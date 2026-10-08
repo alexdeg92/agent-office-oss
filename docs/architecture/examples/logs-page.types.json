@@ -1,0 +1,10 @@
+{
+  "$comment": "Shape sidecar for logs-page.json (api.md §3.6): GET /api/v2/views/logs (topic only for the first default-size page).",
+  "nullable": [
+    "$.items[].channel",
+    "$.items[].model",
+    "$.items[].modelProvider",
+    "$.items[].updatedAt",
+    "$.nextCursor"
+  ]
+}

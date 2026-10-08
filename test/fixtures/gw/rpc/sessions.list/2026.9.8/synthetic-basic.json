@@ -1,0 +1,173 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "totalCount": 12,
+      "count": 12,
+      "hasMore": false,
+      "nextOffset": null,
+      "limitApplied": 300,
+      "sessions": [
+        {
+          "key": "agent:main:main",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000000",
+          "kind": "direct",
+          "isBackground": false,
+          "agentId": "main",
+          "isMain": true,
+          "channel": "whatsapp",
+          "updatedAt": 1791223080000,
+          "totalTokens": 52300,
+          "model": "model-a",
+          "modelProvider": "provider-a",
+          "hasActiveRun": false,
+          "status": "done"
+        },
+        {
+          "key": "agent:main:main:heartbeat",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000001",
+          "kind": "direct",
+          "isBackground": true,
+          "agentId": "main",
+          "updatedAt": 1791223140000,
+          "totalTokens": 900,
+          "model": "model-a",
+          "modelProvider": "provider-a",
+          "status": "done"
+        },
+        {
+          "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000002",
+          "kind": "direct",
+          "isBackground": true,
+          "agentId": "main",
+          "subagentRole": "worker",
+          "spawnedBy": "agent:main:main",
+          "updatedAt": 1791223170000,
+          "totalTokens": 8100,
+          "model": "model-a",
+          "modelProvider": "provider-a",
+          "hasActiveRun": true,
+          "status": "active"
+        },
+        {
+          "key": "agent:main:subagent:ffffffff-0002-4000-8000-000000000002",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000003",
+          "kind": "direct",
+          "isBackground": true,
+          "agentId": "main",
+          "subagentRole": "worker",
+          "spawnedBy": "agent:main:main",
+          "updatedAt": 1791212400000,
+          "totalTokens": 4200,
+          "model": "model-a",
+          "status": "complete",
+          "startedAt": 1791212100000,
+          "endedAt": 1791212400000
+        },
+        {
+          "key": "agent:main:cron:ffffffff-0c01-4000-8000-000000000001",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000004",
+          "kind": "direct",
+          "isBackground": true,
+          "agentId": "main",
+          "updatedAt": 1791223180000,
+          "totalTokens": 1500,
+          "modelProvider": "provider-a",
+          "status": "active"
+        },
+        {
+          "key": "agent:main:discord:direct:100000000000000001",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000005",
+          "kind": "direct",
+          "isBackground": false,
+          "agentId": "main",
+          "channel": "discord",
+          "updatedAt": 1791223140000,
+          "totalTokens": 3300,
+          "model": "model-a",
+          "startedAt": 1791223140000
+        },
+        {
+          "key": "agent:main:dashboard:ffffffff-da5b-4000-8000-000000000001",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000006",
+          "kind": "direct",
+          "isBackground": false,
+          "agentId": "main",
+          "spawnedBy": "agent:main:main",
+          "updatedAt": 1790445600000,
+          "totalTokens": 700,
+          "model": "model-a",
+          "status": "done"
+        },
+        {
+          "key": "agent:main:discord:channel:100000000000000002",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000007",
+          "kind": "group",
+          "isBackground": false,
+          "agentId": "main",
+          "channel": "discord",
+          "updatedAt": 1791050400000,
+          "totalTokens": 12000,
+          "model": "model-a",
+          "status": "done"
+        },
+        {
+          "key": "agent:main:explicit:portal-chat",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000008",
+          "kind": "direct",
+          "isBackground": false,
+          "agentId": "main",
+          "updatedAt": 1791222600000,
+          "totalTokens": 2100,
+          "model": "model-a",
+          "status": "done"
+        },
+        {
+          "key": "agent:main:wechat:group:fake-group",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000009",
+          "kind": "group",
+          "isBackground": false,
+          "agentId": "main",
+          "channel": "wechat",
+          "updatedAt": 1791205200000,
+          "totalTokens": 400,
+          "model": "model-a",
+          "status": "timeout",
+          "startedAt": 1791205140000
+        },
+        {
+          "key": "agent:claude:acp:ffffffff-acb0-4000-8000-000000000001",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000010",
+          "kind": "direct",
+          "isBackground": true,
+          "agentId": "claude",
+          "spawnedBy": "agent:main:main",
+          "updatedAt": 1791208800000,
+          "totalTokens": 600,
+          "model": "model-b",
+          "status": "killed",
+          "endedAt": 1791208800000
+        },
+        {
+          "key": "agent:main:discord:channel:100000000000000002:heartbeat",
+          "sessionId": "ffffffff-5e55-4000-8000-000000000011",
+          "kind": "group",
+          "isBackground": true,
+          "agentId": "main",
+          "channel": "discord",
+          "updatedAt": 1791223020000,
+          "totalTokens": 100,
+          "model": "model-a",
+          "status": "done"
+        }
+      ]
+    }
+  }
+}

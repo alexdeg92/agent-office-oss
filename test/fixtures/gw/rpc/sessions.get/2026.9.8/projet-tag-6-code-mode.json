@@ -1,0 +1,115 @@
+{
+ "$fixture": {
+  "source": "gateway",
+  "channel": "gw.rpc.sessions.get",
+  "origin": "synthetic",
+  "openclawVersion": "2026.9.8",
+  "params": {
+   "key": "agent:main:subagent:ffffffff-cafe-4000-8000-000000000001"
+  },
+  "note": "architect-56: the prod shape: OpenClaw 2026.9.8's exec is a code-mode tool ({title, code}); a spawned sub-agent ran the tag"
+ },
+ "body": {
+  "kind": "json",
+  "value": {
+   "messages": [
+    {
+     "role": "user",
+     "timestamp": 1791223200000,
+     "content": "Prépare un petit plan pour la page d’accueil du café, en quatre étapes."
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223204000,
+     "content": [
+      {
+       "type": "toolCall",
+       "id": "call_cm_1",
+       "name": "exec",
+       "arguments": {
+        "title": "Lire la compétence projet",
+        "code": "text(await skills.read('projet'));"
+       }
+      }
+     ]
+    },
+    {
+     "role": "toolResult",
+     "toolCallId": "call_cm_1",
+     "toolName": "exec",
+     "timestamp": 1791223205000,
+     "content": [
+      {
+       "type": "text",
+       "text": "(SKILL.md)"
+      }
+     ]
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223209000,
+     "content": [
+      {
+       "type": "toolCall",
+       "id": "call_cm_2",
+       "name": "exec",
+       "arguments": {
+        "title": "Démarrer projet café",
+        "code": "return await exec({command:'node /opt/openclaw/workspace/skills/projet/projet.js tag cafe-test-projet en-cours P8 \"Café Test Projet\"',title:'Démarrer projet café'});"
+       }
+      }
+     ]
+    },
+    {
+     "role": "toolResult",
+     "toolCallId": "call_cm_2",
+     "toolName": "exec",
+     "timestamp": 1791223210000,
+     "content": [
+      {
+       "type": "text",
+       "text": "ok · projet cafe-test-projet · en-cours · P8"
+      }
+     ]
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223220000,
+     "content": [
+      {
+       "type": "text",
+       "text": "Voici le plan en quatre étapes."
+      }
+     ]
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223221000,
+     "content": [
+      {
+       "type": "toolCall",
+       "id": "call_cm_3",
+       "name": "exec",
+       "arguments": {
+        "title": "Terminer plan café",
+        "code": "return await exec({command:'node /opt/openclaw/workspace/skills/projet/projet.js tag cafe-test-projet livre P8 \"Café Test Projet\"',title:'Terminer plan café'});"
+       }
+      }
+     ]
+    },
+    {
+     "role": "toolResult",
+     "toolCallId": "call_cm_3",
+     "toolName": "exec",
+     "timestamp": 1791223222000,
+     "content": [
+      {
+       "type": "text",
+       "text": "ok · projet cafe-test-projet · livre · P8"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

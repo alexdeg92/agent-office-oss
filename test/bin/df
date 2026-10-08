@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake df for tests: fixed numbers, same column layout as `df -B1 /`.
+echo "Filesystem        1B-blocks          Used     Available Use% Mounted on"
+echo "/dev/disk0     500000000000  200000000000  300000000000  40% /"

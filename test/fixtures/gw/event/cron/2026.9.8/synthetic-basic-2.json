@@ -1,0 +1,43 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.event.cron",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "jobId": "ffffffff-0c01-4000-8000-000000000001",
+      "action": "finished",
+      "status": "ok",
+      "completionStatus": "completed",
+      "summary": "Résumé publié.",
+      "error": null,
+      "runId": "run_synthetic_2",
+      "sessionKey": "agent:main:cron:ffffffff-0c01-4000-8000-000000000001",
+      "sessionId": "ffffffff-0005-4000-8000-000000000001",
+      "runAtMs": 1791223080000,
+      "durationMs": 4200,
+      "nextRunAtMs": 1791741600000,
+      "delivered": false,
+      "deliveryStatus": "not-requested",
+      "deliveryError": null,
+      "model": "model-a",
+      "provider": "provider-a",
+      "usage": {
+        "input_tokens": 900,
+        "output_tokens": 300,
+        "total_tokens": 1200
+      },
+      "diagnostics": {
+        "summary": "ok"
+      },
+      "job": {
+        "id": "ffffffff-0c01-4000-8000-000000000001",
+        "name": "Veille hebdomadaire",
+        "enabled": true
+      }
+    }
+  }
+}

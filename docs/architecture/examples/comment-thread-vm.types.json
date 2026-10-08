@@ -1,0 +1,37 @@
+{
+  "$comment": "Shape sidecar for comment-thread-vm.json (architect-57). Items are oldest first; kind comment | event | system. body is null for an event, a system line or a deleted comment; text (a LabelRef) only for event and system lines. Delivery statuses: pending | working | replied | failed | no-reply | unavailable. Event items also carry delivery. Retry POST /api/v[23]/projects/:id/comments/:cid/retry {agentId}: 202, original author, failed/no-reply only.",
+  "types": {
+    "$.nextCursor": "string",
+    "$.items[].author.avatarUrl": "string",
+    "$.items[].delivery[].reason": "string",
+    "$.mentionable[].avatarUrl": "string",
+    "$.items[].author.state": "string"
+  },
+  "variants": {
+    "$.items[].author": [
+      {
+        "kind": "system",
+        "name": "Système"
+      }
+    ],
+    "$.items[].delivery[]": [
+      {
+        "agentId": "main",
+        "status": "working",
+        "reason": null
+      },
+      {
+        "agentId": "main",
+        "status": "no-reply",
+        "reason": "timeout"
+      }
+    ]
+  },
+  "nullable": [
+    "$.items[].body",
+    "$.items[].text",
+    "$.items[].replyTo",
+    "$.items[].editedAt",
+    "$.session"
+  ]
+}

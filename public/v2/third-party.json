@@ -1,0 +1,77 @@
+{
+ "$comment": "Third-party notices for what the UI ships (F13). Checked in; test/frontend/notices.test.js fails when a vendored file has no entry. Development-only tools (axe-core) are not shipped and not listed.",
+ "entries": [
+  {
+   "name": "Preact",
+   "version": "11.0.0",
+   "licence": "MIT",
+   "copyright": "Copyright (c) 2015-present Jason Miller",
+   "url": "https://preactjs.com/",
+   "files": [
+    "vendor/preact.mjs",
+    "vendor/preact-hooks.mjs",
+    "vendor/preact.mjs.map",
+    "vendor/hooks.mjs.map"
+   ],
+   "licenceFile": "vendor/licenses/preact.LICENSE"
+  },
+  {
+   "name": "htm",
+   "version": "3.1.1",
+   "licence": "Apache-2.0",
+   "copyright": null,
+   "url": "https://github.com/developit/htm",
+   "files": [
+    "vendor/htm.mjs"
+   ],
+   "licenceFile": "vendor/licenses/htm.LICENSE"
+  },
+  {
+   "name": "Lucide (icons)",
+   "version": "1.52.0",
+   "licence": "ISC",
+   "copyright": "Copyright (c) 2026 Lucide Icons and Contributors; Copyright (c) 2013-present Cole Bemis (Feather, MIT)",
+   "url": "https://lucide.dev/",
+   "files": [
+    "icons.js"
+   ],
+   "licenceFile": "vendor/licenses/lucide.LICENSE"
+  },
+  {
+   "name": "Inter (font)",
+   "version": "Google Fonts, 2026-10-06",
+   "licence": "OFL-1.1",
+   "copyright": "Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)",
+   "url": "https://github.com/rsms/inter",
+   "files": [
+    "bureau/fonts/inter-latin.woff2",
+    "bureau/fonts/inter-latin-ext.woff2"
+   ],
+   "licenceFile": "bureau/fonts/OFL-inter.txt"
+  },
+  {
+   "name": "Sora (font)",
+   "version": "Google Fonts, 2026-10-06",
+   "licence": "OFL-1.1",
+   "copyright": "Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)",
+   "url": "https://github.com/sora-xor/sora-font",
+   "files": [
+    "bureau/fonts/sora-latin.woff2",
+    "bureau/fonts/sora-latin-ext.woff2"
+   ],
+   "licenceFile": "bureau/fonts/OFL-sora.txt"
+  },
+  {
+   "name": "JetBrains Mono (font)",
+   "version": "Google Fonts, 2026-10-06",
+   "licence": "OFL-1.1",
+   "copyright": "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)",
+   "url": "https://github.com/JetBrains/JetBrainsMono",
+   "files": [
+    "bureau/fonts/jetbrains-mono-latin.woff2",
+    "bureau/fonts/jetbrains-mono-latin-ext.woff2"
+   ],
+   "licenceFile": "bureau/fonts/OFL-jetbrainsmono.txt"
+  }
+ ]
+}

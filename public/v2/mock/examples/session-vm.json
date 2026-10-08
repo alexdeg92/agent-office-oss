@@ -1,0 +1,80 @@
+{
+  "data": {
+    "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+    "label": "Sous-agent ffff",
+    "title": {
+      "key": "sessionTitle.subagent",
+      "params": {
+        "id": "ffff"
+      }
+    },
+    "kind": "subagent",
+    "model": "gpt-5.5",
+    "modelProvider": "openai",
+    "tokens": 8100,
+    "updatedAt": 1791223170000,
+    "cwd": "dev/project/agent-office-redesign",
+    "run": {
+      "status": "failed",
+      "endReason": "timeout"
+    },
+    "messageCount": 42,
+    "window": {
+      "from": 0,
+      "to": 42
+    },
+    "toolCount": 1,
+    "traceState": "fresh",
+    "events": [
+      {
+        "id": "ev:0:0",
+        "kind": "user",
+        "at": 1791223000000,
+        "sender": "Owner",
+        "text": "Résume le dépôt.",
+        "truncated": false
+      },
+      {
+        "id": "ev:1:0",
+        "kind": "thinking",
+        "at": 1791223004000,
+        "text": "Je lis le README.",
+        "truncated": false
+      },
+      {
+        "id": "ev:1:1",
+        "kind": "tool",
+        "at": 1791223004000,
+        "callId": "call_1",
+        "name": "read",
+        "toolKind": "file-read",
+        "input": "{\"path\":\"README.md\"}",
+        "output": "# Agent Office",
+        "isError": false,
+        "durationMs": 120,
+        "truncated": false
+      },
+      {
+        "id": "ev:2:0",
+        "kind": "assistant",
+        "at": 1791223009000,
+        "model": "gpt-5.5",
+        "provider": "openai",
+        "outputTokens": 320,
+        "text": "Voici le résumé…",
+        "truncated": false,
+        "stopReason": "stop",
+        "error": null
+      }
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "session:agent%3Amain%3Asubagent%3Affffffff-0001-4000-8000-000000000001",
+      "rev": 9
+    }
+  }
+}

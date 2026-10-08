@@ -1,0 +1,68 @@
+{
+  "name": "synthetic-basic",
+  "origin": "synthetic",
+  "openclawVersion": "2026.9.8",
+  "now": 1791223200000,
+  "config": "config/openclaw/2026.9.8/synthetic-basic.json",
+  "rpc": {
+    "agents.list": "gw/rpc/agents.list/2026.9.8/synthetic-basic.json",
+    "sessions.list": "gw/rpc/sessions.list/2026.9.8/synthetic-basic.json",
+    "cron.list": "gw/rpc/cron.list/2026.9.8/synthetic-basic.json",
+    "channels.status": "gw/rpc/channels.status/2026.9.8/synthetic-basic.json",
+    "sessions.usage": "gw/rpc/sessions.usage/2026.9.8/synthetic-basic.json",
+    "sessions.get": {
+      "param": "key",
+      "files": {
+        "agent:main:main": "gw/rpc/sessions.get/2026.9.8/synthetic-basic-1.json",
+        "agent:main:subagent:ffffffff-0001-4000-8000-000000000001": "gw/rpc/sessions.get/2026.9.8/synthetic-basic-2.json",
+        "agent:main:discord:direct:100000000000000001": "gw/rpc/sessions.get/2026.9.8/synthetic-basic-3.json"
+      }
+    },
+    "sessions.describe": {
+      "param": "key",
+      "files": {
+        "agent:main:main": "gw/rpc/sessions.describe/2026.9.8/synthetic-basic-1.json",
+        "agent:main:subagent:ffffffff-0001-4000-8000-000000000001": "gw/rpc/sessions.describe/2026.9.8/synthetic-basic-2.json",
+        "agent:main:discord:direct:100000000000000001": "gw/rpc/sessions.describe/2026.9.8/synthetic-basic-3.json"
+      }
+    },
+    "cron.runs": {
+      "param": "jobId",
+      "files": {
+        "ffffffff-0c01-4000-8000-000000000001": "gw/rpc/cron.runs/2026.9.8/synthetic-basic-1.json",
+        "ffffffff-0c02-4000-8000-000000000002": "gw/rpc/cron.runs/2026.9.8/synthetic-basic-2.json",
+        "ffffffff-0c03-4000-8000-000000000003": "gw/rpc/cron.runs/2026.9.8/synthetic-basic-3.json"
+      }
+    }
+  },
+  "events": {
+    "onConnect": [
+      "gw/event/health/2026.9.8/synthetic-basic-1.json"
+    ],
+    "observed": [
+      "gw/event/health/2026.9.8/synthetic-basic-1.json",
+      "gw/event/sessions.changed/2026.9.8/synthetic-basic-1.json",
+      "gw/event/chat.metadata.changed/2026.9.8/synthetic-basic-1.json",
+      "gw/event/cron/2026.9.8/synthetic-basic-1.json",
+      "gw/event/sessions.changed/2026.9.8/synthetic-basic-2.json",
+      "gw/event/sessions.changed/2026.9.8/synthetic-basic-3.json",
+      "gw/event/cron/2026.9.8/synthetic-basic-2.json",
+      "gw/event/config.changed/2026.9.8/synthetic-basic-1.json",
+      "gw/event/board.changed/2026.9.8/synthetic-basic-1.json"
+    ]
+  },
+  "cli": {
+    "skills.list": "cli/skills.list/2026.9.8/synthetic-basic.json",
+    "skills.info": {
+      "weather": "cli/skills.info/2026.9.8/synthetic-basic-1.json",
+      "github": "cli/skills.info/2026.9.8/synthetic-basic-2.json",
+      "nano-pdf": "cli/skills.info/2026.9.8/synthetic-basic-3.json"
+    }
+  },
+  "host": {
+    "df": "host/df/synthetic-basic.json"
+  },
+  "notes": [
+    "Hand-written. Shapes follow server.js reads; confirm against a real capture."
+  ]
+}

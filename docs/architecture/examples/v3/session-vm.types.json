@@ -1,0 +1,23 @@
+{
+  "$comment": "Shape sidecar for session-vm.json (api.md §3.6, data-model §2.1). 3.0: kind is primary|subagent|scheduled|conversation-direct|conversation-group|conversation|internal|unrecognized; runtimeKind names an internal session (dashboard|acp|explicit), else null; channel is a ChannelRef or null.",
+  "nullable": [
+    "$.cwd",
+    "$.events[].callId",
+    "$.events[].durationMs",
+    "$.events[].model",
+    "$.events[].outputTokens",
+    "$.events[].provider",
+    "$.events[].sender",
+    "$.events[].stopReason",
+    "$.messageCount",
+    "$.model",
+    "$.modelProvider",
+    "$.run.endReason",
+    "$.runtimeKind",
+    "$.updatedAt"
+  ],
+  "types": {
+    "$.events[].error": "string",
+    "$.runtimeKind": "string"
+  }
+}

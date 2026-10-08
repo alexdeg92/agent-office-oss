@@ -1,0 +1,95 @@
+{
+  "$comment": "Shape sidecar for project-vm.json (api.md §3.9): what one example can't show. See test/helpers/contract-shape.js. session (architect-57) is optional: session items only.",
+  "nullable": [
+    "$.summaryMeta",
+    "$.summaryMeta.author.state",
+    "$.thumb.url",
+    "$.thumb.repoLabel",
+    "$.repo",
+    "$.repo.defaultBranch",
+    "$.repo.branch",
+    "$.repo.ci",
+    "$.repo.ci.at",
+    "$.repo.ci.url",
+    "$.repo.fetchedAt",
+    "$.people[].role",
+    "$.people[].commitCount",
+    "$.historyNextCursor",
+    "$.recentHistory[].actor.state",
+    "$.repo.image.url",
+    "$.recentHistory[].session.summary",
+    "$.recentHistory[].session.messages",
+    "$.recentHistory[].session.people[].avatarUrl",
+    "$.recentHistory[].session.people[].state",
+    "$.recentHistory[].session.channel",
+    "$.cover"
+  ],
+  "types": {
+    "$.summaryMeta.author.avatarUrl": "string",
+    "$.repo.lastError": "string",
+    "$.people[].avatarUrl": "string",
+    "$.recentHistory[].actor.avatarUrl": "string",
+    "$.recentHistory[].session.people[].avatarUrl": "string",
+    "$.recentHistory[].session.people[].state": "string"
+  },
+  "variants": {
+    "$.summaryMeta.author": [
+      {
+        "kind": "system",
+        "name": "Système"
+      }
+    ],
+    "$.thumb": [
+      {
+        "kind": "monogram",
+        "url": null,
+        "repoLabel": null,
+        "initials": "GI",
+        "accent": "teal"
+      }
+    ],
+    "$.sources[].ref": [
+      {
+        "by": "interlocutor",
+        "interlocutorId": "discord-user:100000000000000001"
+      },
+      {
+        "by": "keys",
+        "sessionKeys": [
+          "agent:main:explicit:agent-office"
+        ]
+      }
+    ]
+  },
+  "additional": {
+    "$.recentHistory[].session": {
+      "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+      "label": {
+        "key": "historySession.subagent",
+        "params": {
+          "agent": "Atlas"
+        }
+      },
+      "summary": "Plan de l’infolettre : 3 numéros, outil Brevo, calendrier · 5 étapes · fichiers : plan.md · 25 734 jetons",
+      "messages": 12,
+      "tokens": 25734,
+      "route": "/journaux/agent%3Amain%3Asubagent%3Affffffff-0001-4000-8000-000000000001",
+      "people": [
+        {
+          "id": "agent:main",
+          "kind": "agent",
+          "name": "Atlas",
+          "avatarUrl": null,
+          "state": null
+        }
+      ],
+      "channel": "Discord"
+    },
+    "$.cover": {
+      "url": "https://bureau.example/backend/api/v2/project-covers/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.svg",
+      "thumbUrl": "https://bureau.example/backend/api/v2/project-covers/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.svg",
+      "source": "code",
+      "generatedAt": 1790856000000
+    }
+  }
+}

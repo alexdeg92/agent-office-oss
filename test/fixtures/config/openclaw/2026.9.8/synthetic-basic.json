@@ -1,0 +1,33 @@
+{
+  "channels": {
+    "discord": {
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "100000000000000009": {
+          "channels": {
+            "100000000000000002": {
+              "enabled": true,
+              "requireMention": true
+            },
+            "100000000000000004": {
+              "enabled": false
+            }
+          }
+        }
+      }
+    }
+  },
+  "tools": {
+    "exec": {
+      "security": "allowlist"
+    }
+  },
+  "skills": {
+    "entries": {
+      "github": {
+        "enabled": false
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.cron.runs",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "entries": []
+    }
+  }
+}

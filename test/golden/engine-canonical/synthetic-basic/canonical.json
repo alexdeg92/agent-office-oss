@@ -1,0 +1,594 @@
+{
+  "agents": [
+    {
+      "id": "main",
+      "name": "Timmy",
+      "workspace": "/srv/fake/workspace-main",
+      "model": {
+        "primary": "provider-a/model-a",
+        "provider": "provider-a"
+      },
+      "fallbackModels": [],
+      "isPrimary": true,
+      "mainSessionKey": null
+    },
+    {
+      "id": "scout",
+      "name": "Scout",
+      "workspace": "/srv/fake/workspace-scout",
+      "model": {
+        "primary": "provider-b/model-b",
+        "provider": "provider-b"
+      },
+      "fallbackModels": [],
+      "isPrimary": false,
+      "mainSessionKey": null
+    }
+  ],
+  "cronJobs": [
+    {
+      "id": "ffffffff-0c01-4000-8000-000000000001",
+      "name": "Veille hebdomadaire",
+      "description": "Résumé des nouveautés de la semaine.",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * 1",
+        "tz": "America/Toronto"
+      },
+      "agentId": "main",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agent-turn",
+        "message": "1. Cherche les nouveautés\n2. Résume en français\n3. Publie le résumé",
+        "timeoutSeconds": null,
+        "model": null,
+        "toolsAllow": null,
+        "lightContext": false
+      },
+      "delivery": null,
+      "steps": [
+        "Cherche les nouveautés",
+        "Résume en français",
+        "Publie le résumé"
+      ],
+      "createdAt": 1788631200000,
+      "updatedAt": 1791050400000,
+      "nextRunAt": null,
+      "lastRunAt": null,
+      "lastRunStatus": null,
+      "lastRunError": null,
+      "lastDeliveryStatus": null,
+      "deleteAfterRun": false,
+      "sessionKey": null,
+      "health": "never-run"
+    },
+    {
+      "id": "ffffffff-0c02-4000-8000-000000000002",
+      "name": "Rapport du matin",
+      "description": "",
+      "enabled": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 7 * * *",
+        "tz": "America/Toronto"
+      },
+      "agentId": "main",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agent-turn",
+        "message": "VEILLE: lire les flux\nRAPPORT: envoyer un message",
+        "timeoutSeconds": null,
+        "model": null,
+        "toolsAllow": null,
+        "lightContext": false
+      },
+      "delivery": null,
+      "steps": [
+        "Veille",
+        "Rapport"
+      ],
+      "createdAt": 1789495200000,
+      "updatedAt": 1789495200000,
+      "nextRunAt": null,
+      "lastRunAt": null,
+      "lastRunStatus": null,
+      "lastRunError": null,
+      "lastDeliveryStatus": null,
+      "deleteAfterRun": false,
+      "sessionKey": null,
+      "health": "never-run"
+    },
+    {
+      "id": "ffffffff-0c03-4000-8000-000000000003",
+      "name": "Vérification rapide",
+      "description": "",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/15 * * * *",
+        "tz": null
+      },
+      "agentId": "main",
+      "sessionTarget": "main",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agent-turn",
+        "message": "Vérifie la file.",
+        "timeoutSeconds": null,
+        "model": null,
+        "toolsAllow": null,
+        "lightContext": false
+      },
+      "delivery": null,
+      "steps": [],
+      "createdAt": 1790791200000,
+      "updatedAt": 1790791200000,
+      "nextRunAt": null,
+      "lastRunAt": null,
+      "lastRunStatus": null,
+      "lastRunError": null,
+      "lastDeliveryStatus": null,
+      "deleteAfterRun": false,
+      "sessionKey": null,
+      "health": "never-run"
+    }
+  ],
+  "cronRuns": {
+    "ffffffff-0c01-4000-8000-000000000001": [
+      {
+        "id": "ffffffff-0c01-4000-8000-000000000001@1790618400000",
+        "jobId": "ffffffff-0c01-4000-8000-000000000001",
+        "sessionKey": null,
+        "at": 1790618400000,
+        "action": "finished",
+        "status": "succeeded",
+        "completionStatus": null,
+        "durationMs": 128000,
+        "nextRunAt": 1791223200000,
+        "model": {
+          "id": "model-a",
+          "provider": "provider-a"
+        },
+        "usage": {
+          "total": 3800,
+          "input": 3000,
+          "output": 800
+        },
+        "delivery": {
+          "status": "delivered",
+          "delivered": null,
+          "channel": "discord"
+        },
+        "summary": "Résumé publié.",
+        "error": null
+      },
+      {
+        "id": "ffffffff-0c01-4000-8000-000000000001@1790013600000",
+        "jobId": "ffffffff-0c01-4000-8000-000000000001",
+        "sessionKey": null,
+        "at": 1790013600000,
+        "action": "finished",
+        "status": "failed",
+        "completionStatus": null,
+        "durationMs": 45000,
+        "nextRunAt": 1790618400000,
+        "model": {
+          "id": "model-a",
+          "provider": "provider-a"
+        },
+        "usage": {
+          "total": 900,
+          "input": 0,
+          "output": 0
+        },
+        "delivery": {
+          "status": "skipped",
+          "delivered": null,
+          "channel": "discord"
+        },
+        "summary": "",
+        "error": "Délai dépassé"
+      }
+    ],
+    "ffffffff-0c02-4000-8000-000000000002": [],
+    "ffffffff-0c03-4000-8000-000000000003": [
+      {
+        "id": "ffffffff-0c03-4000-8000-000000000003@1791222300000",
+        "jobId": "ffffffff-0c03-4000-8000-000000000003",
+        "sessionKey": null,
+        "at": 1791222300000,
+        "action": "finished",
+        "status": "succeeded",
+        "completionStatus": null,
+        "durationMs": 4000,
+        "nextRunAt": null,
+        "model": {
+          "id": "model-a",
+          "provider": "provider-a"
+        },
+        "usage": null,
+        "delivery": {
+          "status": "delivered",
+          "delivered": null,
+          "channel": "discord"
+        },
+        "summary": "",
+        "error": null
+      }
+    ]
+  },
+  "skills": [
+    {
+      "name": "weather",
+      "emoji": "⛅",
+      "description": "Prévisions météo.",
+      "source": "bundled",
+      "rawSource": "openclaw-bundled",
+      "bundled": true,
+      "status": "active",
+      "visibility": {
+        "model": true,
+        "command": false,
+        "user": true
+      },
+      "homepage": "https://example.invalid/weather",
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      }
+    },
+    {
+      "name": "github",
+      "emoji": "🐙",
+      "description": "Dépôts GitHub.",
+      "source": "extra",
+      "rawSource": "openclaw-extra",
+      "bundled": false,
+      "status": "disabled",
+      "visibility": {
+        "model": true,
+        "command": false,
+        "user": false
+      },
+      "homepage": null,
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      }
+    },
+    {
+      "name": "nano-pdf",
+      "emoji": null,
+      "description": "Édition de PDF.",
+      "source": "bundled",
+      "rawSource": "openclaw-bundled",
+      "bundled": true,
+      "status": "unavailable",
+      "visibility": {
+        "model": true,
+        "command": false,
+        "user": false
+      },
+      "homepage": null,
+      "missing": {
+        "bins": [
+          "nano-pdf"
+        ],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      }
+    },
+    {
+      "name": "workspace-notes",
+      "emoji": null,
+      "description": "Notes du projet.",
+      "source": "workspace",
+      "rawSource": "openclaw-workspace",
+      "bundled": false,
+      "status": "active",
+      "visibility": {
+        "model": true,
+        "command": true,
+        "user": false
+      },
+      "homepage": null,
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      }
+    }
+  ],
+  "skillInfo": {
+    "weather": {
+      "name": "weather",
+      "filePath": "{{FIXTURES_DIR}}/files/skills/weather/SKILL.md",
+      "always": false,
+      "source": "bundled",
+      "blockedBy": {
+        "allowlist": false,
+        "agentFilter": false,
+        "platform": false
+      },
+      "requirements": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      },
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      },
+      "install": [],
+      "homepage": "https://example.invalid/weather"
+    },
+    "github": {
+      "name": "github",
+      "filePath": null,
+      "always": false,
+      "source": "extra",
+      "blockedBy": {
+        "allowlist": false,
+        "agentFilter": false,
+        "platform": false
+      },
+      "requirements": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      },
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      },
+      "install": [],
+      "homepage": null
+    },
+    "nano-pdf": {
+      "name": "nano-pdf",
+      "filePath": null,
+      "always": false,
+      "source": "bundled",
+      "blockedBy": {
+        "allowlist": false,
+        "agentFilter": false,
+        "platform": false
+      },
+      "requirements": {
+        "bins": [
+          "nano-pdf"
+        ],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      },
+      "missing": {
+        "bins": [
+          "nano-pdf"
+        ],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      },
+      "install": [
+        {
+          "id": "brew",
+          "kind": "brew",
+          "label": "Installer avec Homebrew",
+          "bins": [
+            "nano-pdf"
+          ]
+        }
+      ],
+      "homepage": null
+    }
+  },
+  "channels": [
+    {
+      "id": "discord",
+      "rawId": "discord",
+      "label": "Discord",
+      "configured": true,
+      "health": "running",
+      "lastError": null,
+      "lastStartAt": 1790964000000,
+      "lastInboundAt": 1791223140000,
+      "accounts": [
+        {
+          "accountId": "default",
+          "enabled": true,
+          "lifecycle": "running",
+          "busy": true,
+          "activeRuns": 1,
+          "lastInboundAt": 1791223140000,
+          "lastOutboundAt": 1791223150000,
+          "bot": {
+            "id": "100000000000000008",
+            "username": "timmy-bot"
+          }
+        }
+      ],
+      "policy": {
+        "dm": null,
+        "group": null
+      }
+    },
+    {
+      "id": "whatsapp",
+      "rawId": "whatsapp",
+      "label": "WhatsApp",
+      "configured": true,
+      "health": "stopped",
+      "lastError": null,
+      "lastStartAt": null,
+      "lastInboundAt": null,
+      "accounts": [],
+      "policy": {
+        "dm": null,
+        "group": null
+      }
+    },
+    {
+      "id": "wechat",
+      "rawId": "openclaw-weixin",
+      "label": "WeChat",
+      "configured": false,
+      "health": "not-configured",
+      "lastError": null,
+      "lastStartAt": null,
+      "lastInboundAt": null,
+      "accounts": [],
+      "policy": {
+        "dm": null,
+        "group": null
+      }
+    }
+  ],
+  "transcripts": {
+    "agent:main:main": {
+      "sessionKey": "agent:main:main",
+      "fetchedAt": 1791223200000,
+      "messageCount": 4,
+      "window": {
+        "from": 0,
+        "to": 4
+      },
+      "events": [
+        {
+          "id": "ev:0:0",
+          "kind": "user",
+          "at": 1791223020000,
+          "text": "Quel temps fera-t-il demain ?",
+          "truncated": false,
+          "sender": "Owner"
+        },
+        {
+          "id": "ev:1:0",
+          "kind": "assistant",
+          "at": 1791223022000,
+          "text": "Je regarde la météo.",
+          "truncated": false,
+          "model": "model-a",
+          "provider": "provider-a",
+          "outputTokens": 120,
+          "stopReason": null,
+          "error": null
+        },
+        {
+          "id": "ev:1:1",
+          "kind": "tool",
+          "at": 1791223022000,
+          "callId": "call_1",
+          "name": "web_search",
+          "toolKind": "search",
+          "input": "{\n  \"query\": \"météo demain\"\n}",
+          "output": "Ensoleillé, 18 °C.",
+          "isError": false,
+          "durationMs": 3000,
+          "truncated": false
+        },
+        {
+          "id": "ev:3:0",
+          "kind": "assistant",
+          "at": 1791223027000,
+          "text": "Demain : ensoleillé, 18 °C.",
+          "truncated": false,
+          "model": "model-a",
+          "provider": "provider-a",
+          "outputTokens": 40,
+          "stopReason": null,
+          "error": null
+        }
+      ]
+    },
+    "agent:main:subagent:ffffffff-0001-4000-8000-000000000001": {
+      "sessionKey": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+      "fetchedAt": 1791223200000,
+      "messageCount": 3,
+      "window": {
+        "from": 0,
+        "to": 3
+      },
+      "events": [
+        {
+          "id": "ev:0:0",
+          "kind": "user",
+          "at": 1791223080000,
+          "text": "Analyse le dépôt.",
+          "truncated": false,
+          "sender": null
+        },
+        {
+          "id": "ev:1:0",
+          "kind": "tool",
+          "at": 1791223081000,
+          "callId": "tu_1",
+          "name": "exec",
+          "toolKind": "exec",
+          "input": "{\n  \"cmd\": \"ls\"\n}",
+          "output": "README.md\nserver.js",
+          "isError": true,
+          "durationMs": 2000,
+          "truncated": false
+        }
+      ]
+    },
+    "agent:main:discord:direct:100000000000000001": {
+      "sessionKey": "agent:main:discord:direct:100000000000000001",
+      "fetchedAt": 1791223200000,
+      "messageCount": 2,
+      "window": {
+        "from": 0,
+        "to": 2
+      },
+      "events": [
+        {
+          "id": "ev:0:0",
+          "kind": "user",
+          "at": 1791223140000,
+          "text": "Salut Timmy",
+          "truncated": false,
+          "sender": "Guest"
+        },
+        {
+          "id": "ev:1:0",
+          "kind": "assistant",
+          "at": 1791223145000,
+          "text": "Bonjour Guest !",
+          "truncated": false,
+          "model": null,
+          "provider": null,
+          "outputTokens": null,
+          "stopReason": null,
+          "error": null
+        }
+      ]
+    }
+  },
+  "config": null
+}

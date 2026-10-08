@@ -1,0 +1,227 @@
+{
+  "data": {
+    "projectId": "prj_k3v9q2m8x1c4d7fz",
+    "items": [
+      {
+        "id": "cmt_0a1b2c3d4e5f6071",
+        "kind": "comment",
+        "at": 1791220000000,
+        "author": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": "@scout peux-tu relire le calendrier des numéros ?",
+        "text": null,
+        "mentions": [
+          {
+            "id": "scout",
+            "name": "Scout"
+          }
+        ],
+        "replyTo": null,
+        "delivery": [
+          {
+            "agentId": "scout",
+            "status": "replied",
+            "reason": null
+          }
+        ],
+        "editedAt": 1791220060000,
+        "deleted": false,
+        "editable": true,
+        "deletable": true
+      },
+      {
+        "id": "cmt_1a2b3c4d5e6f7081",
+        "kind": "comment",
+        "at": 1791220090000,
+        "author": {
+          "id": "scout",
+          "kind": "agent",
+          "name": "Scout",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": "Relu : le numéro 2 tombe pendant les vacances, je propose de le décaler d’une semaine.",
+        "text": null,
+        "mentions": [],
+        "replyTo": "cmt_0a1b2c3d4e5f6071",
+        "delivery": [],
+        "editedAt": null,
+        "deleted": false,
+        "editable": false,
+        "deletable": true
+      },
+      {
+        "id": "hist:evt_s1t2a3t4u5s6x7y8",
+        "kind": "system",
+        "at": 1791220200000,
+        "author": {
+          "id": "main",
+          "kind": "agent",
+          "name": "Atlas",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": null,
+        "text": {
+          "key": "historyKind.status",
+          "params": {
+            "from": {
+              "key": "projectStatus.in-progress"
+            },
+            "to": {
+              "key": "projectStatus.in-review"
+            }
+          }
+        },
+        "mentions": [],
+        "replyTo": null,
+        "delivery": [],
+        "editedAt": null,
+        "deleted": false,
+        "editable": false,
+        "deletable": false
+      },
+      {
+        "id": "cmt_2a3b4c5d6e7f8091",
+        "kind": "event",
+        "at": 1791221000000,
+        "author": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": null,
+        "text": {
+          "key": "projectThread.event.summary-requested",
+          "params": {
+            "actor": "Owner"
+          }
+        },
+        "mentions": [],
+        "replyTo": null,
+        "delivery": [
+          {
+            "agentId": "main",
+            "status": "replied",
+            "reason": null
+          }
+        ],
+        "editedAt": null,
+        "deleted": false,
+        "editable": false,
+        "deletable": false
+      },
+      {
+        "id": "cmt_3a4b5c6d7e8f90a1",
+        "kind": "comment",
+        "at": 1791221080000,
+        "author": {
+          "id": "main",
+          "kind": "agent",
+          "name": "Atlas",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": "Le portail est en revue : la refonte est livrée en préproduction, il reste la validation d’Owner.",
+        "text": null,
+        "mentions": [],
+        "replyTo": "cmt_2a3b4c5d6e7f8091",
+        "delivery": [],
+        "editedAt": null,
+        "deleted": false,
+        "editable": false,
+        "deletable": true
+      },
+      {
+        "id": "cmt_4a5b6c7d8e9fa0b1",
+        "kind": "comment",
+        "at": 1791222000000,
+        "author": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": null,
+        "text": null,
+        "mentions": [],
+        "replyTo": null,
+        "delivery": [],
+        "editedAt": null,
+        "deleted": true,
+        "editable": false,
+        "deletable": false
+      },
+      {
+        "id": "cmt_5a6b7c8d9eafb0c1",
+        "kind": "comment",
+        "at": 1791223000000,
+        "author": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "body": "@main on peut livrer ?",
+        "text": null,
+        "mentions": [
+          {
+            "id": "main",
+            "name": "Atlas"
+          }
+        ],
+        "replyTo": null,
+        "delivery": [
+          {
+            "agentId": "main",
+            "status": "working",
+            "reason": null
+          }
+        ],
+        "editedAt": null,
+        "deleted": false,
+        "editable": true,
+        "deletable": true
+      }
+    ],
+    "nextCursor": null,
+    "mentionable": [
+      {
+        "id": "main",
+        "name": "Atlas",
+        "avatarUrl": null,
+        "primary": true
+      },
+      {
+        "id": "scout",
+        "name": "Scout",
+        "avatarUrl": null,
+        "primary": false
+      }
+    ],
+    "canComment": true,
+    "canMention": true,
+    "session": {
+      "key": "agent:main:ao-projet-agent-office",
+      "route": "/journaux/agent%3Amain%3Aao-projet-agent-office"
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "comments:prj_k3v9q2m8x1c4d7fz",
+      "rev": 4
+    }
+  }
+}

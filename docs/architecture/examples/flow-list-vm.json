@@ -1,0 +1,80 @@
+{
+  "data": {
+    "flows": [
+      {
+        "id": "ffffffff-0c01-4000-8000-000000000001",
+        "name": "Veille hebdomadaire",
+        "description": "Résumé des nouveautés de la semaine.",
+        "enabled": true,
+        "schedule": {
+          "kind": "cron",
+          "expr": "0 9 * * 1",
+          "tz": "America/Toronto",
+          "sentence": {
+            "key": "schedule.weekly",
+            "params": {
+              "day": { "key": "weekday.1" },
+              "time": "09:00"
+            }
+          }
+        },
+        "health": "never-run",
+        "nextRunAt": 1791640800000,
+        "lastRunAt": 1791036000000
+      },
+      {
+        "id": "ffffffff-0c03-4000-8000-000000000003",
+        "name": "Vérification rapide",
+        "description": "",
+        "enabled": true,
+        "schedule": {
+          "kind": "cron",
+          "expr": "*/15 * * * *",
+          "tz": null,
+          "sentence": {
+            "key": "schedule.cron",
+            "params": {
+              "expr": "*/15 * * * *"
+            }
+          }
+        },
+        "health": "never-run",
+        "nextRunAt": 1791640800000,
+        "lastRunAt": 1791036000000
+      },
+      {
+        "id": "ffffffff-0c02-4000-8000-000000000002",
+        "name": "Rapport du matin",
+        "description": "",
+        "enabled": false,
+        "schedule": {
+          "kind": "cron",
+          "expr": "30 7 * * *",
+          "tz": "America/Toronto",
+          "sentence": {
+            "key": "schedule.daily",
+            "params": {
+              "time": "07:30"
+            }
+          }
+        },
+        "health": "never-run",
+        "nextRunAt": null,
+        "lastRunAt": 1791036000000
+      }
+    ],
+    "counts": {
+      "total": 3,
+      "enabled": 2
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "flows",
+      "rev": 3
+    }
+  }
+}

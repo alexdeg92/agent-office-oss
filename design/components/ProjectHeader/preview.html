@@ -1,0 +1,26 @@
+<!-- @dsCard group="Projets" height=262 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>En-tête de projet · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol><symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H8"/></symbol><symbol id="i-working" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol><symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol><symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h12l-2 4 2 4H5"/></symbol></svg>
+<main class="pv">
+<button class="bu-backlink"><svg class="bu-icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Projets</button><header class="bu-project-header"><span class="bu-thumb" style="--img: url(../../assets/Office/office-day.png)"><span class="bu-thumb__repo"><svg class="bu-icon" aria-hidden="true"><use href="#i-branch"/></svg>alexdeg92/agent-office-oss</span></span><div class="bu-project-header__body"><div class="pv-row"><span class="bu-pstatus" data-project-status="in-progress"><svg class="bu-icon" aria-hidden="true"><use href="#i-working"/></svg>En cours</span><span class="bu-priority bu-priority--p1" title="Priorité P1">P1</span><ul class="bu-labels"><li><span class="bu-risk bu-risk--low"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg>Inactif depuis 3 j</span></li><li><span class="bu-feature bu-feature--on" title="Drapeau de fonctionnalité activé">projets.board</span></li><li><span class="bu-label-chip bu-label-chip--indigo">site web</span></li></ul></div><h1 class="bu-project-header__title">Agent Office — refonte</h1><div class="bu-project-header__meta"><ul class="bu-avatar-stack" aria-label="Personnes impliquées"><li><span class="bu-avatar bu-avatar--human">AS</span></li><li><span class="bu-avatar bu-avatar--agent" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span></li><li><span class="bu-avatar bu-avatar--agent"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span></li><li><span class="bu-avatar bu-avatar--git">cx</span></li></ul><span>6 personnes</span><span>·</span><span>Dernière activité il y a 3 min</span></div><div class="bu-btn-group"><button class="bu-btn bu-btn--sm"><span class="bu-pstatus bu-sr-only" data-project-status="in-progress"><svg class="bu-icon" aria-hidden="true"><use href="#i-working"/></svg>En cours</span>Déplacer vers…<svg class="bu-icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></button><a class="bu-btn bu-btn--sm" href="#"><svg class="bu-icon" aria-hidden="true"><use href="#i-external"/></svg>Ouvrir le dépôt</a><button class="bu-btn bu-btn--sm bu-btn--ghost"><svg class="bu-icon" aria-hidden="true"><use href="#i-flag"/></svg>Gérer les drapeaux</button></div></div></header>
+</main>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!-- @dsCard group="Agents" height=893 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discuter avec Timmy · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12L20 4l-6 16-3-6z"/><path d="M11 14l9-10"/></symbol><symbol id="i-discuter" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol></svg>
+<main class="pv">
+<div class="pv-frame"><div class="bu-chat"><div class="bu-chat__thread">
+<div class="bu-msg bu-msg--system"><span class="bu-msg__bubble">Session du 5 octobre 2026</span></div>
+<div class="bu-msg bu-msg--user"><div class="bu-msg__bubble">Résume ce que tu as fait aujourd'hui.</div></div>
+<div class="bu-msg bu-msg--agent"><div class="bu-msg__head"><span class="bu-avatar bu-avatar--agent"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-msg__who">Timmy</span><span class="bu-msg__meta">openai/gpt-5 · 6 s · 2 184 jetons</span></div><div class="bu-msg__bubble bu-prose"><p>Voici ma journée :</p><ul><li>Résumé quotidien publié dans <code>#résumé</code>.</li><li>Recherche fournisseurs déléguée à <strong>Scout</strong>.</li></ul></div></div>
+<div class="bu-msg bu-msg--agent bu-msg--error"><div class="bu-msg__head"><span class="bu-avatar bu-avatar--agent" data-agent-state="error"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-msg__who">Timmy</span><span class="bu-msg__meta">échec</span></div><div class="bu-msg__bubble">La passerelle n'a pas répondu à temps. Réessayez dans un instant.</div></div>
+<div class="bu-msg bu-msg--agent"><div class="bu-msg__head"><span class="bu-avatar bu-avatar--agent" data-agent-state="thinking"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-msg__who">Timmy</span><span class="bu-msg__meta">réfléchit…</span></div><div class="bu-typing" role="status" aria-label="Timmy réfléchit"><span></span><span></span><span></span></div></div>
+</div><form class="bu-composer" onsubmit="return false"><label class="bu-sr-only" for="ci">Message pour Timmy</label><textarea class="bu-textarea" id="ci" rows="1" placeholder="Écrire à Timmy…"></textarea><button class="bu-btn bu-btn--primary bu-btn--icon" aria-label="Envoyer" title="Envoyer"><svg class="bu-icon" aria-hidden="true"><use href="#i-send"/></svg></button></form></div></div>
+<div class="bu-card"><div class="bu-empty bu-empty--compact"><div class="bu-empty__art"><svg class="bu-icon" aria-hidden="true"><use href="#i-discuter"/></svg></div><h3 class="bu-empty__title">Posez une question à Timmy</h3><p class="bu-empty__text">Il répond en direct via l'agent OpenClaw.</p><div class="bu-suggestions"><button class="bu-suggestion">Résume ce que tu as fait aujourd'hui</button><button class="bu-suggestion">Quelles tâches planifiées arrivent bientôt ?</button></div></div></div>
+</main>
+</body>
+</html>

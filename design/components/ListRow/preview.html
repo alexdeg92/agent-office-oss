@@ -1,0 +1,39 @@
+<!-- @dsCard group="Données" height=481 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableaux et lignes · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-working" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol><symbol id="i-waiting" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></symbol></svg>
+<main class="pv">
+<div class="bu-table" style="--cols: 8.5rem minmax(0,1fr) 9rem 6rem 7.5rem" role="table">
+<div class="bu-table__head" role="row"><span role="columnheader">Canal</span><span role="columnheader">Interlocuteur / session</span><span role="columnheader">Modèle</span><button class="bu-table__sort bu-cell-end" aria-sort="descending" role="columnheader">Jetons ↓</button><span role="columnheader">Mis à jour</span></div>
+<button class="bu-table__row" role="row"><span class="bu-inline"><span class="bu-dot bu-dot--success bu-dot--live" title="Session active"></span><span class="bu-tag">discord</span></span><span class="bu-cell-main"><span>Owner · #général</span><span class="bu-cell-sub">agent:main:discord:channel:1294…</span></span><span class="bu-tag">gpt-5</span><span class="bu-cell-num bu-cell-end">48 210</span><span class="bu-text-tertiary">il y a 2 min</span></button>
+<button class="bu-table__row" role="row"><span class="bu-inline"><span class="bu-dot" title="Terminée"></span><span class="bu-tag">planifié</span></span><span class="bu-cell-main"><span>Résumé quotidien Discord</span><span class="bu-cell-sub">agent:main:cron:resume-quotidien</span></span><span class="bu-tag">gpt-5-mini</span><span class="bu-cell-num bu-cell-end">12 904</span><span class="bu-text-tertiary">il y a 6 h</span></button>
+<button class="bu-table__row" role="row"><span class="bu-inline"><span class="bu-dot" data-agent-state="working" title="Exécute"></span><span class="bu-tag">sous-agent</span></span><span class="bu-cell-main"><span>Recherche fournisseurs</span><span class="bu-cell-sub">agent:main:subagent:7f2c</span></span><span class="bu-tag">gpt-5</span><span class="bu-cell-num bu-cell-end">3 118</span><span class="bu-text-tertiary">à l'instant</span></button></div>
+<div class="bu-grid--2 bu-grid">
+<ul class="bu-list"><li><a class="bu-row" href="#"><span class="bu-dot bu-dot--success"></span><span class="bu-row__main"><span class="bu-row__title">Owner · #général</span><span class="bu-row__sub">discord · gpt-5 · 48 210 jetons</span></span><span class="bu-row__meta">2 min</span><svg class="bu-icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a></li>
+<li><button class="bu-roster" aria-current="true"><span class="bu-avatar bu-avatar--agent" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-cell-main"><span>Timmy</span><span class="bu-cell-sub">Agent principal</span></span><span class="bu-state bu-state--live" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-working"/></svg>Exécute</span></button></li>
+<li><button class="bu-roster"><span class="bu-avatar bu-avatar--agent" data-agent-state="waiting"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-cell-main"><span>Scout</span><span class="bu-cell-sub">Sous-agent · recherche</span></span><span class="bu-state" data-agent-state="waiting"><svg class="bu-icon" aria-hidden="true"><use href="#i-waiting"/></svg>En attente</span></button></li></ul>
+<div class="bu-card"><p class="bu-eyebrow">Journal des événements · en direct</p><ol class="bu-journal">
+<li class="bu-event"><span class="bu-event__time">14:22:08</span><span class="bu-event__who"><span class="bu-dot" data-agent-state="calling"></span>Timmy</span><span class="bu-event__text">appelle web_search « tarifs fournisseurs 2026 »</span></li>
+<li class="bu-event"><span class="bu-event__time">14:21:51</span><span class="bu-event__who"><span class="bu-dot" data-agent-state="working"></span>Scout</span><span class="bu-event__text">a été délégué par Timmy</span></li>
+<li class="bu-event"><span class="bu-event__time">14:20:02</span><span class="bu-event__who"><span class="bu-dot" data-agent-state="idle"></span>Owner</span><span class="bu-event__text">a écrit dans #général</span></li></ol>
+<dl class="bu-kv"><div class="bu-kv__row"><dt>Binaires requis</dt><dd>ffmpeg, yt-dlp</dd></div><div class="bu-kv__row"><dt>Manquantes</dt><dd class="is-warning">yt-dlp</dd></div></dl></div></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "features": [
+    { "name": "unleashFlag", "enabled": true, "strategies": [{ "name": "default" }] }
+  ]
+}

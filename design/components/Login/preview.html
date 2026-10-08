@@ -1,0 +1,35 @@
+<!-- @dsCard group="Pages" height=711 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connexion · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol></svg>
+<main class="pv">
+<div class="pv-frame"><div class="bu-login" style="min-height: 40rem">
+<div class="bu-login__art"><a class="bu-brand" href="#"><svg class="bu-brand__mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--bu-accent)"/><path d="M16 6.5l9 4.5v10l-9 4.5-9-4.5V11z" fill="none" stroke="var(--bu-text-on-accent)" stroke-width="1.75" stroke-linejoin="round"/><path d="M16 6.5v9.5l9 5M16 16l-9 5" fill="none" stroke="var(--bu-text-on-accent)" stroke-width="1.75" stroke-linejoin="round" opacity=".55"/><circle cx="16" cy="13" r="2.6" fill="var(--bu-text-on-accent)"/></svg><span class="bu-brand__name">Agent Office</span></a>
+<div><h1 class="bu-login__pitch">Votre agent, au travail. En direct.</h1><p class="bu-login__lede">Une fenêtre en temps réel sur Timmy et ses sous-agents : activité, tâches planifiées, projets et santé du serveur.</p></div>
+<div class="bu-login__stage" role="img" aria-label="Le bureau de Timmy, vue isométrique" style="--art: url(../../assets/Office/office-day.png), url(../../assets/Concepts/office-day.png)"></div>
+<div class="bu-login__foot"><span>Portail privé · office.example.com</span><span class="bu-mono-sm">OpenClaw</span></div></div>
+<div class="bu-login__panel"><form class="bu-login__form" onsubmit="return false"><div><h2 class="bu-login__title">Connexion</h2><p class="bu-login__sub">Accès réservé.</p></div>
+<div class="bu-field"><label class="bu-field__label" for="le">Courriel</label><input class="bu-input" id="le" type="email" autocomplete="username" placeholder="nom@example.invalid"></div>
+<div class="bu-field"><label class="bu-field__label" for="lp">Mot de passe</label><input class="bu-input" id="lp" type="password" autocomplete="current-password" aria-invalid="true" aria-describedby="lerr"></div>
+<div class="bu-banner bu-banner--danger" id="lerr"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg><span class="bu-banner__text">Identifiants invalides. Vérifiez le courriel et le mot de passe.</span></div>
+<button class="bu-btn bu-btn--primary bu-btn--lg bu-btn--block">Se connecter</button></form></div></div></div>
+</main>
+</body>
+</html>

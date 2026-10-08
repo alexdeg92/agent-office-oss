@@ -1,0 +1,14 @@
+{
+  "flags": {
+    "ofFlag": {
+      "state": "ENABLED",
+      "variants": { "on": true, "off": false },
+      "defaultVariant": "on"
+    },
+    "ofText": {
+      "state": "ENABLED",
+      "variants": { "a": "hello", "b": "world" },
+      "defaultVariant": "a"
+    }
+  }
+}

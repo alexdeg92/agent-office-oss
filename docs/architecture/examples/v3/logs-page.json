@@ -1,0 +1,69 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "agent:atlas:cron:ffffffff-0c01-4000-8000-000000000001",
+        "kind": "scheduled",
+        "runtimeKind": null,
+        "channel": null,
+        "label": "Tâche planifiée · Veille hebdomadaire",
+        "title": {
+          "key": "sessionTitle.cronNamed",
+          "params": {
+            "name": "Veille hebdomadaire"
+          }
+        },
+        "model": "gpt-5.5",
+        "modelProvider": "provider-a",
+        "tokens": 1500,
+        "updatedAt": 1791223180000,
+        "live": true,
+        "heartbeat": false
+      },
+      {
+        "id": "agent:atlas:subagent:ffffffff-0001-4000-8000-000000000001",
+        "kind": "subagent",
+        "runtimeKind": null,
+        "channel": null,
+        "label": "Sous-agent ffff",
+        "title": {
+          "key": "sessionTitle.subagent",
+          "params": {
+            "id": "ffff"
+          }
+        },
+        "model": "model-a",
+        "modelProvider": "provider-a",
+        "tokens": 8100,
+        "updatedAt": 1791223170000,
+        "live": true,
+        "heartbeat": false
+      },
+      {
+        "id": "agent:atlas:telegram:direct:foreign-user",
+        "kind": "conversation-direct",
+        "runtimeKind": null,
+        "channel": "telegram",
+        "label": "Utilisateur foreign-user",
+        "title": {
+          "key": "sessionTitle.user",
+          "params": {
+            "id": "foreign-user"
+          }
+        },
+        "model": "model-a",
+        "modelProvider": "openai",
+        "tokens": 3300,
+        "updatedAt": 1791223140000,
+        "live": true,
+        "heartbeat": false
+      }
+    ],
+    "nextCursor": "eyJvIjozfQ"
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
+}

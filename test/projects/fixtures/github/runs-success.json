@@ -1,0 +1,11 @@
+{
+  "workflow_runs": [
+    {
+      "id": 43,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/alexdeg92/demo/actions/runs/43",
+      "updated_at": "2026-10-03T08:00:00Z"
+    }
+  ]
+}

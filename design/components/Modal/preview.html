@@ -1,0 +1,36 @@
+<!-- @dsCard group="Mise en page" height=1032 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fenêtre modale et tiroir · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-working" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol></svg>
+<main class="pv">
+<div class="pv-frame" style="position: relative; min-height: 34rem">
+<div class="bu-scrim" style="position: absolute">
+<div class="bu-modal" role="dialog" aria-modal="true" aria-labelledby="m1">
+<div class="bu-modal__header"><div style="flex:1"><h2 class="bu-modal__title" id="m1">Nouvelle tâche planifiée</h2><p class="bu-modal__desc">Timmy exécutera l'instruction à chaque déclenchement.</p></div><button class="bu-btn bu-btn--icon bu-btn--ghost" aria-label="Fermer" title="Fermer"><svg class="bu-icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+<div class="bu-modal__body"><div class="bu-field"><label class="bu-field__label" for="mn">Nom</label><input class="bu-input" id="mn" placeholder="ex. Veille prix concurrent"></div>
+<div class="bu-form-row"><div class="bu-field"><label class="bu-field__label" for="mc">Planification (cron)</label><input class="bu-input bu-mono" id="mc" value="0 9 * * 1"></div><div class="bu-field"><label class="bu-field__label" for="mt">Fuseau</label><input class="bu-input" id="mt" value="America/Toronto"></div></div></div>
+<div class="bu-modal__footer"><button class="bu-btn bu-btn--ghost">Annuler</button><button class="bu-btn bu-btn--primary">Créer la tâche</button></div></div></div></div>
+<div class="pv-frame" style="position: relative; min-height: 26rem">
+<div class="bu-scrim bu-scrim--drawer" style="position: absolute"><aside class="bu-drawer" role="dialog" aria-modal="true" aria-labelledby="d1">
+<div class="bu-modal__header"><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><div style="flex:1"><h2 class="bu-modal__title" id="d1">Timmy</h2><p class="bu-modal__desc">Agent principal</p></div><button class="bu-btn bu-btn--icon bu-btn--ghost" aria-label="Fermer" title="Fermer"><svg class="bu-icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+<div class="bu-modal__body"><div class="pv-row"><span class="bu-state bu-state--live" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-working"/></svg>Exécute</span></div><dl class="bu-kv"><div class="bu-kv__row"><dt>Dernière activité</dt><dd>à l'instant</dd></div><div class="bu-kv__row"><dt>Jetons</dt><dd>184 302</dd></div><div class="bu-kv__row"><dt>Session</dt><dd>agent:main:main</dd></div></dl></div></aside></div></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!-- @dsCard group="Projets" height=372 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Résumé du projet · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></symbol></svg>
+<main class="pv">
+<section class="bu-card bu-summary"><p class="bu-eyebrow">Résumé</p><p class="bu-summary__text">Refonte complète du portail : nouveau système de design Bureau, bureau illustré personnalisable et page Projets. Phase 1 en cours (design), phase 2 prévue après validation d'Owner.</p><div class="bu-summary__source"><span class="bu-avatar bu-avatar--agent bu-avatar--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span>Rédigé par Timmy · 5 oct. 2026, 14:02</span><span class="bu-spacer"></span><button class="bu-btn bu-btn--ghost bu-btn--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-refresh"/></svg>Régénérer</button></div></section>
+<section class="bu-card bu-summary"><p class="bu-eyebrow">Résumé</p><div class="bu-empty bu-empty--compact"><p class="bu-empty__text">Aucun résumé pour l'instant.</p><button class="bu-btn bu-btn--sm">Demander un résumé à Timmy</button></div></section>
+</main>
+</body>
+</html>

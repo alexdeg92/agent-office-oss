@@ -1,0 +1,45 @@
+<!-- @dsCard group="Actions" height=434 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boutons · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol><symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4M16 17l5-5-5-5M21 12H9"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol></svg>
+<main class="pv">
+<section class="pv-col"><p class="bu-eyebrow">Variantes</p><div class="pv-row">
+<button class="bu-btn bu-btn--primary"><svg class="bu-icon" aria-hidden="true"><use href="#i-play"/></svg>Exécuter maintenant</button>
+<button class="bu-btn">Modifier</button>
+<button class="bu-btn bu-btn--ghost">Annuler</button>
+<button class="bu-btn bu-btn--danger-ghost">Supprimer</button>
+<button class="bu-btn bu-btn--danger">Supprimer la tâche</button>
+<button class="bu-btn" disabled>Désactivé</button></div></section>
+<section class="pv-col"><p class="bu-eyebrow">Tailles et icônes</p><div class="pv-row">
+<button class="bu-btn bu-btn--primary bu-btn--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-plus"/></svg>Nouvelle tâche</button>
+<button class="bu-btn bu-btn--primary">Créer la tâche</button>
+<button class="bu-btn bu-btn--primary bu-btn--lg">Se connecter</button>
+<button class="bu-btn bu-btn--icon" aria-label="Zoom arrière" title="Zoom arrière"><svg class="bu-icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+<button class="bu-btn bu-btn--icon" aria-label="Zoom avant" title="Zoom avant"><svg class="bu-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+<button class="bu-btn bu-btn--icon bu-btn--ghost" aria-label="Se déconnecter" title="Se déconnecter"><svg class="bu-icon" aria-hidden="true"><use href="#i-logout"/></svg></button></div></section>
+<section class="pv-col"><p class="bu-eyebrow">États</p><div class="pv-row">
+<button class="bu-btn bu-btn--primary" aria-busy="true">Création…</button>
+<button class="bu-btn bu-btn--armed" aria-live="polite"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg>Confirmer la suppression ?</button>
+<button class="bu-backlink"><svg class="bu-icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Flux de travail</button></div></section>
+<div class="pv-themes"><div class="pv-theme" data-theme="light"><p class="bu-eyebrow">Clair</p><div class="bu-btn-group">
+<button class="bu-btn bu-btn--primary">Enregistrer</button><button class="bu-btn">Exécuter</button><button class="bu-btn bu-btn--ghost">Annuler</button><button class="bu-btn bu-btn--danger-ghost">Supprimer</button></div></div></div>
+</main>
+</body>
+</html>

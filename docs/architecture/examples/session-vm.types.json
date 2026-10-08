@@ -1,0 +1,6 @@
+{
+  "$comment": "Shape sidecar for session-vm.json (api.md §3.6, data-model §2.1).",
+  "nullable": ["$.model", "$.modelProvider", "$.updatedAt", "$.cwd", "$.run.endReason", "$.messageCount", "$.events[].sender", "$.events[].callId",
+    "$.events[].durationMs", "$.events[].model", "$.events[].provider", "$.events[].outputTokens", "$.events[].stopReason"],
+  "types": { "$.events[].error": "string" }
+}

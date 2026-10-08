@@ -1,0 +1,33 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.event.sessions.changed",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "sessionKey": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+      "sessionId": "ffffffff-5e55-4000-8000-000000000002",
+      "kind": "direct",
+      "isBackground": true,
+      "agentId": "main",
+      "reason": "update",
+      "runId": "run_synthetic_1",
+      "ts": 1791223195000,
+      "subagentRole": "worker",
+      "spawnedBy": "agent:main:main",
+      "status": "done",
+      "startedAt": 1791223160000,
+      "endedAt": 1791223194000,
+      "runtimeMs": 34000,
+      "lastRunId": null,
+      "hasActiveRun": false,
+      "updatedAt": 1791223194000,
+      "totalTokens": 9100,
+      "model": "model-a",
+      "modelProvider": "provider-a"
+    }
+  }
+}

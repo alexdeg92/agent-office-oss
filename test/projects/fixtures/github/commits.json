@@ -1,0 +1,18 @@
+[
+  {
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "commit": {
+      "message": "Fix the door\n\nLonger body that must not leak into the card.",
+      "author": { "name": "owner", "email": "Ada@Example.com", "date": "2026-10-01T12:00:00Z" }
+    },
+    "author": { "login": "alexdeg92" }
+  },
+  {
+    "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "commit": {
+      "message": "Second",
+      "author": { "name": "Guest", "email": "guest@example.com", "date": "2026-09-30T12:00:00Z" }
+    },
+    "author": { "login": "guest" }
+  }
+]

@@ -1,0 +1,60 @@
+{
+ "$fixture": {
+  "source": "gateway",
+  "channel": "gw.rpc.sessions.get",
+  "origin": "synthetic",
+  "openclawVersion": "2026.9.8",
+  "params": {
+   "key": "agent:main:discord:direct:100000000000000091"
+  },
+  "note": "architect-54: the project tag (a no-op exec call); never part of the reply text"
+ },
+ "body": {
+  "kind": "json",
+  "value": {
+   "messages": [
+    {
+     "role": "user",
+     "timestamp": 1791223200000,
+     "content": "Où en est le générateur ? Il faudrait aussi les allergènes."
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223220000,
+     "model": "model-a",
+     "provider": "provider-a",
+     "usage": {
+      "output_tokens": 90
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "L’import marche ; j’ajoute les allergènes à la fiche de chaque plat."
+      },
+      {
+       "type": "toolCall",
+       "id": "call_000091_0",
+       "name": "exec",
+       "arguments": {
+        "command": "node /opt/openclaw/workspace/skills/projet/projet.js tag menu-builder en-cours P2 allergènes"
+       }
+      }
+     ]
+    },
+    {
+     "role": "toolResult",
+     "toolCallId": "call_000091_0",
+     "toolName": "exec",
+     "isError": false,
+     "timestamp": 1791223225000,
+     "content": [
+      {
+       "type": "text",
+       "text": "ok · projet"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

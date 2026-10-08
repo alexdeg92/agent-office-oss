@@ -1,0 +1,39 @@
+{
+ "$fixture": {
+  "source": "gateway",
+  "channel": "gw.rpc.sessions.get",
+  "origin": "synthetic",
+  "openclawVersion": "2026.9.8",
+  "params": {
+   "key": "agent:main:discord:direct:100000000000000092"
+  },
+  "note": "architect-54: the project tag (a no-op exec call); never part of the reply text"
+ },
+ "body": {
+  "kind": "json",
+  "value": {
+   "messages": [
+    {
+     "role": "user",
+     "timestamp": 1791223200000,
+     "content": "Quelle heure est-il à Tokyo ?"
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223220000,
+     "model": "model-a",
+     "provider": "provider-a",
+     "usage": {
+      "output_tokens": 90
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Il est 23 h 40 à Tokyo."
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

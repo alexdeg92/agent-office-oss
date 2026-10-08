@@ -1,0 +1,29 @@
+<!-- @dsCard group="Navigation" height=327 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onglets, segments et filtres · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol></svg>
+<main class="pv">
+<div class="bu-tabs" role="tablist"><button class="bu-tab" role="tab" aria-selected="true">Activité</button><button class="bu-tab" role="tab" aria-selected="false">Agent</button><button class="bu-tab" role="tab" aria-selected="false">File <span class="bu-count">3</span></button><button class="bu-tab" role="tab" aria-selected="false">Santé</button></div>
+<div class="bu-toolbar"><div class="bu-segmented" role="group" aria-label="Vue de la trace"><button class="bu-segmented__opt" aria-pressed="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-list"/></svg>Arbre</button><button class="bu-segmented__opt" aria-pressed="false"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg>Chronologie</button></div>
+<div class="bu-segmented" role="group" aria-label="Type d'interlocuteur"><button class="bu-segmented__opt" aria-pressed="true">Tous</button><button class="bu-segmented__opt" aria-pressed="false">Utilisateurs</button><button class="bu-segmented__opt" aria-pressed="false">Canaux</button></div></div>
+<nav class="bu-filter" aria-label="Filtres" style="max-width: 15rem"><p class="bu-eyebrow">Catégorie</p><ul class="bu-filter__list"><li><button class="bu-filter__item" aria-current="true">Toutes <span class="bu-count">52</span></button></li><li><button class="bu-filter__item">Intégrées <span class="bu-count">41</span></button></li><li><button class="bu-filter__item">Espace de travail <span class="bu-count">9</span></button></li><li><button class="bu-filter__item">Extra <span class="bu-count">2</span></button></li></ul></nav>
+</main>
+</body>
+</html>

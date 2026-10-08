@@ -1,0 +1,32 @@
+{
+  "$comment": "Shape sidecar for interlocutor-vm.json (api.md §3.5). profile is null while pending or after a failed lookup. 3.0: kind 'user' | 'room' + channel; profile is the channel enricher's (Discord: as 2.x) or null.",
+  "nullable": [
+    "$.profile",
+    "$.profile.displayName",
+    "$.profile.username",
+    "$.access.policy",
+    "$.access.enabled",
+    "$.access.requireMention",
+    "$.stats.firstSeenAt",
+    "$.stats.lastSeenAt",
+    "$.sessions[].updatedAt",
+    "$.sessions[].model",
+    "$.primarySessionKey"
+  ],
+  "types": {
+    "$.profile.avatarUrl": "string",
+    "$.access.enabled": "boolean",
+    "$.access.requireMention": "boolean"
+  },
+  "variants": {
+    "$.profile": [
+      {
+        "name": "#annonces",
+        "type": "text",
+        "topic": "Nouvelles de l’équipe",
+        "guildName": "Atelier",
+        "createdAt": 1600000000000
+      }
+    ]
+  }
+}

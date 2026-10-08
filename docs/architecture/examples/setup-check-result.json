@@ -1,0 +1,18 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "ok": true,
+      "status": "connected",
+      "protocol": 4,
+      "latencyMs": 42
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
+}

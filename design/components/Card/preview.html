@@ -1,0 +1,35 @@
+<!-- @dsCard group="Mise en page" height=500 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartes · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-flux" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M6.5 10v4a2 2 0 0 0 2 2H14"/></symbol></svg>
+<main class="pv">
+<div class="bu-grid">
+<button class="bu-card bu-card--interactive"><div class="bu-card__header"><span class="bu-dot bu-dot--success"></span><h3 class="bu-card__title bu-truncate">Résumé quotidien Discord</h3><span class="bu-chip bu-chip--success bu-chip--sm" style="margin-left:auto"><svg class="bu-icon" aria-hidden="true"><use href="#i-check"/></svg>Active</span></div>
+<p class="bu-card__desc">Chaque matin, Timmy lit les canaux suivis et publie un résumé des décisions et des questions en suspens.</p>
+<div class="bu-card__footer"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg><span>chaque jour à 08:30</span><span>America/Toronto</span><span class="bu-card__more">Ouvrir<svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></span></div></button>
+<button class="bu-card bu-card--interactive"><div class="bu-card__header"><span class="bu-dot"></span><h3 class="bu-card__title bu-truncate">Veille prix concurrent</h3><span class="bu-chip bu-chip--sm" style="margin-left:auto">Inactive</span></div>
+<p class="bu-card__desc">Compare les prix publiés et signale les écarts de plus de 5 %.</p>
+<div class="bu-card__footer"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg><span>lundi 09:00</span><span class="bu-card__more">Ouvrir<svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></span></div></button>
+</div>
+<section class="bu-card"><div class="bu-detail-header"><span class="bu-icon-tile bu-icon-tile--lg"><svg class="bu-icon bu-icon--lg" aria-hidden="true"><use href="#i-flux"/></svg></span><div><h1 class="bu-detail-header__title">Résumé quotidien Discord <span class="bu-chip bu-chip--success"><svg class="bu-icon" aria-hidden="true"><use href="#i-check"/></svg>Active</span></h1><p class="bu-detail-header__desc">Chaque matin, Timmy lit les canaux suivis et publie un résumé.</p><p class="bu-detail-header__meta">chaque jour à 08:30 · America/Toronto · agent main</p></div></div></section>
+<section class="bu-card"><p class="bu-eyebrow">Planification</p><dl class="bu-kv"><div class="bu-kv__row"><dt>Expression</dt><dd>30 8 * * *</dd></div><div class="bu-kv__row"><dt>Fuseau</dt><dd>America/Toronto</dd></div></dl></section>
+</main>
+</body>
+</html>

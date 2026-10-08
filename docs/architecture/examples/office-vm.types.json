@@ -1,0 +1,29 @@
+{
+  "$comment": "Shape sidecar for office-vm.json (api.md §3.2). occupants[].exchanges (architect-55) is optional: conversation occupants with a known transcript.",
+  "nullable": [
+    "$.connection.since",
+    "$.kpis[].value",
+    "$.occupants[].sessionKey",
+    "$.occupants[].lastSeenAt",
+    "$.occupants[].ruleId",
+    "$.occupants[].look.variant"
+  ],
+  "types": {
+    "$.journal[].actor.avatarUrl": "string"
+  },
+  "variants": {
+    "$.occupants[].destination": [
+      {
+        "kind": "server",
+        "stationUid": "rack-1"
+      }
+    ]
+  },
+  "additional": {
+    "$.occupants[].exchanges": {
+      "recent": 2,
+      "windowMs": 600000,
+      "lastAt": 1791223140000
+    }
+  }
+}

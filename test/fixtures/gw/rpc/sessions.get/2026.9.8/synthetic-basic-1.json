@@ -1,0 +1,75 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.get",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "key": "agent:main:main"
+    }
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Quel temps fera-t-il demain ?",
+          "timestamp": 1791223020000,
+          "senderName": "Owner"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1791223022000,
+          "model": "model-a",
+          "provider": "provider-a",
+          "usage": {
+            "output_tokens": 120
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Je regarde la météo."
+            },
+            {
+              "type": "toolCall",
+              "id": "call_1",
+              "name": "web_search",
+              "arguments": {
+                "query": "météo demain"
+              }
+            }
+          ]
+        },
+        {
+          "role": "toolResult",
+          "toolCallId": "call_1",
+          "toolName": "web_search",
+          "isError": false,
+          "timestamp": 1791223025000,
+          "content": [
+            {
+              "type": "text",
+              "text": "Ensoleillé, 18 °C."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1791223027000,
+          "model": "model-a",
+          "provider": "provider-a",
+          "usage": {
+            "output_tokens": 40
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Demain : ensoleillé, 18 °C."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

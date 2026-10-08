@@ -1,0 +1,53 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.cron.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "jobs": [
+        {
+          "id": "ffffffff-f101-4000-8000-000000000101",
+          "name": "Weekly digest",
+          "description": "Summarise the week.",
+          "enabled": true,
+          "schedule": {
+            "kind": "cron",
+            "expr": "0 9 * * 1",
+            "tz": "Europe/Paris"
+          },
+          "agentId": "atlas",
+          "sessionTarget": "isolated",
+          "wakeMode": "now",
+          "payload": {
+            "kind": "message",
+            "message": "Summarise the week."
+          },
+          "createdAtMs": 1788721200000,
+          "updatedAtMs": 1791226800000
+        },
+        {
+          "id": "ffffffff-f102-4000-8000-000000000102",
+          "name": "Inbox sweep",
+          "enabled": false,
+          "schedule": {
+            "kind": "cron",
+            "expr": "30 7 * * *",
+            "tz": "Europe/Paris"
+          },
+          "sessionTarget": "isolated",
+          "wakeMode": "now",
+          "payload": {
+            "kind": "message",
+            "message": "Sweep the inbox."
+          },
+          "createdAtMs": 1790449200000,
+          "updatedAtMs": 1790449200000
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr-CA" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bureau · planche des accessoires</title>
+  <style>
+    body { margin: 0; padding: 16px; background: var(--bu-bg, #0d1017); color: var(--bu-text-primary, #e9ecf2); font: 14px/1.4 Inter, system-ui, sans-serif; }
+    h1 { font: 600 20px/1.3 Sora, Inter, sans-serif; margin: 0 0 4px; }
+    .meta { color: var(--bu-text-secondary, #aeb5c2); margin: 0 0 12px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+    .controls select { font: inherit; color: inherit; background: var(--bu-bg-sunken, #090b10); border: 1px solid var(--bu-border-default, #2a3140); border-radius: 8px; padding: 6px 8px; }
+    .summary { margin: 0 0 16px; }
+    table { border-collapse: collapse; }
+    th { position: sticky; top: 0; background: var(--bu-bg, #0d1017); font: 600 12px/1.2 Inter, sans-serif; padding: 6px; text-align: left; z-index: 1; }
+    th.row { position: sticky; left: 0; }
+    td { padding: 4px; vertical-align: top; }
+    .cell { position: relative; width: 192px; height: 288px; background: #e9e6df; border-radius: 6px; overflow: hidden; }
+    .cell.dark { background: #2b2f3a; }
+    .cell img { position: absolute; inset: 0; width: 192px; height: 288px; image-rendering: auto; }
+    .tag { position: absolute; left: 4px; top: 4px; padding: 1px 6px; border-radius: 999px; font: 700 11px/16px Inter, sans-serif; color: #fff; }
+    .tag.v2 { background: #1f8a4c; } .tag.v1 { background: #b7791f; } .tag.none { background: #a83232; } .tag.base { background: #4b5563; }
+    .tag + .tag { left: auto; right: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Planche des accessoires (2×, pixel pour pixel)</h1>
+  <p class="meta">Même empilement que la scène : couche arrière → personnage → couche avant, dans l’ordre des emplacements. <b>v2</b> = deux couches livrées · <b>v1</b> = ancienne surcouche (secours) · <b>absent</b> = rien à dessiner.</p>
+  <div class="controls">
+    <label>Personnage <select id="look"></select></label>
+    <label>Accessoire <select id="acc"></select></label>
+    <label><input type="checkbox" id="legacy"> Secours v1</label>
+    <label><input type="checkbox" id="dark"> Fond sombre</label>
+  </div>
+  <p class="summary" id="summary"></p>
+  <p class="meta" id="coverage"></p>
+  <div id="sheet"></div>
+  <script type="module" src="./contact.js"></script>
+</body>
+</html>

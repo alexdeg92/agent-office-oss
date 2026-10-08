@@ -1,0 +1,111 @@
+/* Bureau page layout (<basePath>bureau), the original O3–O5 design (office-dev-18): components come from Bureau
+   (bu-kpis, bu-stage, bu-roster, bu-state, bu-journal, bu-segmented); ao-bureau only arranges them. Full width. */
+.ao-bureau__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--bu-space-4); }
+.ao-bureau__kpis { flex: 1 1 32rem; min-width: 0; max-width: 100%; flex-wrap: wrap; row-gap: var(--bu-space-3); overflow: visible; }   /* wraps, never a scroll region (axe scrollable-region-focusable) */
+.ao-bureau__main { display: grid; grid-template-columns: minmax(0, 1fr) clamp(18rem, 22vw, 26rem); gap: var(--bu-space-4); align-items: start; }
+.ao-bureau--editing .ao-bureau__main { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); }
+.ao-bureau__stagecol { display: flex; flex-direction: column; gap: var(--bu-space-4); min-width: 0; }
+/* The stage fills its column at the room's proportions, never taller than the window allows. */
+.ao-bureau__stagewrap { display: grid; min-width: 0; }
+.ao-bureau__stagewrap > .ao-bureau__stage { grid-area: 1 / 1; width: 100%; height: auto; aspect-ratio: 1067 / 720; min-height: 26rem; max-height: calc(100svh - 13rem); }
+.ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { aspect-ratio: auto; height: clamp(26rem, calc(100svh - 12rem), 60rem); max-height: none; }
+.ao-bureau__side { display: flex; flex-direction: column; gap: var(--bu-space-2); min-width: 0; max-height: max(26rem, calc(100svh - 13rem)); overflow: auto; }
+.ao-bureau--editing .ao-bureau__side { max-height: none; overflow: visible; }
+.ao-bureau__side [hidden] { display: none !important; }
+.ao-bureau__editbar:empty { display: none; }
+.ao-bureau__scrim { position: fixed; inset: 0; z-index: var(--bu-z-drawer); }
+
+/* Theme: the office's day/night (independent of the UI theme), on the right of the KPI strip. */
+.ao-bureau__theme { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-2); }
+.ao-bureau__themelabel { font: var(--bu-type-body-sm); color: var(--bu-text-secondary); }
+.ao-bureau__themenow { margin: 0; font: var(--bu-type-caption); color: var(--bu-text-tertiary); }
+
+/* Agent cards (bu-roster): portrait in its state ring, name, role, state pill. */
+.ao-bureau__roster { display: flex; flex-direction: column; gap: var(--bu-space-2); margin: 0; padding: 0; list-style: none; }
+.ao-bureau__roster .bu-avatar img { border-radius: inherit; }
+.ao-agentcard { width: 100%; text-align: left; }
+.ao-agentcard__seen { font: var(--bu-type-caption); color: var(--bu-text-tertiary); }
+/* O8: an agent seen recently but no longer on stage: listed after the others, muted. */
+.ao-agentcard.is-seen { opacity: 0.72; }
+.ao-agentcard.is-seen .bu-avatar { filter: grayscale(1); }
+
+/* Journal / File below the office. */
+.ao-bureau__feedhead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.ao-bureau__feedhead .bu-eyebrow { margin: 0; }
+.ao-bureau__fresh { font: var(--bu-type-caption); }
+.ao-bureau__tabs { margin-left: auto; }
+.ao-bureau__queue .bu-event__who { gap: var(--bu-space-2); }
+
+/* O10: more than 12 agents, the roster is grouped by state: a caption-size head with a count, errors open. */
+.ao-roster-group + .ao-roster-group { margin-top: var(--bu-space-2); }
+.ao-roster-group > .ao-bureau__roster { padding-top: var(--bu-space-1); }
+.ao-roster-group__head { display: flex; align-items: center; gap: var(--bu-space-2); min-height: 44px; padding: var(--bu-space-2) 0; cursor: pointer; list-style: none;
+  font: var(--bu-type-label); color: var(--bu-text-primary); border-radius: var(--bu-radius-xs); padding-inline: var(--bu-space-1); }
+.ao-roster-group__head::-webkit-details-marker { display: none; }
+.ao-roster-group__head::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform 120ms ease; color: var(--bu-text-tertiary); }
+.ao-roster-group[open] > .ao-roster-group__head::after { transform: rotate(45deg); }
+.ao-roster-group__head:focus-visible { outline: 2px solid var(--bu-focus-ring); outline-offset: 2px; }
+.ao-roster-group__count { min-width: 3ch; padding: 0 var(--bu-space-1); text-align: center; font: var(--bu-type-mono-sm); font-variant-numeric: tabular-nums;
+  color: var(--bu-text-secondary); border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-xs); }
+.ao-roster-group--error .ao-roster-group__label, .ao-roster-group--error .ao-roster-group__count { color: var(--bu-danger); }
+@media (prefers-reduced-motion: reduce) { .ao-roster-group__head::after { transition: none; } }
+
+@media (max-width: 820px) {
+  .ao-bureau__main, .ao-bureau--editing .ao-bureau__main { grid-template-columns: minmax(0, 1fr); }
+  .ao-bureau__stagewrap > .ao-bureau__stage { width: 100%; height: auto; aspect-ratio: 1067 / 720; min-height: 0; max-height: none; }
+  .ao-bureau__side { max-height: none; overflow: visible; }
+}
+.bu-avatar img.ao-avatar-pose { position: absolute; max-width: none; height: auto; border-radius: 0 !important; }
+.bu-avatar:has(.ao-avatar-pose) { overflow: hidden; }
+
+/* Targets (O4, explorer-qa-01 Q01-07): every actionable control ≥ 44 × 44 px, whatever the pointer. */
+.ao-bureau .bu-segmented__opt { min-height: 44px; min-width: 44px; }
+.ao-bureau__scrim .bu-btn { min-height: 44px; min-width: 44px; }
+/* Landscape phones: keep the whole stage on screen. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .ao-bureau__stagewrap > .ao-bureau__stage { height: 86svh; aspect-ratio: auto; min-height: 0; max-height: none; }
+  .ao-bureau__main { grid-template-columns: minmax(0, 1fr) minmax(13rem, 16rem); }
+}
+
+/* Unconfirmed state (explorer-qa-02 Q02-01): the scene stays, captioned as the last observation. */
+.ao-bureau__stagecap { grid-area: 1 / 1; position: relative; z-index: 2; align-self: end; justify-self: start; margin: 0 0 var(--bu-space-2) var(--bu-space-2); padding: 2px var(--bu-space-2);
+  font: var(--bu-type-caption); color: var(--bu-text-secondary); background: color-mix(in srgb, var(--bu-bg) 85%, transparent); border-radius: var(--bu-radius-xs); pointer-events: none; }
+.ao-bureau__stage--last { filter: saturate(0.6); }
+/* R27-02: the stream is down. The scene and annexes are frozen (scene.js setFrozen) and dimmed; the chip says since when. */
+.ao-bureau__stage--last, .ao-bureau__annex--last .ao-bureau__annexstage { filter: saturate(0.45) brightness(0.82); }
+.ao-bureau__stagecap--offline { display: inline-flex; align-items: center; gap: var(--bu-space-1); color: var(--bu-text-primary); border: 1px solid var(--bu-border-default); }
+.ao-bureau__stagecap--offline::before { content: ""; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--bu-state-offline); }
+
+
+/* Read-only instance (explorer-qa-03 Q03-O02): the reason replaces the theme toggle; zoom and reading stay. */
+.ao-bureau__ro { margin: 0; font: var(--bu-type-body-sm); color: var(--bu-text-secondary); min-height: var(--bu-size-touch); display: flex; align-items: center; }
+.ao-drawer__state { margin: 0; font: var(--bu-type-body); color: var(--bu-text-primary); }
+
+/* O9: annex rooms below the office when its desks run out (read-only scenes, same art). */
+.ao-bureau__annexes { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--bu-space-4); }
+.ao-bureau__annex { display: flex; flex-direction: column; gap: var(--bu-space-2); min-width: 0; }
+.ao-bureau__annex .ao-below-title { margin: 0; font: var(--bu-type-label); color: var(--bu-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.ao-bureau__annexstage { width: 100%; aspect-ratio: 1067 / 720; height: auto; min-height: 0; }
+
+
+/* office-dev-19, phones (Owner, Android ~436 px): the office shows near the top. KPIs as a compact 3 × 2 grid (smaller
+   numbers, no sub-lines), the theme switch on one short line, the stage edge to edge at the room's proportions. */
+@media (max-width: 600px) {
+  .ao-bureau__top { gap: var(--bu-space-2); }
+  .ao-bureau__kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--bu-space-2) var(--bu-space-3); flex-basis: 100%; }
+  .ao-bureau__kpis .bu-kpi { padding: 0; border-right: 0; white-space: normal; min-width: 0; gap: 0; }
+  .ao-bureau__kpis .bu-kpi__label { font: var(--bu-type-caption); font-size: 10px; line-height: 1.25; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; }
+  .ao-bureau__kpis .bu-kpi__value { font: var(--bu-type-heading); font-variant-numeric: tabular-nums; }
+  .ao-bureau__kpis .bu-kpi__sub { display: none; }
+  .ao-bureau__theme { width: 100%; gap: var(--bu-space-2); }
+  .ao-bureau__themelabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .ao-bureau__theme .bu-segmented { flex: 1; }
+  .ao-bureau__theme .bu-segmented__opt { flex: 1; justify-content: center; }
+  .ao-bureau__themenow { display: none; }
+  .ao-bureau__stagewrap { margin-inline: calc(-1 * var(--bu-space-4)); }
+  .ao-bureau__stagewrap > .ao-bureau__stage, .ao-bureau__annexes .ao-bureau__annexstage {
+    border-radius: 0; border-inline: 0; aspect-ratio: auto; min-height: 0; max-height: none; height: calc(100vw * 720 / 1067 + 52px); }
+  .ao-bureau__annexes .ao-bureau__annexstage { margin-inline: calc(-1 * var(--bu-space-4)); width: auto; }
+  .ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { height: 70svh; }
+}

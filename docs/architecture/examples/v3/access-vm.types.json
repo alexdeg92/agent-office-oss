@@ -1,0 +1,18 @@
+{
+  "$comment": "Shape sidecar for access-vm.json (api.md §3.5). 3.0: interlocutors of EVERY channel; kind 'user' | 'room', channel a ChannelRef; ids opaque (Discord's unchanged). resolution 'unresolvable' = no enricher for that channel. access is null-valued where the runtime config has no policy for that channel.",
+  "nullable": [
+    "$.agents[].model",
+    "$.interlocutors[].access.enabled",
+    "$.interlocutors[].access.policy",
+    "$.interlocutors[].access.requireMention",
+    "$.interlocutors[].avatarUrl",
+    "$.interlocutors[].lastSeenAt",
+    "$.interlocutors[].name",
+    "$.policy.dm",
+    "$.policy.execSecurity",
+    "$.policy.group"
+  ],
+  "types": {
+    "$.interlocutors[].avatarUrl": "string"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.agents.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "defaultId": "atlas",
+      "agents": [
+        {
+          "id": "atlas",
+          "name": "Atlas",
+          "workspace": "/srv/acme/workspace-atlas",
+          "model": {
+            "primary": "anthropic/claude-sonnet-5"
+          }
+        },
+        {
+          "id": "scribe",
+          "name": "Scribe",
+          "workspace": "/srv/acme/workspace-scribe",
+          "model": "mistral/mistral-large-3"
+        },
+        {
+          "id": "reviewer",
+          "name": "Aaron",
+          "workspace": "/srv/acme/workspace-reviewer",
+          "model": "acme-llm/acme-1"
+        }
+      ]
+    }
+  }
+}

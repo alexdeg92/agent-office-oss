@@ -1,0 +1,205 @@
+/* Office scene (design/office/README.md). Loaded after Bureau tokens + bundle.css; only --bu-* values.
+   Prefix ao- = office-internal; the chrome around it uses bu-stage / bu-nameplate / bu-btn. */
+
+.ao-office { position: relative; overflow: hidden; background: var(--bu-bg-sunken); user-select: none; -webkit-user-select: none; }
+.ao-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: pan-x pan-y; cursor: grab; outline: none; }
+/* O9: one finger scrolls the page past the office; two fingers pan and pinch it (scene.js). The editor drags with one. */
+.ao-office[data-editing] .ao-viewport { touch-action: none; }
+.ao-viewport.is-panning { cursor: grabbing; }
+.ao-viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--bu-focus-ring); }
+.ao-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.ao-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.ao-layer--scene { isolation: isolate; }
+.ao-layer--light { pointer-events: none; }
+.ao-layer--fx { pointer-events: none; }
+.ao-layer--labels { inset: 0; width: auto; height: auto; pointer-events: none; z-index: var(--bu-z-raised); }
+.ao-office .ao-controls { z-index: calc(var(--bu-z-raised) + 1); }
+
+.ao-sprite, .ao-shell, .ao-light, .ao-pose img { position: absolute; display: block; max-width: none; -webkit-user-drag: none; }
+.ao-shell, .ao-light { pointer-events: none; }
+.ao-light[hidden] { display: none; }
+.ao-sprite { transition: filter var(--bu-duration-base) var(--bu-ease-standard); }
+.ao-sprite[hidden] { display: none; }
+.ao-sprite.ao-mirror { transform: scaleX(-1); }
+.ao-sprite.ao-dim { filter: brightness(0.62) saturate(0.7); }
+
+/* Error tint on the monitor: the lit screen image is the mask, danger is the colour. */
+.ao-tint { position: absolute; pointer-events: none; background: var(--bu-danger); mix-blend-mode: color; opacity: 0.85;
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.ao-tint[hidden] { display: none; }
+
+/* Monitor glow (fx layer, above the night light). */
+.ao-glow { position: absolute; width: 120px; height: 90px; margin: -45px 0 0 -60px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--bu-accent) 55%, transparent), transparent);
+  mix-blend-mode: screen; transition: opacity var(--bu-duration-base) var(--bu-ease-standard); }
+.ao-glow[data-mode="on"] { opacity: 0.55; }
+.ao-glow[data-mode="error"] { opacity: 0.6; background: radial-gradient(closest-side, color-mix(in oklab, var(--bu-danger) 60%, transparent), transparent); }
+[data-office-theme="night"] .ao-glow[data-mode="on"] { opacity: 0.9; }
+
+/* ---------- characters ---------- */
+.ao-char { position: absolute; left: 0; top: 0; pointer-events: none; transition: opacity 120ms linear; }
+.ao-char.ao-enter, .ao-char.ao-exit { opacity: 0; }
+.ao-char.ao-flash { animation: ao-flash 120ms linear; }
+@keyframes ao-flash { from { opacity: 0; } to { opacity: 1; } }
+.ao-pose { position: absolute; left: 0; top: 0; opacity: 0; transition: opacity 120ms linear; transform-origin: 50% 96%; }
+.ao-pose.is-in { opacity: 1; }
+.ao-pose img { inset: 0; width: 100%; height: 100%; }
+/* R7-07: one typing frame at a time (author display:block would otherwise paint every frame). */
+.ao-pose img[hidden] { display: none; }
+
+/* Landmark debug overlay (demo ?debug=landmarks) */
+.ao-landmarks { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ao-landmarks .lm-box { fill: none; stroke: var(--bu-accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.ao-landmarks .lm-eyes { stroke: var(--bu-info); stroke-width: 2; }
+.ao-landmarks .lm-centre { fill: var(--bu-accent); }
+.ao-landmarks .lm-ear { fill: var(--bu-warning); }
+.ao-landmarks .lm-neck { fill: var(--bu-success); }
+.ao-landmarks .lm-chest { fill: var(--bu-danger); }
+.ao-landmarks .lm-anchor { fill: none; stroke: var(--bu-text-primary); stroke-width: 1.5; }
+.ao-landmarks .lm-none { fill: var(--bu-text-primary); font: 600 11px/1 sans-serif; }
+
+/* Procedural micro-motion (README §4.2). Animated on the pose wrapper so crossfades keep it. */
+.ao-char[data-motion="breathe"] .ao-pose { animation: ao-breathe 2.4s ease-in-out infinite; }
+.ao-char[data-motion="breathe-slow"] .ao-pose { animation: ao-breathe 4s ease-in-out infinite; }
+.ao-char[data-motion="type"] .ao-pose { animation: ao-bob1 0.4s steps(2, jump-none) infinite; }
+.ao-char[data-motion="type-fast"] .ao-pose { animation: ao-bob1 0.3s steps(2, jump-none) infinite; }
+.ao-char[data-motion="walk"] .ao-pose { animation: ao-bob2 0.35s steps(2, jump-none) infinite; }
+.ao-char[data-motion="hop"] .ao-pose { animation: ao-hop 0.53s cubic-bezier(.3,.7,.4,1) 3; }
+.ao-char.ao-shake { animation: ao-shake 0.3s linear 1; }
+.ao-char[data-motion="wave"] .ao-pose { animation: ao-wave 0.45s ease-in-out 3; }
+@keyframes ao-wave { 0%, 100% { rotate: 0deg; } 50% { rotate: -2.5deg; } }
+@keyframes ao-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.015); } }
+@keyframes ao-bob1 { from { transform: translateY(0); } to { transform: translateY(-1px); } }
+@keyframes ao-bob2 { from { transform: translateY(2px); } to { transform: translateY(-2px); } }
+@keyframes ao-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } }
+@keyframes ao-shake { 0%, 100% { translate: 0 0; } 16%, 50%, 83% { translate: -2px 0; } 33%, 66% { translate: 2px 0; } }
+
+/* ---------- fx: markers and selection ring ---------- */
+.ao-marker { position: absolute; left: 0; top: 0; --_s: var(--bu-state-idle); color: var(--_s); }
+.ao-marker[hidden] { display: none; }
+.ao-marker[data-state="thinking"] { --_s: var(--bu-state-thinking); }
+.ao-marker[data-state="working"] { --_s: var(--bu-state-working); }
+.ao-marker[data-state="researching"] { --_s: var(--bu-state-researching); }
+.ao-marker[data-state="writing"] { --_s: var(--bu-state-writing); }
+.ao-marker[data-state="calling"] { --_s: var(--bu-state-calling); }
+.ao-marker[data-state="waiting"] { --_s: var(--bu-state-waiting); }
+.ao-marker[data-state="error"] { --_s: var(--bu-state-error); }
+.ao-marker[data-state="offline"] { --_s: var(--bu-state-offline); }
+.ao-mk { position: absolute; left: 0; bottom: 0; display: inline-flex; align-items: center; gap: 2px; font: 700 13px/1 var(--bu-font-sans, Inter, sans-serif); }
+.ao-mk--pill { height: 22px; min-width: 22px; padding: 0 6px; justify-content: center; border-radius: 11px; background: var(--bu-surface-overlay); border: 1.5px solid var(--_s); box-shadow: var(--bu-shadow-2); }
+.ao-mk--solid { background: var(--_s); color: var(--bu-text-on-accent, #fff); border-color: var(--_s); }
+.ao-mk svg { width: 13px; height: 13px; }
+.ao-mk--thought { height: 20px; padding: 0 7px; border-radius: 10px; background: var(--bu-surface-overlay); border: 1.5px solid var(--_s); box-shadow: var(--bu-shadow-2); gap: 3px; }
+.ao-mk--thought::after { content: ""; position: absolute; left: -5px; bottom: -6px; width: 6px; height: 6px; border-radius: 50%; background: var(--bu-surface-overlay); border: 1.5px solid var(--_s); }
+.ao-mk--thought i { width: 4px; height: 4px; border-radius: 50%; background: var(--_s); animation: ao-dot 1.2s ease-in-out infinite; }
+.ao-mk--thought i:nth-child(2) { animation-delay: 0.2s; }
+.ao-mk--thought i:nth-child(3) { animation-delay: 0.4s; }
+.ao-marker[data-kind="question"] .ao-mk { animation: ao-mbob 1.6s ease-in-out infinite; }
+.ao-marker[data-kind="plug"] .ao-mk, .ao-marker[data-kind="reading"] .ao-mk, .ao-marker[data-kind="pen"] .ao-mk { animation: ao-pulse 1.4s ease-in-out infinite; }
+.ao-mk--zz { font-size: 13px; gap: 0; }
+.ao-mk--zz b:nth-child(2) { font-size: 10px; transform: translate(1px, -3px); }
+.ao-mk--zz b { animation: ao-zz 3s ease-in-out infinite; display: inline-block; }
+@keyframes ao-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes ao-mbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes ao-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes ao-zz { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+.ao-ring { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; transition: opacity var(--bu-duration-fast) var(--bu-ease-standard); }
+.ao-ring::before { content: ""; position: absolute; left: -34px; top: -14px; width: 68px; height: 28px; border-radius: 50%; border: 2.5px solid var(--bu-accent); background: color-mix(in oklab, var(--bu-accent) 18%, transparent); }
+.ao-ring.is-on { opacity: 1; }
+
+/* ---------- labels: nameplates (bu-nameplate, never scaled) ---------- */
+.ao-plate { left: 0; top: 0; transform: none; pointer-events: auto; cursor: pointer; font-size: max(11px, 0.75rem); }
+.ao-plate:focus-visible { outline: 2px solid var(--bu-focus-ring); outline-offset: 2px; }
+.ao-plate[aria-current="true"] { border-color: var(--bu-accent); box-shadow: 0 0 0 1px var(--bu-accent), var(--bu-shadow-2); }
+.ao-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--_s, var(--bu-state-idle)); flex: none; }
+.ao-plate { --_s: var(--bu-state-idle); }
+.ao-plate[data-state="thinking"] { --_s: var(--bu-state-thinking); }
+.ao-plate[data-state="working"] { --_s: var(--bu-state-working); }
+.ao-plate[data-state="researching"] { --_s: var(--bu-state-researching); }
+.ao-plate[data-state="writing"] { --_s: var(--bu-state-writing); }
+.ao-plate[data-state="calling"] { --_s: var(--bu-state-calling); }
+.ao-plate[data-state="waiting"] { --_s: var(--bu-state-waiting); }
+.ao-plate[data-state="error"] { --_s: var(--bu-state-error); }
+.ao-plate[data-state="offline"] { --_s: var(--bu-state-offline); }
+.ao-plate__state { display: none; }
+.ao-plate:hover .ao-plate__state, .ao-plate:focus-visible .ao-plate__state, .ao-plate[aria-current="true"] .ao-plate__state { display: inline; }
+
+.ao-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- reduced motion (README §4.3): no micro-motion, celebrations or animated markers ---------- */
+.ao-office[data-reduced-motion] .ao-pose,
+.ao-office[data-reduced-motion] .ao-char.ao-shake,
+.ao-office[data-reduced-motion] .ao-mk,
+.ao-office[data-reduced-motion] .ao-mk *,
+.ao-office[data-reduced-motion] .ao-marker .ao-mk { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ao-office .ao-pose, .ao-office .ao-char.ao-shake, .ao-office .ao-mk, .ao-office .ao-mk * { animation: none !important; }
+}
+
+/* ---------- editor overlays (fx layer): ghost footprint, rings ---------- */
+.ao-edit-svg { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.ao-edit-svg .ghost.ok { fill: var(--bu-accent-subtle); stroke: var(--bu-accent-border); stroke-width: 2; }
+.ao-edit-svg .ghost.bad { fill: var(--bu-danger-bg); stroke: var(--bu-danger); stroke-width: 2; stroke-dasharray: 6 4; }
+.ao-edit-svg .ghost.hatch { fill: url(#ao-hatch); stroke: none; }
+.ao-defs { position: absolute; width: 0; height: 0; }
+.ao-hatch-line { fill: var(--bu-danger); opacity: 0.55; }
+.ao-edit-svg .mark.sel { fill: color-mix(in oklab, var(--bu-accent) 22%, transparent); stroke: var(--bu-accent); stroke-width: 2.5; }
+.ao-edit-svg .mark.hl { fill: color-mix(in oklab, var(--bu-accent) 12%, transparent); stroke: var(--bu-accent-border); stroke-width: 2; stroke-dasharray: 5 4; }
+.ao-ghost-img { opacity: 0.6; pointer-events: none; }
+.ao-ghost-img.is-bad { opacity: 0.45; filter: grayscale(1) sepia(1) hue-rotate(-40deg) saturate(3); }
+.ao-ghost-img[hidden] { display: none; }
+.ao-sprite.ao-selected { filter: drop-shadow(0 0 2px var(--bu-accent)) drop-shadow(0 0 6px color-mix(in oklab, var(--bu-accent) 60%, transparent)); }
+.ao-sprite.ao-highlight { filter: drop-shadow(0 0 4px color-mix(in oklab, var(--bu-accent) 70%, transparent)); }
+.ao-office[data-editing] .ao-viewport { cursor: default; }
+.ao-office[data-editing] .ao-layer--scene .ao-sprite, .ao-office[data-editing] .ao-layer--wall .ao-sprite { cursor: pointer; }
+.ao-office[data-editing] .ao-controls [data-page-control] { display: none; }
+/* Hidden tab (O4): every CSS animation pauses; scene.js stops frame loops and idle swivels. */
+.ao-office[data-paused] *, .ao-office[data-paused] *::before, .ao-office[data-paused] *::after { animation-play-state: paused !important; }
+/* Targets (O4, explorer-qa-01 Q01-07): stage controls and nameplates are ≥ 44 × 44 px for every pointer, the
+   nameplate through an invisible hit area so the label stays compact. */
+.ao-office .ao-controls .bu-btn { min-height: 44px; min-width: 44px; }
+.ao-plate { position: absolute; }
+.ao-plate::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); }
+/* Small screens (O4): page controls go icon-only so the bar covers less of the stage (aria-label keeps the name). */
+@media (max-width: 600px) {
+  .ao-ctl-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* office-dev-19: on a phone the bar gets its own strip under the room (the scene's viewport stops above it), so it
+     never covers the office; pages add the strip's height to their stage. */
+  .ao-office { --ao-ctl-strip: 52px; }
+  .ao-office .ao-viewport { bottom: var(--ao-ctl-strip); }
+  .ao-office .ao-controls { top: auto; bottom: 4px; right: var(--bu-space-2); padding: 0; gap: 2px; box-shadow: none; border: 0; background: none; }
+}
+
+/* O8: seen agents (LayoutVM.agentsSeen, no longer on stage) stay at their desk, greyed; their plate is muted and says
+   when they were last seen. Not motion: also under reduced motion. */
+.ao-char[data-presence="seen"] { opacity: 0.55; filter: grayscale(0.85); }
+.ao-plate[data-presence="seen"] { opacity: 0.8; }
+/* O9: crowded and small, a plate is its state dot; the name comes back on hover, focus and selection (scene.js). */
+.ao-office[data-plates-compact] .ao-plate:not(:hover, :focus-visible, [aria-current="true"]) .ao-plate__name { display: none; }
+.ao-office[data-plates-compact] .ao-plate:not(:hover, :focus-visible, [aria-current="true"]) { padding-inline: 4px; gap: 0; }
+.ao-plate[data-presence="seen"] .ao-dot { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+.ao-office[data-plates-compact] .ao-plate:is(:hover, :focus-visible, [aria-current="true"]) { z-index: 3; }
+
+/* office-dev-20: full screen. The stage fills the screen (native Fullscreen API, or a fixed overlay where it's missing,
+   iOS Safari); the scene re-fits; the toolbar stays. Page sizing rules (aspect, max-height, gutters) don't apply. */
+.ao-office:fullscreen, .ao-office[data-fake-fullscreen] {
+  width: 100vw !important; height: 100vh !important; height: 100dvh !important; max-width: none !important; max-height: none !important; min-height: 0 !important;
+  aspect-ratio: auto !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; background: var(--bu-bg-sunken, var(--bu-bg)); }
+.ao-office:-webkit-full-screen { width: 100vw !important; height: 100vh !important; background: var(--bu-bg-sunken, var(--bu-bg)); }
+.ao-office[data-fake-fullscreen] { position: fixed !important; inset: 0; z-index: 2147483000; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.ao-office[data-fullscreen] .ao-controls { top: var(--bu-space-3); right: var(--bu-space-3); bottom: auto; padding: var(--bu-space-1); gap: var(--bu-space-1);
+  background: var(--bu-surface-overlay); border: 1px solid var(--bu-border-default); }
+.ao-office[data-fullscreen] .ao-viewport { bottom: 0; }
+html.ao-fs-lock, html.ao-fs-lock body { overflow: hidden; }
+
+/* office-dev-22: visits. Someone talking (a visitor at the agent's desk, or at the meeting table) has a speech bubble on
+   their name plate; it bobs gently, not at all under reduced motion. */
+/* office-dev-24: above the speaker's own plate (centred), so it is never read as the neighbour's */
+.ao-plate[data-talking]::after { content: "…"; position: absolute; left: 50%; bottom: 100%; margin-bottom: 4px; padding: 0 6px; line-height: 16px; border-radius: 8px;
+  transform: translateX(-50%);
+  font: var(--bu-type-label-sm); color: var(--bu-text-primary); background: var(--bu-surface); border: 1px solid var(--bu-border-default); box-shadow: var(--bu-shadow-1);
+  animation: ao-bubble 1.6s ease-in-out infinite; pointer-events: none; }
+@keyframes ao-bubble { 0%, 100% { transform: translateX(-50%); } 50% { transform: translateX(-50%) translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .ao-plate[data-talking]::after { animation: none; } }
+.ao-office[data-reduced-motion] .ao-plate[data-talking]::after, .ao-office[data-paused] .ao-plate[data-talking]::after { animation: none; }

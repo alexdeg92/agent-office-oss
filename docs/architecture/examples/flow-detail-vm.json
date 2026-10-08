@@ -1,0 +1,112 @@
+{
+  "data": {
+    "job": {
+      "id": "ffffffff-0c01-4000-8000-000000000001",
+      "name": "Veille hebdomadaire",
+      "description": "Résumé des nouveautés de la semaine.",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * 1",
+        "tz": "America/Toronto",
+        "sentence": {
+          "key": "schedule.weekly",
+          "params": {
+            "day": { "key": "weekday.1" },
+            "time": "09:00"
+          }
+        }
+      },
+      "health": "ok",
+      "nextRunAt": 1791640800000,
+      "lastRunAt": 1791036000000,
+      "agentId": "main",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agent-turn",
+        "message": "1. Cherche les nouveautés\n2. Résume en français\n3. Publie le résumé",
+        "model": null,
+        "timeoutSeconds": null
+      },
+      "createdAt": 1788631200000,
+      "updatedAt": 1791050400000
+    },
+    "editable": true,
+    "diagram": {
+      "nodes": [
+        {
+          "kind": "trigger",
+          "label": "Chaque semaine (jour 1) à 09:00"
+        },
+        {
+          "kind": "step",
+          "label": "Cherche les nouveautés"
+        },
+        {
+          "kind": "step",
+          "label": "Résume en français"
+        },
+        {
+          "kind": "step",
+          "label": "Publie le résumé"
+        },
+        {
+          "kind": "output",
+          "label": "Journal"
+        }
+      ]
+    },
+    "runs": [
+      {
+        "id": "ffffffff-0c01-4000-8000-000000000001@1790618400000",
+        "at": 1790618400000,
+        "status": "succeeded",
+        "durationMs": 128000,
+        "nextRunAt": 1791223200000,
+        "model": "model-a",
+        "tokens": {
+          "total": 3800,
+          "input": 3000,
+          "output": 800
+        },
+        "delivery": {
+          "status": "delivered",
+          "delivered": true,
+          "channel": "discord"
+        },
+        "summary": "Résumé publié.",
+        "error": null
+      },
+      {
+        "id": "ffffffff-0c01-4000-8000-000000000001@1790013600000",
+        "at": 1790013600000,
+        "status": "failed",
+        "durationMs": 45000,
+        "nextRunAt": 1790618400000,
+        "model": "model-a",
+        "tokens": {
+          "total": 900,
+          "input": 0,
+          "output": 0
+        },
+        "delivery": {
+          "status": "skipped",
+          "delivered": true,
+          "channel": "discord"
+        },
+        "summary": "",
+        "error": "Délai dépassé"
+      }
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "flow:ffffffff-0c01-4000-8000-000000000001",
+      "rev": 2
+    }
+  }
+}

@@ -1,0 +1,43 @@
+<!-- @dsCard group="Mise en page" height=900 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditorial · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>body { padding: var(--bu-space-6); background: var(--bu-bg); color: var(--bu-text-primary); }</style>
+</head>
+<body>
+<main class="bu-ed">
+  <header class="bu-ed-masthead">
+    <div><p class="bu-eyebrow">Santé système</p><h1 class="bu-ed-masthead__title">Le bulletin de santé</h1></div>
+    <p class="bu-ed-masthead__edition"><span class="bu-ed-mono">5 oct. 2026, 16:30</span><span>Exemple fictif</span></p>
+  </header>
+  <p class="bu-ed-edition-line"><span>Bureau de démonstration</span><span>6 sources sur 6 à jour</span></p>
+  <section class="bu-ed-article bu-ed-article--lead" aria-labelledby="pv-lead">
+    <span class="bu-ed-folio" aria-hidden="true">01</span>
+    <div class="bu-ed-body">
+      <p class="bu-ed-kicker">L’essentiel</p>
+      <h2 class="bu-ed-headline" id="pv-lead">Le serveur répond. <span class="bu-ed-tone--warning">Une source de données est en retard.</span></h2>
+      <p class="bu-ed-standfirst">La passerelle est connectée. La liste des compétences date de <span class="bu-ed-fig">16:16</span> : <span class="bu-ed-fig">3</span> lectures ont échoué depuis.</p>
+      <a class="bu-ed-link" href="#pv-issue">Lire le problème</a>
+    </div>
+    <aside class="bu-ed-margin"><p class="bu-ed-margin__label">À surveiller</p><p class="bu-ed-margin__fact">Disque à 78 %</p><p class="bu-ed-margin__text">Il reste environ 113 Go sur 512 Go.</p></aside>
+  </section>
+  <section class="bu-ed-article bu-ed-section" aria-labelledby="pv-s2">
+    <span class="bu-ed-folio bu-ed-folio--sm" aria-hidden="true">02</span>
+    <div class="bu-ed-body"><h2 class="bu-ed-title" id="pv-s2">La machine</h2>
+      <p class="bu-ed-prose">Le processeur utilise <span class="bu-ed-fig">17 %</span> de ses 8 cœurs. La mémoire occupe <span class="bu-ed-fig">65 %</span> des 32 Go.</p>
+      <ol class="bu-ed-ledger bu-ed-ledger--compact">
+        <li class="bu-ed-entry" id="pv-issue"><div class="bu-ed-entry__body"><h3 class="bu-ed-entry__title">Champ inattendu</h3><p class="bu-ed-entry__text bu-ed-tone--warning">Avertissement. Vu 4 fois.</p></div>
+          <p class="bu-ed-entry__meta"><span class="bu-ed-mono">gw.rpc.agents.list</span></p>
+          <details class="bu-ed-details"><summary>Détails techniques</summary><div class="bu-ed-details__body"><p class="bu-ed-entry__text">Chemin <span class="bu-ed-mono">$.agents[].&lt;undeclared&gt;</span></p></div></details></li>
+      </ol>
+    </div>
+    <aside class="bu-ed-margin"><p class="bu-ed-margin__label">Passerelle</p><p class="bu-ed-margin__text">Connectée, protocole v4.</p></aside>
+  </section>
+</main>
+</body>
+</html>

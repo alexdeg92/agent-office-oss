@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake systemctl for tests: refuses everything, so no test can restart a real service.
+echo "fake systemctl: refused ($*)" >&2
+exit 1

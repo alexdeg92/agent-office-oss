@@ -1,0 +1,53 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.get",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001"
+    }
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Analyse le dépôt."
+            }
+          ],
+          "timestamp": 1791223080000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1791223081000,
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "tu_1",
+              "name": "exec",
+              "input": {
+                "cmd": "ls"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": [
+            {
+              "toolUseId": "tu_1",
+              "content": "README.md\nserver.js"
+            }
+          ],
+          "isError": true,
+          "timestamp": 1791223083000
+        }
+      ]
+    }
+  }
+}

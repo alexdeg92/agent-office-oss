@@ -1,0 +1,30 @@
+{
+  "$comment": "Shape sidecar for layout-vm.json (api.md §3.10). The manifest's shape is manifest.schema.json's (office-dev).",
+  "opaque": [
+    "$.manifest"
+  ],
+  "nullable": [
+    "$.theme.nextChangeAt"
+  ],
+  "types": {
+    "$.layout.updatedBy.avatarUrl": "string",
+    "$.layout.updatedBy.state": "string",
+    "$.layout.data.theme.season": "string",
+    "$.theme.season": "string",
+    "$.default.data.theme.season": "string",
+    "$.revisions[].updatedBy.avatarUrl": "string",
+    "$.revisions[].updatedBy.state": "string",
+    "$.layout.data.agents[].name": "string",
+    "$.layout.data.agents[].role": "string",
+    "$.default.data.agents[].name": "string",
+    "$.default.data.agents[].role": "string"
+  },
+  "variants": {
+    "$.layout.updatedBy": [
+      {
+        "kind": "system",
+        "name": "Système"
+      }
+    ]
+  }
+}

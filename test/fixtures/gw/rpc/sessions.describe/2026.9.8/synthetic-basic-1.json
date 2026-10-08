@@ -1,0 +1,24 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.describe",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "key": "agent:main:main"
+    }
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "session": {
+        "key": "agent:main:main",
+        "displayName": "Session principale",
+        "kind": "main",
+        "model": "model-a",
+        "modelProvider": "provider-a",
+        "updatedAt": 1791223140000
+      }
+    }
+  }
+}

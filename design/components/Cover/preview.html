@@ -1,0 +1,51 @@
+<!-- @dsCard group="Couverture" height=627 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau — système de design · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+
+.cv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.cv-head { display: flex; align-items: center; gap: var(--bu-space-5); }
+.cv-mark { width: calc(var(--bu-space-16) + var(--bu-space-8)); height: calc(var(--bu-space-16) + var(--bu-space-8)); flex: none; }
+.cv-title { margin: var(--bu-space-1) 0 0; }
+.cv-lede { margin: var(--bu-space-2) 0 0; max-width: 34rem; }
+.cv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.cv-panel { gap: var(--bu-space-3); }
+.cv-sws { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--bu-space-2); }
+.cv-sw { display: flex; flex-direction: column; gap: var(--bu-space-0-5); font: var(--bu-type-caption); min-width: 0; }
+.cv-sw span { height: var(--bu-space-10); border-radius: var(--bu-radius-control); border: 1px solid var(--bu-border-default); }
+.cv-sw b { font: var(--bu-type-label); }
+.cv-sw code { font: var(--bu-type-mono-sm); color: var(--bu-text-tertiary); overflow: hidden; text-overflow: ellipsis; }
+.cv-foot { display: flex; justify-content: space-between; gap: var(--bu-space-4); padding-top: var(--bu-space-4); border-top: 1px solid var(--bu-border-subtle); flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-idle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></symbol><symbol id="i-thinking" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18 16l.8 2.2L21 19l-2.2.8L18 22l-.8-2.2L15 19l2.2-.8z"/></symbol><symbol id="i-working" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol><symbol id="i-researching" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol><symbol id="i-writing" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol><symbol id="i-calling" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5"/></symbol><symbol id="i-waiting" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></symbol><symbol id="i-error" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol><symbol id="i-offline" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol></svg>
+<main class="pv">
+<section class="cv">
+<div class="cv-head"><svg class="bu-brand__mark cv-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--bu-accent)"/><path d="M16 6.5l9 4.5v10l-9 4.5-9-4.5V11z" fill="none" stroke="var(--bu-text-on-accent)" stroke-width="1.75" stroke-linejoin="round"/><path d="M16 6.5v9.5l9 5M16 16l-9 5" fill="none" stroke="var(--bu-text-on-accent)" stroke-width="1.75" stroke-linejoin="round" opacity=".55"/><circle cx="16" cy="13" r="2.6" fill="var(--bu-text-on-accent)"/></svg><div><p class="bu-eyebrow">Système de design · Agent Office</p><h1 class="bu-display-lg cv-title">Bureau</h1><p class="bu-body-lg bu-text-secondary cv-lede">Calme, précis, chaleureux. Le jeu vit dans le bureau illustré ; l'interface reste sobre.</p></div></div>
+<div class="cv-grid">
+<div class="bu-card cv-panel"><p class="bu-eyebrow">Couleur</p><div class="cv-sws"><div class="cv-sw"><span style="background: var(--bu-accent)"></span><b>Indigo</b><code>accent</code></div><div class="cv-sw"><span style="background: var(--bu-bg)"></span><b>Encre</b><code>bg</code></div><div class="cv-sw"><span style="background: var(--bu-surface)"></span><b>Ardoise</b><code>surface</code></div><div class="cv-sw"><span style="background: var(--bu-text-primary)"></span><b>Texte</b><code>text-primary</code></div><div class="cv-sw"><span style="background: var(--bu-success)"></span><b>Succès</b><code>success</code></div><div class="cv-sw"><span style="background: var(--bu-warning)"></span><b>Attention</b><code>warning</code></div><div class="cv-sw"><span style="background: var(--bu-danger)"></span><b>Danger</b><code>danger</code></div><div class="cv-sw"><span style="background: var(--bu-info)"></span><b>Info</b><code>info</code></div></div>
+<p class="bu-eyebrow" style="margin-top: var(--bu-space-2)">États d'agent</p><div class="bu-inline"><span class="bu-state" data-agent-state="idle"><svg class="bu-icon" aria-hidden="true"><use href="#i-idle"/></svg>Inactif</span><span class="bu-state" data-agent-state="thinking"><svg class="bu-icon" aria-hidden="true"><use href="#i-thinking"/></svg>Réfléchit</span><span class="bu-state" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-working"/></svg>Exécute</span><span class="bu-state" data-agent-state="researching"><svg class="bu-icon" aria-hidden="true"><use href="#i-researching"/></svg>Recherche</span><span class="bu-state" data-agent-state="writing"><svg class="bu-icon" aria-hidden="true"><use href="#i-writing"/></svg>Rédige</span><span class="bu-state" data-agent-state="calling"><svg class="bu-icon" aria-hidden="true"><use href="#i-calling"/></svg>Appel d'outil</span><span class="bu-state" data-agent-state="waiting"><svg class="bu-icon" aria-hidden="true"><use href="#i-waiting"/></svg>En attente</span><span class="bu-state" data-agent-state="error"><svg class="bu-icon" aria-hidden="true"><use href="#i-error"/></svg>Erreur</span><span class="bu-state" data-agent-state="offline"><svg class="bu-icon" aria-hidden="true"><use href="#i-offline"/></svg>Hors ligne</span></div></div>
+<div class="bu-card cv-panel"><p class="bu-eyebrow">Typographie</p><p class="bu-display" style="margin:0">Sora — Votre agent, en direct.</p><p class="bu-heading" style="margin:0">Inter — Résumé quotidien publié dans #résumé à 08:30.</p><p class="bu-mono" style="margin:0; color: var(--bu-text-secondary)">JetBrains Mono — agent:main · 184 302 jetons · 1,4 s</p></div>
+<div class="bu-card cv-panel"><p class="bu-eyebrow">En direct</p><div class="bu-kpis"><div class="bu-kpi"><span class="bu-kpi__label">En activité</span><span class="bu-kpi__value">2</span></div><div class="bu-kpi"><span class="bu-kpi__label">Jetons</span><span class="bu-kpi__value">184 302</span></div><div class="bu-kpi"><span class="bu-kpi__label">Projets</span><span class="bu-kpi__value">6</span></div></div>
+<ul class="bu-list"><li><button class="bu-roster" aria-current="true"><span class="bu-avatar bu-avatar--agent" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-cell-main"><span>Timmy</span><span class="bu-cell-sub">Agent principal</span></span><span class="bu-state bu-state--live" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-working"/></svg>Exécute</span></button></li><li><button class="bu-roster"><span class="bu-avatar bu-avatar--agent" data-agent-state="researching"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-cell-main"><span>Scout</span><span class="bu-cell-sub">Sous-agent · recherche</span></span><span class="bu-state" data-agent-state="researching"><svg class="bu-icon" aria-hidden="true"><use href="#i-researching"/></svg>Recherche</span></button></li></ul>
+<div class="bu-inline"><button class="bu-btn bu-btn--primary"><svg class="bu-icon" aria-hidden="true"><use href="#i-play"/></svg>Exécuter</button><button class="bu-btn">Modifier</button><span class="bu-live">En direct</span></div></div>
+</div>
+<div class="cv-foot bu-caption"><span>Thèmes Sombre et Clair · AA vérifié · préfixe <code class="bu-kbd">--bu-</code></span><span>office.example.com</span></div>
+</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,56 @@
+# Local install: one process. The UI is at / and the API at /backend, on port 18789.
+# A production split (API-only plus a separate web process behind a proxy) is commented below.
+# Secrets come from env_file only. Do not put tokens in this file.
+# From the repo root: docker compose -f packaging/docker/compose.yml up --build
+
+name: agent-office
+
+services:
+  office:
+    build:
+      context: ../..
+      dockerfile: packaging/docker/Dockerfile
+    image: agent-office:local
+    env_file:
+      - path: ../../.env
+        required: true
+    environment:
+      NODE_ENV: production
+      AO_ENV: production
+      AO_DATA_DIR: /data
+      AO_CONFIG: /config/config.json
+      HOST: 0.0.0.0
+      PORT: "18789"
+    volumes:
+      - ao-data:/data
+      - ao-config:/config
+    ports:
+      - "127.0.0.1:18789:18789"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Optional, read-only, when CLI-backed capabilities are needed. Paths are the operator's, not defaults.
+    # volumes:
+    #   - /path/to/openclaw:/usr/local/bin/openclaw:ro
+    #   - /path/to/runtime-home:/home/ao/.openclaw:ro
+    # Gateway on the host: OC_GATEWAY_URL=ws://host.docker.internal:18793
+    #
+    # Production split, instead of this one service: an `api` service with AO_API_ONLY=1
+    # (command: ["start", "--api-only"]) and a `web` service (command: ["web"]).
+    # Traefik: / → web:8080, /backend stripped → api:18789. Do not compress text/event-stream.
+
+volumes:
+  ao-data: {}
+  ao-config: {}
+
+# networks:
+#   proxy:
+#     external: true
+
+# Caddy, same topology (a separate proxy container or the host). No compression on the API route.
+#   handle /backend/* {
+#     uri strip_prefix /backend
+#     reverse_proxy api:18789
+#   }
+#   handle {
+#     reverse_proxy web:8080
+#   }

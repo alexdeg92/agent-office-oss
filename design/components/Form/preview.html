@@ -1,0 +1,34 @@
+<!-- @dsCard group="Formulaires" height=448 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Champs de formulaire · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol></svg>
+<main class="pv">
+<form class="pv-col" style="max-width: 36rem" onsubmit="return false">
+<div class="bu-field"><label class="bu-field__label" for="f1">Nom <span class="bu-field__req" aria-hidden="true">*</span></label><input class="bu-input" id="f1" placeholder="ex. Veille prix concurrent" value="Résumé quotidien Discord"></div>
+<div class="bu-form-row">
+<div class="bu-field"><label class="bu-field__label" for="f2">Planification (cron)</label><input class="bu-input bu-mono" id="f2" value="0 9 * * 1" aria-describedby="f2h"><p class="bu-field__hint" id="f2h">Chaque lundi à 09:00.</p></div>
+<div class="bu-field"><label class="bu-field__label" for="f3">Fuseau</label><select class="bu-select" id="f3"><option>America/Toronto</option><option>UTC</option></select></div></div>
+<div class="bu-field"><label class="bu-field__label" for="f4">Instruction pour Timmy</label><textarea class="bu-textarea bu-textarea--mono" id="f4" rows="3" aria-invalid="true" aria-describedby="f4e"></textarea><p class="bu-field__error" id="f4e"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg>L'instruction est requise.</p></div>
+<div class="pv-row"><div class="bu-input-group" style="flex: 1"><svg class="bu-icon" aria-hidden="true"><use href="#i-search"/></svg><input class="bu-input bu-input--sm" type="search" placeholder="Rechercher nom ou ID…" aria-label="Rechercher"></div></div>
+<div class="pv-row"><label class="bu-check"><input type="checkbox" checked> Mention requise</label><label class="bu-check"><input type="checkbox"> Messages privés</label><label class="bu-switch"><input type="checkbox" role="switch" checked> Compétence active</label><label class="bu-switch"><input type="checkbox" role="switch"> Mode sombre forcé</label></div>
+</form>
+</main>
+</body>
+</html>

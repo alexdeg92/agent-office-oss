@@ -1,0 +1,27 @@
+<!-- @dsCard group="Projets" height=200 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pile d'avatars · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol></svg>
+<main class="pv">
+<div class="pv-row"><ul class="bu-avatar-stack bu-avatar-stack--sm" aria-label="Personnes impliquées"><li><span class="bu-avatar bu-avatar--human bu-avatar--sm">AS</span></li><li><span class="bu-avatar bu-avatar--agent bu-avatar--sm" data-agent-state="working"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span></li><li><span class="bu-avatar bu-avatar--agent bu-avatar--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span></li><li><span class="bu-avatar bu-avatar--git bu-avatar--sm">cx</span></li><li><span class="bu-avatar-stack__more" title="2 autres">+2</span></li></ul><span class="bu-text-tertiary bu-body-sm">Owner, Timmy, Scout, cx et 2 autres</span></div>
+<div class="pv-row"><ul class="bu-avatar-stack" aria-label="Personnes impliquées"><li><span class="bu-avatar bu-avatar--human">AS</span></li><li><span class="bu-avatar bu-avatar--human">MR</span></li><li><span class="bu-avatar bu-avatar--agent" data-agent-state="thinking"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span></li></ul><ul class="bu-avatar-stack bu-avatar-stack--sm" aria-label="Personnes impliquées"><li><span class="bu-avatar bu-avatar--git bu-avatar--sm">jd</span></li></ul></div>
+</main>
+</body>
+</html>

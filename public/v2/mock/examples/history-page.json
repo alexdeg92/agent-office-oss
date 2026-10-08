@@ -1,0 +1,64 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "evt_a1r2c3h4i5v6e7d8",
+        "at": 1791100000000,
+        "kind": "archived",
+        "group": 1,
+        "actor": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "text": {
+          "key": "historyKind.archived"
+        }
+      },
+      {
+        "id": "evt_p1e2o3p4l5e6o7v8",
+        "at": 1791090000000,
+        "kind": "people-override",
+        "group": 1,
+        "actor": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "text": {
+          "key": "historyKind.people-override",
+          "params": {
+            "person": "Timmy",
+            "role": "développeur"
+          }
+        }
+      },
+      {
+        "id": "evt_c1r2e3a4t5e6d7a8",
+        "at": 1790000000000,
+        "kind": "project-created",
+        "group": 1,
+        "actor": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        },
+        "text": {
+          "key": "historyKind.project-created"
+        }
+      }
+    ],
+    "nextCursor": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
+}

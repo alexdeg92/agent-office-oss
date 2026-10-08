@@ -1,0 +1,6 @@
+{
+  "$comment": "Shape sidecar for health-vm.json (api.md §3.8).",
+  "nullable": ["$.cards[].sub", "$.sources[].lastOkAt", "$.sources[].channels[].lastOkAt", "$.dataQuality.issues[].path"],
+  "types": { "$.channels[].lastError": "string", "$.sources[].lastErrorAt": "number", "$.sources[].lastError": "string",
+    "$.sources[].channels[].lastErrorAt": "number", "$.sources[].channels[].lastError": "string" }
+}

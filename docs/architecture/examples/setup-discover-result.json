@@ -1,0 +1,28 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "agents": [
+        {
+          "id": "atlas",
+          "name": "Atlas",
+          "isPrimary": true,
+          "model": "anthropic/claude-sonnet-5"
+        },
+        {
+          "id": "scribe",
+          "name": "Scribe",
+          "isPrimary": false,
+          "model": null
+        }
+      ]
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
+}

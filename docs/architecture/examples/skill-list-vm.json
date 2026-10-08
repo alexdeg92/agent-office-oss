@@ -1,0 +1,67 @@
+{
+  "data": {
+    "skills": [
+      {
+        "id": "weather",
+        "emoji": "⛅",
+        "description": "Prévisions météo.",
+        "source": "bundled",
+        "status": "active",
+        "visibility": {
+          "model": true,
+          "command": false,
+          "user": true
+        }
+      },
+      {
+        "id": "workspace-notes",
+        "emoji": null,
+        "description": "Notes du projet.",
+        "source": "workspace",
+        "status": "active",
+        "visibility": {
+          "model": true,
+          "command": true,
+          "user": false
+        }
+      },
+      {
+        "id": "nano-pdf",
+        "emoji": null,
+        "description": "Édition de PDF.",
+        "source": "bundled",
+        "status": "unavailable",
+        "visibility": {
+          "model": true,
+          "command": false,
+          "user": false
+        }
+      },
+      {
+        "id": "github",
+        "emoji": "🐙",
+        "description": "Dépôts GitHub.",
+        "source": "extra",
+        "status": "disabled",
+        "visibility": {
+          "model": true,
+          "command": false,
+          "user": false
+        }
+      }
+    ],
+    "counts": {
+      "total": 4,
+      "active": 2
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "skills",
+      "rev": 2
+    }
+  }
+}

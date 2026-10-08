@@ -1,0 +1,23 @@
+{
+  "$fixture": {
+    "source": "cli",
+    "channel": "cli.skills.info",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "argv": [
+        "skills",
+        "info",
+        "<name>",
+        "--agent",
+        "main",
+        "--json"
+      ]
+    }
+  },
+  "body": {
+    "kind": "text",
+    "exitCode": 0,
+    "value": "Warning: binary missing\n{\"name\":\"nano-pdf\",\"description\":\"Édition de PDF.\",\"source\":\"openclaw-bundled\",\"bundled\":true,\"filePath\":null,\"skillKey\":\"nano-pdf\",\"always\":false,\"disabled\":false,\"blockedByAllowlist\":false,\"eligible\":false,\"emoji\":\"\",\"homepage\":\"\",\"missing\":{\"bins\":[\"nano-pdf\"],\"anyBins\":[],\"env\":[],\"config\":[],\"os\":[]},\"configChecks\":[],\"blockedByAgentFilter\":false,\"platformIncompatible\":false,\"modelVisible\":true,\"userInvocable\":false,\"commandVisible\":false,\"requirements\":{\"bins\":[\"nano-pdf\"],\"anyBins\":[],\"env\":[],\"config\":[],\"os\":[]},\"install\":[{\"id\":\"brew\",\"kind\":\"brew\",\"label\":\"Installer avec Homebrew\",\"bins\":[\"nano-pdf\"]}]}\n"
+  }
+}

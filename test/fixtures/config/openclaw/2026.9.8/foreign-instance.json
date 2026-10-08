@@ -1,0 +1,25 @@
+{
+  "channels": {
+    "telegram": {
+      "dmPolicy": "pairing"
+    },
+    "slack": {
+      "groupPolicy": "allowlist"
+    },
+    "matrix": {
+      "groupPolicy": "open"
+    }
+  },
+  "tools": {
+    "exec": {
+      "security": "allowlist"
+    }
+  },
+  "skills": {
+    "entries": {
+      "acme-search": {
+        "enabled": false
+      }
+    }
+  }
+}

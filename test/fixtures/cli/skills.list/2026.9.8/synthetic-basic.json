@@ -1,0 +1,22 @@
+{
+  "$fixture": {
+    "source": "cli",
+    "channel": "cli.skills.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "argv": [
+        "skills",
+        "list",
+        "--agent",
+        "main",
+        "--json"
+      ]
+    }
+  },
+  "body": {
+    "kind": "text",
+    "exitCode": 0,
+    "value": "🦞 OpenClaw 2026.9.8\n{\n  \"skills\": [\n    {\n      \"emoji\": \"⛅\",\n      \"description\": \"Prévisions météo.\",\n      \"disabled\": false,\n      \"eligible\": true,\n      \"source\": \"openclaw-bundled\",\n      \"bundled\": true,\n      \"modelVisible\": true,\n      \"commandVisible\": false,\n      \"userInvocable\": true,\n      \"homepage\": \"https://example.invalid/weather\",\n      \"missing\": {\n        \"bins\": [],\n        \"anyBins\": [],\n        \"env\": [],\n        \"config\": [],\n        \"os\": []\n      },\n      \"name\": \"weather\"\n    },\n    {\n      \"emoji\": \"🐙\",\n      \"description\": \"Dépôts GitHub.\",\n      \"disabled\": true,\n      \"eligible\": true,\n      \"source\": \"openclaw-extra\",\n      \"bundled\": false,\n      \"modelVisible\": true,\n      \"commandVisible\": false,\n      \"userInvocable\": false,\n      \"homepage\": \"\",\n      \"missing\": {\n        \"bins\": [],\n        \"anyBins\": [],\n        \"env\": [],\n        \"config\": [],\n        \"os\": []\n      },\n      \"name\": \"github\"\n    },\n    {\n      \"emoji\": \"\",\n      \"description\": \"Édition de PDF.\",\n      \"disabled\": false,\n      \"eligible\": false,\n      \"source\": \"openclaw-bundled\",\n      \"bundled\": true,\n      \"modelVisible\": true,\n      \"commandVisible\": false,\n      \"userInvocable\": false,\n      \"homepage\": \"\",\n      \"missing\": {\n        \"bins\": [\n          \"nano-pdf\"\n        ],\n        \"anyBins\": [],\n        \"env\": [],\n        \"config\": [],\n        \"os\": []\n      },\n      \"name\": \"nano-pdf\"\n    },\n    {\n      \"emoji\": \"\",\n      \"description\": \"Notes du projet.\",\n      \"disabled\": false,\n      \"eligible\": true,\n      \"source\": \"openclaw-workspace\",\n      \"bundled\": false,\n      \"modelVisible\": true,\n      \"commandVisible\": true,\n      \"userInvocable\": false,\n      \"homepage\": \"\",\n      \"missing\": {\n        \"bins\": [],\n        \"anyBins\": [],\n        \"env\": [],\n        \"config\": [],\n        \"os\": []\n      },\n      \"name\": \"workspace-notes\"\n    }\n  ]\n}\n"
+  }
+}

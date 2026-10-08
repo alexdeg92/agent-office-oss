@@ -1,0 +1,10 @@
+{
+  "$comment": "Shape sidecar for skill-detail-vm.json (api.md §3.7). detail is null when `skills info` failed; markdown '' when unreadable or outside approved roots (R1-11).",
+  "nullable": [
+    "$.skill.emoji",
+    "$.skill.homepage",
+    "$.detail",
+    "$.detail.requirements",
+    "$.detail.missing"
+  ]
+}

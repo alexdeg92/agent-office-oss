@@ -1,0 +1,29 @@
+{
+  "setupCode": "AO-7Q2K-91MX",
+  "instance": {
+    "name": "Bureau de Camille",
+    "locale": "en",
+    "timeZone": "Europe/Paris"
+  },
+  "owner": {
+    "displayName": "Camille",
+    "email": "camille@example.invalid",
+    "password": "<write-only; ≥ 12 chars; never echoed>"
+  },
+  "runtime": {
+    "adapter": "openclaw",
+    "gatewayUrl": "ws://127.0.0.1:18789"
+  },
+  "agents": {
+    "primary": "atlas",
+    "looks": {
+      "atlas": {
+        "character": "timmy",
+        "variant": null,
+        "accessories": [
+          "headphones"
+        ]
+      }
+    }
+  }
+}

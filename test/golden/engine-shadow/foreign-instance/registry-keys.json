@@ -1,0 +1,12 @@
+[
+  "cli.skills.list",
+  "gw.event.health",
+  "gw.rpc.agents.list",
+  "gw.rpc.channels.status",
+  "gw.rpc.cron.list",
+  "gw.rpc.cron.runs#ffffffff-f101-4000-8000-000000000101",
+  "gw.rpc.cron.runs#ffffffff-f102-4000-8000-000000000102",
+  "gw.rpc.sessions.get#agent:atlas:telegram:direct:foreign-user",
+  "gw.rpc.sessions.list",
+  "gw.rpc.sessions.usage"
+]

@@ -1,0 +1,65 @@
+{
+  "$comment": "Shape sidecar for error-409-project.json: the ProjectVM rules of project-vm.types.json, under error.current.vm.",
+  "nullable": [
+    "$.error.current.vm.summaryMeta",
+    "$.error.current.vm.summaryMeta.author.state",
+    "$.error.current.vm.thumb.url",
+    "$.error.current.vm.thumb.repoLabel",
+    "$.error.current.vm.repo",
+    "$.error.current.vm.repo.defaultBranch",
+    "$.error.current.vm.repo.branch",
+    "$.error.current.vm.repo.ci",
+    "$.error.current.vm.repo.ci.at",
+    "$.error.current.vm.repo.ci.url",
+    "$.error.current.vm.repo.fetchedAt",
+    "$.error.current.vm.people[].role",
+    "$.error.current.vm.people[].commitCount",
+    "$.error.current.vm.historyNextCursor",
+    "$.error.current.vm.recentHistory[].actor.state",
+    "$.error.current.vm.repo.image.url",
+    "$.error.current.vm.cover"
+  ],
+  "types": {
+    "$.error.current.vm.summaryMeta.author.avatarUrl": "string",
+    "$.error.current.vm.repo.lastError": "string",
+    "$.error.current.vm.people[].avatarUrl": "string",
+    "$.error.current.vm.recentHistory[].actor.avatarUrl": "string"
+  },
+  "variants": {
+    "$.error.current.vm.summaryMeta.author": [
+      {
+        "kind": "system",
+        "name": "Système"
+      }
+    ],
+    "$.error.current.vm.thumb": [
+      {
+        "kind": "monogram",
+        "url": null,
+        "repoLabel": null,
+        "initials": "GI",
+        "accent": "teal"
+      }
+    ],
+    "$.error.current.vm.sources[].ref": [
+      {
+        "by": "interlocutor",
+        "interlocutorId": "discord-user:100000000000000001"
+      },
+      {
+        "by": "keys",
+        "sessionKeys": [
+          "agent:main:explicit:agent-office"
+        ]
+      }
+    ]
+  },
+  "additional": {
+    "$.error.current.vm.cover": {
+      "url": "https://bureau.example/backend/api/v2/project-covers/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.svg",
+      "thumbUrl": "https://bureau.example/backend/api/v2/project-covers/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.svg",
+      "source": "code",
+      "generatedAt": 1790856000000
+    }
+  }
+}

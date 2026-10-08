@@ -1,0 +1,16 @@
+{
+  "$comment": "Shape sidecar for candidates-vm.json (api.md §3.14).",
+  "nullable": [
+    "$.candidates[].sources[].ref"
+  ],
+  "variants": {
+    "$.candidates[].sources[].ref": [
+      {
+        "by": "keys",
+        "sessionKeys": [
+          "agent:main:explicit:agent-office"
+        ]
+      }
+    ]
+  }
+}

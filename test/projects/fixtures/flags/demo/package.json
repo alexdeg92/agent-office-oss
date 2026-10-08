@@ -1,0 +1,7 @@
+{
+  "name": "demo",
+  "featureFlags": {
+    "darkMode": true,
+    "token": "ghp_should_not_store"
+  }
+}

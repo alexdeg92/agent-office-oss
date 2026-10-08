@@ -1,0 +1,356 @@
+[
+  {
+    "key": "agent:atlas:main",
+    "sessionId": "ffffffff-f001-4000-8000-000000000001",
+    "class": {
+      "kind": "primary",
+      "ruleId": "is-main",
+      "agentId": "atlas",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "claude-sonnet-5",
+      "provider": "anthropic"
+    },
+    "provider": "anthropic",
+    "usage": {
+      "total": 42000,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791313140000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": false,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:atlas:telegram:direct:foreign-user",
+    "sessionId": "ffffffff-f002-4000-8000-000000000002",
+    "class": {
+      "kind": "conversation-direct",
+      "ruleId": "chat-direct",
+      "agentId": "atlas",
+      "channel": "telegram",
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "direct",
+      "interlocutorId": "telegram-user:foreign-user"
+    },
+    "displayName": null,
+    "model": {
+      "id": "claude-sonnet-5",
+      "provider": "anthropic"
+    },
+    "provider": "anthropic",
+    "usage": {
+      "total": 3100,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791313180000,
+    "run": {
+      "status": "running",
+      "endReason": null,
+      "evidence": "gateway-flag",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:scribe:slack:channel:C0ACME",
+    "sessionId": "ffffffff-f003-4000-8000-000000000003",
+    "class": {
+      "kind": "conversation-group",
+      "ruleId": "chat-group",
+      "agentId": "scribe",
+      "channel": "slack",
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "channel",
+      "interlocutorId": "slack-room:C0ACME"
+    },
+    "displayName": null,
+    "model": {
+      "id": "mistral-large-3",
+      "provider": "mistral"
+    },
+    "provider": "mistral",
+    "usage": {
+      "total": 2500,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791313170000,
+    "run": {
+      "status": "running",
+      "endReason": null,
+      "evidence": "gateway-flag",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:atlas:matrix:group:!ops:example.org",
+    "sessionId": "ffffffff-f004-4000-8000-000000000004",
+    "class": {
+      "kind": "conversation-group",
+      "ruleId": "chat-group",
+      "agentId": "atlas",
+      "channel": "matrix",
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "group",
+      "interlocutorId": "matrix-room:!ops:example.org"
+    },
+    "displayName": null,
+    "model": {
+      "id": "acme-1",
+      "provider": "acme-llm"
+    },
+    "provider": "acme-llm",
+    "usage": {
+      "total": 900,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791309600000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:atlas:cron:ffffffff-f101-4000-8000-000000000101",
+    "sessionId": "ffffffff-f005-4000-8000-000000000005",
+    "class": {
+      "kind": "scheduled",
+      "ruleId": "cron",
+      "agentId": "atlas",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": true,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": "ffffffff-f101-4000-8000-000000000101",
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": null,
+    "provider": "anthropic",
+    "usage": {
+      "total": 1500,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791306000000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:atlas:subagent:ffffffff-f201-4000-8000-000000000201",
+    "sessionId": "ffffffff-f006-4000-8000-000000000006",
+    "class": {
+      "kind": "subagent",
+      "ruleId": "subagent",
+      "agentId": "atlas",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": true,
+      "rawClassification": null,
+      "subagentId": "ffffffff-f201-4000-8000-000000000201",
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "claude-sonnet-5",
+      "provider": "anthropic"
+    },
+    "provider": "anthropic",
+    "usage": {
+      "total": 800,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791313190000,
+    "run": {
+      "status": "running",
+      "endReason": null,
+      "evidence": "gateway-flag",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": "agent:atlas:main",
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:reviewer:explicit:review-desk",
+    "sessionId": "ffffffff-f007-4000-8000-000000000007",
+    "class": {
+      "kind": "explicit",
+      "ruleId": "explicit",
+      "agentId": "reviewer",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": "review-desk",
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "acme-1",
+      "provider": "acme-llm"
+    },
+    "provider": "acme-llm",
+    "usage": {
+      "total": 300,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791226800000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  }
+]

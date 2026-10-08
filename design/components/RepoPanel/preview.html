@@ -1,0 +1,34 @@
+<!-- @dsCard group="Projets" height=767 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panneau dépôt · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol><symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H8"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol><symbol id="i-journaux" viewBox="0 0 24 24"><path d="M7 4h11a1 1 0 0 1 1 1v15H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 9h6M9 13h6M9 17h3"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol></svg>
+<main class="pv">
+<section class="bu-card" style="max-width: 24rem"><p class="bu-eyebrow">Dépôt</p><a class="bu-repo__link" href="#"><svg class="bu-icon" aria-hidden="true"><use href="#i-external"/></svg>github.com/alexdeg92/agent-office-oss</a>
+<dl class="bu-kv"><div class="bu-kv__row"><dt>Branche par défaut</dt><dd><span class="bu-tag"><svg class="bu-icon" aria-hidden="true"><use href="#i-branch"/></svg>main</span></dd></div><div class="bu-kv__row"><dt>Intégration continue</dt><dd><span class="bu-chip bu-chip--success bu-chip--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-check"/></svg>Réussie</span></dd></div><div class="bu-kv__row"><dt>Dernier commit</dt><dd>il y a 3 min</dd></div></dl>
+<p class="bu-eyebrow">Commits récents</p><ol class="bu-commits">
+<li class="bu-commit"><span class="bu-commit__sha">3782a7b</span><span class="bu-commit__msg">Service unit : nouveau chemin d'installation</span><span class="bu-commit__meta">AS · 2 h</span></li>
+<li class="bu-commit"><span class="bu-commit__sha">a91f04e</span><span class="bu-commit__msg">Tokens Bureau : contraste AA vérifié</span><span class="bu-commit__meta">cx · 1 j</span></li>
+<li class="bu-commit"><span class="bu-commit__sha">7d7e87c</span><span class="bu-commit__msg">Commit initial : Agent Office</span><span class="bu-commit__meta">AS · 3 j</span></li></ol>
+<a class="bu-btn bu-btn--ghost bu-btn--sm" href="#">Voir tous les commits<svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+<p class="bu-eyebrow">Sources liées</p><ul class="bu-labels" style="flex-direction: column; align-items: flex-start"><li class="bu-source"><svg class="bu-icon" aria-hidden="true"><use href="#i-branch"/></svg>github · alexdeg92/agent-office-oss</li><li class="bu-source"><svg class="bu-icon" aria-hidden="true"><use href="#i-file"/></svg>espace de travail · ~/projects/agent-office</li><li class="bu-source"><svg class="bu-icon" aria-hidden="true"><use href="#i-journaux"/></svg>groupe de sessions · agent-office (14)</li></ul></section>
+<section class="bu-card" style="max-width: 24rem"><p class="bu-eyebrow">Dépôt</p><dl class="bu-kv"><div class="bu-kv__row"><dt>Intégration continue</dt><dd><span class="bu-chip bu-chip--danger bu-chip--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-x"/></svg>En échec</span></dd></div></dl><div class="bu-empty bu-empty--compact"><p class="bu-empty__text">Projet créé à la main : aucun dépôt lié.</p><button class="bu-btn bu-btn--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-plus"/></svg>Lier un dépôt GitHub</button></div></section>
+</main>
+</body>
+</html>

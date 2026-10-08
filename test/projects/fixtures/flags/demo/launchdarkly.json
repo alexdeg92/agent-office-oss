@@ -1,0 +1,9 @@
+{
+  "flags": {
+    "ldFlag": { "key": "ldFlag", "on": true, "variations": [true, false] }
+  },
+  "flagValues": {
+    "ldValue": false,
+    "ldText": "ld-variation-secret"
+  }
+}

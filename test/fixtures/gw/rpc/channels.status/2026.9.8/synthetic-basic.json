@@ -1,0 +1,107 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.channels.status",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "ts": 1791223200000,
+      "channelOrder": [
+        "discord",
+        "whatsapp",
+        "openclaw-weixin"
+      ],
+      "channelLabels": {
+        "discord": "Discord",
+        "whatsapp": "WhatsApp",
+        "openclaw-weixin": "Weixin"
+      },
+      "channelDetailLabels": {
+        "discord": "Bot Discord",
+        "whatsapp": "WhatsApp Web",
+        "openclaw-weixin": "Weixin"
+      },
+      "channelSystemImages": {
+        "discord": "bubble",
+        "whatsapp": "phone"
+      },
+      "channelMeta": [
+        {
+          "id": "discord",
+          "label": "Discord",
+          "detailLabel": "Bot Discord",
+          "systemImage": "bubble"
+        }
+      ],
+      "eventLoop": {
+        "degraded": false,
+        "degradedSinceMs": null,
+        "reasons": [],
+        "intervalMs": 1000,
+        "delayP99Ms": 12.6,
+        "delayMaxMs": 30.1,
+        "utilization": 0.12,
+        "cpuCoreRatio": 0.08,
+        "cpuBreakdown": {
+          "mainThreadCoreRatio": 0.05,
+          "hostUtilization": 0.2,
+          "hostCpuCount": 4,
+          "workerCoreRatio": 0.01,
+          "otherThreadsCoreRatio": 0.02
+        }
+      },
+      "channels": {
+        "discord": {
+          "configured": true,
+          "running": true,
+          "lastStartAt": 1790964000000,
+          "lastStopAt": null,
+          "lastError": null,
+          "tokenSource": "config",
+          "lastProbeAt": null
+        },
+        "openclaw-weixin": {
+          "configured": false
+        },
+        "whatsapp": {
+          "configured": true,
+          "statusState": "unlinked",
+          "linked": false,
+          "running": false,
+          "connected": false,
+          "reconnectAttempts": 0,
+          "lastError": null,
+          "lifecycle": "stopped",
+          "healthState": "idle",
+          "busy": false
+        }
+      },
+      "channelAccounts": {
+        "discord": [
+          {
+            "accountId": "default",
+            "enabled": true,
+            "lastStartAt": 1790964000000,
+            "lifecycle": "running",
+            "busy": true,
+            "activeRuns": 1,
+            "lastInboundAt": 1791223140000,
+            "lastOutboundAt": 1791223150000,
+            "tokenSource": "config",
+            "tokenStatus": "ok",
+            "bot": {
+              "id": "100000000000000008",
+              "username": "timmy-bot"
+            },
+            "groupPolicy": "allowlist",
+            "guildsConfigured": 1,
+            "configured": true
+          }
+        ]
+      }
+    }
+  }
+}

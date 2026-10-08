@@ -1,0 +1,6 @@
+{
+  "$comment": "Shape sidecar for skill-list-vm.json (api.md §3.7).",
+  "nullable": [
+    "$.skills[].emoji"
+  ]
+}

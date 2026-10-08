@@ -1,0 +1,59 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.cron.runs",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "jobId": "ffffffff-0c01-4000-8000-000000000001"
+    }
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "entries": [
+        {
+          "action": "finished",
+          "model": "model-a",
+          "provider": "provider-a",
+          "deliveryStatus": "delivered",
+          "delivery": {
+            "intended": {
+              "channel": "discord"
+            }
+          },
+          "runAtMs": 1790618400000,
+          "status": "ok",
+          "durationMs": 128000,
+          "nextRunAtMs": 1791223200000,
+          "usage": {
+            "input_tokens": 3000,
+            "output_tokens": 800,
+            "total_tokens": 3800
+          },
+          "summary": "Résumé publié."
+        },
+        {
+          "action": "finished",
+          "model": "model-a",
+          "provider": "provider-a",
+          "deliveryStatus": "skipped",
+          "delivery": {
+            "intended": {
+              "channel": "discord"
+            }
+          },
+          "runAtMs": 1790013600000,
+          "status": "error",
+          "durationMs": 45000,
+          "nextRunAtMs": 1790618400000,
+          "usage": {
+            "totalTokens": 900
+          },
+          "error": "Délai dépassé",
+          "summary": ""
+        }
+      ]
+    }
+  }
+}

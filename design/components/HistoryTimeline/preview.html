@@ -1,0 +1,33 @@
+<!-- @dsCard group="Projets" height=502 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historique du projet · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-flux" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M6.5 10v4a2 2 0 0 0 2 2H14"/></symbol><symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 12h6M15 12h6"/></symbol><symbol id="i-discuter" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol></svg>
+<main class="pv">
+<section class="bu-card" style="max-width: 40rem"><p class="bu-eyebrow">Historique</p><ol class="bu-history">
+<li class="bu-history__item bu-history__item--status"><span class="bu-history__icon"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></span><div><p class="bu-history__text"><b>Owner</b> a déplacé le projet : <b>À faire</b> → <b>En cours</b>.</p><time class="bu-history__when" datetime="2026-10-05T14:21">aujourd'hui, 14:21</time></div></li>
+<li class="bu-history__item bu-history__item--flow"><span class="bu-history__icon"><svg class="bu-icon" aria-hidden="true"><use href="#i-flux"/></svg></span><div><p class="bu-history__text">Flux <b>Déploiement portail</b> exécuté par <b>Timmy</b> : réussi en 2 min 08 s.</p><time class="bu-history__when">aujourd'hui, 13:50</time></div></li>
+<li class="bu-history__item bu-history__item--commit"><span class="bu-history__icon"><svg class="bu-icon" aria-hidden="true"><use href="#i-commit"/></svg></span><div><p class="bu-history__text"><b>Owner</b> a poussé 2 commits sur <b>main</b>.</p><time class="bu-history__when">aujourd'hui, 12:04</time></div></li>
+<li class="bu-history__item bu-history__item--session"><span class="bu-history__icon"><svg class="bu-icon" aria-hidden="true"><use href="#i-discuter"/></svg></span><div><p class="bu-history__text">Session <b>#projets</b> avec <b>Guest</b> : 14 messages, 22 104 jetons.</p><time class="bu-history__when">hier, 17:40</time></div></li>
+<li class="bu-history__item bu-history__item--risk"><span class="bu-history__icon"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg></span><div><p class="bu-history__text">Risque levé : <b>Cron en échec</b> (Résumé quotidien Discord).</p><time class="bu-history__when">hier, 08:31</time></div></li>
+<li class="bu-history__item bu-history__item--cron"><span class="bu-history__icon"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg></span><div><p class="bu-history__text">Tâche planifiée <b>Résumé quotidien Discord</b> : échec après 45 s.</p><time class="bu-history__when">hier, 08:30</time></div></li></ol>
+<button class="bu-btn bu-btn--ghost bu-btn--sm">Afficher plus</button></section>
+</main>
+</body>
+</html>

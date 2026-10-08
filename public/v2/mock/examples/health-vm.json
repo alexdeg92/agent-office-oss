@@ -1,0 +1,274 @@
+{
+  "data": {
+    "level": "ok",
+    "cards": [
+      {
+        "id": "gateway",
+        "level": "ok",
+        "value": {
+          "key": "healthValue.connected"
+        },
+        "sub": {
+          "key": "healthSub.protocol",
+          "params": {
+            "n": 4
+          }
+        }
+      },
+      {
+        "id": "cpu",
+        "level": "ok",
+        "value": {
+          "n": 11,
+          "unit": "percent"
+        },
+        "sub": {
+          "key": "healthSub.cores",
+          "params": {
+            "n": 4
+          }
+        }
+      },
+      {
+        "id": "memory",
+        "level": "ok",
+        "value": {
+          "n": 63,
+          "unit": "percent"
+        },
+        "sub": {
+          "key": "healthSub.memTotalGb",
+          "params": {
+            "n": 16
+          }
+        }
+      },
+      {
+        "id": "disk",
+        "level": "ok",
+        "value": {
+          "n": 40,
+          "unit": "percent"
+        },
+        "sub": {
+          "key": "healthSub.diskTotalGb",
+          "params": {
+            "n": 500
+          }
+        }
+      },
+      {
+        "id": "event-loop",
+        "level": "ok",
+        "value": {
+          "key": "healthValue.healthy"
+        },
+        "sub": {
+          "key": "healthSub.p99",
+          "params": {
+            "n": 13
+          }
+        }
+      },
+      {
+        "id": "uptime",
+        "level": "ok",
+        "value": {
+          "n": 273605000,
+          "unit": "ms"
+        },
+        "sub": {
+          "key": "healthSub.sinceBoot"
+        }
+      },
+      {
+        "id": "cron",
+        "level": "ok",
+        "value": {
+          "n": 3,
+          "unit": "count"
+        },
+        "sub": {
+          "key": "healthSub.cronAllOk"
+        }
+      },
+      {
+        "id": "plugins",
+        "level": "ok",
+        "value": {
+          "n": 3,
+          "unit": "count"
+        },
+        "sub": {
+          "key": "healthSub.pluginsAllOk"
+        }
+      }
+    ],
+    "channels": [
+      {
+        "id": "discord",
+        "label": "Discord",
+        "health": "running",
+        "lastError": null,
+        "accounts": 1
+      },
+      {
+        "id": "whatsapp",
+        "label": "WhatsApp",
+        "health": "stopped",
+        "lastError": null,
+        "accounts": 0
+      },
+      {
+        "id": "wechat",
+        "label": "WeChat",
+        "health": "not-configured",
+        "lastError": null,
+        "accounts": 0
+      }
+    ],
+    "sources": [
+      {
+        "id": "cli",
+        "state": "fresh",
+        "lastOkAt": 1791223200000,
+        "lastErrorAt": null,
+        "lastError": null,
+        "channels": [
+          {
+            "channel": "cli.skills.list",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          }
+        ]
+      },
+      {
+        "id": "config",
+        "state": "fresh",
+        "lastOkAt": 1791223200000,
+        "lastErrorAt": null,
+        "lastError": null,
+        "channels": [
+          {
+            "channel": "config.openclaw",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          }
+        ]
+      },
+      {
+        "id": "gateway",
+        "state": "fresh",
+        "lastOkAt": 1791223200000,
+        "lastErrorAt": null,
+        "lastError": null,
+        "channels": [
+          {
+            "channel": "gw.event.health",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          },
+          {
+            "channel": "gw.hello",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          },
+          {
+            "channel": "gw.rpc.agents.list",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          },
+          {
+            "channel": "gw.rpc.channels.status",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          },
+          {
+            "channel": "gw.rpc.cron.list",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          },
+          {
+            "channel": "gw.rpc.sessions.list",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          }
+        ]
+      },
+      {
+        "id": "host",
+        "state": "fresh",
+        "lastOkAt": 1791223200000,
+        "lastErrorAt": null,
+        "lastError": null,
+        "channels": [
+          {
+            "channel": "host.metrics",
+            "state": "fresh",
+            "lastOkAt": 1791223200000,
+            "lastErrorAt": null,
+            "lastError": null
+          }
+        ]
+      }
+    ],
+    "dataQuality": {
+      "open": {
+        "error": 0,
+        "warn": 1,
+        "info": 0
+      },
+      "issues": [
+        {
+          "id": "98015dac40af93b5",
+          "code": "shape.extra-field",
+          "severity": "warn",
+          "channel": "gw.rpc.agents.list",
+          "path": "$.agents[].<undeclared>",
+          "count": 4,
+          "firstSeenAt": 1791223000000,
+          "lastSeenAt": 1791223190000,
+          "state": "open",
+          "mutable": true
+        }
+      ]
+    },
+    "series": {
+      "cpu": [
+        9,
+        11
+      ],
+      "mem": [
+        62,
+        63
+      ],
+      "at0": 1791223200000,
+      "stepMs": 60000
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "health",
+      "rev": 1
+    }
+  }
+}

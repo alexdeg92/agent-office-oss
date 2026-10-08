@@ -1,0 +1,6 @@
+{
+  "features": {
+    "growthFlag": { "defaultValue": false },
+    "textFlag": { "defaultValue": "beta" }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$comment": "Shape sidecar for flow-list-vm.json (api.md §3.4).",
+  "nullable": [
+    "$.flows[].nextRunAt",
+    "$.flows[].lastRunAt",
+    "$.flows[].schedule.tz"
+  ],
+  "variants": {
+    "$.flows[].schedule": [
+      {
+        "kind": "every",
+        "everyMs": 1800000,
+        "anchorAt": null,
+        "sentence": {
+          "key": "schedule.every",
+          "params": {
+            "duration": "PT30M"
+          }
+        }
+      },
+      {
+        "kind": "at",
+        "at": 1791640800000,
+        "sentence": {
+          "key": "schedule.at",
+          "params": {
+            "at": "2026-10-12T13:00:00.000Z"
+          }
+        }
+      },
+      {
+        "kind": "unrecognized",
+        "sentence": {
+          "key": "schedule.unrecognized"
+        }
+      }
+    ]
+  },
+  "types": {
+    "$.flows[].schedule.anchorAt": "number"
+  }
+}

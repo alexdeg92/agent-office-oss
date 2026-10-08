@@ -1,0 +1,180 @@
+{
+  "data": {
+    "connection": {
+      "gateway": "up",
+      "since": 1791220000000
+    },
+    "kpis": [
+      {
+        "id": "active",
+        "label": {
+          "key": "kpi.active"
+        },
+        "value": 2,
+        "unit": "count",
+        "sub": {
+          "key": "kpi.onStage",
+          "params": {
+            "n": 3
+          }
+        }
+      },
+      {
+        "id": "tokens",
+        "label": {
+          "key": "kpi.tokens"
+        },
+        "value": 4284300,
+        "unit": "tokens",
+        "sub": null
+      }
+    ],
+    "occupants": [
+      {
+        "id": "primary",
+        "role": "primary",
+        "name": "Atlas",
+        "title": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Atlas"
+          }
+        },
+        "roleLabel": {
+          "key": "occupantRole.primary"
+        },
+        "state": "working",
+        "stateSince": 1791223100000,
+        "stationUid": "st-timmy",
+        "look": {
+          "character": "timmy",
+          "variant": null,
+          "accessories": [
+            "headphones"
+          ]
+        },
+        "ruleId": "primary",
+        "destination": null,
+        "sessionKey": "agent:atlas:main",
+        "tokens": 52300,
+        "lastSeenAt": 1791223080000
+      },
+      {
+        "id": "subagent:ffffffff-0001-4000-8000-000000000001",
+        "role": "subagent",
+        "name": "Sous-agent ffff",
+        "title": {
+          "key": "sessionTitle.subagent",
+          "params": {
+            "id": "ffff"
+          }
+        },
+        "roleLabel": {
+          "key": "occupantRole.subagent"
+        },
+        "state": "working",
+        "stateSince": 1791223150000,
+        "stationUid": "st-2",
+        "look": {
+          "character": "helper",
+          "variant": "blue",
+          "accessories": []
+        },
+        "ruleId": "*subagent",
+        "destination": null,
+        "sessionKey": "agent:atlas:subagent:ffffffff-0001-4000-8000-000000000001",
+        "tokens": 8100,
+        "lastSeenAt": 1791223170000
+      },
+      {
+        "id": "scheduled:ffffffff-0c01-4000-8000-000000000001",
+        "role": "scheduled",
+        "name": "Veille hebdomadaire",
+        "title": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Veille hebdomadaire"
+          }
+        },
+        "roleLabel": {
+          "key": "occupantRole.scheduled"
+        },
+        "state": "idle",
+        "stateSince": 1791223000000,
+        "stationUid": null,
+        "look": {
+          "character": "helper",
+          "variant": "green",
+          "accessories": []
+        },
+        "ruleId": "*cron",
+        "destination": null,
+        "sessionKey": "agent:atlas:cron:ffffffff-0c01-4000-8000-000000000001",
+        "tokens": 1500,
+        "lastSeenAt": 1791223180000
+      }
+    ],
+    "journal": [
+      {
+        "id": "le_42",
+        "at": 1791223190000,
+        "count": 3,
+        "actor": {
+          "id": "per_0a1b2c3d4e5f6g7h",
+          "kind": "agent",
+          "name": "Atlas",
+          "avatarUrl": null,
+          "state": "working"
+        },
+        "text": {
+          "key": "liveEvent.run.started",
+          "params": {
+            "occupant": "Sous-agent ffff"
+          }
+        },
+        "kind": "run.started"
+      },
+      {
+        "id": "le_41",
+        "at": 1791223000000,
+        "count": 1,
+        "actor": {
+          "kind": "system",
+          "name": "Système"
+        },
+        "text": {
+          "key": "liveEvent.cron.fired",
+          "params": {
+            "job": "Veille hebdomadaire"
+          }
+        },
+        "kind": "cron.fired"
+      }
+    ],
+    "layoutRevision": 4,
+    "queue": [
+      {
+        "id": "ffffffff-0c01-4000-8000-000000000001",
+        "name": "Veille hebdomadaire",
+        "schedule": {
+          "key": "schedule.weekly",
+          "params": {
+            "day": {
+              "key": "weekday.1"
+            },
+            "time": "09:00"
+          }
+        }
+      }
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "office",
+      "rev": 118
+    }
+  }
+}

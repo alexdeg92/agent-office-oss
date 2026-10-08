@@ -1,0 +1,25 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.get",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Can you check the release notes?",
+          "timestamp": 1791313170000
+        },
+        {
+          "role": "assistant",
+          "content": "On it.",
+          "timestamp": 1791313180000
+        }
+      ]
+    }
+  }
+}

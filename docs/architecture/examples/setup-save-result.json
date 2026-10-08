@@ -1,0 +1,15 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "configured": true
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
+}

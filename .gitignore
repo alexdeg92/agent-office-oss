@@ -1,0 +1,28 @@
+node_modules/
+*.log
+*.bak*
+.env
+.env.*
+!.env.example
+
+# Captured real-data fixtures and every golden derived from them are local-only (PM decision on review-06):
+# never committed, never published. The committed suite runs on synthetic scenarios.
+test/fixtures/local/
+test/golden/local/
+
+# Review/QA evidence folders (screenshots, crops, inventories): kept on disk, not in git. Report .md files are committed.
+design/reports/*/
+# Generated copy of the design system and art (rebuilt by `node scripts/sync-design.js` at deploy).
+public/v2/bureau/
+# Session-local agent context file (managed by Owner).
+CLAUDE.md
+# Report screenshots/animations stay on disk only.
+design/reports/*.png
+design/reports/*.gif
+design/reports/*.jpg
+
+# Instance-specific deployment files (Owner's server): never part of the core repo.
+instance/
+
+# Release artifacts (tarball, checksum, notes). Produced by packaging/release.sh.
+dist/

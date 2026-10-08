@@ -1,0 +1,18 @@
+{
+  "$comment": "Shape sidecar for access-vm.json (api.md §3.5).",
+  "nullable": [
+    "$.agents[].model",
+    "$.interlocutors[].name",
+    "$.interlocutors[].avatarUrl",
+    "$.interlocutors[].lastSeenAt",
+    "$.interlocutors[].access.policy",
+    "$.interlocutors[].access.enabled",
+    "$.interlocutors[].access.requireMention",
+    "$.policy.dm",
+    "$.policy.group",
+    "$.policy.execSecurity"
+  ],
+  "types": {
+    "$.interlocutors[].avatarUrl": "string"
+  }
+}

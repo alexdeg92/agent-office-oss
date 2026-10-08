@@ -1,0 +1,13 @@
+{
+  "agent:claude:acp:<uuid> → acp (acp)": 1,
+  "agent:main:cron:<uuid> → scheduled (cron)": 1,
+  "agent:main:dashboard:<uuid> → dashboard (dashboard)": 1,
+  "agent:main:discord:channel:<number> → conversation-group (chat-group) discord-channel": 1,
+  "agent:main:discord:channel:<number>:heartbeat → conversation-group (chat-group) heartbeat discord-channel": 1,
+  "agent:main:discord:direct:<number> → conversation-direct (chat-direct) discord-user": 1,
+  "agent:main:explicit:portal-chat → explicit (explicit)": 1,
+  "agent:main:main → primary (is-main)": 1,
+  "agent:main:main:heartbeat → primary (main-key) heartbeat": 1,
+  "agent:main:subagent:<uuid> → subagent (subagent)": 2,
+  "agent:main:wechat:group:fake-group → conversation-group (chat-group) wechat-room": 1
+}

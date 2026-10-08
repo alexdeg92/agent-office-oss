@@ -1,0 +1,90 @@
+{
+  "data": {
+    "skill": {
+      "id": "weather",
+      "emoji": "⛅",
+      "description": "Prévisions météo.",
+      "source": "bundled",
+      "status": "active",
+      "visibility": {
+        "model": true,
+        "command": false,
+        "user": true
+      },
+      "homepage": "https://example.invalid/weather"
+    },
+    "detail": {
+      "always": false,
+      "blockedBy": {
+        "allowlist": false,
+        "agentFilter": false,
+        "platform": false
+      },
+      "requirements": {
+        "bins": [
+          "curl"
+        ],
+        "anyBins": [
+          "python3"
+        ],
+        "env": [
+          "METEO_UNITES"
+        ],
+        "config": [
+          "skills.weather.units"
+        ],
+        "os": [
+          "linux"
+        ]
+      },
+      "missing": {
+        "bins": [
+          "curl"
+        ],
+        "anyBins": [
+          "python3"
+        ],
+        "env": [
+          "METEO_UNITES"
+        ],
+        "config": [
+          "skills.weather.units"
+        ],
+        "os": [
+          "linux"
+        ]
+      },
+      "install": [
+        {
+          "id": "brew-curl",
+          "kind": "brew",
+          "label": "Installer curl (Homebrew)",
+          "bins": [
+            "curl"
+          ]
+        }
+      ]
+    },
+    "markdown": "# Météo\n\nPrévisions sur trois jours.\n\n## Étapes\n\n1. Lire la ville demandée\n2. Appeler le service météo\n3. Envoyer le résumé\n",
+    "flow": {
+      "steps": [
+        "Lire la ville demandée",
+        "Appeler le service météo",
+        "Envoyer le résumé"
+      ],
+      "outputs": [
+        "message"
+      ]
+    },
+    "needsRestart": false
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "skill:weather",
+      "rev": 1
+    }
+  }
+}

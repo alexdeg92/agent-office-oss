@@ -1,0 +1,75 @@
+# Push and pull request checks. No repository secrets. Local captures are not in git;
+# capture tests skip when test/fixtures/local is absent.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: node scripts/build-frontend.js
+
+      - run: npm run test:release
+
+      - name: packed file list
+        run: |
+          stage=$(mktemp -d)
+          node -e 'require("./packaging/release-tools").stagePackage(process.cwd(), process.argv[1])' "$stage"
+          ( cd "$stage" && npm pack --dry-run --json ) > "$RUNNER_TEMP/pack.json"
+          node packaging/check-pack.js "$RUNNER_TEMP/pack.json" # size budget and no worn, design sources, or fixtures
+
+      - name: docker image
+        run: docker build -f packaging/docker/Dockerfile -t agent-office:ci .
+
+      # Packaged first run against the image just built. Measured at about 9s once the image exists.
+      - name: packaged first run
+        run: node --test packaging/first-run.test.js
+
+      - name: docker smoke
+        run: packaging/docker/smoke.sh
+
+      - name: compose example
+        run: docker compose -f packaging/docker/docker-compose.example.yml config --quiet
+
+      - name: demo runtime smoke
+        run: IMAGE=agent-office:ci packaging/docker/demo-smoke.sh
+
+      - name: Homebrew formula syntax
+        run: ruby -c packaging/homebrew/agent-office.rb
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Both platforms, written to a local OCI archive. Nothing is pushed.
+      - name: multi-arch image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file packaging/docker/Dockerfile \
+            --tag agent-office:ci \
+            --output type=oci,dest="$RUNNER_TEMP/agent-office-oci.tar" \
+            .
+          test -s "$RUNNER_TEMP/agent-office-oci.tar"

@@ -1,0 +1,8 @@
+{
+  "additional": {
+    "$.integrations": {
+      "projet": true
+    }
+  },
+  "$comment": "Shape sidecar for setup-save-request.json. integrations (architect-56) is optional: { projet: boolean }, default true."
+}

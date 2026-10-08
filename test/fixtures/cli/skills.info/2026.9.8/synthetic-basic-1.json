@@ -1,0 +1,23 @@
+{
+  "$fixture": {
+    "source": "cli",
+    "channel": "cli.skills.info",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "argv": [
+        "skills",
+        "info",
+        "<name>",
+        "--agent",
+        "main",
+        "--json"
+      ]
+    }
+  },
+  "body": {
+    "kind": "text",
+    "exitCode": 0,
+    "value": "{\n  \"name\": \"weather\",\n  \"description\": \"Prévisions météo.\",\n  \"source\": \"openclaw-bundled\",\n  \"bundled\": true,\n  \"filePath\": \"{{FIXTURES_DIR}}/files/skills/weather/SKILL.md\",\n  \"baseDir\": \"{{FIXTURES_DIR}}/files/skills/weather\",\n  \"skillKey\": \"weather\",\n  \"always\": false,\n  \"disabled\": false,\n  \"blockedByAllowlist\": false,\n  \"eligible\": true,\n  \"emoji\": \"⛅\",\n  \"homepage\": \"https://example.invalid/weather\",\n  \"missing\": {\n    \"bins\": [],\n    \"anyBins\": [],\n    \"env\": [],\n    \"config\": [],\n    \"os\": []\n  },\n  \"configChecks\": [],\n  \"blockedByAgentFilter\": false,\n  \"platformIncompatible\": false,\n  \"modelVisible\": true,\n  \"userInvocable\": true,\n  \"commandVisible\": false,\n  \"requirements\": {\n    \"bins\": [],\n    \"anyBins\": [],\n    \"env\": [],\n    \"config\": [],\n    \"os\": []\n  },\n  \"install\": []\n}\n"
+  }
+}

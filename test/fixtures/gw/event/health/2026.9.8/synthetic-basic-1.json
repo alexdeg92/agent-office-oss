@@ -1,0 +1,28 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.event.health",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "ok": true,
+      "server": {
+        "version": "2026.9.8"
+      },
+      "eventLoop": {
+        "degraded": false,
+        "delayP99Ms": 12.6
+      },
+      "plugins": {
+        "loaded": [
+          "discord",
+          "whatsapp",
+          "memory"
+        ]
+      }
+    }
+  }
+}

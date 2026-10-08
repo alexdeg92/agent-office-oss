@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="fr-CA" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bureau · page (banc d’essai)</title>
+  <script type="importmap">
+  { "imports": { "preact": "../vendor/preact.mjs", "preact/hooks": "../vendor/preact-hooks.mjs", "htm": "../vendor/htm.mjs" } }
+  </script>
+  <style>body { margin: 0; background: var(--bu-bg); color: var(--bu-text-primary); } .dev-note { margin: 0; padding: 8px 24px 0; font: 12px/1.4 Inter, sans-serif; color: var(--bu-text-tertiary); }</style>
+</head>
+<body>
+  <p class="dev-note">Banc d’essai d’office-dev : la page Bureau réelle (public/v2/office/page.js) sur le flux simulé de mock-office.js, sans le shell de l’application.</p>
+  <div id="app"></div>
+  <script type="module" src="./bureau-dev.js"></script>
+</body>
+</html>

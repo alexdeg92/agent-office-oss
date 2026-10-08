@@ -1,0 +1,83 @@
+{
+  "name": "@alexdeg92/agent-office",
+  "version": "1.0.0",
+  "description": "Live dashboard for OpenClaw agents: an animated office, chat, workflows, projects and system health.",
+  "main": "server.js",
+  "bin": {
+    "agent-office": "packaging/bin/agent-office.js"
+  },
+  "files": [
+    "server.js",
+    "gateway.js",
+    "src/",
+    "public/v2/",
+    "scripts/serve-frontend.js",
+    "scripts/hash-password.js",
+    "packaging/bin/agent-office.js",
+    "packaging/bin/combined.js",
+    "integrations/openclaw/projet/",
+    "LICENSE",
+    "README.md",
+    ".env.example",
+    "!public/v2/mock/",
+    "!public/v2/office/{bureau-dev,contact,demo,setup-dev}.{html,js}",
+    "!public/v2/office/mock-office.js",
+    "!public/v2/bureau/assets/ProjectCovers/",
+    "!public/v2/bureau/assets/**/worn/",
+    "!**/design/",
+    "!**/test/",
+    "!**/.env",
+    "!**/.env.*",
+    "!**/*.sqlite",
+    "!**/*.sqlite-*",
+    "!**/*.db",
+    "!**/*.token",
+    "!**/*.pem",
+    "!**/*.key",
+    "!**/id_rsa*",
+    "!**/id_ed25519*",
+    "!**/fixtures/local/",
+    "!**/golden/local/",
+    "!**/instance/",
+    "!**/design/reports/",
+    "!**/reports/",
+    "!**/PROMPTS.md",
+    "!**/tools/",
+    "!**/guides/",
+    "!**/*-raw.png",
+    "!**/rectification.json",
+    "!public/v2/office/README.md",
+    "!public/v2/office/mock-store.js",
+    "!public/v2/office/package.json"
+  ],
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:golden": "UPDATE_GOLDEN=1 node --test \"test/**/*.test.js\"",
+    "fixtures:synthetic": "node scripts/make-synthetic-fixtures.js",
+    "test:release": "node --test test/packaging/*.test.js test/portability/*.test.js test/frontend/release.test.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "proxy-addr": "2.0.7",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "axe-core": "4.14.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexdeg92/agent-office-oss.git"
+  },
+  "homepage": "https://github.com/alexdeg92/agent-office-oss#readme",
+  "bugs": {
+    "url": "https://github.com/alexdeg92/agent-office-oss/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

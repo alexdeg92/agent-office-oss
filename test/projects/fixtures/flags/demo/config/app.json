@@ -1,0 +1,4 @@
+{
+  "featureFlags": { "configFlag": false, "note": "hello" },
+  "secret": "do-not-keep"
+}

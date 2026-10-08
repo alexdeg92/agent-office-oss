@@ -1,0 +1,113 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "totalCount": 7,
+      "count": 7,
+      "hasMore": false,
+      "nextOffset": null,
+      "limitApplied": 300,
+      "sessions": [
+        {
+          "kind": "direct",
+          "isBackground": false,
+          "updatedAt": 1791313140000,
+          "totalTokens": 42000,
+          "status": "done",
+          "key": "agent:atlas:main",
+          "sessionId": "ffffffff-f001-4000-8000-000000000001",
+          "agentId": "atlas",
+          "isMain": true,
+          "channel": "telegram",
+          "model": "claude-sonnet-5",
+          "modelProvider": "anthropic"
+        },
+        {
+          "kind": "direct",
+          "isBackground": false,
+          "updatedAt": 1791313180000,
+          "totalTokens": 3100,
+          "status": "active",
+          "key": "agent:atlas:telegram:direct:foreign-user",
+          "sessionId": "ffffffff-f002-4000-8000-000000000002",
+          "agentId": "atlas",
+          "channel": "telegram",
+          "model": "claude-sonnet-5",
+          "modelProvider": "anthropic",
+          "hasActiveRun": true
+        },
+        {
+          "kind": "group",
+          "isBackground": false,
+          "updatedAt": 1791313170000,
+          "totalTokens": 2500,
+          "status": "active",
+          "key": "agent:scribe:slack:channel:C0ACME",
+          "sessionId": "ffffffff-f003-4000-8000-000000000003",
+          "agentId": "scribe",
+          "channel": "slack",
+          "model": "mistral-large-3",
+          "modelProvider": "mistral",
+          "hasActiveRun": true
+        },
+        {
+          "kind": "group",
+          "isBackground": false,
+          "updatedAt": 1791309600000,
+          "totalTokens": 900,
+          "status": "done",
+          "key": "agent:atlas:matrix:group:!ops:example.org",
+          "sessionId": "ffffffff-f004-4000-8000-000000000004",
+          "agentId": "atlas",
+          "channel": "matrix",
+          "model": "acme-1",
+          "modelProvider": "acme-llm"
+        },
+        {
+          "kind": "direct",
+          "isBackground": true,
+          "updatedAt": 1791306000000,
+          "totalTokens": 1500,
+          "status": "done",
+          "key": "agent:atlas:cron:ffffffff-f101-4000-8000-000000000101",
+          "sessionId": "ffffffff-f005-4000-8000-000000000005",
+          "agentId": "atlas",
+          "modelProvider": "anthropic"
+        },
+        {
+          "kind": "direct",
+          "isBackground": true,
+          "updatedAt": 1791313190000,
+          "totalTokens": 800,
+          "status": "active",
+          "key": "agent:atlas:subagent:ffffffff-f201-4000-8000-000000000201",
+          "sessionId": "ffffffff-f006-4000-8000-000000000006",
+          "agentId": "atlas",
+          "subagentRole": "worker",
+          "spawnedBy": "agent:atlas:main",
+          "model": "claude-sonnet-5",
+          "modelProvider": "anthropic",
+          "hasActiveRun": true
+        },
+        {
+          "kind": "direct",
+          "isBackground": false,
+          "updatedAt": 1791226800000,
+          "totalTokens": 300,
+          "status": "done",
+          "key": "agent:reviewer:explicit:review-desk",
+          "sessionId": "ffffffff-f007-4000-8000-000000000007",
+          "agentId": "reviewer",
+          "model": "acme-1",
+          "modelProvider": "acme-llm"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,242 @@
+{
+  "agents": [
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "workspace": "/srv/acme/workspace-atlas",
+      "model": {
+        "primary": "anthropic/claude-sonnet-5",
+        "provider": "anthropic"
+      },
+      "fallbackModels": [],
+      "isPrimary": true,
+      "mainSessionKey": null
+    },
+    {
+      "id": "scribe",
+      "name": "Scribe",
+      "workspace": "/srv/acme/workspace-scribe",
+      "model": {
+        "primary": "mistral/mistral-large-3",
+        "provider": "mistral"
+      },
+      "fallbackModels": [],
+      "isPrimary": false,
+      "mainSessionKey": null
+    },
+    {
+      "id": "reviewer",
+      "name": "Aaron",
+      "workspace": "/srv/acme/workspace-reviewer",
+      "model": {
+        "primary": "acme-llm/acme-1",
+        "provider": "acme-llm"
+      },
+      "fallbackModels": [],
+      "isPrimary": false,
+      "mainSessionKey": null
+    }
+  ],
+  "cronJobs": [
+    {
+      "id": "ffffffff-f101-4000-8000-000000000101",
+      "name": "Weekly digest",
+      "description": "Summarise the week.",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * 1",
+        "tz": "Europe/Paris"
+      },
+      "agentId": "atlas",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agent-turn",
+        "message": "Summarise the week.",
+        "timeoutSeconds": null,
+        "model": null,
+        "toolsAllow": null,
+        "lightContext": false
+      },
+      "delivery": null,
+      "steps": [],
+      "createdAt": 1788721200000,
+      "updatedAt": 1791226800000,
+      "nextRunAt": null,
+      "lastRunAt": null,
+      "lastRunStatus": null,
+      "lastRunError": null,
+      "lastDeliveryStatus": null,
+      "deleteAfterRun": false,
+      "sessionKey": null,
+      "health": "never-run"
+    },
+    {
+      "id": "ffffffff-f102-4000-8000-000000000102",
+      "name": "Inbox sweep",
+      "description": "",
+      "enabled": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 7 * * *",
+        "tz": "Europe/Paris"
+      },
+      "agentId": null,
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agent-turn",
+        "message": "Sweep the inbox.",
+        "timeoutSeconds": null,
+        "model": null,
+        "toolsAllow": null,
+        "lightContext": false
+      },
+      "delivery": null,
+      "steps": [],
+      "createdAt": 1790449200000,
+      "updatedAt": 1790449200000,
+      "nextRunAt": null,
+      "lastRunAt": null,
+      "lastRunStatus": null,
+      "lastRunError": null,
+      "lastDeliveryStatus": null,
+      "deleteAfterRun": false,
+      "sessionKey": null,
+      "health": "never-run"
+    }
+  ],
+  "cronRuns": {
+    "ffffffff-f101-4000-8000-000000000101": [],
+    "ffffffff-f102-4000-8000-000000000102": []
+  },
+  "skills": [
+    {
+      "name": "acme-search",
+      "emoji": "🔎",
+      "description": "Search the Acme wiki.",
+      "source": "extra",
+      "rawSource": "openclaw-extra",
+      "bundled": false,
+      "status": "disabled",
+      "visibility": {
+        "model": true,
+        "command": false,
+        "user": true
+      },
+      "homepage": null,
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      }
+    },
+    {
+      "name": "release-notes",
+      "emoji": "📝",
+      "description": "Write release notes.",
+      "source": "bundled",
+      "rawSource": "openclaw-bundled",
+      "bundled": true,
+      "status": "active",
+      "visibility": {
+        "model": true,
+        "command": true,
+        "user": true
+      },
+      "homepage": null,
+      "missing": {
+        "bins": [],
+        "anyBins": [],
+        "env": [],
+        "config": [],
+        "os": []
+      }
+    }
+  ],
+  "skillInfo": {},
+  "channels": [
+    {
+      "id": "telegram",
+      "rawId": "telegram",
+      "label": "Telegram",
+      "configured": true,
+      "health": "running",
+      "lastError": null,
+      "lastStartAt": 1791226800000,
+      "lastInboundAt": null,
+      "accounts": [],
+      "policy": {
+        "dm": null,
+        "group": null
+      }
+    },
+    {
+      "id": "slack",
+      "rawId": "slack",
+      "label": "Slack",
+      "configured": true,
+      "health": "running",
+      "lastError": null,
+      "lastStartAt": 1791226800000,
+      "lastInboundAt": null,
+      "accounts": [],
+      "policy": {
+        "dm": null,
+        "group": null
+      }
+    },
+    {
+      "id": "matrix",
+      "rawId": "matrix",
+      "label": "Matrix",
+      "configured": false,
+      "health": "not-configured",
+      "lastError": null,
+      "lastStartAt": null,
+      "lastInboundAt": null,
+      "accounts": [],
+      "policy": {
+        "dm": null,
+        "group": null
+      }
+    }
+  ],
+  "transcripts": {
+    "agent:atlas:telegram:direct:foreign-user": {
+      "sessionKey": "agent:atlas:telegram:direct:foreign-user",
+      "fetchedAt": 1791313200000,
+      "messageCount": 2,
+      "window": {
+        "from": 0,
+        "to": 2
+      },
+      "events": [
+        {
+          "id": "ev:0:0",
+          "kind": "user",
+          "at": 1791313170000,
+          "text": "Can you check the release notes?",
+          "truncated": false,
+          "sender": null
+        },
+        {
+          "id": "ev:1:0",
+          "kind": "assistant",
+          "at": 1791313180000,
+          "text": "On it.",
+          "truncated": false,
+          "model": null,
+          "provider": null,
+          "outputTokens": null,
+          "stopReason": null,
+          "error": null
+        }
+      ]
+    }
+  },
+  "config": null
+}

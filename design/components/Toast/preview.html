@@ -1,0 +1,30 @@
+<!-- @dsCard group="Statut" height=296 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notifications (toasts) · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol></svg>
+<main class="pv">
+<div class="pv-col" style="align-items: center" role="status" aria-live="polite">
+<div class="bu-toast bu-toast--success"><svg class="bu-icon bu-icon--md" aria-hidden="true"><use href="#i-check"/></svg><span class="bu-toast__text">Tâche créée</span><button class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label="Fermer"><svg class="bu-icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+<div class="bu-toast"><svg class="bu-icon bu-icon--md" aria-hidden="true"><use href="#i-info"/></svg><span class="bu-toast__text">Exécution lancée<small>L'historique se met à jour dans un instant.</small></span><button class="bu-btn bu-btn--sm">Voir l'historique</button></div>
+<div class="bu-toast bu-toast--warning"><svg class="bu-icon bu-icon--md" aria-hidden="true"><use href="#i-alert"/></svg><span class="bu-toast__text">Compétence désactivée<small>Appliquez pour redémarrer Timmy.</small></span><button class="bu-btn bu-btn--sm">Appliquer</button></div>
+<div class="bu-toast bu-toast--danger" role="alert"><svg class="bu-icon bu-icon--md" aria-hidden="true"><use href="#i-alert"/></svg><span class="bu-toast__text">La tâche n'a pas pu être supprimée.<small class="bu-mono-sm">HTTP 502 · gateway timeout</small></span><button class="bu-btn bu-btn--sm">Réessayer</button></div></div>
+</main>
+</body>
+</html>

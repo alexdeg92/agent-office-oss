@@ -1,0 +1,28 @@
+<!-- @dsCard group="Agents" height=232 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avatars · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-hash" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/></symbol></svg>
+<main class="pv">
+<div class="pv-row"><span class="bu-avatar bu-avatar--agent bu-avatar--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--xl"><svg class="bu-icon bu-icon--lg" aria-hidden="true"><use href="#i-bot"/></svg></span></div>
+<div class="pv-row"><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="idle" title="Inactif"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="thinking" title="Réfléchit"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="working" title="Exécute"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="researching" title="Recherche"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="writing" title="Rédige"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="calling" title="Appel d'outil"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="waiting" title="En attente"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="error" title="Erreur"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg" data-agent-state="offline" title="Hors ligne"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span></div>
+<div class="pv-row"><span class="bu-avatar bu-avatar--human bu-avatar--lg">AS</span><span class="bu-avatar bu-avatar--human">MR</span><span class="bu-avatar bu-avatar--human bu-avatar--sm">J</span><span class="bu-avatar bu-avatar--git bu-avatar--lg">gh</span><span class="bu-avatar bu-avatar--human bu-avatar--lg"><svg class="bu-icon" aria-hidden="true"><use href="#i-hash"/></svg></span><span class="bu-avatar bu-avatar--agent bu-avatar--lg"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg><span class="bu-avatar__badge" data-agent-state="working"></span></span></div>
+</main>
+</body>
+</html>

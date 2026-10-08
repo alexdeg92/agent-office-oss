@@ -1,0 +1,611 @@
+[
+  {
+    "key": "agent:main:main",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000000",
+    "class": {
+      "kind": "primary",
+      "ruleId": "is-main",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": "Session principale",
+    "model": {
+      "id": "model-a",
+      "provider": "provider-a"
+    },
+    "provider": "provider-a",
+    "usage": {
+      "total": 52300,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791223140000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": false,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:main:heartbeat",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000001",
+    "class": {
+      "kind": "primary",
+      "ruleId": "is-main",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": "agent:main:main",
+      "background": true,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": "provider-a"
+    },
+    "provider": "provider-a",
+    "usage": {
+      "total": 900,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791223140000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": false,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000002",
+    "class": {
+      "kind": "subagent",
+      "ruleId": "subagent",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": true,
+      "rawClassification": null,
+      "subagentId": "ffffffff-0001-4000-8000-000000000001",
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": "provider-a"
+    },
+    "provider": "provider-a",
+    "usage": {
+      "total": 9100,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791223194000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": 1791223160000,
+      "endedAt": 1791223194000,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": 34000,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": "agent:main:main",
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:subagent:ffffffff-0002-4000-8000-000000000002",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000003",
+    "class": {
+      "kind": "subagent",
+      "ruleId": "subagent",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": true,
+      "rawClassification": null,
+      "subagentId": "ffffffff-0002-4000-8000-000000000002",
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 4200,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791212400000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": 1791212100000,
+      "endedAt": 1791212400000,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": "agent:main:main",
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:cron:ffffffff-0c01-4000-8000-000000000001",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000004",
+    "class": {
+      "kind": "scheduled",
+      "ruleId": "cron",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": true,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": "ffffffff-0c01-4000-8000-000000000001",
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": null,
+    "provider": "provider-a",
+    "usage": {
+      "total": 1500,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791223180000,
+    "run": {
+      "status": "running",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:discord:direct:100000000000000001",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000005",
+    "class": {
+      "kind": "conversation-direct",
+      "ruleId": "chat-direct",
+      "agentId": "main",
+      "channel": "discord",
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "direct",
+      "interlocutorId": "discord-user:100000000000000001"
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": "provider-a"
+    },
+    "provider": "provider-a",
+    "usage": {
+      "total": 3300,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791223140000,
+    "run": {
+      "status": "running",
+      "endReason": null,
+      "evidence": "start-without-end",
+      "startedAt": 1791223140000,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:dashboard:ffffffff-da5b-4000-8000-000000000001",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000006",
+    "class": {
+      "kind": "dashboard",
+      "ruleId": "dashboard",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 700,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1790445600000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": "agent:main:main",
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:discord:channel:100000000000000002",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000007",
+    "class": {
+      "kind": "conversation-group",
+      "ruleId": "chat-group",
+      "agentId": "main",
+      "channel": "discord",
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "channel",
+      "interlocutorId": "discord-channel:100000000000000002"
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 12000,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791050400000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:explicit:portal-chat",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000008",
+    "class": {
+      "kind": "explicit",
+      "ruleId": "explicit",
+      "agentId": "main",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": "portal-chat",
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 2100,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791222600000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:wechat:group:fake-group",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000009",
+    "class": {
+      "kind": "conversation-group",
+      "ruleId": "chat-group",
+      "agentId": "main",
+      "channel": "wechat",
+      "heartbeatOf": null,
+      "background": false,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "group",
+      "interlocutorId": "wechat-room:fake-group"
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 400,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791205200000,
+    "run": {
+      "status": "failed",
+      "endReason": "timeout",
+      "evidence": "status-field",
+      "startedAt": 1791205140000,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": true,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:claude:acp:ffffffff-acb0-4000-8000-000000000001",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000010",
+    "class": {
+      "kind": "acp",
+      "ruleId": "acp",
+      "agentId": "claude",
+      "channel": null,
+      "heartbeatOf": null,
+      "background": true,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": null,
+      "interlocutorId": null
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-b",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 600,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791208800000,
+    "run": {
+      "status": "failed",
+      "endReason": "killed",
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": 1791208800000,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": "agent:main:main",
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": false,
+    "group": null,
+    "channelName": null,
+    "label": null
+  },
+  {
+    "key": "agent:main:discord:channel:100000000000000002:heartbeat",
+    "sessionId": "ffffffff-5e55-4000-8000-000000000011",
+    "class": {
+      "kind": "conversation-group",
+      "ruleId": "chat-group",
+      "agentId": "main",
+      "channel": "discord",
+      "heartbeatOf": "agent:main:discord:channel:100000000000000002",
+      "background": true,
+      "rawClassification": null,
+      "subagentId": null,
+      "cronJobId": null,
+      "explicitKey": null,
+      "chatScope": "channel",
+      "interlocutorId": "discord-channel:100000000000000002"
+    },
+    "displayName": null,
+    "model": {
+      "id": "model-a",
+      "provider": null
+    },
+    "provider": null,
+    "usage": {
+      "total": 100,
+      "input": null,
+      "output": null
+    },
+    "updatedAt": 1791223020000,
+    "run": {
+      "status": "succeeded",
+      "endReason": null,
+      "evidence": "status-field",
+      "startedAt": null,
+      "endedAt": null,
+      "hasActiveSubagentRun": false,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "lastError": null
+    },
+    "costUsd": null,
+    "parentKey": null,
+    "childKeys": [],
+    "goal": null,
+    "cwd": null,
+    "messageCount": null,
+    "interactive": false,
+    "group": null,
+    "channelName": null,
+    "label": null
+  }
+]

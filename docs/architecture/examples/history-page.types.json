@@ -1,0 +1,50 @@
+{
+  "$comment": "Shape sidecar for history-page.json (api.md §3.9). session (architect-57) is optional: session items only.",
+  "types": {
+    "$.items[].actor.avatarUrl": "string",
+    "$.items[].actor.state": "string",
+    "$.nextCursor": "string",
+    "$.items[].session.people[].avatarUrl": "string",
+    "$.items[].session.people[].state": "string"
+  },
+  "variants": {
+    "$.items[].actor": [
+      {
+        "kind": "system",
+        "name": "Système"
+      }
+    ]
+  },
+  "additional": {
+    "$.items[].session": {
+      "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+      "label": {
+        "key": "historySession.subagent",
+        "params": {
+          "agent": "Atlas"
+        }
+      },
+      "summary": "Plan de l’infolettre : 3 numéros, outil Brevo, calendrier · 5 étapes · fichiers : plan.md · 25 734 jetons",
+      "messages": 12,
+      "tokens": 25734,
+      "route": "/journaux/agent%3Amain%3Asubagent%3Affffffff-0001-4000-8000-000000000001",
+      "people": [
+        {
+          "id": "agent:main",
+          "kind": "agent",
+          "name": "Atlas",
+          "avatarUrl": null,
+          "state": null
+        }
+      ],
+      "channel": "Discord"
+    }
+  },
+  "nullable": [
+    "$.items[].session.summary",
+    "$.items[].session.messages",
+    "$.items[].session.people[].avatarUrl",
+    "$.items[].session.people[].state",
+    "$.items[].session.channel"
+  ]
+}

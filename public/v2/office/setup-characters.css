@@ -1,0 +1,73 @@
+/* First-run setup, « characters » step (O5). Bureau tokens only; every control ≥ 44 px; one column on phones. */
+.ao-sc { container: ao-sc / inline-size; display: flex; flex-direction: column; gap: var(--bu-space-4); color: var(--bu-text-primary); }
+.ao-sc__title { font: var(--bu-type-title-lg); margin: 0; }
+.ao-sc__help { font: var(--bu-type-body); color: var(--bu-text-secondary); margin: 0; max-width: var(--bu-size-ed-measure, 680px); }
+.ao-sc__grid { display: grid; grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); gap: var(--bu-space-8); align-items: start; }
+.ao-sc__label { font: var(--bu-type-label); letter-spacing: var(--bu-tracking-label); text-transform: uppercase; color: var(--bu-text-tertiary); margin: 0 0 var(--bu-space-2); padding: 0; }
+.ao-sc__list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--bu-border-default); }
+.ao-sc__list li { border-bottom: 1px solid var(--bu-border-subtle); }
+.ao-sc__agent { display: flex; align-items: center; gap: var(--bu-space-3); width: 100%; min-height: 44px; padding: var(--bu-space-2) var(--bu-space-1);
+  background: none; border: 0; border-radius: var(--bu-radius-xs); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ao-sc__agent:hover { background: color-mix(in srgb, var(--bu-text-primary) 5%, transparent); }
+.ao-sc__agent:focus-visible, .ao-sc__card:has(input:focus-visible), .ao-sc__swatch:has(input:focus-visible) { outline: 2px solid var(--bu-focus-ring); outline-offset: 2px; }
+.ao-sc__agent[aria-current="true"] { box-shadow: inset 3px 0 0 var(--bu-accent); }
+.ao-sc__agent[aria-current="true"] .ao-sc__name { color: var(--bu-accent-text); }
+.ao-sc__agenttext { display: flex; flex-direction: column; min-width: 0; }
+.ao-sc__name { font: var(--bu-type-heading); overflow-wrap: anywhere; }
+.ao-sc__role, .ao-sc__look { font: var(--bu-type-caption); color: var(--bu-text-tertiary); }
+.ao-sc__look { color: var(--bu-text-secondary); }
+.ao-sc__editor { display: flex; flex-direction: column; gap: var(--bu-space-5); min-width: 0; }
+.ao-sc__subtitle { font: var(--bu-type-title); margin: 0; overflow-wrap: anywhere; }
+.ao-sc__preview { display: flex; align-items: end; gap: var(--bu-space-5); flex-wrap: wrap; }
+.ao-sc__pose { margin: 0; }
+.ao-sc__pose .bu-select { min-height: 44px; }
+/* A look: stacked images on one canvas (192 × 288 authored px); back layers, body, front layers. */
+.ao-sc-figure { position: relative; display: inline-block; flex: none; aspect-ratio: 2 / 3; }
+.ao-sc-figure img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: auto; }
+.ao-sc-figure--sm { width: 40px; }
+.ao-sc-figure--lg { width: 144px; background: var(--bu-surface-sunken, color-mix(in srgb, var(--bu-text-primary) 4%, transparent)); border-radius: var(--bu-radius-sm); }
+.ao-sc__set { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ao-sc__cards, .ao-sc__swatches { display: flex; flex-wrap: wrap; gap: var(--bu-space-2); }
+.ao-sc__card, .ao-sc__swatch { position: relative; display: inline-flex; align-items: center; gap: var(--bu-space-2); min-height: 44px; padding: var(--bu-space-1) var(--bu-space-3);
+  border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-sm); cursor: pointer; font: var(--bu-type-body-sm); }
+.ao-sc__card.is-on, .ao-sc__swatch.is-on { border-color: var(--bu-accent); box-shadow: 0 0 0 1px var(--bu-accent); font-weight: 600; }
+.ao-sc__card input, .ao-sc__swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ao-sc__dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--bu-border-default); }
+.ao-sc__slot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-2); margin-bottom: var(--bu-space-2); }
+.ao-sc__slotlabel { font: var(--bu-type-caption); color: var(--bu-text-tertiary); min-width: 5rem; }
+.ao-sc__acc { min-height: 44px; }
+.ao-sc__acc[aria-pressed="true"] { border-color: var(--bu-accent); color: var(--bu-accent-text); }
+.ao-sc__note { font: var(--bu-type-body-sm); color: var(--bu-text-secondary); margin: var(--bu-space-2) 0 0; }
+.ao-sc__reset { align-self: flex-start; min-height: 44px; }
+.ao-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@container ao-sc (max-width: 640px) {
+  .ao-sc__grid { grid-template-columns: minmax(0, 1fr); gap: var(--bu-space-6); }
+  .ao-sc-figure--lg { width: 112px; }
+}
+@media (prefers-reduced-motion: reduce) { .ao-sc * { transition: none !important; } }
+/* Embedded in the Bureau editor's side panel (O6): one column, the panel gives the width. */
+.ao-sc--embedded .ao-sc__grid { grid-template-columns: minmax(0, 1fr); gap: var(--bu-space-5); }
+/* O7, embedded (Bureau editor): the agents are compact one-line chips above the look editor, so picking an agent
+   shows its editor without scrolling; on a narrow panel a native select replaces them. Role and look stay in the
+   button's text for screen readers (visually hidden) and in its tooltip. */
+.ao-sc__pick { display: none; margin: 0; }
+.ao-sc__pick .bu-select { min-height: 44px; width: 100%; }
+.ao-sc--embedded .ao-sc__list { display: flex; flex-wrap: wrap; gap: var(--bu-space-1); border-top: 0; }
+.ao-sc--embedded .ao-sc__list li { border-bottom: 0; }
+.ao-sc--embedded .ao-sc__agent { width: auto; min-height: 44px; padding: var(--bu-space-1) var(--bu-space-3) var(--bu-space-1) var(--bu-space-1); gap: var(--bu-space-2);
+  border: 1px solid var(--bu-border-subtle); border-radius: 999px; }
+.ao-sc--embedded .ao-sc__agent[aria-current="true"] { box-shadow: none; border-color: var(--bu-accent); background: color-mix(in srgb, var(--bu-accent) 10%, transparent); }
+.ao-sc--embedded .ao-sc__name { font: var(--bu-type-body-sm); font-weight: 600; white-space: nowrap; }
+.ao-sc--embedded .ao-sc-figure--sm { width: 24px; }
+.ao-sc--embedded .ao-sc__preview .ao-sc-figure--lg { width: 72px; }
+.ao-sc--embedded .ao-sc__preview { align-items: center; gap: var(--bu-space-3); }
+.ao-sc--embedded .ao-sc__subtitle { font: var(--bu-type-heading); }
+.ao-sc--embedded .ao-sc__editor { gap: var(--bu-space-4); }
+.ao-sc--embedded .ao-sc__agents { margin-bottom: calc(-1 * var(--bu-space-2)); }
+@container ao-sc (max-width: 340px) {
+  .ao-sc--embedded .ao-sc__pick { display: block; }
+  .ao-sc--embedded .ao-sc__list { display: none; }
+}
+/* O7: the editor's chips under two small headings, « Agents » and « Règles par défaut ». */
+.ao-sc__group { font: var(--bu-type-label); letter-spacing: var(--bu-tracking-label); text-transform: uppercase; color: var(--bu-text-tertiary); margin: var(--bu-space-2) 0 var(--bu-space-1); }
+.ao-sc__group:first-child { margin-top: 0; }

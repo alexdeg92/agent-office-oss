@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://office.example.com/schemas/office-layout.json",
+  "title": "Agent Office — saved office layout",
+  "description": "What the customization editor saves: furniture placement, room theme, and how each agent looks and is labelled. References asset ids from the manifest. Stored by the Agent Office backend (never in ~/.openclaw).",
+  "type": "object",
+  "required": [
+    "version",
+    "manifestVersion",
+    "room",
+    "theme",
+    "items",
+    "agents"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "manifestVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Manifest version the layout was made with; the server refuses a layout newer than its manifest."
+    },
+    "room": {
+      "type": "string",
+      "description": "rooms[].id from the manifest."
+    },
+    "theme": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "auto",
+            "fixed"
+          ],
+          "description": "auto = follow the clock (America/Toronto)."
+        },
+        "fixed": {
+          "type": "string",
+          "description": "themes[].id (day or night kind) when mode = fixed."
+        },
+        "day": {
+          "type": "string"
+        },
+        "night": {
+          "type": "string"
+        },
+        "nightFrom": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+        },
+        "nightTo": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+        },
+        "season": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional season theme layered on top (e.g. 'hiver')."
+        }
+      },
+      "description": "The ONE owner of the office theme (api-proposal.md §4). UiPrefs has no office theme.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "fixed"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "fixed"
+            ]
+          }
+        }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "description": "Placed furniture. Uniqueness of uid, placement kind (wall items use wall/offset, floor items x/y), wall side, overlaps, bounds and reachability are semantic checks (layout-rules.js validateLayout), not expressible here.",
+      "items": {
+        "type": "object",
+        "required": [
+          "uid",
+          "asset"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "uid": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,47}$",
+            "description": "Stable instance id (stations are referenced by it)."
+          },
+          "asset": {
+            "type": "string",
+            "description": "furniture[].id"
+          },
+          "x": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "y": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "orientation": {
+            "enum": [
+              "sw",
+              "se"
+            ],
+            "default": "sw",
+            "description": "Must be one of the asset orientations in the manifest (SW-only assets reject se)."
+          },
+          "wall": {
+            "enum": [
+              "left",
+              "right"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 48,
+            "description": "Optional custom name, e.g. « Poste de Scout »."
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "x",
+              "y"
+            ],
+            "not": {
+              "required": [
+                "wall"
+              ]
+            }
+          },
+          {
+            "required": [
+              "wall",
+              "offset"
+            ],
+            "not": {
+              "required": [
+                "x"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "agents": {
+      "type": "array",
+      "description": "Look and labels per agent. Rules are matched in order; the first match wins. A '*' agentId with a match rule styles agents not listed explicitly (e.g. every new sub-agent).",
+      "items": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "character"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "pattern": "^(main|primary|\\*(subagent|cron|dm|channel|scheduled|direct|group|conversation)|(subagent|cron|dm|channel|scheduled|direct|group|conversation):[^\\s]{1,128})$",
+            "description": "The primary agent (\"main\" in 2.x, \"primary\" in 3.0), an exact OccupantId (\"subagent:<subjectId>\", \"dm:<id>\" ≡ \"direct:<id>\" …), or a default rule \"*<role>\". Both vocabularies are accepted (ADR-001 §12.6: main ≡ primary, cron ≡ scheduled, dm ≡ direct, channel ≡ group; conversation is 3.0). Matching: exact id → \"*<role>\" → \"*conversation\" (conversation roles) → \"*subagent\"."
+          },
+          "match": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "main",
+                  "subagent",
+                  "cron",
+                  "dm",
+                  "channel",
+                  "primary",
+                  "scheduled",
+                  "direct",
+                  "group",
+                  "conversation"
+                ]
+              }
+            },
+            "description": "Redundant with agentId; when present it must equal the role in agentId."
+          },
+          "character": {
+            "type": "string",
+            "description": "characters[].id"
+          },
+          "variant": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "characters[].variants[].id; null = base colours. Default rules rotate through variants in order."
+          },
+          "accessories": {
+            "type": "array",
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "accessories[].id; at most one per slot. Omitted = the variant default gear (manifest defaultAccessories); [] = none."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 24,
+            "description": "Display name (exact rules only; default rules must leave it null). Never written back to OpenClaw."
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 32,
+            "description": "Custom role label shown under the name. Resolved into OfficeVM occupants[].roleLabel."
+          },
+          "station": {
+            "type": "string",
+            "description": "items[].uid of a desk station, or \"auto\" (also the meaning when omitted): first free desk in layout order. Default (\"*\") rules must use auto. No free desk → the occupant is listed but not seated (overflow)."
+          }
+        }
+      }
+    },
+    "presence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seenMinutes"
+      ],
+      "properties": {
+        "seenMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440,
+          "description": "O8 (3.0): how long an agent seen recently (LayoutVM.agentsSeen) but no longer on stage stays at its desk, greyed, after its last activity; then it walks out. 0 turns it off. Default 30 when absent."
+        }
+      },
+      "description": "Seen-agent presence in the office (optional)."
+    }
+  }
+}

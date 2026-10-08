@@ -1,0 +1,99 @@
+/* Office editor (design/office/editor.md). Loaded after Bureau tokens + bundle.css + office.css. */
+
+.ao-editbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-2) var(--bu-space-3); padding: var(--bu-space-2) var(--bu-space-3); border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); background: var(--bu-surface-raised); }
+.ao-editbar__title { margin: 0; font: var(--bu-type-heading); color: var(--bu-text-primary); }
+.ao-editbar__history { display: inline-flex; gap: var(--bu-space-0-5); }
+.ao-editbar__spacer { flex: 1; }
+.ao-editbar__save { display: inline-flex; }
+
+.ao-editpanel { display: flex; flex-direction: column; gap: var(--bu-space-5); padding: var(--bu-space-3); border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); background: var(--bu-surface-raised); color: var(--bu-text-primary); }
+.ao-editpanel section { display: flex; flex-direction: column; gap: var(--bu-space-2); }
+.ao-panel__title { display: flex; align-items: center; gap: var(--bu-space-2); margin: 0; font: var(--bu-type-heading-sm); }
+.ao-search { align-items: center; gap: var(--bu-space-2); }
+.ao-search .bu-icon { color: var(--bu-text-tertiary); }
+.ao-search input { flex: 1; min-width: 0; }
+.ao-cats .bu-filter__list { flex-direction: row; flex-wrap: wrap; }
+.ao-cats .bu-filter__item { width: auto; }
+.ao-cats .bu-filter__item[aria-current="true"], .ao-placed .bu-filter__item[aria-current="true"], .ao-agents .bu-filter__item[aria-current="true"] { background: var(--bu-surface-selected); color: var(--bu-text-primary); }
+
+.ao-palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--bu-space-2); margin: 0; padding: 0; list-style: none; }
+.ao-tile { display: grid; grid-template-rows: 64px auto auto; gap: var(--bu-space-0-5); width: 100%; padding: var(--bu-space-2); text-align: center; font: var(--bu-type-label-sm); color: var(--bu-text-primary); touch-action: none; user-select: none; }
+.ao-tile[aria-pressed="true"] { border-color: var(--bu-accent-border); background: var(--bu-surface-selected); }
+.ao-tile:focus-visible { outline: 2px solid var(--bu-focus-ring); outline-offset: 2px; }
+.ao-tile__img { display: grid; place-items: center; overflow: hidden; }
+.ao-tile__img img { max-width: 100%; max-height: 64px; object-fit: contain; pointer-events: none; }
+.ao-tile__fp { color: var(--bu-text-tertiary); font: var(--bu-type-caption); font-variant-numeric: tabular-nums; }
+.ao-empty { color: var(--bu-text-tertiary); font: var(--bu-type-body-sm, var(--bu-type-body)); }
+
+.ao-placed, .ao-agents { display: flex; flex-direction: column; gap: var(--bu-space-0-5); margin: 0; padding: 0; list-style: none; max-height: 14rem; overflow: auto; }
+.ao-placed__pos, .ao-agents__role { color: var(--bu-text-tertiary); font: var(--bu-type-caption); font-variant-numeric: tabular-nums; }
+.ao-agents .bu-filter__item { flex-wrap: wrap; padding-block: var(--bu-space-1); }
+
+.ao-reason, .ao-problems { color: var(--bu-danger); }
+.ao-reason { display: flex; align-items: center; gap: var(--bu-space-2); margin: 0; padding: var(--bu-space-2); border: 1px dashed var(--bu-danger-border); border-radius: var(--bu-radius-control); background: var(--bu-danger-bg); font: var(--bu-type-label); }
+.ao-problems { padding: var(--bu-space-2) var(--bu-space-3); border: 1px solid var(--bu-danger-border); border-radius: var(--bu-radius-control); background: var(--bu-danger-bg); }
+.ao-problems ul { margin: 0; padding-left: var(--bu-space-4); font: var(--bu-type-body); color: var(--bu-text-primary); }
+.ao-ok { margin: 0; color: var(--bu-text-secondary); font: var(--bu-type-caption); }
+
+.ao-agentcard { gap: var(--bu-space-3) !important; }
+.ao-preview-wrap { display: flex; gap: var(--bu-space-3); align-items: flex-end; }
+.ao-preview { position: relative; width: 96px; height: 144px; flex: none; border-radius: var(--bu-radius-card); background: var(--bu-bg-sunken); border: 1px solid var(--bu-border-subtle); overflow: hidden; }
+.ao-preview img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ao-posepick { flex: 1; }
+.ao-fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--bu-space-2); }
+.ao-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--bu-space-2); }
+.ao-charcard { display: flex; flex-direction: column; align-items: center; gap: var(--bu-space-1); padding: var(--bu-space-2); font: var(--bu-type-label); color: var(--bu-text-primary); }
+.ao-charcard img { width: 48px; height: 72px; object-fit: contain; }
+.ao-charcard[aria-pressed="true"], .ao-themecard[aria-pressed="true"] { border-color: var(--bu-accent-border); background: var(--bu-surface-selected); box-shadow: 0 0 0 1px var(--bu-accent-border); }
+.ao-swatches { display: flex; flex-wrap: wrap; gap: var(--bu-space-2); }
+.ao-swatch { display: inline-flex; align-items: center; gap: var(--bu-space-2); padding: var(--bu-space-1) var(--bu-space-2); border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-pill); font: var(--bu-type-label); cursor: pointer; }
+.ao-swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ao-swatch__dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--bu-border-strong); }
+.ao-swatch:has(input:checked) { border-color: var(--bu-accent-border); background: var(--bu-surface-selected); }
+.ao-swatch:has(input:checked) .ao-swatch__dot { box-shadow: 0 0 0 2px var(--bu-surface-raised), 0 0 0 4px var(--bu-focus-ring); }
+.ao-swatch:has(input:focus-visible) { outline: 2px solid var(--bu-focus-ring); outline-offset: 2px; }
+.ao-accslot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-1); }
+.ao-accslot__label { min-width: 4rem; color: var(--bu-text-secondary); font: var(--bu-type-label-sm); }
+.ao-acc[aria-pressed="true"] { background: var(--bu-accent); border-color: var(--bu-accent); color: var(--bu-text-on-accent); }
+.ao-acc__soon { margin-left: var(--bu-space-1); font-weight: 700; }
+
+.ao-night { display: grid; grid-template-columns: 1fr 1fr; gap: var(--bu-space-2); }
+.ao-night .bu-field__hint { grid-column: 1 / -1; }
+.ao-themecards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--bu-space-2); }
+.ao-themecard { display: flex; flex-direction: column; gap: var(--bu-space-1); padding: var(--bu-space-2); font: var(--bu-type-label); color: var(--bu-text-primary); }
+.ao-themecard img { width: 100%; aspect-ratio: 2134 / 1373; object-fit: contain; border-radius: var(--bu-radius-control); background: var(--bu-bg-sunken); }
+
+/* Item toolbar floats above the selected sprite, in viewport px (never scaled). */
+.ao-editoverlay { position: absolute; inset: 0; pointer-events: none; z-index: calc(var(--bu-z-raised) + 2); }
+.ao-itembar { position: absolute; display: flex; gap: var(--bu-space-0-5); padding: var(--bu-space-0-5); transform: translate(-50%, calc(-100% - var(--bu-space-2))); border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-control); background: var(--bu-surface-overlay); box-shadow: var(--bu-shadow-2); pointer-events: auto; }
+.ao-itembar__danger { color: var(--bu-danger); }
+
+.ao-scrim { position: fixed; z-index: var(--bu-z-modal); }
+.ao-versions { display: flex; flex-direction: column; gap: var(--bu-space-2); margin: 0; padding: 0; list-style: none; max-height: 22rem; overflow: auto; }
+.ao-versions li { display: flex; align-items: center; justify-content: space-between; gap: var(--bu-space-3); padding: var(--bu-space-2); border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-control); }
+.ao-versions small { color: var(--bu-text-tertiary); }
+
+@media (prefers-reduced-motion: reduce) { .ao-itembar, .ao-ghost-img { transition: none; } }
+
+/* Touch (O4): editor targets ≥ 44 px. */
+@media (pointer: coarse) {
+  .ao-editbar .bu-btn, .ao-editbar .bu-segmented__opt, .ao-editpanel .bu-btn, .ao-editpanel .bu-filter__item, .ao-itembar .bu-btn, .ao-scrim .bu-btn { min-height: 44px; min-width: 44px; }
+  .ao-editpanel .bu-input, .ao-editpanel .bu-select { min-height: 44px; }
+  .ao-swatch { min-height: 44px; }
+}
+/* Targets (O6): the panel's fields are ≥ 44 px like every other control. */
+.ao-editpanel .bu-select, .ao-editpanel .bu-input { min-height: 44px; }
+/* O7: one row at 1280 in the app shell. Secondary actions live in « Plus d’actions »; the title stays the toolbar's
+   accessible name but is hidden visually when the bar is narrow; the dirty chip is short (its full text is the title). */
+.ao-editbar { container: ao-editbar / inline-size; }
+@container ao-editbar (max-width: 1200px) {
+  .ao-editbar__title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.ao-more { position: relative; display: inline-flex; }
+.ao-more .bu-btn .bu-icon { margin-left: var(--bu-space-1); margin-right: 0; }
+.ao-more__menu { position: absolute; top: calc(100% + var(--bu-space-1)); right: 0; z-index: calc(var(--bu-z-raised) + 5); min-width: 13rem; margin: 0; padding: var(--bu-space-1);
+  list-style: none; background: var(--bu-surface-raised); border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-sm); box-shadow: var(--bu-shadow-3, var(--bu-shadow-2)); }
+.ao-more__item { display: flex; align-items: center; gap: var(--bu-space-2); width: 100%; min-height: 44px; padding: 0 var(--bu-space-3); background: none; border: 0;
+  border-radius: var(--bu-radius-xs); color: var(--bu-text-primary); font: var(--bu-type-body); text-align: left; cursor: pointer; }
+.ao-more__item:hover, .ao-more__item:focus-visible { background: color-mix(in srgb, var(--bu-accent) 12%, transparent); outline: none; }
+.ao-more__item:focus-visible { box-shadow: inset 0 0 0 2px var(--bu-focus-ring); }

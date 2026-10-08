@@ -1,0 +1,123 @@
+{
+  "data": {
+    "modelVersion": 1,
+    "apiVersion": 3,
+    "contractVersion": "3.0",
+    "serverVersion": "1.0.0+dev",
+    "env": "dev",
+    "capabilities": {
+      "openclawWrites": true,
+      "storeWrites": true
+    },
+    "readonly": false,
+    "runtime": {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "gatewayLabel": "Passerelle OpenClaw",
+      "version": "2026.9.8",
+      "capabilities": {
+        "sessions": true,
+        "transcripts": true,
+        "activity": "run-state",
+        "flows": {
+          "read": true,
+          "write": true,
+          "schedules": [
+            "cron",
+            "every",
+            "at"
+          ],
+          "multiAgent": true
+        },
+        "skills": {
+          "read": true,
+          "toggle": true,
+          "detail": true
+        },
+        "channels": true,
+        "interlocutors": true,
+        "chat": true,
+        "restart": true,
+        "costs": true,
+        "subagents": true,
+        "sessionGroups": true
+      }
+    },
+    "primaryAgent": {
+      "id": "atlas",
+      "name": "Atlas",
+      "avatarUrl": null
+    },
+    "instance": {
+      "name": "Bureau de Camille",
+      "timeZone": "Europe/Paris",
+      "locale": "en",
+      "configured": true
+    },
+    "locale": "fr",
+    "locales": [
+      "fr",
+      "en"
+    ],
+    "labels": {
+      "sessionKind.primary": "Principale",
+      "sessionKind.scheduled": "Tâche planifiée",
+      "sessionKind.conversation-direct": "Message direct",
+      "sessionKind.conversation-group": "Groupe",
+      "sessionKind.conversation": "Conversation",
+      "sessionKind.internal": "Interne",
+      "runtimeKind.dashboard": "Tableau de bord",
+      "occupantRole.primary": "Agent principal",
+      "occupantRole.scheduled": "Exécution planifiée",
+      "occupantRole.direct": "Conversation privée",
+      "occupantRole.group": "Groupe",
+      "interlocutorKind.user": "Personne",
+      "interlocutorKind.room": "Salon",
+      "channel.telegram": "Telegram",
+      "channel.matrix": "Matrix",
+      "provider.acme-llm": "acme-llm",
+      "agent.atlas": "Atlas",
+      "kpi.idle": "{agent} au repos"
+    },
+    "enums": {
+      "sessionKind": [
+        "primary",
+        "subagent",
+        "scheduled",
+        "conversation-direct",
+        "conversation-group",
+        "conversation",
+        "internal",
+        "unrecognized"
+      ],
+      "occupantRole": [
+        "primary",
+        "subagent",
+        "scheduled",
+        "direct",
+        "group",
+        "conversation"
+      ],
+      "interlocutorKind": [
+        "user",
+        "room"
+      ],
+      "agentState": [
+        "idle",
+        "thinking",
+        "working",
+        "researching",
+        "writing",
+        "calling",
+        "waiting",
+        "error",
+        "offline"
+      ]
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
+}

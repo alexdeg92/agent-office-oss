@@ -1,0 +1,6 @@
+{
+  "name": "agent-office-v2-ui",
+  "private": true,
+  "type": "module",
+  "description": "Browser ES modules for /v2 (no build). This file only tells Node the .js files are ESM, for test/frontend."
+}

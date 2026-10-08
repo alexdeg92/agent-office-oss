@@ -1,0 +1,17 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.hello",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "protocol": 4,
+      "server": {
+        "version": "2026.9.8"
+      }
+    }
+  }
+}

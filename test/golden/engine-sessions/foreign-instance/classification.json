@@ -1,0 +1,9 @@
+{
+  "agent:atlas:cron:<uuid> → scheduled (cron)": 1,
+  "agent:atlas:main → primary (is-main)": 1,
+  "agent:atlas:matrix:group:!ops:example.org → conversation-group (chat-group) matrix-room": 1,
+  "agent:atlas:subagent:<uuid> → subagent (subagent)": 1,
+  "agent:atlas:telegram:direct:foreign-user → conversation-direct (chat-direct) telegram-user": 1,
+  "agent:reviewer:explicit:review-desk → explicit (explicit)": 1,
+  "agent:scribe:slack:channel:C0ACME → conversation-group (chat-group) slack-room": 1
+}

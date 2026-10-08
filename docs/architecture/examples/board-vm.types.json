@@ -1,0 +1,17 @@
+{
+  "$comment": "Shape sidecar for board-vm.json (api.md §3.9).",
+  "types": {
+    "$.columns[].cards[].people.visible[].avatarUrl": "string"
+  },
+  "additional": {
+    "$.columns[].cards[].cover": {
+      "url": "https://bureau.example/backend/api/v2/project-covers/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.svg",
+      "thumbUrl": "https://bureau.example/backend/api/v2/project-covers/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.svg",
+      "source": "code",
+      "generatedAt": 1790856000000
+    }
+  },
+  "nullable": [
+    "$.columns[].cards[].cover"
+  ]
+}

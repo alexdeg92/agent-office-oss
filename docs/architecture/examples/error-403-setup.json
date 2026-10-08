@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "forbidden",
+    "message": "Code d’installation invalide.",
+    "requestId": "req_0123456789ab",
+    "details": [
+      {
+        "field": "setupCode",
+        "issue": "invalid"
+      }
+    ]
+  }
+}

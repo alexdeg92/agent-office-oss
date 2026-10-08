@@ -1,0 +1,123 @@
+# Only a v* tag in the NEW public repository authorizes this workflow.
+# Configure PORTAL_EMAIL/PORTAL_DISPLAY_NAME/PUBLIC_PRIVATE_NAMES privacy inputs,
+# NPM_TOKEN for npm, and TAP_TOKEN with write access to the separate tap repository.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'alexdeg92/agent-office-oss'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: match version to tag
+        run: node -e 'const v=require("./package.json").version;if(process.env.GITHUB_REF_NAME!==`v${v}`)process.exit(1)'
+      - run: node scripts/build-frontend.js
+      - run: npm run test:release
+      - name: public privacy gate
+        env:
+          PORTAL_EMAIL: ${{ secrets.PORTAL_EMAIL }}
+          PORTAL_DISPLAY_NAME: ${{ secrets.PORTAL_DISPLAY_NAME }}
+          PUBLIC_PRIVATE_NAMES: ${{ secrets.PUBLIC_PRIVATE_NAMES }}
+        run: packaging/export-public.sh dist/public
+      - run: docker build -f packaging/docker/Dockerfile -t agent-office:ci .
+      - run: node --test packaging/first-run.test.js
+      - run: IMAGE=agent-office:ci packaging/docker/smoke.sh
+      - name: pack and prepare tap
+        run: |
+          npm pack --json --pack-destination dist > dist/pack.json
+          node packaging/check-pack.js dist/pack.json
+          node - <<'JS'
+          const fs=require('fs'),crypto=require('crypto');
+          const pack=JSON.parse(fs.readFileSync('dist/pack.json'))[0];
+          const sha=crypto.createHash('sha256').update(fs.readFileSync('dist/'+pack.filename)).digest('hex');
+          const {updateFormula}=require('./packaging/release-tools');
+          fs.mkdirSync('dist/homebrew-tap/Formula',{recursive:true});
+          fs.writeFileSync('dist/homebrew-tap/Formula/agent-office.rb',updateFormula(fs.readFileSync('packaging/homebrew/agent-office.rb','utf8'),pack.version,sha));
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            dist/*.tgz
+            dist/homebrew-tap/Formula/agent-office.rb
+  npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm publish dist/*.tgz --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: version
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/alexdeg92/agent-office-oss:${{ steps.version.outputs.value }}
+            ghcr.io/alexdeg92/agent-office-oss:latest
+  tap:
+    needs: [npm, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - uses: actions/checkout@v4
+        with:
+          repository: alexdeg92/homebrew-tap
+          token: ${{ secrets.TAP_TOKEN }}
+          path: tap
+      - name: update formula
+        run: |
+          mkdir -p tap/Formula
+          cp dist/homebrew-tap/Formula/agent-office.rb tap/Formula/agent-office.rb
+          cd tap
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Formula/agent-office.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "agent-office ${GITHUB_REF_NAME}"
+            git push
+          fi

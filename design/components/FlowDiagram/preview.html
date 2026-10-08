@@ -1,0 +1,44 @@
+<!-- @dsCard group="Données" height=812 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagramme de flux · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-flux" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M6.5 10v4a2 2 0 0 0 2 2H14"/></symbol><symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12L20 4l-6 16-3-6z"/><path d="M11 14l9-10"/></symbol></svg>
+<main class="pv">
+<section class="bu-card"><p class="bu-eyebrow">Flux d'exécution</p><ol class="bu-flow">
+<li class="bu-flow__node bu-flow__node--trigger"><span class="bu-flow__kind"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg>Déclencheur</span><span class="bu-flow__label">Chaque jour à 08:30</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--step"><span class="bu-flow__kind">Étape</span><span class="bu-flow__label">Lire les canaux suivis</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--decision"><span class="bu-flow__kind"><svg class="bu-icon" aria-hidden="true"><use href="#i-flux"/></svg>Décision</span><span class="bu-flow__label">Selon le volume de messages</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--step"><span class="bu-flow__kind">Étape</span><span class="bu-flow__label">Rédiger le résumé</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--output"><span class="bu-flow__kind"><svg class="bu-icon" aria-hidden="true"><use href="#i-send"/></svg>Sortie</span><span class="bu-flow__label">Message dans #résumé</span></li></ol><p class="bu-caption" style="margin:0">Étapes dérivées de l'instruction de la tâche.</p></section><section class="bu-card" style="max-width: 22rem"><p class="bu-eyebrow">Mobile (vertical)</p><ol class="bu-flow bu-flow--vertical">
+<li class="bu-flow__node bu-flow__node--trigger"><span class="bu-flow__kind"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg>Déclencheur</span><span class="bu-flow__label">Chaque jour à 08:30</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--step"><span class="bu-flow__kind">Étape</span><span class="bu-flow__label">Lire les canaux suivis</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--decision"><span class="bu-flow__kind"><svg class="bu-icon" aria-hidden="true"><use href="#i-flux"/></svg>Décision</span><span class="bu-flow__label">Selon le volume de messages</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--step"><span class="bu-flow__kind">Étape</span><span class="bu-flow__label">Rédiger le résumé</span></li>
+<li class="bu-flow__arrow" aria-hidden="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></li>
+<li class="bu-flow__node bu-flow__node--output"><span class="bu-flow__kind"><svg class="bu-icon" aria-hidden="true"><use href="#i-send"/></svg>Sortie</span><span class="bu-flow__label">Message dans #résumé</span></li></ol></section>
+</main>
+</body>
+</html>

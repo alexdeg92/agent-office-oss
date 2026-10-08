@@ -1,0 +1,33 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.event.sessions.changed",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "sessionKey": "agent:main:main",
+      "sessionId": "ffffffff-5e55-4000-8000-000000000000",
+      "kind": "direct",
+      "isBackground": false,
+      "agentId": "main",
+      "isMain": true,
+      "channel": "whatsapp",
+      "reason": "update",
+      "ts": 1791223196000,
+      "catalogChanged": false,
+      "totalTokens": 52300,
+      "model": "model-a",
+      "modelProvider": "provider-a",
+      "hasActiveRun": false,
+      "status": "done",
+      "startedAt": null,
+      "endedAt": null,
+      "runtimeMs": null,
+      "lastRunId": null,
+      "updatedAt": 1791223080000
+    }
+  }
+}

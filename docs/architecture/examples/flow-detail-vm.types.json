@@ -1,0 +1,71 @@
+{
+  "$comment": "Shape sidecar for flow-detail-vm.json (api.md §3.4).",
+  "nullable": [
+    "$.job.nextRunAt",
+    "$.job.lastRunAt",
+    "$.job.schedule.tz",
+    "$.job.createdAt",
+    "$.job.updatedAt",
+    "$.job.payload.model",
+    "$.job.payload.timeoutSeconds",
+    "$.runs[].durationMs",
+    "$.runs[].nextRunAt",
+    "$.runs[].model",
+    "$.runs[].tokens",
+    "$.runs[].delivery.status",
+    "$.runs[].delivery.delivered",
+    "$.runs[].delivery.channel",
+    "$.runs[].error"
+  ],
+  "types": {
+    "$.job.payload.model": "string",
+    "$.job.payload.timeoutSeconds": "number",
+    "$.runs[].error": "string"
+  },
+  "variants": {
+    "$.job.payload": [
+      {
+        "kind": "command",
+        "argv": [
+          "restic",
+          "backup"
+        ]
+      },
+      {
+        "kind": "heartbeat"
+      },
+      {
+        "kind": "unrecognized"
+      }
+    ],
+    "$.job.schedule": [
+      {
+        "kind": "every",
+        "everyMs": 1800000,
+        "anchorAt": null,
+        "sentence": {
+          "key": "schedule.every",
+          "params": {
+            "duration": "PT30M"
+          }
+        }
+      },
+      {
+        "kind": "at",
+        "at": 1791640800000,
+        "sentence": {
+          "key": "schedule.at",
+          "params": {
+            "at": "2026-10-12T13:00:00.000Z"
+          }
+        }
+      },
+      {
+        "kind": "unrecognized",
+        "sentence": {
+          "key": "schedule.unrecognized"
+        }
+      }
+    ]
+  }
+}

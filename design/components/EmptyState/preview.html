@@ -1,0 +1,32 @@
+<!-- @dsCard group="Statut" height=568 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>États vides, chargement et erreurs · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-competences" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 4v6M13.5 7h6"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol></svg>
+<main class="pv">
+<div class="bu-grid">
+<div class="bu-card"><div class="bu-empty"><div class="bu-empty__art"><svg class="bu-icon" aria-hidden="true"><use href="#i-competences"/></svg></div><h3 class="bu-empty__title">Aucune compétence ne correspond</h3><p class="bu-empty__text">Retirez un filtre pour voir plus de résultats.</p><button class="bu-btn bu-btn--sm">Réinitialiser les filtres</button></div></div>
+<div class="bu-card"><div class="bu-empty bu-empty--error"><div class="bu-empty__art"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg></div><h3 class="bu-empty__title">Trace indisponible</h3><p class="bu-empty__text">La passerelle n'a pas répondu. Les autres pages restent à jour.</p><button class="bu-btn bu-btn--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-refresh"/></svg>Réessayer</button></div></div>
+<div class="bu-card" aria-busy="true" aria-label="Chargement"><div class="bu-inline"><span class="bu-skeleton bu-skeleton--circle"></span><span class="bu-skeleton bu-skeleton--title"></span></div><span class="bu-skeleton"></span><span class="bu-skeleton" style="width: 80%"></span><span class="bu-skeleton bu-skeleton--block"></span></div></div>
+<div class="bu-banner bu-banner--warning"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg><span class="bu-banner__text">Les données affichées datent de 14:22. Reconnexion à la passerelle en cours…</span><button class="bu-btn bu-btn--sm">Actualiser</button></div>
+<div class="bu-banner bu-banner--danger"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg><span class="bu-banner__text">Timmy est hors ligne : la passerelle OpenClaw ne répond plus. <code>WS_DISCONNECTED</code></span></div>
+<div class="pv-row"><span class="bu-spinner" role="status" aria-label="Chargement"></span><span class="bu-text-tertiary">Spinner : seulement quand la forme du contenu est inconnue.</span></div>
+</main>
+</body>
+</html>

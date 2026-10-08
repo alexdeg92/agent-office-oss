@@ -1,0 +1,84 @@
+{
+  "data": {
+    "agents": [
+      {
+        "id": "atlas",
+        "name": "Atlas",
+        "model": "provider-a/model-a",
+        "isPrimary": true
+      },
+      {
+        "id": "scout",
+        "name": "Scout",
+        "model": "provider-b/model-b",
+        "isPrimary": false
+      }
+    ],
+    "interlocutors": [
+      {
+        "id": "discord-user:100000000000000001",
+        "kind": "user",
+        "name": "Guest",
+        "avatarUrl": null,
+        "resolution": "resolved",
+        "sessionCount": 1,
+        "totalTokens": 3300,
+        "lastSeenAt": 1791223140000,
+        "access": {
+          "policy": "pairing",
+          "enabled": null,
+          "requireMention": null
+        },
+        "channel": "discord"
+      },
+      {
+        "id": "discord-channel:100000000000000002",
+        "kind": "room",
+        "name": "#annonces",
+        "avatarUrl": null,
+        "resolution": "resolved",
+        "sessionCount": 1,
+        "totalTokens": 12000,
+        "lastSeenAt": 1791050400000,
+        "access": {
+          "policy": "allowlist",
+          "enabled": true,
+          "requireMention": true
+        },
+        "channel": "discord"
+      },
+      {
+        "id": "telegram-user:foreign-user",
+        "kind": "user",
+        "channel": "telegram",
+        "name": null,
+        "avatarUrl": null,
+        "resolution": "unresolvable",
+        "sessionCount": 1,
+        "totalTokens": 3100,
+        "lastSeenAt": 1791223180000,
+        "access": {
+          "policy": null,
+          "enabled": null,
+          "requireMention": null
+        }
+      }
+    ],
+    "policy": {
+      "dm": "pairing",
+      "group": "allowlist",
+      "channelsEnabled": 1,
+      "channelsTotal": 2,
+      "execSecurity": "allowlist"
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "access",
+      "rev": 4
+    }
+  }
+}

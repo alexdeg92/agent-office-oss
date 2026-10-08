@@ -1,0 +1,9 @@
+{
+  "flags": [
+    {
+      "feature": { "name": "smithFlag" },
+      "enabled": false,
+      "feature_state_value": "secret-state"
+    }
+  ]
+}

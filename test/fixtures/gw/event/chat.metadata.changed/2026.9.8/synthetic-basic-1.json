@@ -1,0 +1,17 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.event.chat.metadata.changed",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "agentId": "main",
+      "usageUpdatedAt": 1791223180000,
+      "modelCatalogChanged": false,
+      "authChanged": false
+    }
+  }
+}

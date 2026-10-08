@@ -1,0 +1,16 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.usage",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "totals": {
+        "totalTokens": 51100
+      }
+    }
+  }
+}

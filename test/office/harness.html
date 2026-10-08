@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr-CA" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Office DOM test harness</title>
+<link rel="stylesheet" href="/design/css/bureau.css">
+<link rel="stylesheet" href="/design/components/bundle.css">
+<link rel="stylesheet" href="/public/v2/office/office.css">
+<link rel="stylesheet" href="/public/v2/office/editor.css">
+<script type="importmap">
+{ "imports": { "preact": "/public/v2/vendor/preact.mjs", "preact/hooks": "/public/v2/vendor/preact-hooks.mjs", "htm": "/public/v2/vendor/htm.mjs" } }
+</script>
+<style>body { margin: 0; } #stage { width: 1000px; height: 700px; } #bar, #aside { width: 360px; }</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="stage" class="bu-stage"></div>
+<div id="aside"></div>
+<script type="module">
+// Test harness for test/office/*.dom.test.js: loads the real modules and the shipped manifest/layout.
+// Image decoding can be put under test control (window.H.holdDecodes) to reproduce races (R4-12).
+import { OfficeScene } from '/public/v2/office/scene.js';
+import { indexManifest } from '/public/v2/office/assets.js';
+import { resolveOccupants, validateLayout } from '/public/v2/office/layout-rules.js';
+import { createMockLayoutStore } from '/public/v2/office/mock-store.js';
+import { openEditor } from '/public/v2/office/editor.js';
+
+const [manifest, layout] = await Promise.all(['manifest', 'layout'].map((n) => fetch(`/design/office/${n}.example.json`).then((r) => r.json())));
+const index = indexManifest(manifest);
+const realDecode = HTMLImageElement.prototype.decode;
+const held = [];
+window.H = {
+  manifest, layout, index, OfficeScene, resolveOccupants, validateLayout, createMockLayoutStore, openEditor,
+  assetBase: '/design/',
+  /** From now on decode() waits until release(i); returns the pending list. */
+  holdDecodes() {
+    HTMLImageElement.prototype.decode = function () { return new Promise((res) => held.push({ src: this.src, res })); };
+    return held;
+  },
+  release(i) { const h = held[i]; h.res(); h.done = true; },
+  releaseAll() { for (const h of held) if (!h.done) { h.res(); h.done = true; } },
+  restoreDecodes() { HTMLImageElement.prototype.decode = realDecode; held.length = 0; },
+  occupants(list) { return resolveOccupants(layout, index, list).map((r, i) => ({ ...list[i], ...r })); },
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  /** Resolves with cond()'s first truthy value (polled every 10 ms); rejects naming the condition after `ms`.
+   *  Tests wait on what they assert next, never on the clock, so a loaded run only takes longer (no flake). */
+  until(cond, ms = 30_000) {
+    return new Promise((resolve, reject) => {
+      const t0 = performance.now();
+      const step = () => {
+        let v; try { v = cond(); } catch { v = null; }
+        if (v) return resolve(v);
+        if (performance.now() - t0 > ms) return reject(new Error(`H.until timed out: ${cond}`));
+        setTimeout(step, 10);
+      };
+      step();
+    });
+  },
+  /** n animation frames: pending decode callbacks and _nextFrame swaps have run (event-loop order, not the clock). */
+  frames(n = 2) { return new Promise((resolve) => { const f = (k) => (k ? requestAnimationFrame(() => f(k - 1)) : setTimeout(resolve, 0)); f(n); }); },
+};
+window.H.ready = true;
+</script>
+</body>
+</html>

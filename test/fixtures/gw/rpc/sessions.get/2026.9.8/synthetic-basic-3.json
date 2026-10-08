@@ -1,0 +1,29 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.sessions.get",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8",
+    "params": {
+      "key": "agent:main:discord:direct:100000000000000001"
+    }
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Salut Timmy",
+          "timestamp": 1791223140000,
+          "senderLabel": "Guest"
+        },
+        {
+          "role": "assistant",
+          "content": "Bonjour Guest !",
+          "timestamp": 1791223145000
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.channels.status",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "ts": 1791313200000,
+      "channelOrder": [
+        "telegram",
+        "slack",
+        "matrix"
+      ],
+      "channelLabels": {
+        "telegram": "Telegram",
+        "slack": "Slack",
+        "matrix": "Matrix"
+      },
+      "channels": {
+        "telegram": {
+          "configured": true,
+          "running": true,
+          "lastStartAt": 1791226800000,
+          "lastError": null
+        },
+        "slack": {
+          "configured": true,
+          "running": true,
+          "lastStartAt": 1791226800000,
+          "lastError": null
+        },
+        "matrix": {
+          "configured": false
+        }
+      }
+    }
+  }
+}

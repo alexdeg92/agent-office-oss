@@ -1,0 +1,38 @@
+<!-- @dsCard group="Données" height=865 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trace d'exécution et chronologie · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 13v1.5M14.5 13v1.5"/><circle cx="12" cy="4" r="1"/></symbol><symbol id="i-researching" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol><symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.5 5.5a4 4 0 0 0 4.9 4.9L11 19a2.1 2.1 0 0 1-3-3l8.6-8.4a4 4 0 0 1-2.1-2.1z"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol></svg>
+<main class="pv">
+<div class="bu-toolbar"><div class="bu-segmented" role="group" aria-label="Vue"><button class="bu-segmented__opt" aria-pressed="true"><svg class="bu-icon" aria-hidden="true"><use href="#i-list"/></svg>Arbre</button><button class="bu-segmented__opt" aria-pressed="false"><svg class="bu-icon" aria-hidden="true"><use href="#i-clock"/></svg>Chronologie</button></div></div>
+<ol class="bu-trace">
+<li class="bu-trace__node bu-trace__node--human"><span class="bu-avatar bu-avatar--human">AS</span><div class="bu-trace__head"><span class="bu-trace__who">Owner</span><span class="bu-trace__time">14:20:02</span></div><div class="bu-trace__body">Peux-tu comparer les tarifs des trois fournisseurs ?</div></li>
+<li class="bu-trace__node"><span class="bu-avatar bu-avatar--agent"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg></span><div class="bu-trace__head"><span class="bu-trace__who">Timmy</span><span class="bu-trace__time">14:20:05</span><span class="bu-trace__meta">· 2 184 jetons</span></div><div class="bu-trace__body">Je lance une recherche, puis je résume les écarts.</div>
+<ul class="bu-trace__tools">
+<li><details class="bu-tool" open><summary><svg class="bu-icon" aria-hidden="true"><use href="#i-researching"/></svg><span class="bu-tool__name">web_search</span><span class="bu-chip bu-chip--success bu-chip--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-check"/></svg>ok</span><span class="bu-tool__dur">1,4 s</span></summary><div class="bu-tool__body"><div class="bu-code"><div class="bu-code__header">Entrée</div><pre>{ "query": "tarifs fournisseurs 2026" }</pre></div><div class="bu-code"><div class="bu-code__header">Résultat</div><pre>5 résultats · 3 pertinents</pre></div></div></details></li>
+<li><details class="bu-tool bu-tool--error"><summary><svg class="bu-icon" aria-hidden="true"><use href="#i-tool"/></svg><span class="bu-tool__name">fetch</span><span class="bu-chip bu-chip--danger bu-chip--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-x"/></svg>erreur</span><span class="bu-tool__dur">8,0 s</span></summary></details></li></ul></li></ol>
+<div class="bu-card"><div class="bu-waterfall"><div class="bu-waterfall__axis"><span>Étape</span><span>14:20:02 → 14:20:17 · 15 s</span><span>Durée</span></div>
+<span class="bu-waterfall__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-user"/></svg>Owner</span><div class="bu-waterfall__track"><span class="bu-waterfall__bar bu-waterfall__bar--human" style="--start: 0%; --len: 1%"></span></div><span class="bu-waterfall__dur">—</span>
+<span class="bu-waterfall__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-bot"/></svg>Timmy</span><div class="bu-waterfall__track"><span class="bu-waterfall__bar bu-waterfall__bar--agent" style="--start: 20%; --len: 1%"></span></div><span class="bu-waterfall__dur">—</span>
+<span class="bu-waterfall__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-researching"/></svg>web_search</span><div class="bu-waterfall__track"><span class="bu-waterfall__bar" style="--start: 22%; --len: 9%"></span></div><span class="bu-waterfall__dur">1,4 s</span>
+<span class="bu-waterfall__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-tool"/></svg>fetch</span><div class="bu-waterfall__track"><span class="bu-waterfall__bar bu-waterfall__bar--error" style="--start: 32%; --len: 53%"></span></div><span class="bu-waterfall__dur">8,0 s</span></div></div>
+<details class="bu-run" open><summary><span class="bu-chip bu-chip--success bu-chip--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-check"/></svg>Réussie</span><span class="bu-run__when">5 oct. 2026, 08:30</span><span class="bu-run__stats">1 min 12 s · 12 904 jetons</span></summary><div class="bu-run__body"><p class="bu-run__facts">Modèle : <b>openai/gpt-5-mini</b> Entrée/Sortie : <b>11 020 / 1 884</b> Livraison : <b>envoyée</b> Prochaine : <b>6 oct., 08:30</b></p><div class="bu-code"><pre>3 décisions, 2 questions ouvertes, 1 échéance (vendredi).</pre></div></div></details>
+</main>
+</body>
+</html>

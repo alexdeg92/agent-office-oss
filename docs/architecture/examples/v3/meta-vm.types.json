@@ -1,0 +1,17 @@
+{
+  "$comment": "Shape sidecar for v3 meta-vm.json (api-v3.md D1). labels and enums are records (an excerpt here; the server sends the whole dictionary for the locale plus DYNAMIC channel.*, provider.*, model.*, agent.* entries for every value that occurred, so a client never assumes a closed list there). runtime.capabilities is the adapter's declaration (opaque beyond the documented keys); runtime.version is null when the runtime didn't say.",
+  "nullable": [
+    "$.runtime",
+    "$.runtime.version",
+    "$.primaryAgent",
+    "$.primaryAgent.avatarUrl",
+    "$.instance.name"
+  ],
+  "types": {
+    "$.primaryAgent.avatarUrl": "string",
+    "$.instance.name": "string"
+  },
+  "opaque": [
+    "$.runtime.capabilities"
+  ]
+}

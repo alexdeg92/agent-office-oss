@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr-CA" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installation · personnages (banc d’essai)</title>
+  <script type="importmap">
+  { "imports": { "preact": "../vendor/preact.mjs", "preact/hooks": "../vendor/preact-hooks.mjs", "htm": "../vendor/htm.mjs" } }
+  </script>
+  <style>body { margin: 0; background: var(--bu-bg); color: var(--bu-text-primary); font: var(--bu-type-body); } main { padding: 24px; max-width: 1136px; margin: 0 auto; }
+    .dev-note { margin: 0; padding: 8px 24px 0; font: 12px/1.4 Inter, sans-serif; color: var(--bu-text-tertiary); } #out { font: 12px/1.5 monospace; color: var(--bu-text-tertiary); white-space: pre-wrap; }
+    @media (max-width: 600px) { main { padding: 16px; } }</style>
+</head>
+<body>
+  <p class="dev-note">Banc d’essai d’office-dev : l’étape « personnages » de l’installation (setup-characters.js), hors du parcours F8.</p>
+  <main><div id="step"></div><pre id="out" aria-hidden="true"></pre></main>
+  <script type="module" src="./setup-dev.js"></script>
+</body>
+</html>

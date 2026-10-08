@@ -1,0 +1,4596 @@
+{
+  "data": {
+    "layout": {
+      "id": "lay_main00000000000",
+      "name": "Bureau principal",
+      "revision": 4,
+      "updatedAt": 1791200000000,
+      "updatedBy": {
+        "id": "per_alex00000000000",
+        "kind": "human",
+        "name": "Owner",
+        "avatarUrl": null,
+        "state": null
+      },
+      "data": {
+        "version": 1,
+        "manifestVersion": 2,
+        "room": "bureau",
+        "theme": {
+          "mode": "auto",
+          "day": "day",
+          "night": "night",
+          "nightFrom": "19:00",
+          "nightTo": "07:00",
+          "season": null
+        },
+        "items": [
+          {
+            "uid": "st-timmy",
+            "asset": "desk",
+            "x": 6,
+            "y": 1,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-2",
+            "asset": "desk",
+            "x": 6,
+            "y": 4,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-3",
+            "asset": "desk",
+            "x": 6,
+            "y": 7,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-4",
+            "asset": "desk",
+            "x": 2,
+            "y": 1,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-5",
+            "asset": "desk",
+            "x": 2,
+            "y": 4,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-6",
+            "asset": "desk",
+            "x": 2,
+            "y": 7,
+            "orientation": "sw"
+          },
+          {
+            "uid": "rug",
+            "asset": "rug",
+            "x": 9,
+            "y": 7
+          },
+          {
+            "uid": "sofa",
+            "asset": "sofa",
+            "x": 9,
+            "y": 8,
+            "orientation": "sw"
+          },
+          {
+            "uid": "lamp",
+            "asset": "lamp",
+            "x": 11,
+            "y": 6
+          },
+          {
+            "uid": "meeting",
+            "asset": "meeting-table",
+            "x": 9,
+            "y": 3
+          },
+          {
+            "uid": "shelf",
+            "asset": "shelf",
+            "x": 4,
+            "y": 0,
+            "orientation": "sw"
+          },
+          {
+            "uid": "coffee",
+            "asset": "coffee-machine",
+            "x": 0,
+            "y": 8,
+            "orientation": "sw"
+          },
+          {
+            "uid": "rack",
+            "asset": "server-rack",
+            "x": 11,
+            "y": 0
+          },
+          {
+            "uid": "plant-1",
+            "asset": "plant-large",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "uid": "plant-2",
+            "asset": "plant-small",
+            "x": 11,
+            "y": 5
+          },
+          {
+            "uid": "wb",
+            "asset": "whiteboard",
+            "wall": "right",
+            "offset": 8
+          },
+          {
+            "uid": "win",
+            "asset": "window",
+            "wall": "left",
+            "offset": 4
+          }
+        ],
+        "agents": [
+          {
+            "agentId": "primary",
+            "match": {
+              "kind": "primary"
+            },
+            "character": "timmy",
+            "variant": null,
+            "accessories": [
+              "headphones"
+            ],
+            "name": null,
+            "role": null,
+            "station": "st-timmy"
+          },
+          {
+            "agentId": "*subagent",
+            "match": {
+              "kind": "subagent"
+            },
+            "character": "subagent",
+            "variant": "teal",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          },
+          {
+            "agentId": "*scheduled",
+            "match": {
+              "kind": "scheduled"
+            },
+            "character": "subagent",
+            "variant": "ochre",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          },
+          {
+            "agentId": "*direct",
+            "match": {
+              "kind": "direct"
+            },
+            "character": "subagent",
+            "variant": "sage",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          },
+          {
+            "agentId": "*group",
+            "match": {
+              "kind": "group"
+            },
+            "character": "subagent",
+            "variant": "sage",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          }
+        ],
+        "presence": {
+          "seenMinutes": 60
+        }
+      }
+    },
+    "manifest": {
+      "version": 2,
+      "projection": {
+        "kind": "dimetric-2:1",
+        "tileWidth": 96,
+        "tileHeight": 48,
+        "artScale": 2,
+        "wallHeight": 144
+      },
+      "pending": [
+        "Batch 5b (accessory contract v2): back/front accessory layers per pose and per character/variant, and head landmarks per pose in anchors.json",
+        "Seated idle/sleep poses at the desk (seated-ne, sleeping-ne): idle and offline hold the first typing frame until then",
+        "Batch 3: sub-agent portraits (characters.subagent.variants[].portrait)",
+        "Night variants beyond window@night and lamp@on (e.g. shelf/plant night tints) if the artist adds them: add images[\"sw@night\"] on the item; the renderer picks them up with no code change"
+      ],
+      "rooms": [
+        {
+          "id": "bureau",
+          "label": "Bureau principal",
+          "cols": 12,
+          "rows": 10,
+          "anchor": {
+            "x": 971,
+            "y": 298
+          },
+          "size": {
+            "w": 2134,
+            "h": 1373
+          },
+          "entrance": {
+            "x": 6,
+            "y": 9
+          },
+          "images": {
+            "day": "assets/Office/room/day.png",
+            "night": "assets/Office/room/night.png"
+          }
+        }
+      ],
+      "furniture": [
+        {
+          "id": "desk",
+          "label": "Poste de travail",
+          "category": "poste",
+          "placement": "floor",
+          "footprint": {
+            "w": 2,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/desk.png",
+          "anchor": {
+            "x": 103,
+            "y": 177
+          },
+          "size": {
+            "w": 307,
+            "h": 325
+          },
+          "station": {
+            "kind": "desk",
+            "seat": {
+              "x": 1.1,
+              "y": 1.45
+            },
+            "facing": "sw",
+            "stack": [
+              "desk",
+              "monitor",
+              "chair",
+              "character"
+            ],
+            "parts": {
+              "chair": {
+                "image": "assets/Office/furniture/chair.png",
+                "anchor": {
+                  "x": 65,
+                  "y": 120
+                },
+                "size": {
+                  "w": 132,
+                  "h": 200
+                },
+                "at": {
+                  "x": 0,
+                  "y": 1
+                }
+              },
+              "monitor": {
+                "image": "assets/Office/furniture/monitor.png",
+                "variants": {
+                  "on": "assets/Office/furniture/monitor@on.png"
+                }
+              }
+            },
+            "blocks": [
+              {
+                "x": 0,
+                "y": 1
+              },
+              {
+                "x": 1,
+                "y": 1
+              }
+            ],
+            "screen": {
+              "x": 171,
+              "y": 78
+            },
+            "seated": {
+              "seat": {
+                "x": 1.0625,
+                "y": 1.2708333333333335
+              },
+              "facing": "ne",
+              "seatFrom": "chair",
+              "stack": [
+                "desk",
+                "monitor",
+                "keyboard",
+                "chair",
+                "character"
+              ],
+              "parts": {
+                "chair": {
+                  "image": "assets/Office/furniture/chair@ne.png",
+                  "anchor": {
+                    "x": 70,
+                    "y": 122
+                  },
+                  "size": {
+                    "w": 149,
+                    "h": 207
+                  },
+                  "at": {
+                    "x": 0.5625,
+                    "y": 0.7708333333333334
+                  },
+                  "seatAnchor": {
+                    "x": 77,
+                    "y": 101
+                  }
+                },
+                "keyboard": {
+                  "image": "assets/Office/furniture/keyboard.png",
+                  "offsetByCharacter": {
+                    "timmy": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "subagent": {
+                      "x": -8,
+                      "y": 12
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "pending": [
+            "desk-se (orientation se)"
+          ]
+        },
+        {
+          "id": "chair",
+          "label": "Chaise",
+          "category": "assise",
+          "placement": "floor",
+          "footprint": {
+            "w": 1,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/chair.png",
+          "anchor": {
+            "x": 65,
+            "y": 120
+          },
+          "size": {
+            "w": 132,
+            "h": 200
+          }
+        },
+        {
+          "id": "sofa",
+          "label": "Canapé",
+          "category": "assise",
+          "placement": "floor",
+          "footprint": {
+            "w": 3,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/sofa.png",
+          "anchor": {
+            "x": 57,
+            "y": 79
+          },
+          "size": {
+            "w": 309,
+            "h": 260
+          },
+          "station": {
+            "kind": "lounge",
+            "seat": {
+              "x": 1.4,
+              "y": 1.3
+            },
+            "facing": "sw",
+            "stack": [
+              "sofa",
+              "character"
+            ],
+            "seated": {
+              "seat": {
+                "x": 1.4,
+                "y": 0.55
+              },
+              "facing": "sw",
+              "stack": [
+                "sofa",
+                "character"
+              ],
+              "seatPoint": {
+                "x": 85,
+                "y": 105
+              }
+            }
+          }
+        },
+        {
+          "id": "rug",
+          "label": "Tapis",
+          "category": "sol",
+          "placement": "decal",
+          "footprint": {
+            "w": 3,
+            "d": 2
+          },
+          "walkable": true,
+          "image": "assets/Office/furniture/rug.png",
+          "anchor": {
+            "x": 203,
+            "y": 10
+          },
+          "size": {
+            "w": 503,
+            "h": 264
+          }
+        },
+        {
+          "id": "plant-large",
+          "label": "Grande plante",
+          "category": "plante",
+          "placement": "floor",
+          "footprint": {
+            "w": 1,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/plant-large.png",
+          "anchor": {
+            "x": 82,
+            "y": 191
+          },
+          "size": {
+            "w": 169,
+            "h": 257
+          }
+        },
+        {
+          "id": "plant-small",
+          "label": "Petite plante",
+          "category": "plante",
+          "placement": "floor",
+          "footprint": {
+            "w": 1,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/plant-small.png",
+          "anchor": {
+            "x": 45,
+            "y": 49
+          },
+          "size": {
+            "w": 93,
+            "h": 110
+          }
+        },
+        {
+          "id": "shelf",
+          "label": "Bibliothèque",
+          "category": "rangement",
+          "placement": "floor",
+          "footprint": {
+            "w": 2,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/shelf.png",
+          "anchor": {
+            "x": 92,
+            "y": 178
+          },
+          "size": {
+            "w": 312,
+            "h": 346
+          },
+          "station": {
+            "kind": "reading",
+            "seat": {
+              "x": 1,
+              "y": 1.5
+            },
+            "facing": "sw"
+          },
+          "pending": [
+            "shelf-se (orientation se)"
+          ]
+        },
+        {
+          "id": "coffee-machine",
+          "label": "Machine à café",
+          "category": "equipement",
+          "placement": "floor",
+          "footprint": {
+            "w": 1,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/coffee-machine.png",
+          "anchor": {
+            "x": 106,
+            "y": 209
+          },
+          "size": {
+            "w": 226,
+            "h": 315
+          },
+          "station": {
+            "kind": "coffee",
+            "seat": {
+              "x": 0.5,
+              "y": 1.5
+            },
+            "facing": "sw"
+          },
+          "pending": [
+            "coffee-machine-se (orientation se)"
+          ]
+        },
+        {
+          "id": "server-rack",
+          "label": "Baie serveur",
+          "category": "equipement",
+          "placement": "floor",
+          "footprint": {
+            "w": 1,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/server-rack.png",
+          "anchor": {
+            "x": 106,
+            "y": 261
+          },
+          "size": {
+            "w": 213,
+            "h": 367
+          },
+          "station": {
+            "kind": "server",
+            "seat": {
+              "x": -0.5,
+              "y": 0.5
+            },
+            "facing": "sw"
+          }
+        },
+        {
+          "id": "meeting-table",
+          "label": "Table de réunion",
+          "category": "poste",
+          "placement": "floor",
+          "footprint": {
+            "w": 2,
+            "d": 2
+          },
+          "image": "assets/Office/furniture/meeting-table.png",
+          "anchor": {
+            "x": 204,
+            "y": 132
+          },
+          "size": {
+            "w": 411,
+            "h": 334
+          },
+          "station": {
+            "kind": "meeting",
+            "seat": {
+              "x": 2.5,
+              "y": 1
+            },
+            "facing": "sw",
+            "seats": [
+              {
+                "x": 0.4,
+                "y": 2.6,
+                "facing": "se"
+              },
+              {
+                "x": 2.3,
+                "y": 0.7,
+                "facing": "sw"
+              }
+            ]
+          },
+          "pending": [
+            "talking-se (standing, facing SE) for the meeting scene: walking-se stands in until then"
+          ]
+        },
+        {
+          "id": "lamp",
+          "label": "Lampadaire",
+          "category": "deco",
+          "placement": "floor",
+          "footprint": {
+            "w": 1,
+            "d": 1
+          },
+          "image": "assets/Office/furniture/lamp.png",
+          "anchor": {
+            "x": 47,
+            "y": 214
+          },
+          "size": {
+            "w": 93,
+            "h": 282
+          },
+          "layerBias": 0.1,
+          "images": {
+            "sw@on": "assets/Office/furniture/lamp@on.png"
+          }
+        },
+        {
+          "id": "whiteboard",
+          "label": "Tableau blanc",
+          "category": "mur",
+          "placement": "wall",
+          "image": "assets/Office/furniture/whiteboard.png",
+          "anchor": {
+            "x": 11,
+            "y": 115
+          },
+          "size": {
+            "w": 214,
+            "h": 225
+          },
+          "wall": {
+            "side": "right",
+            "length": 2,
+            "elevation": 48
+          }
+        },
+        {
+          "id": "window",
+          "label": "Fenêtre",
+          "category": "mur",
+          "placement": "wall",
+          "image": "assets/Office/furniture/window.png",
+          "anchor": {
+            "x": 11,
+            "y": 222
+          },
+          "size": {
+            "w": 214,
+            "h": 234
+          },
+          "wall": {
+            "side": "left",
+            "length": 2,
+            "elevation": 40
+          },
+          "images": {
+            "sw@night": "assets/Office/furniture/window@night.png"
+          }
+        }
+      ],
+      "characters": [
+        {
+          "id": "timmy",
+          "label": "Atlas",
+          "role": "main",
+          "family": "bureau-bot",
+          "canvas": {
+            "w": 192,
+            "h": 288
+          },
+          "anchor": {
+            "x": 96,
+            "y": 276
+          },
+          "scale": 1,
+          "head": {
+            "y": 63
+          },
+          "poses": {
+            "idle": "assets/Characters/timmy/idle.png",
+            "working": "assets/Characters/timmy/working.png",
+            "thinking": "assets/Characters/timmy/thinking.png",
+            "talking": "assets/Characters/timmy/talking.png",
+            "walking": "assets/Characters/timmy/walking.png",
+            "walking-se": "assets/Characters/timmy/walking-se.png",
+            "celebrating": "assets/Characters/timmy/celebrating.png",
+            "sleeping": "assets/Characters/timmy/sleeping.png",
+            "alert": "assets/Characters/timmy/alert.png",
+            "working-ne": {
+              "frames": [
+                "assets/Characters/timmy/working-ne-1.png",
+                "assets/Characters/timmy/working-ne-2.png",
+                "assets/Characters/timmy/working-ne-3.png"
+              ],
+              "frameMs": 350,
+              "seatAnchor": {
+                "x": 75,
+                "y": 234
+              }
+            },
+            "reading-ne": {
+              "image": "assets/Characters/timmy/reading-ne.png",
+              "seatAnchor": {
+                "x": 75,
+                "y": 234
+              }
+            },
+            "thinking-ne": {
+              "image": "assets/Characters/timmy/thinking-ne.png",
+              "seatAnchor": {
+                "x": 75,
+                "y": 234
+              }
+            },
+            "seated-turn-sw": {
+              "image": "assets/Characters/timmy/seated-turn-sw.png",
+              "seatAnchor": {
+                "x": 97,
+                "y": 236
+              }
+            },
+            "sofa-sit-sw": {
+              "image": "assets/Characters/timmy/sofa-sit-sw.png",
+              "seatAnchor": {
+                "x": 97.08,
+                "y": 207.96
+              }
+            }
+          },
+          "landmarks": {
+            "idle": {
+              "headCentre": {
+                "x": 98.5,
+                "y": 130
+              },
+              "headBox": {
+                "x": 44,
+                "y": 87,
+                "w": 109,
+                "h": 86
+              },
+              "tilt": 17.63,
+              "earLeft": {
+                "x": 47.41,
+                "y": 120.42
+              },
+              "earRight": {
+                "x": 143.83,
+                "y": 144.37
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 68.71,
+                  "y": 126.36
+                },
+                "b": {
+                  "x": 100.86,
+                  "y": 136.58
+                }
+              },
+              "neck": {
+                "x": 83,
+                "y": 170
+              },
+              "chest": {
+                "x": 79.53,
+                "y": 188.68
+              }
+            },
+            "working": {
+              "headCentre": {
+                "x": 89,
+                "y": 137.5
+              },
+              "headBox": {
+                "x": 35,
+                "y": 96,
+                "w": 108,
+                "h": 83
+              },
+              "tilt": 19.05,
+              "earLeft": {
+                "x": 40.11,
+                "y": 126.05
+              },
+              "earRight": {
+                "x": 134.66,
+                "y": 152.81
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 59.77,
+                  "y": 134.06
+                },
+                "b": {
+                  "x": 91.4,
+                  "y": 144.98
+                }
+              },
+              "neck": {
+                "x": 81,
+                "y": 179
+              },
+              "chest": {
+                "x": 72.97,
+                "y": 192.35
+              }
+            },
+            "thinking": {
+              "headCentre": {
+                "x": 99,
+                "y": 118
+              },
+              "headBox": {
+                "x": 45,
+                "y": 76,
+                "w": 108,
+                "h": 84
+              },
+              "tilt": 23.7,
+              "earLeft": {
+                "x": 49.8,
+                "y": 105.31
+              },
+              "earRight": {
+                "x": 144.21,
+                "y": 140.92
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 70.34,
+                  "y": 115.57
+                },
+                "b": {
+                  "x": 101.73,
+                  "y": 129.35
+                }
+              },
+              "neck": {
+                "x": 85,
+                "y": 158
+              },
+              "chest": {
+                "x": 77.81,
+                "y": 181.09
+              }
+            },
+            "talking": {
+              "headCentre": {
+                "x": 100.5,
+                "y": 138
+              },
+              "headBox": {
+                "x": 47,
+                "y": 96,
+                "w": 107,
+                "h": 84
+              },
+              "tilt": 19.19,
+              "earLeft": {
+                "x": 52.58,
+                "y": 128.11
+              },
+              "earRight": {
+                "x": 141.55,
+                "y": 155.66
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 71.71,
+                  "y": 135.26
+                },
+                "b": {
+                  "x": 101.76,
+                  "y": 145.72
+                }
+              },
+              "neck": {
+                "x": 86,
+                "y": 181
+              },
+              "chest": {
+                "x": 80.01,
+                "y": 194.95
+              }
+            },
+            "walking": {
+              "headCentre": {
+                "x": 94,
+                "y": 124
+              },
+              "headBox": {
+                "x": 39,
+                "y": 82,
+                "w": 110,
+                "h": 84
+              },
+              "tilt": 17.57,
+              "earLeft": {
+                "x": 44.04,
+                "y": 113.08
+              },
+              "earRight": {
+                "x": 140.96,
+                "y": 138.86
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 65.37,
+                  "y": 119.04
+                },
+                "b": {
+                  "x": 98.06,
+                  "y": 129.39
+                }
+              },
+              "neck": {
+                "x": 81,
+                "y": 164
+              },
+              "chest": {
+                "x": 78.06,
+                "y": 182.68
+              }
+            },
+            "walking-se": {
+              "headCentre": {
+                "x": 84,
+                "y": 133
+              },
+              "headBox": {
+                "x": 28,
+                "y": 85,
+                "w": 112,
+                "h": 96
+              },
+              "tilt": -18.67,
+              "earLeft": {
+                "x": 35.48,
+                "y": 142.82
+              },
+              "earRight": {
+                "x": 128.65,
+                "y": 114.54
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 81.47,
+                  "y": 135.99
+                },
+                "b": {
+                  "x": 112.72,
+                  "y": 125.43
+                }
+              },
+              "neck": {
+                "x": 80,
+                "y": 171
+              },
+              "chest": {
+                "x": 86.88,
+                "y": 191.38
+              }
+            },
+            "celebrating": {
+              "headCentre": {
+                "x": 100.5,
+                "y": 129
+              },
+              "headBox": {
+                "x": 46,
+                "y": 86,
+                "w": 109,
+                "h": 86
+              },
+              "tilt": 21.57,
+              "earLeft": {
+                "x": 50.06,
+                "y": 116.42
+              },
+              "earRight": {
+                "x": 145.2,
+                "y": 147.3
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 71.04,
+                  "y": 124.51
+                },
+                "b": {
+                  "x": 102.68,
+                  "y": 137.02
+                }
+              },
+              "neck": {
+                "x": 85,
+                "y": 174
+              },
+              "chest": {
+                "x": 77.32,
+                "y": 189.38
+              }
+            },
+            "sleeping": {
+              "headCentre": {
+                "x": 97,
+                "y": 134
+              },
+              "headBox": {
+                "x": 40,
+                "y": 88,
+                "w": 114,
+                "h": 92
+              },
+              "tilt": 19.6,
+              "earLeft": {
+                "x": 46.04,
+                "y": 121.24
+              },
+              "earRight": {
+                "x": 141.38,
+                "y": 152.14
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 63.4,
+                  "y": 141.02
+                },
+                "b": {
+                  "x": 95.61,
+                  "y": 152.49
+                }
+              },
+              "neck": {
+                "x": 86,
+                "y": 177
+              },
+              "chest": {
+                "x": 83.13,
+                "y": 193.96
+              }
+            },
+            "alert": {
+              "headCentre": {
+                "x": 102.5,
+                "y": 127
+              },
+              "headBox": {
+                "x": 47,
+                "y": 85,
+                "w": 111,
+                "h": 84
+              },
+              "tilt": 18.07,
+              "earLeft": {
+                "x": 50.77,
+                "y": 115.35
+              },
+              "earRight": {
+                "x": 147,
+                "y": 142.95
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 72.03,
+                  "y": 120.78
+                },
+                "b": {
+                  "x": 105.2,
+                  "y": 131.6
+                }
+              },
+              "neck": {
+                "x": 88,
+                "y": 170
+              },
+              "chest": {
+                "x": 82.23,
+                "y": 186.16
+              }
+            },
+            "working-ne": {
+              "headCentre": {
+                "x": 80.5,
+                "y": 136
+              },
+              "headBox": {
+                "x": 25,
+                "y": 94,
+                "w": 111,
+                "h": 84
+              },
+              "tilt": 13.22,
+              "earLeft": {
+                "x": 28.47,
+                "y": 128.46
+              },
+              "earRight": {
+                "x": 117.59,
+                "y": 149.4
+              },
+              "neck": {
+                "x": 74,
+                "y": 180
+              },
+              "chest": {
+                "x": 96,
+                "y": 206
+              }
+            },
+            "reading-ne": {
+              "headCentre": {
+                "x": 85.5,
+                "y": 136.5
+              },
+              "headBox": {
+                "x": 29,
+                "y": 94,
+                "w": 113,
+                "h": 85
+              },
+              "tilt": 14.24,
+              "earLeft": {
+                "x": 32.31,
+                "y": 127.78
+              },
+              "earRight": {
+                "x": 123.53,
+                "y": 150.93
+              },
+              "neck": {
+                "x": 74,
+                "y": 180
+              },
+              "chest": {
+                "x": 96,
+                "y": 206
+              }
+            },
+            "thinking-ne": {
+              "headCentre": {
+                "x": 80.5,
+                "y": 136
+              },
+              "headBox": {
+                "x": 25,
+                "y": 94,
+                "w": 111,
+                "h": 84
+              },
+              "tilt": 11.85,
+              "earLeft": {
+                "x": 28.89,
+                "y": 129.75
+              },
+              "earRight": {
+                "x": 116.5,
+                "y": 148.13
+              },
+              "neck": {
+                "x": 74,
+                "y": 180
+              },
+              "chest": {
+                "x": 96,
+                "y": 206
+              }
+            },
+            "seated-turn-sw": {
+              "headCentre": {
+                "x": 108.5,
+                "y": 135
+              },
+              "headBox": {
+                "x": 53,
+                "y": 91,
+                "w": 111,
+                "h": 88
+              },
+              "tilt": 20.72,
+              "earLeft": {
+                "x": 60.51,
+                "y": 120.68
+              },
+              "earRight": {
+                "x": 153.68,
+                "y": 151.61
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 81.48,
+                  "y": 129.2
+                },
+                "b": {
+                  "x": 113.21,
+                  "y": 141.2
+                }
+              },
+              "neck": {
+                "x": 101,
+                "y": 179
+              },
+              "chest": {
+                "x": 100,
+                "y": 200
+              }
+            },
+            "sofa-sit-sw": {
+              "headCentre": {
+                "x": 103,
+                "y": 119.5
+              },
+              "headBox": {
+                "x": 47,
+                "y": 76,
+                "w": 112,
+                "h": 87
+              },
+              "tilt": 17.55,
+              "earLeft": {
+                "x": 52.65,
+                "y": 109.33
+              },
+              "earRight": {
+                "x": 141.89,
+                "y": 133.11
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 71.04,
+                  "y": 116.96
+                },
+                "b": {
+                  "x": 101.37,
+                  "y": 126.55
+                }
+              },
+              "neck": {
+                "x": 96,
+                "y": 162
+              },
+              "chest": {
+                "x": 97,
+                "y": 187
+              }
+            }
+          },
+          "portrait": "assets/Characters/timmy/portrait.png"
+        },
+        {
+          "id": "subagent",
+          "label": "Sous-agent",
+          "role": "subagent",
+          "family": "bureau-bot",
+          "canvas": {
+            "w": 192,
+            "h": 288
+          },
+          "anchor": {
+            "x": 96,
+            "y": 276
+          },
+          "scale": 0.85,
+          "scaleBaked": true,
+          "head": {
+            "y": 95
+          },
+          "poses": {
+            "idle": "assets/Characters/subagent/sage/idle.png",
+            "working": "assets/Characters/subagent/sage/working.png",
+            "thinking": "assets/Characters/subagent/sage/thinking.png",
+            "talking": "assets/Characters/subagent/sage/talking.png",
+            "walking": "assets/Characters/subagent/sage/walking.png",
+            "walking-se": "assets/Characters/subagent/sage/walking-se.png",
+            "celebrating": "assets/Characters/subagent/sage/celebrating.png",
+            "sleeping": "assets/Characters/subagent/sage/sleeping.png",
+            "alert": "assets/Characters/subagent/sage/alert.png",
+            "working-ne": {
+              "frames": [
+                "assets/Characters/subagent/sage/working-ne-1.png",
+                "assets/Characters/subagent/sage/working-ne-2.png",
+                "assets/Characters/subagent/sage/working-ne-3.png"
+              ],
+              "frameMs": 350,
+              "seatAnchor": {
+                "x": 78.15,
+                "y": 240.3
+              }
+            },
+            "reading-ne": {
+              "image": "assets/Characters/subagent/sage/reading-ne.png",
+              "seatAnchor": {
+                "x": 78.15,
+                "y": 240.3
+              }
+            },
+            "thinking-ne": {
+              "image": "assets/Characters/subagent/sage/thinking-ne.png",
+              "seatAnchor": {
+                "x": 78.15,
+                "y": 240.3
+              }
+            },
+            "seated-turn-sw": {
+              "image": "assets/Characters/subagent/sage/seated-turn-sw.png",
+              "seatAnchor": {
+                "x": 96.85,
+                "y": 242
+              }
+            },
+            "sofa-sit-sw": {
+              "image": "assets/Characters/subagent/sage/sofa-sit-sw.png",
+              "seatAnchor": {
+                "x": 96.92,
+                "y": 218.17
+              }
+            }
+          },
+          "landmarks": {
+            "idle": {
+              "headCentre": {
+                "x": 98.12,
+                "y": 151.9
+              },
+              "headBox": {
+                "x": 51.8,
+                "y": 115.35,
+                "w": 92.64999999999999,
+                "h": 73.1
+              },
+              "tilt": 18.96,
+              "earLeft": {
+                "x": 55.22,
+                "y": 143.36
+              },
+              "earRight": {
+                "x": 137.27,
+                "y": 164.96
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 73.98,
+                  "y": 149.16
+                },
+                "b": {
+                  "x": 101.28,
+                  "y": 158.54
+                }
+              },
+              "neck": {
+                "x": 84.95,
+                "y": 185.9
+              },
+              "chest": {
+                "x": 81,
+                "y": 201.97
+              }
+            },
+            "working": {
+              "headCentre": {
+                "x": 90.05,
+                "y": 158.28
+              },
+              "headBox": {
+                "x": 44.15,
+                "y": 123,
+                "w": 91.79999999999998,
+                "h": 70.55000000000001
+              },
+              "tilt": 19.05,
+              "earLeft": {
+                "x": 49.05,
+                "y": 149.42
+              },
+              "earRight": {
+                "x": 128.93,
+                "y": 171.97
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 65.87,
+                  "y": 156.01
+                },
+                "b": {
+                  "x": 92.49,
+                  "y": 165.2
+                }
+              },
+              "neck": {
+                "x": 83.25,
+                "y": 193.55
+              },
+              "chest": {
+                "x": 76.27,
+                "y": 204.75
+              }
+            },
+            "thinking": {
+              "headCentre": {
+                "x": 98.55,
+                "y": 141.7
+              },
+              "headBox": {
+                "x": 52.65,
+                "y": 106,
+                "w": 91.79999999999998,
+                "h": 71.4
+              },
+              "tilt": 22.65,
+              "earLeft": {
+                "x": 56.3,
+                "y": 132.54
+              },
+              "earRight": {
+                "x": 137.05,
+                "y": 161.77
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 74.72,
+                  "y": 140.69
+                },
+                "b": {
+                  "x": 101.22,
+                  "y": 151.75
+                }
+              },
+              "neck": {
+                "x": 86.65,
+                "y": 175.7
+              },
+              "chest": {
+                "x": 80.84,
+                "y": 194.82
+              }
+            },
+            "talking": {
+              "headCentre": {
+                "x": 99.83,
+                "y": 158.7
+              },
+              "headBox": {
+                "x": 54.35,
+                "y": 123,
+                "w": 90.95000000000002,
+                "h": 71.4
+              },
+              "tilt": 19.09,
+              "earLeft": {
+                "x": 59.36,
+                "y": 149.57
+              },
+              "earRight": {
+                "x": 134.77,
+                "y": 172.37
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 75.91,
+                  "y": 155.28
+                },
+                "b": {
+                  "x": 101.11,
+                  "y": 164
+                }
+              },
+              "neck": {
+                "x": 87.5,
+                "y": 195.25
+              },
+              "chest": {
+                "x": 82.81,
+                "y": 205.71
+              }
+            },
+            "walking": {
+              "headCentre": {
+                "x": 94.3,
+                "y": 146.8
+              },
+              "headBox": {
+                "x": 47.55,
+                "y": 111.1,
+                "w": 93.50000000000001,
+                "h": 71.4
+              },
+              "tilt": 17.98,
+              "earLeft": {
+                "x": 53.72,
+                "y": 137.72
+              },
+              "earRight": {
+                "x": 135.87,
+                "y": 160.94
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 71.8,
+                  "y": 143.64
+                },
+                "b": {
+                  "x": 99.57,
+                  "y": 152.65
+                }
+              },
+              "neck": {
+                "x": 83.25,
+                "y": 180.8
+              },
+              "chest": {
+                "x": 81.09,
+                "y": 197.14
+              }
+            },
+            "walking-se": {
+              "headCentre": {
+                "x": 85.8,
+                "y": 154.45
+              },
+              "headBox": {
+                "x": 38.2,
+                "y": 113.65,
+                "w": 95.2,
+                "h": 81.6
+              },
+              "tilt": -17.8,
+              "earLeft": {
+                "x": 43.25,
+                "y": 163.35
+              },
+              "earRight": {
+                "x": 122.74,
+                "y": 140.18
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 82.36,
+                  "y": 157.6
+                },
+                "b": {
+                  "x": 109.09,
+                  "y": 149.02
+                }
+              },
+              "neck": {
+                "x": 82.4,
+                "y": 186.75
+              },
+              "chest": {
+                "x": 87.29,
+                "y": 204.07
+              }
+            },
+            "celebrating": {
+              "headCentre": {
+                "x": 99.83,
+                "y": 151.05
+              },
+              "headBox": {
+                "x": 53.5,
+                "y": 114.5,
+                "w": 92.65,
+                "h": 73.1
+              },
+              "tilt": 21.17,
+              "earLeft": {
+                "x": 56.4,
+                "y": 141.77
+              },
+              "earRight": {
+                "x": 137.14,
+                "y": 168.6
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 73.94,
+                  "y": 148.59
+                },
+                "b": {
+                  "x": 101.26,
+                  "y": 159.17
+                }
+              },
+              "neck": {
+                "x": 86.65,
+                "y": 189.3
+              },
+              "chest": {
+                "x": 79.34,
+                "y": 203.93
+              }
+            },
+            "sleeping": {
+              "headCentre": {
+                "x": 96.85,
+                "y": 155.3
+              },
+              "headBox": {
+                "x": 48.4,
+                "y": 116.2,
+                "w": 96.9,
+                "h": 78.2
+              },
+              "tilt": 19.64,
+              "earLeft": {
+                "x": 53.38,
+                "y": 145.38
+              },
+              "earRight": {
+                "x": 134.72,
+                "y": 171.89
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 68.6,
+                  "y": 162.34
+                },
+                "b": {
+                  "x": 95.25,
+                  "y": 171.85
+                }
+              },
+              "neck": {
+                "x": 87.5,
+                "y": 191.85
+              },
+              "chest": {
+                "x": 84.88,
+                "y": 206.38
+              }
+            },
+            "alert": {
+              "headCentre": {
+                "x": 101.52,
+                "y": 149.35
+              },
+              "headBox": {
+                "x": 54.35,
+                "y": 113.65,
+                "w": 94.35,
+                "h": 71.4
+              },
+              "tilt": 18.81,
+              "earLeft": {
+                "x": 58.52,
+                "y": 139.52
+              },
+              "earRight": {
+                "x": 140.98,
+                "y": 163.46
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 76.5,
+                  "y": 144.27
+                },
+                "b": {
+                  "x": 104.72,
+                  "y": 153.88
+                }
+              },
+              "neck": {
+                "x": 89.2,
+                "y": 185.9
+              },
+              "chest": {
+                "x": 85.01,
+                "y": 199.12
+              }
+            },
+            "working-ne": {
+              "headCentre": {
+                "x": 82.83,
+                "y": 157
+              },
+              "headBox": {
+                "x": 35.65,
+                "y": 121.3,
+                "w": 94.35,
+                "h": 71.39999999999999
+              },
+              "tilt": 12.68,
+              "earLeft": {
+                "x": 38.09,
+                "y": 152.13
+              },
+              "earRight": {
+                "x": 114.42,
+                "y": 169.31
+              },
+              "neck": {
+                "x": 77.3,
+                "y": 194.4
+              },
+              "chest": {
+                "x": 96,
+                "y": 216.5
+              }
+            },
+            "reading-ne": {
+              "headCentre": {
+                "x": 87.07,
+                "y": 157.43
+              },
+              "headBox": {
+                "x": 39.05,
+                "y": 121.3,
+                "w": 96.05,
+                "h": 72.25000000000001
+              },
+              "tilt": 13.84,
+              "earLeft": {
+                "x": 41.47,
+                "y": 150.04
+              },
+              "earRight": {
+                "x": 119.81,
+                "y": 169.34
+              },
+              "neck": {
+                "x": 77.3,
+                "y": 194.4
+              },
+              "chest": {
+                "x": 96,
+                "y": 216.5
+              }
+            },
+            "thinking-ne": {
+              "headCentre": {
+                "x": 82.83,
+                "y": 157
+              },
+              "headBox": {
+                "x": 35.65,
+                "y": 121.3,
+                "w": 94.35,
+                "h": 71.39999999999999
+              },
+              "tilt": 11.49,
+              "earLeft": {
+                "x": 39.11,
+                "y": 152.07
+              },
+              "earRight": {
+                "x": 114.39,
+                "y": 167.37
+              },
+              "neck": {
+                "x": 77.3,
+                "y": 194.4
+              },
+              "chest": {
+                "x": 96,
+                "y": 216.5
+              }
+            },
+            "seated-turn-sw": {
+              "headCentre": {
+                "x": 106.62,
+                "y": 156.15
+              },
+              "headBox": {
+                "x": 59.45,
+                "y": 118.75,
+                "w": 94.35000000000001,
+                "h": 74.80000000000001
+              },
+              "tilt": 20.2,
+              "earLeft": {
+                "x": 65.93,
+                "y": 145.93
+              },
+              "earRight": {
+                "x": 146.52,
+                "y": 171.72
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 84.02,
+                  "y": 153.04
+                },
+                "b": {
+                  "x": 111.26,
+                  "y": 163.06
+                }
+              },
+              "neck": {
+                "x": 100.25,
+                "y": 193.55
+              },
+              "chest": {
+                "x": 99.4,
+                "y": 211.4
+              }
+            },
+            "sofa-sit-sw": {
+              "headCentre": {
+                "x": 101.95,
+                "y": 142.97
+              },
+              "headBox": {
+                "x": 54.35,
+                "y": 106,
+                "w": 95.20000000000002,
+                "h": 73.94999999999999
+              },
+              "tilt": 16.68,
+              "earLeft": {
+                "x": 59.72,
+                "y": 136.45
+              },
+              "earRight": {
+                "x": 135.8,
+                "y": 156.08
+              },
+              "eyeLine": {
+                "a": {
+                  "x": 75.29,
+                  "y": 142.53
+                },
+                "b": {
+                  "x": 100.92,
+                  "y": 150.21
+                }
+              },
+              "neck": {
+                "x": 96,
+                "y": 179.1
+              },
+              "chest": {
+                "x": 96.85,
+                "y": 200.35000000000002
+              }
+            }
+          },
+          "variants": [
+            {
+              "id": "sage",
+              "label": "Sauge",
+              "swatch": "#A8C090",
+              "poses": {
+                "idle": "assets/Characters/subagent/sage/idle.png",
+                "working": "assets/Characters/subagent/sage/working.png",
+                "thinking": "assets/Characters/subagent/sage/thinking.png",
+                "talking": "assets/Characters/subagent/sage/talking.png",
+                "walking": "assets/Characters/subagent/sage/walking.png",
+                "walking-se": "assets/Characters/subagent/sage/walking-se.png",
+                "celebrating": "assets/Characters/subagent/sage/celebrating.png",
+                "sleeping": "assets/Characters/subagent/sage/sleeping.png",
+                "alert": "assets/Characters/subagent/sage/alert.png",
+                "working-ne": {
+                  "frames": [
+                    "assets/Characters/subagent/sage/working-ne-1.png",
+                    "assets/Characters/subagent/sage/working-ne-2.png",
+                    "assets/Characters/subagent/sage/working-ne-3.png"
+                  ],
+                  "frameMs": 350,
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "reading-ne": {
+                  "image": "assets/Characters/subagent/sage/reading-ne.png",
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "thinking-ne": {
+                  "image": "assets/Characters/subagent/sage/thinking-ne.png",
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "seated-turn-sw": {
+                  "image": "assets/Characters/subagent/sage/seated-turn-sw.png",
+                  "seatAnchor": {
+                    "x": 96.85,
+                    "y": 242
+                  }
+                },
+                "sofa-sit-sw": {
+                  "image": "assets/Characters/subagent/sage/sofa-sit-sw.png",
+                  "seatAnchor": {
+                    "x": 96.92,
+                    "y": 218.17
+                  }
+                }
+              },
+              "landmarks": {
+                "idle": {
+                  "headCentre": {
+                    "x": 98.12,
+                    "y": 151.9
+                  },
+                  "headBox": {
+                    "x": 51.8,
+                    "y": 115.35,
+                    "w": 92.64999999999999,
+                    "h": 73.1
+                  },
+                  "tilt": 18.96,
+                  "earLeft": {
+                    "x": 55.22,
+                    "y": 143.36
+                  },
+                  "earRight": {
+                    "x": 137.27,
+                    "y": 164.96
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 73.98,
+                      "y": 149.16
+                    },
+                    "b": {
+                      "x": 101.28,
+                      "y": 158.54
+                    }
+                  },
+                  "neck": {
+                    "x": 84.95,
+                    "y": 185.9
+                  },
+                  "chest": {
+                    "x": 81,
+                    "y": 201.97
+                  }
+                },
+                "working": {
+                  "headCentre": {
+                    "x": 90.05,
+                    "y": 158.28
+                  },
+                  "headBox": {
+                    "x": 44.15,
+                    "y": 123,
+                    "w": 91.79999999999998,
+                    "h": 70.55000000000001
+                  },
+                  "tilt": 19.05,
+                  "earLeft": {
+                    "x": 49.05,
+                    "y": 149.42
+                  },
+                  "earRight": {
+                    "x": 128.93,
+                    "y": 171.97
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 65.87,
+                      "y": 156.01
+                    },
+                    "b": {
+                      "x": 92.49,
+                      "y": 165.2
+                    }
+                  },
+                  "neck": {
+                    "x": 83.25,
+                    "y": 193.55
+                  },
+                  "chest": {
+                    "x": 76.27,
+                    "y": 204.75
+                  }
+                },
+                "thinking": {
+                  "headCentre": {
+                    "x": 98.55,
+                    "y": 141.7
+                  },
+                  "headBox": {
+                    "x": 52.65,
+                    "y": 106,
+                    "w": 91.79999999999998,
+                    "h": 71.4
+                  },
+                  "tilt": 22.65,
+                  "earLeft": {
+                    "x": 56.3,
+                    "y": 132.54
+                  },
+                  "earRight": {
+                    "x": 137.05,
+                    "y": 161.77
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 74.72,
+                      "y": 140.69
+                    },
+                    "b": {
+                      "x": 101.22,
+                      "y": 151.75
+                    }
+                  },
+                  "neck": {
+                    "x": 86.65,
+                    "y": 175.7
+                  },
+                  "chest": {
+                    "x": 80.84,
+                    "y": 194.82
+                  }
+                },
+                "talking": {
+                  "headCentre": {
+                    "x": 99.83,
+                    "y": 158.7
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 123,
+                    "w": 90.95000000000002,
+                    "h": 71.4
+                  },
+                  "tilt": 19.09,
+                  "earLeft": {
+                    "x": 59.36,
+                    "y": 149.57
+                  },
+                  "earRight": {
+                    "x": 134.77,
+                    "y": 172.37
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 75.91,
+                      "y": 155.28
+                    },
+                    "b": {
+                      "x": 101.11,
+                      "y": 164
+                    }
+                  },
+                  "neck": {
+                    "x": 87.5,
+                    "y": 195.25
+                  },
+                  "chest": {
+                    "x": 82.81,
+                    "y": 205.71
+                  }
+                },
+                "walking": {
+                  "headCentre": {
+                    "x": 94.3,
+                    "y": 146.8
+                  },
+                  "headBox": {
+                    "x": 47.55,
+                    "y": 111.1,
+                    "w": 93.50000000000001,
+                    "h": 71.4
+                  },
+                  "tilt": 17.98,
+                  "earLeft": {
+                    "x": 53.72,
+                    "y": 137.72
+                  },
+                  "earRight": {
+                    "x": 135.87,
+                    "y": 160.94
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 71.8,
+                      "y": 143.64
+                    },
+                    "b": {
+                      "x": 99.57,
+                      "y": 152.65
+                    }
+                  },
+                  "neck": {
+                    "x": 83.25,
+                    "y": 180.8
+                  },
+                  "chest": {
+                    "x": 81.09,
+                    "y": 197.14
+                  }
+                },
+                "walking-se": {
+                  "headCentre": {
+                    "x": 85.8,
+                    "y": 154.45
+                  },
+                  "headBox": {
+                    "x": 38.2,
+                    "y": 113.65,
+                    "w": 95.2,
+                    "h": 81.6
+                  },
+                  "tilt": -17.8,
+                  "earLeft": {
+                    "x": 43.25,
+                    "y": 163.35
+                  },
+                  "earRight": {
+                    "x": 122.74,
+                    "y": 140.18
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 82.36,
+                      "y": 157.6
+                    },
+                    "b": {
+                      "x": 109.09,
+                      "y": 149.02
+                    }
+                  },
+                  "neck": {
+                    "x": 82.4,
+                    "y": 186.75
+                  },
+                  "chest": {
+                    "x": 87.29,
+                    "y": 204.07
+                  }
+                },
+                "celebrating": {
+                  "headCentre": {
+                    "x": 99.83,
+                    "y": 151.05
+                  },
+                  "headBox": {
+                    "x": 53.5,
+                    "y": 114.5,
+                    "w": 92.65,
+                    "h": 73.1
+                  },
+                  "tilt": 21.17,
+                  "earLeft": {
+                    "x": 56.4,
+                    "y": 141.77
+                  },
+                  "earRight": {
+                    "x": 137.14,
+                    "y": 168.6
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 73.94,
+                      "y": 148.59
+                    },
+                    "b": {
+                      "x": 101.26,
+                      "y": 159.17
+                    }
+                  },
+                  "neck": {
+                    "x": 86.65,
+                    "y": 189.3
+                  },
+                  "chest": {
+                    "x": 79.34,
+                    "y": 203.93
+                  }
+                },
+                "sleeping": {
+                  "headCentre": {
+                    "x": 96.85,
+                    "y": 155.3
+                  },
+                  "headBox": {
+                    "x": 48.4,
+                    "y": 116.2,
+                    "w": 96.9,
+                    "h": 78.2
+                  },
+                  "tilt": 19.64,
+                  "earLeft": {
+                    "x": 53.38,
+                    "y": 145.38
+                  },
+                  "earRight": {
+                    "x": 134.72,
+                    "y": 171.89
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 68.6,
+                      "y": 162.34
+                    },
+                    "b": {
+                      "x": 95.25,
+                      "y": 171.85
+                    }
+                  },
+                  "neck": {
+                    "x": 87.5,
+                    "y": 191.85
+                  },
+                  "chest": {
+                    "x": 84.88,
+                    "y": 206.38
+                  }
+                },
+                "alert": {
+                  "headCentre": {
+                    "x": 101.52,
+                    "y": 149.35
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 113.65,
+                    "w": 94.35,
+                    "h": 71.4
+                  },
+                  "tilt": 18.81,
+                  "earLeft": {
+                    "x": 58.52,
+                    "y": 139.52
+                  },
+                  "earRight": {
+                    "x": 140.98,
+                    "y": 163.46
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 76.5,
+                      "y": 144.27
+                    },
+                    "b": {
+                      "x": 104.72,
+                      "y": 153.88
+                    }
+                  },
+                  "neck": {
+                    "x": 89.2,
+                    "y": 185.9
+                  },
+                  "chest": {
+                    "x": 85.01,
+                    "y": 199.12
+                  }
+                },
+                "working-ne": {
+                  "headCentre": {
+                    "x": 82.83,
+                    "y": 157
+                  },
+                  "headBox": {
+                    "x": 35.65,
+                    "y": 121.3,
+                    "w": 94.35,
+                    "h": 71.39999999999999
+                  },
+                  "tilt": 12.68,
+                  "earLeft": {
+                    "x": 38.09,
+                    "y": 152.13
+                  },
+                  "earRight": {
+                    "x": 114.42,
+                    "y": 169.31
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "reading-ne": {
+                  "headCentre": {
+                    "x": 87.07,
+                    "y": 157.43
+                  },
+                  "headBox": {
+                    "x": 39.05,
+                    "y": 121.3,
+                    "w": 96.05,
+                    "h": 72.25000000000001
+                  },
+                  "tilt": 13.84,
+                  "earLeft": {
+                    "x": 41.47,
+                    "y": 150.04
+                  },
+                  "earRight": {
+                    "x": 119.81,
+                    "y": 169.34
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "thinking-ne": {
+                  "headCentre": {
+                    "x": 82.83,
+                    "y": 157
+                  },
+                  "headBox": {
+                    "x": 35.65,
+                    "y": 121.3,
+                    "w": 94.35,
+                    "h": 71.39999999999999
+                  },
+                  "tilt": 11.49,
+                  "earLeft": {
+                    "x": 39.11,
+                    "y": 152.07
+                  },
+                  "earRight": {
+                    "x": 114.39,
+                    "y": 167.37
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "seated-turn-sw": {
+                  "headCentre": {
+                    "x": 106.62,
+                    "y": 156.15
+                  },
+                  "headBox": {
+                    "x": 59.45,
+                    "y": 118.75,
+                    "w": 94.35000000000001,
+                    "h": 74.80000000000001
+                  },
+                  "tilt": 20.2,
+                  "earLeft": {
+                    "x": 65.93,
+                    "y": 145.93
+                  },
+                  "earRight": {
+                    "x": 146.52,
+                    "y": 171.72
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 84.02,
+                      "y": 153.04
+                    },
+                    "b": {
+                      "x": 111.26,
+                      "y": 163.06
+                    }
+                  },
+                  "neck": {
+                    "x": 100.25,
+                    "y": 193.55
+                  },
+                  "chest": {
+                    "x": 99.4,
+                    "y": 211.4
+                  }
+                },
+                "sofa-sit-sw": {
+                  "headCentre": {
+                    "x": 101.95,
+                    "y": 142.97
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 106,
+                    "w": 95.20000000000002,
+                    "h": 73.94999999999999
+                  },
+                  "tilt": 16.68,
+                  "earLeft": {
+                    "x": 59.72,
+                    "y": 136.45
+                  },
+                  "earRight": {
+                    "x": 135.8,
+                    "y": 156.08
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 75.29,
+                      "y": 142.53
+                    },
+                    "b": {
+                      "x": 100.92,
+                      "y": 150.21
+                    }
+                  },
+                  "neck": {
+                    "x": 96,
+                    "y": 179.1
+                  },
+                  "chest": {
+                    "x": 96.85,
+                    "y": 200.35000000000002
+                  }
+                }
+              },
+              "gearFree": true,
+              "defaultAccessories": []
+            },
+            {
+              "id": "ochre",
+              "label": "Ocre",
+              "swatch": "#D8A860",
+              "poses": {
+                "idle": "assets/Characters/subagent/ochre/idle.png",
+                "working": "assets/Characters/subagent/ochre/working.png",
+                "thinking": "assets/Characters/subagent/ochre/thinking.png",
+                "talking": "assets/Characters/subagent/ochre/talking.png",
+                "walking": "assets/Characters/subagent/ochre/walking.png",
+                "walking-se": "assets/Characters/subagent/ochre/walking-se.png",
+                "celebrating": "assets/Characters/subagent/ochre/celebrating.png",
+                "sleeping": "assets/Characters/subagent/ochre/sleeping.png",
+                "alert": "assets/Characters/subagent/ochre/alert.png",
+                "working-ne": {
+                  "frames": [
+                    "assets/Characters/subagent/ochre/working-ne-1.png",
+                    "assets/Characters/subagent/ochre/working-ne-2.png",
+                    "assets/Characters/subagent/ochre/working-ne-3.png"
+                  ],
+                  "frameMs": 350,
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "reading-ne": {
+                  "image": "assets/Characters/subagent/ochre/reading-ne.png",
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "thinking-ne": {
+                  "image": "assets/Characters/subagent/ochre/thinking-ne.png",
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "seated-turn-sw": {
+                  "image": "assets/Characters/subagent/ochre/seated-turn-sw.png",
+                  "seatAnchor": {
+                    "x": 96.85,
+                    "y": 242
+                  }
+                },
+                "sofa-sit-sw": {
+                  "image": "assets/Characters/subagent/ochre/sofa-sit-sw.png",
+                  "seatAnchor": {
+                    "x": 96.92,
+                    "y": 218.17
+                  }
+                }
+              },
+              "landmarks": {
+                "idle": {
+                  "headCentre": {
+                    "x": 98.12,
+                    "y": 151.9
+                  },
+                  "headBox": {
+                    "x": 51.8,
+                    "y": 115.35,
+                    "w": 92.64999999999999,
+                    "h": 73.1
+                  },
+                  "tilt": 18,
+                  "earLeft": {
+                    "x": 55.31,
+                    "y": 150.06
+                  },
+                  "earRight": {
+                    "x": 136.12,
+                    "y": 172.55
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 73,
+                      "y": 154.34
+                    },
+                    "b": {
+                      "x": 100.11,
+                      "y": 163.15
+                    }
+                  },
+                  "neck": {
+                    "x": 84.95,
+                    "y": 185.9
+                  },
+                  "chest": {
+                    "x": 81.59,
+                    "y": 206.9
+                  }
+                },
+                "working": {
+                  "headCentre": {
+                    "x": 90.05,
+                    "y": 158.28
+                  },
+                  "headBox": {
+                    "x": 44.15,
+                    "y": 123,
+                    "w": 91.79999999999998,
+                    "h": 70.55000000000001
+                  },
+                  "tilt": 19.58,
+                  "earLeft": {
+                    "x": 50.65,
+                    "y": 153.13
+                  },
+                  "earRight": {
+                    "x": 126.73,
+                    "y": 176.51
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 66.3,
+                      "y": 159.6
+                    },
+                    "b": {
+                      "x": 92.05,
+                      "y": 168.76
+                    }
+                  },
+                  "neck": {
+                    "x": 83.25,
+                    "y": 193.55
+                  },
+                  "chest": {
+                    "x": 76.15,
+                    "y": 207.06
+                  }
+                },
+                "thinking": {
+                  "headCentre": {
+                    "x": 98.55,
+                    "y": 141.7
+                  },
+                  "headBox": {
+                    "x": 52.65,
+                    "y": 106,
+                    "w": 91.79999999999998,
+                    "h": 71.4
+                  },
+                  "tilt": 23.93,
+                  "earLeft": {
+                    "x": 58.16,
+                    "y": 137.95
+                  },
+                  "earRight": {
+                    "x": 136.44,
+                    "y": 165.72
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 76.04,
+                      "y": 144.42
+                    },
+                    "b": {
+                      "x": 101.41,
+                      "y": 155.68
+                    }
+                  },
+                  "neck": {
+                    "x": 86.65,
+                    "y": 175.7
+                  },
+                  "chest": {
+                    "x": 81.58,
+                    "y": 196.98
+                  }
+                },
+                "talking": {
+                  "headCentre": {
+                    "x": 99.83,
+                    "y": 158.7
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 123,
+                    "w": 90.95000000000002,
+                    "h": 71.4
+                  },
+                  "tilt": 18.59,
+                  "earLeft": {
+                    "x": 60.7,
+                    "y": 159.23
+                  },
+                  "earRight": {
+                    "x": 134.14,
+                    "y": 182.59
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 76.41,
+                      "y": 163.43
+                    },
+                    "b": {
+                      "x": 102.04,
+                      "y": 172.05
+                    }
+                  },
+                  "neck": {
+                    "x": 87.5,
+                    "y": 195.25
+                  },
+                  "chest": {
+                    "x": 82.69,
+                    "y": 212.92
+                  }
+                },
+                "walking": {
+                  "headCentre": {
+                    "x": 94.3,
+                    "y": 146.8
+                  },
+                  "headBox": {
+                    "x": 47.55,
+                    "y": 111.1,
+                    "w": 93.50000000000001,
+                    "h": 71.4
+                  },
+                  "tilt": 18.98,
+                  "earLeft": {
+                    "x": 54.22,
+                    "y": 141.93
+                  },
+                  "earRight": {
+                    "x": 133.91,
+                    "y": 166.39
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 71.74,
+                      "y": 147.72
+                    },
+                    "b": {
+                      "x": 98.31,
+                      "y": 156.86
+                    }
+                  },
+                  "neck": {
+                    "x": 83.25,
+                    "y": 180.8
+                  },
+                  "chest": {
+                    "x": 81.48,
+                    "y": 199.1
+                  }
+                },
+                "walking-se": {
+                  "headCentre": {
+                    "x": 85.8,
+                    "y": 154.45
+                  },
+                  "headBox": {
+                    "x": 38.2,
+                    "y": 113.65,
+                    "w": 95.2,
+                    "h": 81.6
+                  },
+                  "tilt": -18.89,
+                  "earLeft": {
+                    "x": 46.8,
+                    "y": 169.61
+                  },
+                  "earRight": {
+                    "x": 122.25,
+                    "y": 149.04
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 83.79,
+                      "y": 162.63
+                    },
+                    "b": {
+                      "x": 108.8,
+                      "y": 154.07
+                    }
+                  },
+                  "neck": {
+                    "x": 82.4,
+                    "y": 186.75
+                  },
+                  "chest": {
+                    "x": 87.52,
+                    "y": 207.28
+                  }
+                },
+                "celebrating": {
+                  "headCentre": {
+                    "x": 99.83,
+                    "y": 151.05
+                  },
+                  "headBox": {
+                    "x": 53.5,
+                    "y": 114.5,
+                    "w": 92.65,
+                    "h": 73.1
+                  },
+                  "tilt": 20.8,
+                  "earLeft": {
+                    "x": 58.24,
+                    "y": 144.57
+                  },
+                  "earRight": {
+                    "x": 137.09,
+                    "y": 171.26
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 74.52,
+                      "y": 151.57
+                    },
+                    "b": {
+                      "x": 101.5,
+                      "y": 161.82
+                    }
+                  },
+                  "neck": {
+                    "x": 86.65,
+                    "y": 189.3
+                  },
+                  "chest": {
+                    "x": 80.84,
+                    "y": 204.13
+                  }
+                },
+                "sleeping": {
+                  "headCentre": {
+                    "x": 96.85,
+                    "y": 155.3
+                  },
+                  "headBox": {
+                    "x": 48.4,
+                    "y": 116.2,
+                    "w": 96.9,
+                    "h": 78.2
+                  },
+                  "tilt": 19.46,
+                  "earLeft": {
+                    "x": 54.13,
+                    "y": 149.19
+                  },
+                  "earRight": {
+                    "x": 132.39,
+                    "y": 175.03
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 67.85,
+                      "y": 166.13
+                    },
+                    "b": {
+                      "x": 94.25,
+                      "y": 175.46
+                    }
+                  },
+                  "neck": {
+                    "x": 87.5,
+                    "y": 191.85
+                  },
+                  "chest": {
+                    "x": 84.25,
+                    "y": 208.62
+                  }
+                },
+                "alert": {
+                  "headCentre": {
+                    "x": 101.52,
+                    "y": 149.35
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 113.65,
+                    "w": 94.35,
+                    "h": 71.4
+                  },
+                  "tilt": 19,
+                  "earLeft": {
+                    "x": 57.79,
+                    "y": 144.21
+                  },
+                  "earRight": {
+                    "x": 138.61,
+                    "y": 170.65
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 75.14,
+                      "y": 149.74
+                    },
+                    "b": {
+                      "x": 103.02,
+                      "y": 159.34
+                    }
+                  },
+                  "neck": {
+                    "x": 89.2,
+                    "y": 185.9
+                  },
+                  "chest": {
+                    "x": 83.57,
+                    "y": 204
+                  }
+                },
+                "working-ne": {
+                  "headCentre": {
+                    "x": 82.83,
+                    "y": 157
+                  },
+                  "headBox": {
+                    "x": 35.65,
+                    "y": 121.3,
+                    "w": 94.35,
+                    "h": 71.39999999999999
+                  },
+                  "tilt": 12.9,
+                  "earLeft": {
+                    "x": 38.18,
+                    "y": 149.54
+                  },
+                  "earRight": {
+                    "x": 113.61,
+                    "y": 166.81
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "reading-ne": {
+                  "headCentre": {
+                    "x": 87.07,
+                    "y": 157.43
+                  },
+                  "headBox": {
+                    "x": 39.05,
+                    "y": 121.3,
+                    "w": 96.05,
+                    "h": 72.25000000000001
+                  },
+                  "tilt": 13.7,
+                  "earLeft": {
+                    "x": 41.57,
+                    "y": 150.43
+                  },
+                  "earRight": {
+                    "x": 119.4,
+                    "y": 169.4
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "thinking-ne": {
+                  "headCentre": {
+                    "x": 82.83,
+                    "y": 157
+                  },
+                  "headBox": {
+                    "x": 35.65,
+                    "y": 121.3,
+                    "w": 94.35,
+                    "h": 71.39999999999999
+                  },
+                  "tilt": 11.74,
+                  "earLeft": {
+                    "x": 39.08,
+                    "y": 152.62
+                  },
+                  "earRight": {
+                    "x": 113.59,
+                    "y": 168.11
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "seated-turn-sw": {
+                  "headCentre": {
+                    "x": 106.62,
+                    "y": 156.15
+                  },
+                  "headBox": {
+                    "x": 59.45,
+                    "y": 118.75,
+                    "w": 94.35000000000001,
+                    "h": 74.80000000000001
+                  },
+                  "tilt": 20.81,
+                  "earLeft": {
+                    "x": 65.96,
+                    "y": 144.36
+                  },
+                  "earRight": {
+                    "x": 144.89,
+                    "y": 171.39
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 83.96,
+                      "y": 152.29
+                    },
+                    "b": {
+                      "x": 110.72,
+                      "y": 162.46
+                    }
+                  },
+                  "neck": {
+                    "x": 100.25,
+                    "y": 193.55
+                  },
+                  "chest": {
+                    "x": 99.4,
+                    "y": 211.4
+                  }
+                },
+                "sofa-sit-sw": {
+                  "headCentre": {
+                    "x": 101.95,
+                    "y": 142.97
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 106,
+                    "w": 95.20000000000002,
+                    "h": 73.94999999999999
+                  },
+                  "tilt": 18.1,
+                  "earLeft": {
+                    "x": 59.8,
+                    "y": 134.18
+                  },
+                  "earRight": {
+                    "x": 134.94,
+                    "y": 155.99
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 74.86,
+                      "y": 142.06
+                    },
+                    "b": {
+                      "x": 99.77,
+                      "y": 150.2
+                    }
+                  },
+                  "neck": {
+                    "x": 96,
+                    "y": 179.1
+                  },
+                  "chest": {
+                    "x": 96.85,
+                    "y": 200.35000000000002
+                  }
+                }
+              },
+              "gearFree": true,
+              "defaultAccessories": [
+                "cap"
+              ]
+            },
+            {
+              "id": "teal",
+              "label": "Sarcelle",
+              "swatch": "#609090",
+              "poses": {
+                "idle": "assets/Characters/subagent/teal/idle.png",
+                "working": "assets/Characters/subagent/teal/working.png",
+                "thinking": "assets/Characters/subagent/teal/thinking.png",
+                "talking": "assets/Characters/subagent/teal/talking.png",
+                "walking": "assets/Characters/subagent/teal/walking.png",
+                "walking-se": "assets/Characters/subagent/teal/walking-se.png",
+                "celebrating": "assets/Characters/subagent/teal/celebrating.png",
+                "sleeping": "assets/Characters/subagent/teal/sleeping.png",
+                "alert": "assets/Characters/subagent/teal/alert.png",
+                "working-ne": {
+                  "frames": [
+                    "assets/Characters/subagent/teal/working-ne-1.png",
+                    "assets/Characters/subagent/teal/working-ne-2.png",
+                    "assets/Characters/subagent/teal/working-ne-3.png"
+                  ],
+                  "frameMs": 350,
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "reading-ne": {
+                  "image": "assets/Characters/subagent/teal/reading-ne.png",
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "thinking-ne": {
+                  "image": "assets/Characters/subagent/teal/thinking-ne.png",
+                  "seatAnchor": {
+                    "x": 78.15,
+                    "y": 240.3
+                  }
+                },
+                "seated-turn-sw": {
+                  "image": "assets/Characters/subagent/teal/seated-turn-sw.png",
+                  "seatAnchor": {
+                    "x": 96.85,
+                    "y": 242
+                  }
+                },
+                "sofa-sit-sw": {
+                  "image": "assets/Characters/subagent/teal/sofa-sit-sw.png",
+                  "seatAnchor": {
+                    "x": 96.92,
+                    "y": 218.17
+                  }
+                }
+              },
+              "landmarks": {
+                "idle": {
+                  "headCentre": {
+                    "x": 98.12,
+                    "y": 151.9
+                  },
+                  "headBox": {
+                    "x": 51.8,
+                    "y": 115.35,
+                    "w": 92.64999999999999,
+                    "h": 73.1
+                  },
+                  "tilt": 16.26,
+                  "earLeft": {
+                    "x": 55.45,
+                    "y": 144.71
+                  },
+                  "earRight": {
+                    "x": 137.45,
+                    "y": 166.08
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 72.7,
+                      "y": 151.72
+                    },
+                    "b": {
+                      "x": 101.32,
+                      "y": 160.07
+                    }
+                  },
+                  "neck": {
+                    "x": 84.95,
+                    "y": 185.9
+                  },
+                  "chest": {
+                    "x": 82.15,
+                    "y": 202.18
+                  }
+                },
+                "working": {
+                  "headCentre": {
+                    "x": 90.05,
+                    "y": 158.28
+                  },
+                  "headBox": {
+                    "x": 44.15,
+                    "y": 123,
+                    "w": 91.79999999999998,
+                    "h": 70.55000000000001
+                  },
+                  "tilt": 18.52,
+                  "earLeft": {
+                    "x": 48.67,
+                    "y": 149.02
+                  },
+                  "earRight": {
+                    "x": 129.1,
+                    "y": 173.75
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 66.02,
+                      "y": 158.18
+                    },
+                    "b": {
+                      "x": 93.16,
+                      "y": 167.27
+                    }
+                  },
+                  "neck": {
+                    "x": 83.25,
+                    "y": 193.55
+                  },
+                  "chest": {
+                    "x": 77.07,
+                    "y": 205.22
+                  }
+                },
+                "thinking": {
+                  "headCentre": {
+                    "x": 98.55,
+                    "y": 141.7
+                  },
+                  "headBox": {
+                    "x": 52.65,
+                    "y": 106,
+                    "w": 91.79999999999998,
+                    "h": 71.4
+                  },
+                  "tilt": 21.1,
+                  "earLeft": {
+                    "x": 56.43,
+                    "y": 134.18
+                  },
+                  "earRight": {
+                    "x": 135.83,
+                    "y": 161.83
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 74.44,
+                      "y": 142.75
+                    },
+                    "b": {
+                      "x": 100.44,
+                      "y": 152.78
+                    }
+                  },
+                  "neck": {
+                    "x": 86.65,
+                    "y": 175.7
+                  },
+                  "chest": {
+                    "x": 80.96,
+                    "y": 194.84
+                  }
+                },
+                "talking": {
+                  "headCentre": {
+                    "x": 99.83,
+                    "y": 158.7
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 123,
+                    "w": 90.95000000000002,
+                    "h": 71.4
+                  },
+                  "tilt": 18.21,
+                  "earLeft": {
+                    "x": 56.94,
+                    "y": 151.63
+                  },
+                  "earRight": {
+                    "x": 134.63,
+                    "y": 176.64
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 73.83,
+                      "y": 160.34
+                    },
+                    "b": {
+                      "x": 100.46,
+                      "y": 169.1
+                    }
+                  },
+                  "neck": {
+                    "x": 87.5,
+                    "y": 195.25
+                  },
+                  "chest": {
+                    "x": 80.84,
+                    "y": 209.76
+                  }
+                },
+                "walking": {
+                  "headCentre": {
+                    "x": 94.3,
+                    "y": 146.8
+                  },
+                  "headBox": {
+                    "x": 47.55,
+                    "y": 111.1,
+                    "w": 93.50000000000001,
+                    "h": 71.4
+                  },
+                  "tilt": 17.3,
+                  "earLeft": {
+                    "x": 52.67,
+                    "y": 135.15
+                  },
+                  "earRight": {
+                    "x": 136.2,
+                    "y": 160.73
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 69.99,
+                      "y": 143.45
+                    },
+                    "b": {
+                      "x": 99.34,
+                      "y": 152.59
+                    }
+                  },
+                  "neck": {
+                    "x": 83.25,
+                    "y": 180.8
+                  },
+                  "chest": {
+                    "x": 80.77,
+                    "y": 194.67
+                  }
+                },
+                "walking-se": {
+                  "headCentre": {
+                    "x": 85.8,
+                    "y": 154.45
+                  },
+                  "headBox": {
+                    "x": 38.2,
+                    "y": 113.65,
+                    "w": 95.2,
+                    "h": 81.6
+                  },
+                  "tilt": -18.3,
+                  "earLeft": {
+                    "x": 42.36,
+                    "y": 162.43
+                  },
+                  "earRight": {
+                    "x": 123.78,
+                    "y": 138.59
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 81.78,
+                      "y": 155.45
+                    },
+                    "b": {
+                      "x": 108.3,
+                      "y": 146.68
+                    }
+                  },
+                  "neck": {
+                    "x": 82.4,
+                    "y": 186.75
+                  },
+                  "chest": {
+                    "x": 87.17,
+                    "y": 202.23
+                  }
+                },
+                "celebrating": {
+                  "headCentre": {
+                    "x": 99.83,
+                    "y": 151.05
+                  },
+                  "headBox": {
+                    "x": 53.5,
+                    "y": 114.5,
+                    "w": 92.65,
+                    "h": 73.1
+                  },
+                  "tilt": 19.82,
+                  "earLeft": {
+                    "x": 56.88,
+                    "y": 143.94
+                  },
+                  "earRight": {
+                    "x": 138.73,
+                    "y": 168.72
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 74.79,
+                      "y": 151.12
+                    },
+                    "b": {
+                      "x": 101.71,
+                      "y": 160.82
+                    }
+                  },
+                  "neck": {
+                    "x": 86.65,
+                    "y": 189.3
+                  },
+                  "chest": {
+                    "x": 81.03,
+                    "y": 203.22
+                  }
+                },
+                "sleeping": {
+                  "headCentre": {
+                    "x": 96.85,
+                    "y": 155.3
+                  },
+                  "headBox": {
+                    "x": 48.4,
+                    "y": 116.2,
+                    "w": 96.9,
+                    "h": 78.2
+                  },
+                  "tilt": 20.85,
+                  "earLeft": {
+                    "x": 52.91,
+                    "y": 145.94
+                  },
+                  "earRight": {
+                    "x": 134.66,
+                    "y": 171.68
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 68.52,
+                      "y": 162.32
+                    },
+                    "b": {
+                      "x": 96.41,
+                      "y": 172.94
+                    }
+                  },
+                  "neck": {
+                    "x": 87.5,
+                    "y": 191.85
+                  },
+                  "chest": {
+                    "x": 84.47,
+                    "y": 206.14
+                  }
+                },
+                "alert": {
+                  "headCentre": {
+                    "x": 101.52,
+                    "y": 149.35
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 113.65,
+                    "w": 94.35,
+                    "h": 71.4
+                  },
+                  "tilt": 18.23,
+                  "earLeft": {
+                    "x": 58.1,
+                    "y": 141.34
+                  },
+                  "earRight": {
+                    "x": 141.07,
+                    "y": 164.11
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 75.76,
+                      "y": 146.85
+                    },
+                    "b": {
+                      "x": 103.76,
+                      "y": 156.07
+                    }
+                  },
+                  "neck": {
+                    "x": 89.2,
+                    "y": 185.9
+                  },
+                  "chest": {
+                    "x": 84.53,
+                    "y": 198.66
+                  }
+                },
+                "working-ne": {
+                  "headCentre": {
+                    "x": 82.83,
+                    "y": 157
+                  },
+                  "headBox": {
+                    "x": 35.65,
+                    "y": 121.3,
+                    "w": 94.35,
+                    "h": 71.39999999999999
+                  },
+                  "tilt": 13.71,
+                  "earLeft": {
+                    "x": 40.33,
+                    "y": 150.79
+                  },
+                  "earRight": {
+                    "x": 114.19,
+                    "y": 168.81
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "reading-ne": {
+                  "headCentre": {
+                    "x": 87.07,
+                    "y": 157.43
+                  },
+                  "headBox": {
+                    "x": 39.05,
+                    "y": 121.3,
+                    "w": 96.05,
+                    "h": 72.25000000000001
+                  },
+                  "tilt": 13.83,
+                  "earLeft": {
+                    "x": 41.84,
+                    "y": 150.44
+                  },
+                  "earRight": {
+                    "x": 119.07,
+                    "y": 169.45
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "thinking-ne": {
+                  "headCentre": {
+                    "x": 82.83,
+                    "y": 157
+                  },
+                  "headBox": {
+                    "x": 35.65,
+                    "y": 121.3,
+                    "w": 94.35,
+                    "h": 71.39999999999999
+                  },
+                  "tilt": 12.67,
+                  "earLeft": {
+                    "x": 40.63,
+                    "y": 152.26
+                  },
+                  "earRight": {
+                    "x": 113.97,
+                    "y": 168.75
+                  },
+                  "neck": {
+                    "x": 77.3,
+                    "y": 194.4
+                  },
+                  "chest": {
+                    "x": 96,
+                    "y": 216.5
+                  }
+                },
+                "seated-turn-sw": {
+                  "headCentre": {
+                    "x": 106.62,
+                    "y": 156.15
+                  },
+                  "headBox": {
+                    "x": 59.45,
+                    "y": 118.75,
+                    "w": 94.35000000000001,
+                    "h": 74.80000000000001
+                  },
+                  "tilt": 19.16,
+                  "earLeft": {
+                    "x": 66.57,
+                    "y": 145.7
+                  },
+                  "earRight": {
+                    "x": 145.75,
+                    "y": 170.44
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 83.74,
+                      "y": 152.36
+                    },
+                    "b": {
+                      "x": 111.23,
+                      "y": 161.91
+                    }
+                  },
+                  "neck": {
+                    "x": 100.25,
+                    "y": 193.55
+                  },
+                  "chest": {
+                    "x": 99.4,
+                    "y": 211.4
+                  }
+                },
+                "sofa-sit-sw": {
+                  "headCentre": {
+                    "x": 101.95,
+                    "y": 142.97
+                  },
+                  "headBox": {
+                    "x": 54.35,
+                    "y": 106,
+                    "w": 95.20000000000002,
+                    "h": 73.94999999999999
+                  },
+                  "tilt": 16.53,
+                  "earLeft": {
+                    "x": 59.07,
+                    "y": 137.3
+                  },
+                  "earRight": {
+                    "x": 137.05,
+                    "y": 156.02
+                  },
+                  "eyeLine": {
+                    "a": {
+                      "x": 75.82,
+                      "y": 142.62
+                    },
+                    "b": {
+                      "x": 102.03,
+                      "y": 150.4
+                    }
+                  },
+                  "neck": {
+                    "x": 96,
+                    "y": 179.1
+                  },
+                  "chest": {
+                    "x": 96.85,
+                    "y": 200.35000000000002
+                  }
+                }
+              },
+              "gearFree": true,
+              "defaultAccessories": [
+                "glasses"
+              ]
+            }
+          ],
+          "pending": [
+            "assets/Characters/subagent/sage/portrait.png",
+            "assets/Characters/subagent/ochre/portrait.png",
+            "assets/Characters/subagent/teal/portrait.png"
+          ]
+        }
+      ],
+      "accessories": [
+        {
+          "id": "headphones",
+          "label": "Casque d’écoute",
+          "slot": "head",
+          "images": {
+            "timmy": {
+              "idle": "assets/Characters/accessories/headphones/timmy/idle.png",
+              "working": "assets/Characters/accessories/headphones/timmy/working.png",
+              "thinking": "assets/Characters/accessories/headphones/timmy/thinking.png",
+              "talking": "assets/Characters/accessories/headphones/timmy/talking.png",
+              "walking": "assets/Characters/accessories/headphones/timmy/walking.png",
+              "walking-se": "assets/Characters/accessories/headphones/timmy/walking-se.png",
+              "celebrating": "assets/Characters/accessories/headphones/timmy/celebrating.png",
+              "sleeping": "assets/Characters/accessories/headphones/timmy/sleeping.png",
+              "alert": "assets/Characters/accessories/headphones/timmy/alert.png"
+            },
+            "subagent": {
+              "idle": "assets/Characters/accessories/headphones/subagent/idle.png",
+              "working": "assets/Characters/accessories/headphones/subagent/working.png",
+              "thinking": "assets/Characters/accessories/headphones/subagent/thinking.png",
+              "talking": "assets/Characters/accessories/headphones/subagent/talking.png",
+              "walking": "assets/Characters/accessories/headphones/subagent/walking.png",
+              "walking-se": "assets/Characters/accessories/headphones/subagent/walking-se.png",
+              "celebrating": "assets/Characters/accessories/headphones/subagent/celebrating.png",
+              "sleeping": "assets/Characters/accessories/headphones/subagent/sleeping.png",
+              "alert": "assets/Characters/accessories/headphones/subagent/alert.png"
+            }
+          },
+          "legacy": true,
+          "layers": {
+            "timmy": {
+              "idle": {
+                "back": "assets/Characters/accessories/headphones/timmy/idle.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/headphones/timmy/working.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/headphones/timmy/thinking.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/headphones/timmy/talking.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/headphones/timmy/walking.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/headphones/timmy/walking-se.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/headphones/timmy/celebrating.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/headphones/timmy/sleeping.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/sleeping.front.png"
+              },
+              "alert": {
+                "back": "assets/Characters/accessories/headphones/timmy/alert.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/alert.front.png"
+              },
+              "working-ne": {
+                "back": "assets/Characters/accessories/headphones/timmy/working-ne-1.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/working-ne-1.front.png",
+                "frames": [
+                  {
+                    "back": "assets/Characters/accessories/headphones/timmy/working-ne-1.back.png",
+                    "front": "assets/Characters/accessories/headphones/timmy/working-ne-1.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/headphones/timmy/working-ne-2.back.png",
+                    "front": "assets/Characters/accessories/headphones/timmy/working-ne-2.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/headphones/timmy/working-ne-3.back.png",
+                    "front": "assets/Characters/accessories/headphones/timmy/working-ne-3.front.png"
+                  }
+                ]
+              },
+              "reading-ne": {
+                "back": "assets/Characters/accessories/headphones/timmy/reading-ne.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/reading-ne.front.png"
+              },
+              "thinking-ne": {
+                "back": "assets/Characters/accessories/headphones/timmy/thinking-ne.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/thinking-ne.front.png"
+              },
+              "seated-turn-sw": {
+                "back": "assets/Characters/accessories/headphones/timmy/seated-turn-sw.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/seated-turn-sw.front.png"
+              },
+              "sofa-sit-sw": {
+                "back": "assets/Characters/accessories/headphones/timmy/sofa-sit-sw.back.png",
+                "front": "assets/Characters/accessories/headphones/timmy/sofa-sit-sw.front.png"
+              }
+            },
+            "subagent/sage": {
+              "idle": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/idle.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/working.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/thinking.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/talking.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/walking.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/walking-se.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/celebrating.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/headphones/subagent/sage/sleeping.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/sage/sleeping.front.png"
+              }
+            },
+            "subagent/ochre": {
+              "idle": {
+                "back": "assets/Characters/accessories/headphones/subagent/ochre/idle.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/ochre/idle.front.png"
+              }
+            },
+            "subagent/teal": {
+              "idle": {
+                "back": "assets/Characters/accessories/headphones/subagent/teal/idle.back.png",
+                "front": "assets/Characters/accessories/headphones/subagent/teal/idle.front.png"
+              }
+            }
+          },
+          "pending": [
+            "Batch 5b: assets/Characters/accessories/headphones/{timmy,subagent/<variant>}/<pose>.{back,front}.png"
+          ]
+        },
+        {
+          "id": "cap",
+          "label": "Casquette",
+          "slot": "head",
+          "images": {
+            "timmy": {
+              "idle": "assets/Characters/accessories/cap/timmy/idle.png",
+              "working": "assets/Characters/accessories/cap/timmy/working.png",
+              "thinking": "assets/Characters/accessories/cap/timmy/thinking.png",
+              "talking": "assets/Characters/accessories/cap/timmy/talking.png",
+              "walking": "assets/Characters/accessories/cap/timmy/walking.png",
+              "walking-se": "assets/Characters/accessories/cap/timmy/walking-se.png",
+              "celebrating": "assets/Characters/accessories/cap/timmy/celebrating.png",
+              "sleeping": "assets/Characters/accessories/cap/timmy/sleeping.png",
+              "alert": "assets/Characters/accessories/cap/timmy/alert.png"
+            },
+            "subagent": {
+              "idle": "assets/Characters/accessories/cap/subagent/idle.png",
+              "working": "assets/Characters/accessories/cap/subagent/working.png",
+              "thinking": "assets/Characters/accessories/cap/subagent/thinking.png",
+              "talking": "assets/Characters/accessories/cap/subagent/talking.png",
+              "walking": "assets/Characters/accessories/cap/subagent/walking.png",
+              "walking-se": "assets/Characters/accessories/cap/subagent/walking-se.png",
+              "celebrating": "assets/Characters/accessories/cap/subagent/celebrating.png",
+              "sleeping": "assets/Characters/accessories/cap/subagent/sleeping.png",
+              "alert": "assets/Characters/accessories/cap/subagent/alert.png"
+            }
+          },
+          "legacy": true,
+          "layers": {
+            "timmy": {
+              "idle": {
+                "back": "assets/Characters/accessories/cap/timmy/idle.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/cap/timmy/working.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/cap/timmy/thinking.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/cap/timmy/talking.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/cap/timmy/walking.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/cap/timmy/walking-se.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/cap/timmy/celebrating.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/cap/timmy/sleeping.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/sleeping.front.png"
+              },
+              "alert": {
+                "back": "assets/Characters/accessories/cap/timmy/alert.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/alert.front.png"
+              },
+              "working-ne": {
+                "back": "assets/Characters/accessories/cap/timmy/working-ne-1.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/working-ne-1.front.png",
+                "frames": [
+                  {
+                    "back": "assets/Characters/accessories/cap/timmy/working-ne-1.back.png",
+                    "front": "assets/Characters/accessories/cap/timmy/working-ne-1.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/cap/timmy/working-ne-2.back.png",
+                    "front": "assets/Characters/accessories/cap/timmy/working-ne-2.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/cap/timmy/working-ne-3.back.png",
+                    "front": "assets/Characters/accessories/cap/timmy/working-ne-3.front.png"
+                  }
+                ]
+              },
+              "reading-ne": {
+                "back": "assets/Characters/accessories/cap/timmy/reading-ne.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/reading-ne.front.png"
+              },
+              "thinking-ne": {
+                "back": "assets/Characters/accessories/cap/timmy/thinking-ne.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/thinking-ne.front.png"
+              },
+              "seated-turn-sw": {
+                "back": "assets/Characters/accessories/cap/timmy/seated-turn-sw.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/seated-turn-sw.front.png"
+              },
+              "sofa-sit-sw": {
+                "back": "assets/Characters/accessories/cap/timmy/sofa-sit-sw.back.png",
+                "front": "assets/Characters/accessories/cap/timmy/sofa-sit-sw.front.png"
+              }
+            },
+            "subagent/sage": {
+              "idle": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/idle.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/working.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/thinking.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/talking.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/walking.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/walking-se.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/celebrating.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/sleeping.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/sleeping.front.png"
+              },
+              "alert": {
+                "back": "assets/Characters/accessories/cap/subagent/sage/alert.back.png",
+                "front": "assets/Characters/accessories/cap/subagent/sage/alert.front.png"
+              }
+            }
+          },
+          "pending": [
+            "Batch 5b: assets/Characters/accessories/cap/{timmy,subagent/<variant>}/<pose>.{back,front}.png"
+          ]
+        },
+        {
+          "id": "glasses",
+          "label": "Lunettes",
+          "slot": "face",
+          "images": {
+            "timmy": {
+              "idle": "assets/Characters/accessories/glasses/timmy/idle.png",
+              "working": "assets/Characters/accessories/glasses/timmy/working.png",
+              "thinking": "assets/Characters/accessories/glasses/timmy/thinking.png",
+              "talking": "assets/Characters/accessories/glasses/timmy/talking.png",
+              "walking": "assets/Characters/accessories/glasses/timmy/walking.png",
+              "walking-se": "assets/Characters/accessories/glasses/timmy/walking-se.png",
+              "celebrating": "assets/Characters/accessories/glasses/timmy/celebrating.png",
+              "sleeping": "assets/Characters/accessories/glasses/timmy/sleeping.png",
+              "alert": "assets/Characters/accessories/glasses/timmy/alert.png"
+            },
+            "subagent": {
+              "idle": "assets/Characters/accessories/glasses/subagent/idle.png",
+              "working": "assets/Characters/accessories/glasses/subagent/working.png",
+              "thinking": "assets/Characters/accessories/glasses/subagent/thinking.png",
+              "talking": "assets/Characters/accessories/glasses/subagent/talking.png",
+              "walking": "assets/Characters/accessories/glasses/subagent/walking.png",
+              "walking-se": "assets/Characters/accessories/glasses/subagent/walking-se.png",
+              "celebrating": "assets/Characters/accessories/glasses/subagent/celebrating.png",
+              "sleeping": "assets/Characters/accessories/glasses/subagent/sleeping.png",
+              "alert": "assets/Characters/accessories/glasses/subagent/alert.png"
+            }
+          },
+          "legacy": true,
+          "layers": {
+            "timmy": {
+              "idle": {
+                "back": "assets/Characters/accessories/glasses/timmy/idle.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/glasses/timmy/working.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/glasses/timmy/thinking.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/glasses/timmy/talking.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/glasses/timmy/walking.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/glasses/timmy/walking-se.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/glasses/timmy/celebrating.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/glasses/timmy/sleeping.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/sleeping.front.png"
+              },
+              "alert": {
+                "back": "assets/Characters/accessories/glasses/timmy/alert.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/alert.front.png"
+              },
+              "working-ne": {
+                "back": "assets/Characters/accessories/glasses/timmy/working-ne-1.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/working-ne-1.front.png",
+                "frames": [
+                  {
+                    "back": "assets/Characters/accessories/glasses/timmy/working-ne-1.back.png",
+                    "front": "assets/Characters/accessories/glasses/timmy/working-ne-1.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/glasses/timmy/working-ne-2.back.png",
+                    "front": "assets/Characters/accessories/glasses/timmy/working-ne-2.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/glasses/timmy/working-ne-3.back.png",
+                    "front": "assets/Characters/accessories/glasses/timmy/working-ne-3.front.png"
+                  }
+                ]
+              },
+              "reading-ne": {
+                "back": "assets/Characters/accessories/glasses/timmy/reading-ne.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/reading-ne.front.png"
+              },
+              "thinking-ne": {
+                "back": "assets/Characters/accessories/glasses/timmy/thinking-ne.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/thinking-ne.front.png"
+              },
+              "seated-turn-sw": {
+                "back": "assets/Characters/accessories/glasses/timmy/seated-turn-sw.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/seated-turn-sw.front.png"
+              },
+              "sofa-sit-sw": {
+                "back": "assets/Characters/accessories/glasses/timmy/sofa-sit-sw.back.png",
+                "front": "assets/Characters/accessories/glasses/timmy/sofa-sit-sw.front.png"
+              }
+            },
+            "subagent/sage": {
+              "idle": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/idle.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/working.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/thinking.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/talking.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/walking.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/walking-se.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/celebrating.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/glasses/subagent/sage/sleeping.back.png",
+                "front": "assets/Characters/accessories/glasses/subagent/sage/sleeping.front.png"
+              }
+            }
+          },
+          "pending": [
+            "Batch 5b: assets/Characters/accessories/glasses/{timmy,subagent/<variant>}/<pose>.{back,front}.png"
+          ]
+        },
+        {
+          "id": "scarf",
+          "label": "Foulard",
+          "slot": "neck",
+          "images": {
+            "timmy": {
+              "idle": "assets/Characters/accessories/scarf/timmy/idle.png",
+              "working": "assets/Characters/accessories/scarf/timmy/working.png",
+              "thinking": "assets/Characters/accessories/scarf/timmy/thinking.png",
+              "talking": "assets/Characters/accessories/scarf/timmy/talking.png",
+              "walking": "assets/Characters/accessories/scarf/timmy/walking.png",
+              "walking-se": "assets/Characters/accessories/scarf/timmy/walking-se.png",
+              "celebrating": "assets/Characters/accessories/scarf/timmy/celebrating.png",
+              "sleeping": "assets/Characters/accessories/scarf/timmy/sleeping.png",
+              "alert": "assets/Characters/accessories/scarf/timmy/alert.png"
+            },
+            "subagent": {
+              "idle": "assets/Characters/accessories/scarf/subagent/idle.png",
+              "working": "assets/Characters/accessories/scarf/subagent/working.png",
+              "thinking": "assets/Characters/accessories/scarf/subagent/thinking.png",
+              "talking": "assets/Characters/accessories/scarf/subagent/talking.png",
+              "walking": "assets/Characters/accessories/scarf/subagent/walking.png",
+              "walking-se": "assets/Characters/accessories/scarf/subagent/walking-se.png",
+              "celebrating": "assets/Characters/accessories/scarf/subagent/celebrating.png",
+              "sleeping": "assets/Characters/accessories/scarf/subagent/sleeping.png",
+              "alert": "assets/Characters/accessories/scarf/subagent/alert.png"
+            }
+          },
+          "legacy": true,
+          "layers": {
+            "timmy": {
+              "idle": {
+                "back": "assets/Characters/accessories/scarf/timmy/idle.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/scarf/timmy/working.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/scarf/timmy/thinking.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/scarf/timmy/talking.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/scarf/timmy/walking.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/scarf/timmy/walking-se.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/scarf/timmy/celebrating.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/scarf/timmy/sleeping.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/sleeping.front.png"
+              },
+              "alert": {
+                "back": "assets/Characters/accessories/scarf/timmy/alert.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/alert.front.png"
+              },
+              "working-ne": {
+                "back": "assets/Characters/accessories/scarf/timmy/working-ne-1.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/working-ne-1.front.png",
+                "frames": [
+                  {
+                    "back": "assets/Characters/accessories/scarf/timmy/working-ne-1.back.png",
+                    "front": "assets/Characters/accessories/scarf/timmy/working-ne-1.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/scarf/timmy/working-ne-2.back.png",
+                    "front": "assets/Characters/accessories/scarf/timmy/working-ne-2.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/scarf/timmy/working-ne-3.back.png",
+                    "front": "assets/Characters/accessories/scarf/timmy/working-ne-3.front.png"
+                  }
+                ]
+              },
+              "reading-ne": {
+                "back": "assets/Characters/accessories/scarf/timmy/reading-ne.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/reading-ne.front.png"
+              },
+              "thinking-ne": {
+                "back": "assets/Characters/accessories/scarf/timmy/thinking-ne.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/thinking-ne.front.png"
+              },
+              "seated-turn-sw": {
+                "back": "assets/Characters/accessories/scarf/timmy/seated-turn-sw.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/seated-turn-sw.front.png"
+              },
+              "sofa-sit-sw": {
+                "back": "assets/Characters/accessories/scarf/timmy/sofa-sit-sw.back.png",
+                "front": "assets/Characters/accessories/scarf/timmy/sofa-sit-sw.front.png"
+              }
+            },
+            "subagent/sage": {
+              "idle": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/idle.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/working.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/thinking.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/talking.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/walking.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/walking-se.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/celebrating.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/scarf/subagent/sage/sleeping.back.png",
+                "front": "assets/Characters/accessories/scarf/subagent/sage/sleeping.front.png"
+              }
+            }
+          },
+          "pending": [
+            "Batch 5b: assets/Characters/accessories/scarf/{timmy,subagent/<variant>}/<pose>.{back,front}.png"
+          ]
+        },
+        {
+          "id": "badge",
+          "label": "Badge",
+          "slot": "badge",
+          "images": {
+            "timmy": {
+              "idle": "assets/Characters/accessories/badge/timmy/idle.png",
+              "working": "assets/Characters/accessories/badge/timmy/working.png",
+              "thinking": "assets/Characters/accessories/badge/timmy/thinking.png",
+              "talking": "assets/Characters/accessories/badge/timmy/talking.png",
+              "walking": "assets/Characters/accessories/badge/timmy/walking.png",
+              "walking-se": "assets/Characters/accessories/badge/timmy/walking-se.png",
+              "celebrating": "assets/Characters/accessories/badge/timmy/celebrating.png",
+              "sleeping": "assets/Characters/accessories/badge/timmy/sleeping.png",
+              "alert": "assets/Characters/accessories/badge/timmy/alert.png"
+            },
+            "subagent": {
+              "idle": "assets/Characters/accessories/badge/subagent/idle.png",
+              "working": "assets/Characters/accessories/badge/subagent/working.png",
+              "thinking": "assets/Characters/accessories/badge/subagent/thinking.png",
+              "talking": "assets/Characters/accessories/badge/subagent/talking.png",
+              "walking": "assets/Characters/accessories/badge/subagent/walking.png",
+              "walking-se": "assets/Characters/accessories/badge/subagent/walking-se.png",
+              "celebrating": "assets/Characters/accessories/badge/subagent/celebrating.png",
+              "sleeping": "assets/Characters/accessories/badge/subagent/sleeping.png",
+              "alert": "assets/Characters/accessories/badge/subagent/alert.png"
+            }
+          },
+          "legacy": true,
+          "layers": {
+            "timmy": {
+              "idle": {
+                "back": "assets/Characters/accessories/badge/timmy/idle.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/badge/timmy/working.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/badge/timmy/thinking.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/badge/timmy/talking.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/badge/timmy/walking.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/badge/timmy/walking-se.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/badge/timmy/celebrating.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/badge/timmy/sleeping.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/sleeping.front.png"
+              },
+              "alert": {
+                "back": "assets/Characters/accessories/badge/timmy/alert.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/alert.front.png"
+              },
+              "working-ne": {
+                "back": "assets/Characters/accessories/badge/timmy/working-ne-1.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/working-ne-1.front.png",
+                "frames": [
+                  {
+                    "back": "assets/Characters/accessories/badge/timmy/working-ne-1.back.png",
+                    "front": "assets/Characters/accessories/badge/timmy/working-ne-1.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/badge/timmy/working-ne-2.back.png",
+                    "front": "assets/Characters/accessories/badge/timmy/working-ne-2.front.png"
+                  },
+                  {
+                    "back": "assets/Characters/accessories/badge/timmy/working-ne-3.back.png",
+                    "front": "assets/Characters/accessories/badge/timmy/working-ne-3.front.png"
+                  }
+                ]
+              },
+              "reading-ne": {
+                "back": "assets/Characters/accessories/badge/timmy/reading-ne.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/reading-ne.front.png"
+              },
+              "thinking-ne": {
+                "back": "assets/Characters/accessories/badge/timmy/thinking-ne.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/thinking-ne.front.png"
+              },
+              "seated-turn-sw": {
+                "back": "assets/Characters/accessories/badge/timmy/seated-turn-sw.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/seated-turn-sw.front.png"
+              },
+              "sofa-sit-sw": {
+                "back": "assets/Characters/accessories/badge/timmy/sofa-sit-sw.back.png",
+                "front": "assets/Characters/accessories/badge/timmy/sofa-sit-sw.front.png"
+              }
+            },
+            "subagent/sage": {
+              "idle": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/idle.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/idle.front.png"
+              },
+              "working": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/working.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/working.front.png"
+              },
+              "thinking": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/thinking.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/thinking.front.png"
+              },
+              "talking": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/talking.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/talking.front.png"
+              },
+              "walking": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/walking.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/walking.front.png"
+              },
+              "walking-se": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/walking-se.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/walking-se.front.png"
+              },
+              "celebrating": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/celebrating.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/celebrating.front.png"
+              },
+              "sleeping": {
+                "back": "assets/Characters/accessories/badge/subagent/sage/sleeping.back.png",
+                "front": "assets/Characters/accessories/badge/subagent/sage/sleeping.front.png"
+              }
+            }
+          },
+          "pending": [
+            "Batch 5b: assets/Characters/accessories/badge/{timmy,subagent/<variant>}/<pose>.{back,front}.png"
+          ]
+        }
+      ],
+      "themes": [
+        {
+          "id": "day",
+          "label": "Jour",
+          "kind": "day"
+        },
+        {
+          "id": "night",
+          "label": "Nuit",
+          "kind": "night",
+          "room": "night",
+          "light": {
+            "image": "assets/Office/light/night.png",
+            "blend": "multiply",
+            "opacity": 0.35
+          },
+          "furnitureVariants": [
+            "night",
+            "on"
+          ],
+          "monitors": "on"
+        }
+      ],
+      "accessoriesV2": {
+        "complete": false,
+        "covered": 113,
+        "total": 280
+      }
+    },
+    "theme": {
+      "resolved": "day",
+      "mode": "auto",
+      "nextChangeAt": 1791241200000,
+      "season": null
+    },
+    "default": {
+      "data": {
+        "version": 1,
+        "manifestVersion": 2,
+        "room": "bureau",
+        "theme": {
+          "mode": "auto",
+          "day": "day",
+          "night": "night",
+          "nightFrom": "19:00",
+          "nightTo": "07:00",
+          "season": null
+        },
+        "items": [
+          {
+            "uid": "st-timmy",
+            "asset": "desk",
+            "x": 6,
+            "y": 1,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-2",
+            "asset": "desk",
+            "x": 6,
+            "y": 4,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-3",
+            "asset": "desk",
+            "x": 6,
+            "y": 7,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-4",
+            "asset": "desk",
+            "x": 2,
+            "y": 1,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-5",
+            "asset": "desk",
+            "x": 2,
+            "y": 4,
+            "orientation": "sw"
+          },
+          {
+            "uid": "st-6",
+            "asset": "desk",
+            "x": 2,
+            "y": 7,
+            "orientation": "sw"
+          },
+          {
+            "uid": "rug",
+            "asset": "rug",
+            "x": 9,
+            "y": 7
+          },
+          {
+            "uid": "sofa",
+            "asset": "sofa",
+            "x": 9,
+            "y": 8,
+            "orientation": "sw"
+          },
+          {
+            "uid": "lamp",
+            "asset": "lamp",
+            "x": 11,
+            "y": 6
+          },
+          {
+            "uid": "meeting",
+            "asset": "meeting-table",
+            "x": 9,
+            "y": 3
+          },
+          {
+            "uid": "shelf",
+            "asset": "shelf",
+            "x": 4,
+            "y": 0,
+            "orientation": "sw"
+          },
+          {
+            "uid": "coffee",
+            "asset": "coffee-machine",
+            "x": 0,
+            "y": 8,
+            "orientation": "sw"
+          },
+          {
+            "uid": "rack",
+            "asset": "server-rack",
+            "x": 11,
+            "y": 0
+          },
+          {
+            "uid": "plant-1",
+            "asset": "plant-large",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "uid": "plant-2",
+            "asset": "plant-small",
+            "x": 11,
+            "y": 5
+          },
+          {
+            "uid": "wb",
+            "asset": "whiteboard",
+            "wall": "right",
+            "offset": 8
+          },
+          {
+            "uid": "win",
+            "asset": "window",
+            "wall": "left",
+            "offset": 4
+          }
+        ],
+        "agents": [
+          {
+            "agentId": "primary",
+            "match": {
+              "kind": "primary"
+            },
+            "character": "timmy",
+            "variant": null,
+            "accessories": [
+              "headphones"
+            ],
+            "name": null,
+            "role": null,
+            "station": "st-timmy"
+          },
+          {
+            "agentId": "*subagent",
+            "match": {
+              "kind": "subagent"
+            },
+            "character": "subagent",
+            "variant": "teal",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          },
+          {
+            "agentId": "*scheduled",
+            "match": {
+              "kind": "scheduled"
+            },
+            "character": "subagent",
+            "variant": "ochre",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          },
+          {
+            "agentId": "*direct",
+            "match": {
+              "kind": "direct"
+            },
+            "character": "subagent",
+            "variant": "sage",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          },
+          {
+            "agentId": "*group",
+            "match": {
+              "kind": "group"
+            },
+            "character": "subagent",
+            "variant": "sage",
+            "name": null,
+            "role": null,
+            "station": "auto"
+          }
+        ]
+      }
+    },
+    "revisions": [
+      {
+        "id": "4",
+        "revision": 4,
+        "updatedAt": 1791200000000,
+        "updatedBy": {
+          "id": "per_alex00000000000",
+          "kind": "human",
+          "name": "Owner",
+          "avatarUrl": null,
+          "state": null
+        }
+      },
+      {
+        "id": "3",
+        "revision": 3,
+        "updatedAt": 1791100000000,
+        "updatedBy": {
+          "kind": "system",
+          "name": "Système"
+        }
+      }
+    ],
+    "agentsSeen": [
+      {
+        "id": "subagent:ffffffff-0001-4000-8000-000000000001",
+        "role": "subagent",
+        "name": "Sous-agent ffff",
+        "lastSeenAt": 1791223170000
+      },
+      {
+        "id": "direct:100000000000000001",
+        "role": "direct",
+        "name": "Guest",
+        "lastSeenAt": 1791100000000
+      }
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "layout",
+      "rev": 4
+    }
+  }
+}

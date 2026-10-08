@@ -1,0 +1,41 @@
+{
+  "name": "foreign-instance",
+  "origin": "synthetic",
+  "openclawVersion": "2026.9.8",
+  "now": 1791313200000,
+  "config": "config/openclaw/2026.9.8/foreign-instance.json",
+  "rpc": {
+    "agents.list": "gw/rpc/agents.list/2026.9.8/foreign-instance.json",
+    "sessions.list": "gw/rpc/sessions.list/2026.9.8/foreign-instance.json",
+    "cron.list": "gw/rpc/cron.list/2026.9.8/foreign-instance.json",
+    "channels.status": "gw/rpc/channels.status/2026.9.8/foreign-instance.json",
+    "sessions.usage": "gw/rpc/sessions.usage/2026.9.8/foreign-instance.json",
+    "sessions.get": {
+      "param": "key",
+      "files": {
+        "agent:atlas:telegram:direct:foreign-user": "gw/rpc/sessions.get/2026.9.8/foreign-instance-1.json"
+      }
+    },
+    "cron.runs": {
+      "param": "jobId",
+      "files": {
+        "ffffffff-f101-4000-8000-000000000101": "gw/rpc/cron.runs/2026.9.8/foreign-instance-1.json",
+        "ffffffff-f102-4000-8000-000000000102": "gw/rpc/cron.runs/2026.9.8/foreign-instance-2.json"
+      }
+    }
+  },
+  "events": {
+    "onConnect": [
+      "gw/event/health/2026.9.8/foreign-instance-1.json"
+    ]
+  },
+  "cli": {
+    "skills.list": "cli/skills.list/2026.9.8/foreign-instance.json"
+  },
+  "host": {
+    "df": "host/df/foreign-instance.json"
+  },
+  "notes": [
+    "Hand-written foreign instance (ADR-001 §6.1, §12.8): primary atlas (no agent named main), Telegram/Slack/Matrix, unknown provider acme-llm, Europe/Paris, en. Mirrors test/projects/foreign-instance.test.js (Atlas, Camille, Aaron)."
+  ]
+}

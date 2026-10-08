@@ -1,0 +1,60 @@
+{
+ "$fixture": {
+  "source": "gateway",
+  "channel": "gw.rpc.sessions.get",
+  "origin": "synthetic",
+  "openclawVersion": "2026.9.8",
+  "params": {
+   "key": "agent:main:explicit:menu-1"
+  },
+  "note": "architect-54: the project tag (a no-op exec call); never part of the reply text"
+ },
+ "body": {
+  "kind": "json",
+  "value": {
+   "messages": [
+    {
+     "role": "user",
+     "timestamp": 1791223200000,
+     "content": "Construis-moi un générateur de menus pour le restaurant : import des plats, mise en page, export PDF."
+    },
+    {
+     "role": "assistant",
+     "timestamp": 1791223220000,
+     "model": "model-a",
+     "provider": "provider-a",
+     "usage": {
+      "output_tokens": 90
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "D’accord, je commence par l’import des plats et la mise en page."
+      },
+      {
+       "type": "toolCall",
+       "id": "call_menu-1_0",
+       "name": "exec",
+       "arguments": {
+        "command": "node /opt/openclaw/workspace/skills/projet/projet.js tag menu-builder en-cours P2 \"Générateur de menus\" import et mise en page"
+       }
+      }
+     ]
+    },
+    {
+     "role": "toolResult",
+     "toolCallId": "call_menu-1_0",
+     "toolName": "exec",
+     "isError": false,
+     "timestamp": 1791223225000,
+     "content": [
+      {
+       "type": "text",
+       "text": "ok · projet"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

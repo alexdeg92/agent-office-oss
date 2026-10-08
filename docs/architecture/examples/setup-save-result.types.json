@@ -1,0 +1,15 @@
+{
+  "$comment": "After this the setup code is spent and the instance is locked; the server switches to the configured app in-process (same port), so the client reloads. integrations.projet (architect-56): status installed|outdated|conflict|skipped|failed, reason when not installed.",
+  "types": {
+    "$.revision": "number",
+    "$.vm": "any"
+  },
+  "additional": {
+    "$.result.integrations": {
+      "projet": {
+        "status": "installed"
+      }
+    },
+    "$.result.integrations.projet.reason": "opted-out"
+  }
+}

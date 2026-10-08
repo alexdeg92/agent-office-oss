@@ -1,0 +1,22 @@
+/* Flux task view (pages/flow.js, owner office-dev): the original S7a layout (office-dev-18). Bureau components
+   (bu-detail-header, bu-card, bu-kv, bu-flow, bu-run, bu-switch) do the work; this only arranges them.
+   Width: frontend's page frame (.ao-frame.ao-frame--detail), never a max-width here. */
+.ao-flow { gap: var(--bu-space-4); }
+.ao-flow .bu-backlink { align-self: flex-start; }
+.ao-flow__headtext { min-width: 0; }
+.ao-flow .bu-detail-header__title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-2); }
+.ao-flow__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--bu-space-3); }
+.ao-flow__pair { display: grid; gap: var(--bu-space-4); align-items: start; }
+.ao-flow__msg { max-height: 24rem; overflow: auto; }
+.ao-flow .ao-section { gap: var(--bu-space-3); }
+.ao-flow .ao-section__head { display: flex; align-items: center; gap: var(--bu-space-2); min-height: var(--bu-size-control-sm); }
+.ao-flow .ao-form { display: flex; flex-direction: column; gap: var(--bu-space-4); }
+.ao-flow .ao-form .bu-btn-group { gap: var(--bu-space-2); }
+.ao-runs { display: flex; flex-direction: column; gap: var(--bu-space-2); }
+.ao-runs .bu-code pre { margin: 0; }
+.ao-spin-sm { width: var(--bu-space-3); height: var(--bu-space-3); border-width: 2px; }
+.ao-flow .bu-btn, .ao-flow .bu-switch { min-height: var(--bu-size-touch, 44px); }
+@media (max-width: 820px) {
+  .ao-flow__pair { grid-template-columns: minmax(0, 1fr); }
+  .ao-flow__actions .bu-btn { flex: 1 1 auto; }
+}

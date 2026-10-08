@@ -1,0 +1,13 @@
+{
+  "$fixture": {
+    "source": "host",
+    "channel": "host.df",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "text",
+    "exitCode": 0,
+    "value": "Filesystem 1B-blocks Used Available Use% Mounted on\n/dev/disk0 500000000000 100000000000 400000000000 20% /\n"
+  }
+}

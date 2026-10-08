@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "manifestVersion": 2,
+  "room": "bureau",
+  "theme": {
+    "mode": "auto",
+    "day": "day",
+    "night": "night",
+    "nightFrom": "19:00",
+    "nightTo": "07:00",
+    "season": null
+  },
+  "items": [
+    {
+      "uid": "st-timmy",
+      "asset": "desk",
+      "x": 6,
+      "y": 1,
+      "orientation": "sw"
+    },
+    {
+      "uid": "st-2",
+      "asset": "desk",
+      "x": 6,
+      "y": 4,
+      "orientation": "sw"
+    },
+    {
+      "uid": "st-3",
+      "asset": "desk",
+      "x": 6,
+      "y": 7,
+      "orientation": "sw"
+    },
+    {
+      "uid": "st-4",
+      "asset": "desk",
+      "x": 2,
+      "y": 1,
+      "orientation": "sw"
+    },
+    {
+      "uid": "st-5",
+      "asset": "desk",
+      "x": 2,
+      "y": 4,
+      "orientation": "sw"
+    },
+    {
+      "uid": "st-6",
+      "asset": "desk",
+      "x": 2,
+      "y": 7,
+      "orientation": "sw"
+    },
+    {
+      "uid": "rug",
+      "asset": "rug",
+      "x": 9,
+      "y": 7
+    },
+    {
+      "uid": "sofa",
+      "asset": "sofa",
+      "x": 9,
+      "y": 8,
+      "orientation": "sw"
+    },
+    {
+      "uid": "lamp",
+      "asset": "lamp",
+      "x": 11,
+      "y": 6
+    },
+    {
+      "uid": "meeting",
+      "asset": "meeting-table",
+      "x": 9,
+      "y": 3
+    },
+    {
+      "uid": "shelf",
+      "asset": "shelf",
+      "x": 4,
+      "y": 0,
+      "orientation": "sw"
+    },
+    {
+      "uid": "coffee",
+      "asset": "coffee-machine",
+      "x": 0,
+      "y": 8,
+      "orientation": "sw"
+    },
+    {
+      "uid": "rack",
+      "asset": "server-rack",
+      "x": 11,
+      "y": 0
+    },
+    {
+      "uid": "plant-1",
+      "asset": "plant-large",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "uid": "plant-2",
+      "asset": "plant-small",
+      "x": 11,
+      "y": 5
+    },
+    {
+      "uid": "wb",
+      "asset": "whiteboard",
+      "wall": "right",
+      "offset": 8
+    },
+    {
+      "uid": "win",
+      "asset": "window",
+      "wall": "left",
+      "offset": 4
+    }
+  ],
+  "agents": [
+    {
+      "agentId": "main",
+      "match": {
+        "kind": "main"
+      },
+      "character": "timmy",
+      "variant": null,
+      "accessories": [
+        "headphones"
+      ],
+      "name": null,
+      "role": null,
+      "station": "st-timmy"
+    },
+    {
+      "agentId": "*subagent",
+      "match": {
+        "kind": "subagent"
+      },
+      "character": "subagent",
+      "variant": "teal",
+      "name": null,
+      "role": null,
+      "station": "auto"
+    },
+    {
+      "agentId": "*cron",
+      "match": {
+        "kind": "cron"
+      },
+      "character": "subagent",
+      "variant": "ochre",
+      "name": null,
+      "role": null,
+      "station": "auto"
+    },
+    {
+      "agentId": "*dm",
+      "match": {
+        "kind": "dm"
+      },
+      "character": "subagent",
+      "variant": "sage",
+      "name": null,
+      "role": null,
+      "station": "auto"
+    },
+    {
+      "agentId": "*channel",
+      "match": {
+        "kind": "channel"
+      },
+      "character": "subagent",
+      "variant": "sage",
+      "name": null,
+      "role": null,
+      "station": "auto"
+    }
+  ]
+}

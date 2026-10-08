@@ -1,0 +1,30 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.agents.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "defaultId": "main",
+      "agents": [
+        {
+          "id": "main",
+          "name": "Timmy",
+          "workspace": "/srv/fake/workspace-main",
+          "model": {
+            "primary": "provider-a/model-a"
+          }
+        },
+        {
+          "id": "scout",
+          "name": "Scout",
+          "workspace": "/srv/fake/workspace-scout",
+          "model": "provider-b/model-b"
+        }
+      ]
+    }
+  }
+}

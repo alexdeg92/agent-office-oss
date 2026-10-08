@@ -1,0 +1,255 @@
+{
+  "error": {
+    "code": "conflict",
+    "message": "Le projet a changé entre-temps.",
+    "requestId": "req_8f2c1a",
+    "current": {
+      "revision": 8,
+      "vm": {
+        "id": "prj_k3v9q2m8x1c4d7fz",
+        "revision": 8,
+        "name": "Agent Office",
+        "status": "in-progress",
+        "priority": "P1",
+        "archived": false,
+        "summary": "Refonte du tableau de bord de Timmy : moteur typé, API v2 et nouveau bureau illustré.",
+        "summaryMeta": {
+          "author": {
+            "id": "per_0a1b2c3d4e5f6g7h",
+            "kind": "agent",
+            "name": "Timmy",
+            "avatarUrl": null,
+            "state": "working"
+          },
+          "at": 1791222000000
+        },
+        "thumb": {
+          "kind": "screenshot",
+          "url": "https://shots.example/alexdeg92/agent-office-oss.png",
+          "repoLabel": "alexdeg92/agent-office-oss",
+          "initials": "AO",
+          "accent": "indigo"
+        },
+        "flags": [
+          {
+            "kind": "priority",
+            "key": "P1",
+            "label": "P1"
+          },
+          {
+            "kind": "risk",
+            "key": "ci-red",
+            "label": "CI rouge",
+            "severity": "medium",
+            "acked": false,
+            "removable": false
+          },
+          {
+            "kind": "feature",
+            "key": "office-v2",
+            "label": "office-v2",
+            "state": "on"
+          },
+          {
+            "kind": "label",
+            "key": "interne",
+            "label": "interne",
+            "removable": true
+          }
+        ],
+        "sources": [
+          {
+            "id": "src_7hq2x9k4m1p3v8zd",
+            "kind": "github",
+            "label": "alexdeg92/agent-office-oss",
+            "ref": {
+              "owner": "alexdeg92",
+              "repo": "agent-office-oss"
+            },
+            "addedAt": 1790000000000,
+            "sessionCount": null
+          },
+          {
+            "id": "src_2m8v4k9q1x7c3p5z",
+            "kind": "workspace",
+            "label": "dev/project/agent-office-redesign",
+            "ref": {
+              "path": "dev/project/agent-office-redesign"
+            },
+            "addedAt": 1790000500000,
+            "sessionCount": 14
+          },
+          {
+            "id": "src_9z1x3c5v7b2n4m6q",
+            "kind": "sessionGroup",
+            "label": "Agent Office",
+            "ref": {
+              "by": "group",
+              "groupId": "Agent Office",
+              "name": "Agent Office"
+            },
+            "addedAt": 1790001000000,
+            "sessionCount": 3
+          },
+          {
+            "id": "src_4k6m8p1q3s5u7w9y",
+            "kind": "manual",
+            "label": "manuel",
+            "ref": null,
+            "addedAt": 1790000000000,
+            "sessionCount": null
+          }
+        ],
+        "repo": {
+          "state": "ok",
+          "url": "https://github.com/alexdeg92/agent-office-oss",
+          "owner": "alexdeg92",
+          "name": "agent-office-oss",
+          "image": {
+            "kind": "screenshot",
+            "url": "https://shots.example/alexdeg92/agent-office-oss.png",
+            "initials": "AO",
+            "accent": "indigo"
+          },
+          "defaultBranch": "main",
+          "branch": "main",
+          "ci": {
+            "state": "failing",
+            "at": 1791221000000,
+            "url": "https://github.com/alexdeg92/agent-office-oss/actions/runs/1"
+          },
+          "commits": [
+            {
+              "sha": "3782a7b",
+              "at": 1791220000000,
+              "author": "Owner",
+              "message": "Service unit: new install path"
+            }
+          ],
+          "fetchedAt": 1791222500000,
+          "lastError": null
+        },
+        "people": [
+          {
+            "id": "per_alex00000000000",
+            "kind": "human",
+            "name": "Owner",
+            "avatarUrl": null,
+            "state": null,
+            "role": "responsable",
+            "origin": "manual",
+            "commitCount": 12
+          },
+          {
+            "id": "per_0a1b2c3d4e5f6g7h",
+            "kind": "agent",
+            "name": "Timmy",
+            "avatarUrl": null,
+            "state": "working",
+            "role": null,
+            "origin": "derived",
+            "commitCount": null
+          },
+          {
+            "id": "per_9g8f7e6d5c4b3a21",
+            "kind": "git",
+            "name": "inconnu",
+            "avatarUrl": null,
+            "state": null,
+            "role": null,
+            "origin": "derived",
+            "commitCount": 2
+          }
+        ],
+        "recentHistory": [
+          {
+            "id": "evt_s1t2a3t4u5s6x7y8",
+            "at": 1791223000000,
+            "kind": "status",
+            "group": 1,
+            "actor": {
+              "id": "per_alex00000000000",
+              "kind": "human",
+              "name": "Owner",
+              "avatarUrl": null,
+              "state": null
+            },
+            "text": {
+              "key": "historyKind.status",
+              "params": {
+                "from": {
+                  "key": "projectStatus.todo"
+                },
+                "to": {
+                  "key": "projectStatus.in-progress"
+                }
+              }
+            }
+          },
+          {
+            "id": "evt_c0m1m2i3t4s5a6b7",
+            "at": 1791220000000,
+            "kind": "commit",
+            "group": 3,
+            "actor": {
+              "id": "per_alex00000000000",
+              "kind": "human",
+              "name": "Owner",
+              "avatarUrl": null,
+              "state": null
+            },
+            "text": {
+              "key": "historyKind.commit.other",
+              "params": {
+                "n": 3,
+                "branch": "main"
+              }
+            }
+          },
+          {
+            "id": "evt_r1i2s3k4r5a6i7s8",
+            "at": 1791219000000,
+            "kind": "risk-raised",
+            "group": 1,
+            "actor": {
+              "kind": "system",
+              "name": "Système"
+            },
+            "text": {
+              "key": "historyKind.risk-raised",
+              "params": {
+                "risk": {
+                  "key": "risk.ci-red"
+                }
+              }
+            }
+          },
+          {
+            "id": "evt_f1l2o3w4r5u6n7a8",
+            "at": 1791218000000,
+            "kind": "flow-run",
+            "group": 1,
+            "actor": {
+              "id": "per_0a1b2c3d4e5f6g7h",
+              "kind": "agent",
+              "name": "Timmy",
+              "avatarUrl": null,
+              "state": "working"
+            },
+            "text": {
+              "key": "historyKind.flow-run.succeeded",
+              "params": {
+                "job": "Veille hebdomadaire",
+                "n": 1,
+                "duration": "PT2M8S"
+              }
+            }
+          }
+        ],
+        "historyNextCursor": "eyJhdCI6MTc5MTIxODAwMDAwMCwiaWQiOiJldnRfZjEifQ",
+        "lastActivityAt": 1791223000000,
+        "createdAt": 1790000000000
+      }
+    }
+  }
+}

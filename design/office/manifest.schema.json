@@ -1,0 +1,1468 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://office.example.com/schemas/office-manifest.json",
+  "title": "Agent Office — asset manifest",
+  "description": "Declares every image of the illustrated office (rooms, furniture, characters, accessories, themes) with its grid geometry and anchors. Paths are relative to design/ (later: to the app's asset root).",
+  "type": "object",
+  "required": [
+    "version",
+    "projection",
+    "rooms",
+    "furniture",
+    "characters",
+    "accessories",
+    "themes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [
+        1,
+        2
+      ],
+      "description": "2 = accessory contract v2 (back/front layers, landmarks), gear-free variants with defaultAccessories, seated (Batch 6) poses and station.seated. Renderers still read v1 fields (single-layer images) as a fallback."
+    },
+    "projection": {
+      "type": "object",
+      "required": [
+        "kind",
+        "tileWidth",
+        "tileHeight",
+        "artScale",
+        "wallHeight"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "dimetric-2:1"
+        },
+        "tileWidth": {
+          "type": "number",
+          "description": "CSS px of one tile at zoom 1 (96).",
+          "exclusiveMinimum": 0
+        },
+        "tileHeight": {
+          "type": "number",
+          "description": "CSS px (48). Must equal tileWidth / 2.",
+          "exclusiveMinimum": 0
+        },
+        "artScale": {
+          "type": "number",
+          "description": "Image pixels per CSS px (2).",
+          "minimum": 1
+        },
+        "wallHeight": {
+          "type": "number",
+          "description": "CSS px of the back walls (144)."
+        }
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "cols",
+          "rows",
+          "anchor",
+          "images",
+          "size"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "$ref": "#/$defs/labelFr"
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 24
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 24
+          },
+          "anchor": {
+            "$ref": "#/$defs/point",
+            "description": "Pixel of the floor's back corner (grid 0,0) in the shell image."
+          },
+          "images": {
+            "type": "object",
+            "description": "Shell image per theme id.",
+            "minProperties": 1,
+            "additionalProperties": {
+              "$ref": "#/$defs/path"
+            }
+          },
+          "entrance": {
+            "type": "object",
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "description": "Floor tile where occupants enter and leave (front cutaway edge)."
+          },
+          "size": {
+            "$ref": "#/$defs/size",
+            "description": "Image canvas in image px (from design/assets/anchors.json); lets the renderer lay out before the image loads."
+          }
+        }
+      }
+    },
+    "furniture": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "category",
+          "placement",
+          "image",
+          "anchor",
+          "size"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "$ref": "#/$defs/labelFr"
+          },
+          "category": {
+            "enum": [
+              "poste",
+              "assise",
+              "rangement",
+              "deco",
+              "plante",
+              "equipement",
+              "mur",
+              "sol"
+            ],
+            "description": "Editor palette grouping (French keys shown as labels)."
+          },
+          "placement": {
+            "enum": [
+              "floor",
+              "decal",
+              "wall"
+            ]
+          },
+          "footprint": {
+            "$ref": "#/$defs/footprint",
+            "description": "Required for floor and decal items."
+          },
+          "walkable": {
+            "type": "boolean",
+            "default": false
+          },
+          "orientations": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "sw",
+                "se"
+              ]
+            },
+            "default": [
+              "sw"
+            ],
+            "description": "Painted facings available. Rotating swaps footprint w/d and uses the other image (never a mirror)."
+          },
+          "image": {
+            "$ref": "#/$defs/path",
+            "description": "Default image (orientation sw, default theme)."
+          },
+          "images": {
+            "type": "object",
+            "description": "Extra images keyed \"<orientation>\" or \"<orientation>@<suffix>\" (e.g. \"se\", \"sw@night\", \"sw@on\"); see themes[].furnitureVariants for lookup order.",
+            "additionalProperties": {
+              "$ref": "#/$defs/path"
+            }
+          },
+          "anchor": {
+            "$ref": "#/$defs/point",
+            "description": "Pixel of the footprint's back corner (floor/decal) or the bottom-left wall point (wall)."
+          },
+          "layerBias": {
+            "type": "number",
+            "default": 0,
+            "description": "Added to depth; use sparingly (e.g. +0.1 for a lamp that must sit over a sofa arm)."
+          },
+          "station": {
+            "type": "object",
+            "description": "Present when the item is a place an agent can occupy (desk, sofa, shelf, server rack, coffee machine, meeting table).",
+            "required": [
+              "kind",
+              "seat",
+              "facing"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "desk",
+                  "lounge",
+                  "reading",
+                  "server",
+                  "coffee",
+                  "meeting"
+                ]
+              },
+              "seat": {
+                "$ref": "#/$defs/gridPoint",
+                "description": "Fractional grid point (relative to the item origin) where the character's feet anchor goes."
+              },
+              "facing": {
+                "enum": [
+                  "sw",
+                  "se"
+                ],
+                "description": "Facing of the standing (v1) occupant. Seated facing lives in station.seated.facing."
+              },
+              "stack": {
+                "type": "array",
+                "description": "Draw order of the composite, back to front. Tokens are part names, the item id (the item image itself) and \"character\" (the seated occupant).",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "parts": {
+                "type": "object",
+                "description": "Composite parts drawn with the item, keyed by the names used in stack. A string is an image on the item canvas and anchor; an object can carry its own anchor, a grid offset (at, relative to the item origin) and variants (e.g. monitor on).",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/path"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "image"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "image": {
+                          "$ref": "#/$defs/path"
+                        },
+                        "anchor": {
+                          "$ref": "#/$defs/point"
+                        },
+                        "at": {
+                          "$ref": "#/$defs/gridPoint"
+                        },
+                        "variants": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "$ref": "#/$defs/path"
+                          }
+                        },
+                        "size": {
+                          "$ref": "#/$defs/size",
+                          "description": "Image canvas in image px (from design/assets/anchors.json); lets the renderer lay out before the image loads."
+                        },
+                        "mirror": {
+                          "type": "boolean",
+                          "description": "Placeholder only: mirror the image (a stand-in until the dedicated art exists)."
+                        },
+                        "seatAnchor": {
+                          "$ref": "#/$defs/point",
+                          "description": "Seat contact on this part (image px), e.g. chair@ne."
+                        },
+                        "offsetByCharacter": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "$ref": "#/$defs/point"
+                          },
+                          "description": "Image-px offset of this part per occupant character id (keyboard within the smaller agents’ reach)."
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "screen": {
+                "$ref": "#/$defs/point",
+                "description": "Pixel of the monitor screen centre in the item image (image px), for the state glow."
+              },
+              "blocks": {
+                "type": "array",
+                "description": "Extra non-walkable tiles relative to the item origin (e.g. the chair tile in front of a desk). Not part of the footprint for overlap checks.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "seated": {
+                "type": "object",
+                "required": [
+                  "seat",
+                  "facing"
+                ],
+                "additionalProperties": false,
+                "description": "Batch 6 seated composition, used when the occupant look has the seated poses (desk: seated-ne + seated-turn-sw; lounge: sofa-sit-sw). Otherwise the standing seat/stack/parts above apply. NE is a pose family selected inside the station, not a station orientation.",
+                "properties": {
+                  "seat": {
+                    "$ref": "#/$defs/gridPoint",
+                    "description": "Grid point (relative to the item origin) where the seated pose anchor lands."
+                  },
+                  "facing": {
+                    "enum": [
+                      "ne",
+                      "sw"
+                    ]
+                  },
+                  "stack": {
+                    "type": "array",
+                    "description": "Draw order of the composite, back to front. Tokens are part names, the item id (the item image itself) and \"character\" (the seated occupant).",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "parts": {
+                    "type": "object",
+                    "description": "Composite parts drawn with the item, keyed by the names used in stack. A string is an image on the item canvas and anchor; an object can carry its own anchor, a grid offset (at, relative to the item origin) and variants (e.g. monitor on).",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/path"
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "image"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "image": {
+                              "$ref": "#/$defs/path"
+                            },
+                            "anchor": {
+                              "$ref": "#/$defs/point"
+                            },
+                            "at": {
+                              "$ref": "#/$defs/gridPoint"
+                            },
+                            "variants": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "$ref": "#/$defs/path"
+                              }
+                            },
+                            "size": {
+                              "$ref": "#/$defs/size",
+                              "description": "Image canvas in image px (from design/assets/anchors.json); lets the renderer lay out before the image loads."
+                            },
+                            "mirror": {
+                              "type": "boolean",
+                              "description": "Placeholder only: mirror the image (a stand-in until the dedicated art exists)."
+                            },
+                            "seatAnchor": {
+                              "$ref": "#/$defs/point",
+                              "description": "Seat contact on this part (image px), e.g. chair@ne."
+                            },
+                            "offsetByCharacter": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "$ref": "#/$defs/point"
+                              },
+                              "description": "Image-px offset of this part per occupant character id (keyboard within the smaller agents’ reach)."
+                            },
+                            "clip": {
+                              "type": "array",
+                              "minItems": 3,
+                              "items": {
+                                "type": "array",
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "items": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                }
+                              },
+                              "description": "Visible polygon in canvas percentages, for the front armrest layer."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "seatFrom": {
+                    "enum": [
+                      "chair"
+                    ],
+                    "description": "Place seated poses on the seatAnchor of parts.chair."
+                  },
+                  "seatPoint": {
+                    "$ref": "#/$defs/point",
+                    "description": "Seat contact on the item image itself (image px), e.g. the sofa’s first seat."
+                  },
+                  "scaleByCharacter": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1
+                    },
+                    "description": "Pose scale about the hip contact; body and accessory layers scale together."
+                  },
+                  "turned": {
+                    "type": "object",
+                    "required": [
+                      "seatFrom",
+                      "stack"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "seatFrom": {
+                        "type": "string"
+                      },
+                      "stack": {
+                        "type": "array",
+                        "description": "Draw order of the composite, back to front. Tokens are part names, the item id (the item image itself) and \"character\" (the seated occupant).",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "scaleByCharacter": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1
+                        },
+                        "description": "Pose scale about the hip contact; body and accessory layers scale together."
+                      }
+                    },
+                    "description": "Chair contact and layers when a desk occupant turns toward the viewer."
+                  }
+                }
+              },
+              "seats": {
+                "type": "array",
+                "maxItems": 4,
+                "description": "Standing spots for an interaction (meeting delegation scene), relative to the item origin. Facing picks the pose family (se/sw).",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "x",
+                    "y",
+                    "facing"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "facing": {
+                      "enum": [
+                        "sw",
+                        "se"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "wall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "length": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "elevation": {
+                "type": "number",
+                "description": "CSS px above the floor."
+              },
+              "side": {
+                "enum": [
+                  "left",
+                  "right"
+                ],
+                "description": "The wall plane the art is painted for."
+              }
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Not delivered yet (artist batch in progress). Documentation only: the renderer ignores this field and falls back as described in README §7."
+          },
+          "size": {
+            "$ref": "#/$defs/size",
+            "description": "Image canvas in image px (from design/assets/anchors.json); lets the renderer lay out before the image loads."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "placement": {
+                  "enum": [
+                    "floor",
+                    "decal"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "footprint"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "placement": {
+                  "const": "wall"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "wall"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "role",
+          "canvas",
+          "anchor",
+          "scale",
+          "poses"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "$ref": "#/$defs/labelFr"
+          },
+          "role": {
+            "enum": [
+              "main",
+              "subagent"
+            ],
+            "description": "main = the primary agent's base character; subagent = the sibling family."
+          },
+          "family": {
+            "type": "string",
+            "description": "Characters sharing a family share silhouette and accessory fit."
+          },
+          "canvas": {
+            "$ref": "#/$defs/size",
+            "description": "Pose image size in image px (192×288 at 2× for the main character)."
+          },
+          "anchor": {
+            "$ref": "#/$defs/point",
+            "description": "Feet centre in the pose canvas; identical for all poses and accessories."
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 1.5,
+            "description": "Render scale (sub-agents 0.85)."
+          },
+          "poses": {
+            "$ref": "#/$defs/poseSet"
+          },
+          "portrait": {
+            "$ref": "#/$defs/path",
+            "description": "Square crop for bu-avatar--agent."
+          },
+          "variants": {
+            "type": "array",
+            "description": "Colour variants. 'swatch' is shown in the editor; poses override the base images.",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "swatch"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "label": {
+                  "$ref": "#/$defs/labelFr"
+                },
+                "swatch": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "poses": {
+                  "$ref": "#/$defs/poseSet"
+                },
+                "portrait": {
+                  "$ref": "#/$defs/path"
+                },
+                "landmarks": {
+                  "$ref": "#/$defs/landmarkSet",
+                  "description": "Overrides the character landmarks for this variant."
+                },
+                "defaultAccessories": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "description": "Gear worn when a layout rule omits accessories. Precedence: rule.accessories if present (an explicit [] means none) → variant.defaultAccessories → []. Resolved once, server-side, into OfficeVM look.accessories; renderers never add defaults."
+                },
+                "gearFree": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "The variant sprites carry no accessories; defaultAccessories are drawn as layers. false = legacy geared sprites (defaults must then be empty)."
+                }
+              }
+            }
+          },
+          "tintMask": {
+            "$ref": "#/$defs/poseSet",
+            "description": "Optional greyscale masks for runtime recolouring (later)."
+          },
+          "scaleBaked": {
+            "type": "boolean",
+            "default": false,
+            "description": "True when scale is already painted into the pose pixels (sub-agents): render the canvas at scale 1."
+          },
+          "head": {
+            "type": "object",
+            "required": [
+              "y"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "y": {
+                "type": "number"
+              }
+            },
+            "description": "Image-px y of the top of the head in the idle pose; markers and nameplates sit above it."
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Not delivered yet (artist batch in progress). Documentation only: the renderer ignores this field and falls back as described in README §7."
+          },
+          "landmarks": {
+            "$ref": "#/$defs/landmarkSet"
+          }
+        }
+      }
+    },
+    "accessories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "slot",
+          "images"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "$ref": "#/$defs/labelFr"
+          },
+          "slot": {
+            "enum": [
+              "body",
+              "neck",
+              "face",
+              "head",
+              "badge"
+            ],
+            "description": "One accessory per slot; draw order body → neck → face → head → badge."
+          },
+          "images": {
+            "type": "object",
+            "description": "v1 single-layer overlays per character id → pose. Fallback only: used for a pose that has no v2 layers.",
+            "additionalProperties": {
+              "$ref": "#/$defs/overlaySet"
+            }
+          },
+          "tintable": {
+            "type": "boolean",
+            "default": false
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Not delivered yet (artist batch in progress). Documentation only: the renderer ignores this field and falls back as described in README §7."
+          },
+          "layers": {
+            "type": "object",
+            "description": "Accessory contract v2: per \"<character>\" or \"<character>/<variant>\" → pose → {back, front}. Render order: back layers → character → front layers, each in slot order. The variant key wins over the character key.",
+            "propertyNames": {
+              "pattern": "^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)?$"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/layerSet"
+            }
+          },
+          "legacy": {
+            "type": "boolean",
+            "default": false,
+            "description": "images are the deprecated v1 single-layer overlays (runtime:false in anchors.json): renderers may draw them only as a fallback where no v2 layers exist, and may hide them."
+          }
+        }
+      }
+    },
+    "themes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "$ref": "#/$defs/labelFr"
+          },
+          "kind": {
+            "enum": [
+              "day",
+              "night",
+              "season"
+            ]
+          },
+          "base": {
+            "$ref": "#/$defs/id",
+            "description": "Optional: a season normally layers on whatever day/night theme is resolved (layout.theme.season)."
+          },
+          "light": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "image": {
+                "$ref": "#/$defs/path"
+              },
+              "blend": {
+                "enum": [
+                  "normal",
+                  "multiply",
+                  "screen",
+                  "soft-light",
+                  "overlay"
+                ]
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "extras": {
+            "type": "array",
+            "description": "Season decor props drawn on top of the layout (never collide, never move furniture). Floor: {asset, x, y}; wall: {asset, wall, offset}.",
+            "items": {
+              "type": "object",
+              "required": [
+                "asset"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "asset": {
+                  "$ref": "#/$defs/id"
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "wall": {
+                  "enum": [
+                    "left",
+                    "right"
+                  ]
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "room": {
+            "type": "string",
+            "description": "Key in rooms[].images for this theme (defaults to the theme id, then the base theme)."
+          },
+          "furnitureVariants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Variant suffixes tried in order. The image key is built as \"<orientation>@<suffix>\" (e.g. \"sw@night\", \"sw@on\"), then \"<orientation>\", then furniture.image."
+          },
+          "monitors": {
+            "enum": [
+              "state",
+              "on"
+            ],
+            "default": "state",
+            "description": "state = monitors light up only for active agent states; on = every occupied monitor is on (night), except offline."
+          }
+        }
+      }
+    },
+    "pending": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Not delivered yet (artist batch in progress). Documentation only: the renderer ignores this field and falls back as described in README §7."
+    },
+    "accessoriesV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "covered",
+        "total"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "covered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "description": "Batch 5b coverage computed by build-manifest.mjs (look × delivered pose × accessory). complete = renderers hide the deprecated v1 overlays by default."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,47}$"
+    },
+    "labelFr": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "User-facing French label."
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^assets/(Office|Characters|Logos)/[A-Za-z0-9_./@-]+\\.(png|webp|svg)$"
+    },
+    "point": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "gridPoint": {
+      "$ref": "#/$defs/point"
+    },
+    "size": {
+      "type": "object",
+      "required": [
+        "w",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "footprint": {
+      "type": "object",
+      "required": [
+        "w",
+        "d"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "d": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        }
+      }
+    },
+    "poseSet": {
+      "type": "object",
+      "description": "Image per pose. The 8 SW poses are required; walking-se and the Batch 6 poses are optional. Back to the camera (NE): seated-ne (idle), working-ne (frame loop), reading-ne, thinking-ne, sleeping-ne, walking-ne, walking-nw. Facing the camera while seated: seated-turn-sw (+ wave/talking/celebrating/alert variants), seated-swivel (optional 3/4 in-between). Sofa: sofa-sit-sw, sofa-sleep-sw. Missing optional poses fall back (public/v2/office/assets.js POSE_FALLBACK).",
+      "required": [
+        "idle",
+        "working",
+        "thinking",
+        "talking",
+        "walking",
+        "celebrating",
+        "sleeping",
+        "alert"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "idle": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "working": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "thinking": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "talking": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "walking": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "walking-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "celebrating": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "sleeping": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "alert": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "working-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "reading-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "thinking-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "sleeping-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-swivel": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-turn-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-wave-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-talking-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-celebrating-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "seated-alert-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "sofa-sit-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "sofa-sleep-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "walking-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "walking-nw": {
+          "$ref": "#/$defs/poseEntry"
+        }
+      }
+    },
+    "overlaySet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idle": {
+          "$ref": "#/$defs/path"
+        },
+        "working": {
+          "$ref": "#/$defs/path"
+        },
+        "thinking": {
+          "$ref": "#/$defs/path"
+        },
+        "talking": {
+          "$ref": "#/$defs/path"
+        },
+        "walking": {
+          "$ref": "#/$defs/path"
+        },
+        "walking-se": {
+          "$ref": "#/$defs/path"
+        },
+        "celebrating": {
+          "$ref": "#/$defs/path"
+        },
+        "sleeping": {
+          "$ref": "#/$defs/path"
+        },
+        "alert": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "working-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "reading-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "thinking-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "sleeping-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-swivel": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-turn-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-wave-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-talking-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-celebrating-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "seated-alert-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "sofa-sit-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "sofa-sleep-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "walking-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "walking-nw": {
+          "$ref": "#/$defs/path"
+        }
+      }
+    },
+    "landmarks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Head landmarks of one pose image (accessory contract v2), image px on the pose canvas. Normalised from anchors.json by build-manifest.mjs (public/v2/office/landmarks.js).",
+      "properties": {
+        "headCentre": {
+          "$ref": "#/$defs/point"
+        },
+        "headBox": {
+          "type": "object",
+          "required": [
+            "x",
+            "y",
+            "w",
+            "h"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "w": {
+              "type": "number"
+            },
+            "h": {
+              "type": "number"
+            }
+          }
+        },
+        "tilt": {
+          "type": "number",
+          "description": "Degrees, clockwise."
+        },
+        "earLeft": {
+          "$ref": "#/$defs/point"
+        },
+        "earRight": {
+          "$ref": "#/$defs/point"
+        },
+        "eyeLine": {
+          "type": "object",
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/point"
+            },
+            "b": {
+              "$ref": "#/$defs/point"
+            }
+          }
+        },
+        "neck": {
+          "$ref": "#/$defs/point"
+        },
+        "chest": {
+          "$ref": "#/$defs/point"
+        }
+      }
+    },
+    "landmarkSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idle": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "working": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "thinking": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "talking": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "walking": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "walking-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "celebrating": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "sleeping": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "alert": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "working-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "reading-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "thinking-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "sleeping-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-swivel": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-turn-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-wave-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-talking-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-celebrating-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "seated-alert-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "sofa-sit-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "sofa-sleep-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "walking-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "walking-nw": {
+          "$ref": "#/$defs/landmarks"
+        }
+      }
+    },
+    "layerPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "back": {
+          "$ref": "#/$defs/path",
+          "description": "Drawn behind the character (far cup/band, back of a scarf, glasses arms)."
+        },
+        "front": {
+          "$ref": "#/$defs/path",
+          "description": "Drawn over the character."
+        },
+        "frames": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/path"
+              },
+              "front": {
+                "$ref": "#/$defs/path"
+              }
+            }
+          },
+          "description": "Per-frame layers for frame poses (working-ne): frame i swaps with body frame i. back/front above = frame 1."
+        }
+      }
+    },
+    "layerSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idle": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "working": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "thinking": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "talking": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "walking": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "walking-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "celebrating": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "sleeping": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "alert": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "working-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "reading-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "thinking-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "sleeping-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-swivel": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-turn-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-wave-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-talking-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-celebrating-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "seated-alert-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "sofa-sit-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "sofa-sleep-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "walking-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "walking-nw": {
+          "$ref": "#/$defs/layerPair"
+        }
+      }
+    },
+    "poseEntry": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "A pose with its own geometry or a frame loop. Exactly one of image/frames.",
+          "properties": {
+            "image": {
+              "$ref": "#/$defs/path"
+            },
+            "frames": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 9,
+              "items": {
+                "$ref": "#/$defs/path"
+              },
+              "description": "Loop frames (e.g. working-ne typing, files <pose>.1.png …)."
+            },
+            "frameMs": {
+              "type": "integer",
+              "minimum": 80,
+              "maximum": 2000,
+              "default": 350
+            },
+            "anchor": {
+              "$ref": "#/$defs/point",
+              "description": "Seat anchor: overrides the character anchor for this pose (image px)."
+            },
+            "canvas": {
+              "$ref": "#/$defs/size"
+            },
+            "seatAnchor": {
+              "$ref": "#/$defs/point",
+              "description": "Seated hip contact (image px). When the station has a seat point, the pose is placed so this pixel lands on it (stationRegistration seatFormula: characterTopLeft = seatTopLeft + seat.seatAnchor − pose.seatAnchor)."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "image"
+              ]
+            },
+            {
+              "required": [
+                "frames"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

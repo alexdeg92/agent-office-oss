@@ -1,0 +1,14 @@
+{
+  "$comment": "Shape sidecar for logs-page.json (api.md §3.6): GET /api/v2/views/logs (topic only for the first default-size page). 3.0: kind is primary|subagent|scheduled|conversation-direct|conversation-group|conversation|internal|unrecognized; runtimeKind names an internal session (dashboard|acp|explicit), else null; channel is a ChannelRef or null.",
+  "nullable": [
+    "$.items[].channel",
+    "$.items[].model",
+    "$.items[].modelProvider",
+    "$.items[].runtimeKind",
+    "$.items[].updatedAt",
+    "$.nextCursor"
+  ],
+  "types": {
+    "$.items[].runtimeKind": "string"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.event.board.changed",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "ts": 1791223198000
+    }
+  }
+}

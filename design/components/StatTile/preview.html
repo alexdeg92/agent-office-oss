@@ -1,0 +1,36 @@
+<!-- @dsCard group="Données" height=500 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indicateurs (KPI) · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L21.5 20h-19z"/><path d="M12 10v4M12 17h.01"/></symbol></svg>
+<main class="pv">
+<section class="bu-card"><p class="bu-eyebrow">Bandeau KPI — Bureau</p><div class="bu-kpis">
+<div class="bu-kpi"><span class="bu-kpi__label">Agents en scène</span><span class="bu-kpi__value">4<span class="bu-kpi__sub">dont 3 sous-agents</span></span></div>
+<div class="bu-kpi"><span class="bu-kpi__label">En activité</span><span class="bu-kpi__value">2</span></div>
+<div class="bu-kpi"><span class="bu-kpi__label">Jetons aujourd'hui</span><span class="bu-kpi__value">184 302</span></div>
+<div class="bu-kpi"><span class="bu-kpi__label">Dernier événement</span><span class="bu-kpi__value">14:22<span class="bu-kpi__sub">il y a 2 min</span></span></div></div></section>
+<div class="bu-grid">
+<div class="bu-stat bu-stat--success"><span class="bu-stat__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-check"/></svg>Passerelle</span><span class="bu-stat__value">Connectée</span><span class="bu-stat__sub">protocole v4 · operator.read</span></div>
+<div class="bu-stat"><span class="bu-stat__label">Processeur</span><span class="bu-stat__value bu-num">23 %</span><div class="bu-meter" style="--value: 23%"><span></span></div><span class="bu-stat__sub">8 cœurs · charge 1,84</span></div>
+<div class="bu-stat bu-stat--warning"><span class="bu-stat__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg>Disque</span><span class="bu-stat__value bu-num">86 %</span><div class="bu-meter" style="--value: 86%"><span></span></div><span class="bu-stat__sub">412 Go sur 480 Go</span></div>
+<div class="bu-stat bu-stat--danger"><span class="bu-stat__label"><svg class="bu-icon" aria-hidden="true"><use href="#i-alert"/></svg>Tâches en échec</span><span class="bu-stat__value bu-num">2</span><span class="bu-stat__sub">dernières 24 h</span></div></div>
+<div class="pv-row"><div class="bu-stat bu-stat--compact"><span class="bu-stat__label">Politique DM</span><span class="bu-stat__value">pairing</span></div><div class="bu-stat bu-stat--compact"><span class="bu-stat__label">Canaux activés</span><span class="bu-stat__value bu-num">3 / 5</span></div></div>
+</main>
+</body>
+</html>

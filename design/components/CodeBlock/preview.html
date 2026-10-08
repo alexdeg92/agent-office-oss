@@ -1,0 +1,33 @@
+<!-- @dsCard group="Données" height=511 -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code et texte mis en forme · Bureau</title>
+<link rel="stylesheet" href="../../css/bureau.css">
+<link rel="stylesheet" href="../bundle.css">
+<style>
+body { padding: var(--bu-space-6); }
+.pv { display: flex; flex-direction: column; gap: var(--bu-space-6); }
+.pv-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bu-space-3); }
+.pv-col { display: flex; flex-direction: column; gap: var(--bu-space-3); }
+.pv-themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: var(--bu-space-3); }
+.pv-theme { display: flex; flex-direction: column; gap: var(--bu-space-3); padding: var(--bu-space-4); border-radius: var(--bu-radius-card); background: var(--bu-bg); color: var(--bu-text-primary); border: 1px solid var(--bu-border-subtle); }
+.pv-frame { border: 1px solid var(--bu-border-subtle); border-radius: var(--bu-radius-panel); overflow: hidden; background: var(--bu-bg); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></symbol></svg>
+<main class="pv">
+<div class="bu-code bu-code--scroll"><div class="bu-code__header">Instruction exécutée à chaque déclenchement<button class="bu-btn bu-btn--ghost bu-btn--sm"><svg class="bu-icon" aria-hidden="true"><use href="#i-copy"/></svg>Copier</button></div><pre>1. Lire les messages des canaux suivis depuis 24 h.
+2. Extraire les décisions, les questions et les échéances.
+3. Publier le résumé dans #résumé, en français.</pre></div>
+<div class="bu-code"><div class="bu-code__header">Entrée</div><pre>{
+  <span class="tok-key">"query"</span>: <span class="tok-str">"tarifs fournisseurs 2026"</span>,
+  <span class="tok-key">"count"</span>: <span class="tok-num">5</span>
+}</pre></div>
+<div class="bu-card"><div class="bu-prose"><h3>Résumé du jour</h3><p>Timmy a traité <strong>14 demandes</strong> et lancé deux sous-agents. La commande <code>openclaw skills list --agent main</code> renvoie 52 compétences.</p><ul><li>Fournisseurs : trois devis reçus.</li><li>Prochaine tâche planifiée : lundi 09:00.</li></ul><p>Voir les <a href="#">journaux</a>.</p></div></div>
+</main>
+</body>
+</html>

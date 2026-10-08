@@ -1,0 +1,4 @@
+{
+  "$comment": "Shape sidecar for import-result.json (api.md §5.4): CommandResult.revision and vm are always null for an import.",
+  "types": { "$.revision": "number", "$.vm": "any" }
+}

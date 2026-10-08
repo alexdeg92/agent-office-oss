@@ -1,0 +1,73 @@
+{
+  "$fixture": {
+    "source": "gateway",
+    "channel": "gw.rpc.cron.list",
+    "origin": "synthetic",
+    "openclawVersion": "2026.9.8"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "jobs": [
+        {
+          "id": "ffffffff-0c01-4000-8000-000000000001",
+          "name": "Veille hebdomadaire",
+          "description": "Résumé des nouveautés de la semaine.",
+          "enabled": true,
+          "schedule": {
+            "kind": "cron",
+            "expr": "0 9 * * 1",
+            "tz": "America/Toronto"
+          },
+          "agentId": "main",
+          "sessionTarget": "isolated",
+          "wakeMode": "now",
+          "payload": {
+            "kind": "message",
+            "message": "1. Cherche les nouveautés\n2. Résume en français\n3. Publie le résumé"
+          },
+          "createdAtMs": 1788631200000,
+          "updatedAtMs": 1791050400000
+        },
+        {
+          "id": "ffffffff-0c02-4000-8000-000000000002",
+          "name": "Rapport du matin",
+          "enabled": false,
+          "schedule": {
+            "kind": "cron",
+            "expr": "30 7 * * *",
+            "tz": "America/Toronto"
+          },
+          "agentId": "main",
+          "sessionTarget": "isolated",
+          "wakeMode": "now",
+          "payload": {
+            "kind": "message",
+            "message": "VEILLE: lire les flux\nRAPPORT: envoyer un message"
+          },
+          "createdAtMs": 1789495200000,
+          "updatedAtMs": 1789495200000
+        },
+        {
+          "id": "ffffffff-0c03-4000-8000-000000000003",
+          "name": "Vérification rapide",
+          "description": "",
+          "enabled": true,
+          "schedule": {
+            "kind": "cron",
+            "expr": "*/15 * * * *"
+          },
+          "agentId": "main",
+          "sessionTarget": "main",
+          "wakeMode": "next-heartbeat",
+          "payload": {
+            "kind": "message",
+            "message": "Vérifie la file."
+          },
+          "createdAtMs": 1790791200000,
+          "updatedAtMs": 1790791200000
+        }
+      ]
+    }
+  }
+}
