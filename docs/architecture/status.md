@@ -1,6 +1,6 @@
-# Agent Office: current state (2026-10-06)
+# Agent Office: current state (2026-10-09)
 
-One page: what's done, what sits behind a flag, what's deprecated, and the known gaps. Details live in the linked documents (index: `README.md`). The suite has 1292 tests (1290 green on 2026-10-06; the two reds are owned elsewhere, see architect-47).
+One page: what's done, what sits behind a flag, what's deprecated, and the known gaps. Details live in the linked documents (index: `README.md`). This update records the onboarding-1 fix round. Its targeted tests are reported below; the full suite was not run in this round. Entries outside that scope retain their prior review status.
 
 ## Done
 | Area | State | Where |
@@ -8,10 +8,10 @@ One page: what's done, what sits behind a flag, what's deprecated, and the known
 | **Engine** | Canonical model (sessions, agents, flows, skills, channels, transcripts, config), quarantine (value-free, closed codes), LiveEvents, one primary-agent resolver, typed on-demand reads | `engine.md`, `data-model.md` |
 | **Runtime adapters** | `openclaw` (production) and `demo` (a synthesised read-only team, no network). Selected by the instance config `runtime.adapter` or `AO_RUNTIME` | ADR-001 §3, §13 |
 | **Channels and enrichers** | Pluggable channel grammars (static) and enrichers (selected; Discord first); interlocutors of any channel; `unresolvable` without an enricher | ADR-001 §14 |
-| **API** | `/api/v2` = contract **2.5** (the current UI); `/api/v3` = contract **3.0** (open vocabularies, no personal values), served side by side from one router, one engine, one stream hub per version | `api.md`, `api-v3.md`, `migration-v3.md` |
+| **API** | `/api/v2` = contract **2.7** (the current UI); `/api/v3` = contract **3.2** (open vocabularies, no personal values), served side by side from one router, one engine, one stream hub per version | `api.md`, `api-v3.md`, `migration-v3.md` |
 | **Security** | One-owner login (scrypt hash, shared login/setup throttle, CSRF guard, `Secure` cookies in production), the agent's scoped token, audit of every write, private file permissions checked at boot | `api.md` §5, `go-live.md` |
-| **Instance config and setup** | Config + secrets files (0600, atomic, OS-locked publication, env wins), first-run setup with a one-time code and an in-process handoff, locale (fr/en) and time zone | `api.md` §5.7, ADR-001 §5 |
-| **Store** | SQLite, migrations 001–009 (latest: canonical seen inventory with one id limit in code points), daily backup, retention | `storage.md` |
+| **Instance config and setup** | Strict legacy config v1 / DB-auth config v2; 30-minute setup code, private owner resumption/amendment/recovery; adapter-owned discovery/naming, catalog characters, reviewed installation/rollback and network guidance; in-process handoff | `api.md` §5.7, ADR-001 §5 |
+| **Store** | SQLite, migrations 001–015 (DB owner-only role, setup status/digest, separate peer inventory role); private backups retain owner hashes, secrets-file opt-in; retention | `storage.md` |
 | **Operations** | `/healthz`, `/readyz`, `/healthz/proxy`; `agent-office backup / restore` (online, verified, secrets opt-in; restore is all-or-nothing, payloads schema-validated, refused while any server, setup included, owns the data dir); `agent-office doctor` (read-only install checks, FR/EN, `--json`, never prints a value); configurable retention | `operations.md`, `../guide/troubleshooting.md` |
 | **Soak (G10)** | Real OpenClaw-shaped traffic (the local captures) replayed into the real server (`AO_API_ONLY=1`), compressed (`AO_TIME_SCALE`): zero quarantine growth and a flat live heap over 10 simulated minutes after the stream buffers fill. Local-only (needs the captures) | `test/e2e/replay.test.js` |
 | **Portability** | Foreign-instance end-to-end test, personal-literals lint (per-occurrence allowances with a mutation self-test), v3 examples written for a foreign instance | ADR-001 §12.8 |
@@ -35,7 +35,7 @@ One page: what's done, what sits behind a flag, what's deprecated, and the known
 | What | Replaced by | Removal |
 | --- | --- | --- |
 | Old UI files in `public/` (`index.html`, `app.js`, `office.js`…) | the `/v2` UI | no longer served (redirect to `/v2/`) since S16; frontend deletes them |
-| `/api/v2` (contract 2.5, `project2x`, the 2.x examples) | `/api/v3` | after the UI and the office have switched (`migration-v3.md`) |
+| `/api/v2` (contract 2.7, `project2x`, the 2.x examples) | `/api/v3` | after the UI and the office have switched (`migration-v3.md`) |
 | `PORTAL_PASSWORD` (plaintext) | `PORTAL_PASSWORD_HASH` / setup's hash | a later release (it warns at boot) |
 | 2.x aliases: `with-timmy`, occupant `main`, `discord-user` / `discord-channel` kinds, `resolution: pending` for "no enricher" | the 3.0 names | with `/api/v2` |
 | `persons.discord_user_id` column | `person_identities` | the 3.0 store cleanup |
@@ -46,7 +46,6 @@ One page: what's done, what sits behind a flag, what's deprecated, and the known
   - the Discord-shaped runtime config;
   - `cron` + `tz` flow inputs;
   - explicit-key chat;
-  - the setup adapter list in `setup.js`;
   - file-based skill docs.
 
   The Hermes adapter itself needs a capture of a real Hermes API first (§13.3).
@@ -55,7 +54,6 @@ One page: what's done, what sits behind a flag, what's deprecated, and the known
 - **G4 leftovers:**
   - `scripts/config-from-env.js` (optional for env-configured installs);
   - `agent-office setup` in the terminal;
-  - applying setup's `agents.looks` to the office layout (with office-dev).
 - **UI migration to `/api/v3`:** frontend's version switch (`apiVersion` config) and office-dev's mock (`presence`) are in progress.
 - **Open review items owned elsewhere:**
   - R22-10 (the mock setup throttle never releases; frontend);
@@ -63,3 +61,12 @@ One page: what's done, what sits behind a flag, what's deprecated, and the known
   - review-23's deployment findings.
 - **Awaiting re-test:** R24-01 and R26-01 (lengths in code points; long ids now admitted and only left out of the seen inventory, with a `store.unindexed` warning).
 - **One adapter and one primary agent per instance** (3.0 scope; ADR-001 §2).
+
+
+## Onboarding-1 fix round — ready for security re-gate
+
+Critic-01 P0/P1/P2 and critic-05 (strict partial-login errors and locked missing-secrets recovery), S01-01 through S01-05, S02-01/S02-02 and S06-01 have implementation fixes and targeted regressions. One `src/ops/safe-fs.js` serves confined descriptor reads plus installer/uninstaller/backup mutations with exclusive unpredictable temporary files and pinned parents. Owner drafts can be corrected/recovered with a fresh local code; modern config is explicitly v2; peers use `agent:<id>`, delegates retain `subagent:<subject>`. API revisions are 2.7/3.2, with executable setup fixtures and schema.
+
+**Validation:** 576 passing tests in 64 individually invoked files, zero failures; one optional local-capture S4 test skipped because its fixtures are absent. Browser evidence recaptured all 44 chapter/theme/width screenshots plus four missing-secrets locked states using only injected network fixtures, including code-gated owner amendment and FR/EN recovery guidance. No full suite, real runtime home or host network probes were used. Source integrity, JSON/JS validators, shared schema generation, frontend build and diff checks pass. See [fix table](../../design/reports/onboarding-1.md) and [detailed evidence](../../design/reports/onboarding-1-fixes.md).
+
+**Gate:** ready for independent security recheck of the commit named in the PM handoff; not a security GO or merge approval. Config v2/schema 015 are forward migrations; rollback restores a matching private pre-upgrade backup. Concurrent file replacements can refuse integration rollback and retain private preimages; abrupt process termination is not a crash-atomic multi-workspace transaction.

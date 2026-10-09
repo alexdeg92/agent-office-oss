@@ -9,7 +9,7 @@ export function indexManifest(m) {
     proj: m.projection,
     rooms: by(m.rooms),
     furniture: by(m.furniture),
-    characters: by(m.characters),
+    characters: by([...(m.characters ?? []), ...(m.characterPacks?.packs ?? [])]),
     accessories: by(m.accessories),
     themes: by(m.themes),
   };
@@ -91,6 +91,9 @@ function poseEntry(character, pose, entry) {
     anchor: entry.anchor ?? character.anchor,
     canvas: entry.canvas ?? character.canvas,
     seatAnchor: entry.seatAnchor ?? null,
+    frameSeatAnchors: entry.frameSeatAnchors ?? null,
+    handAnchor: entry.handAnchor ?? null,
+    fxAnchor: entry.fxAnchor ?? null,
   };
 }
 

@@ -1,0 +1,42 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "bind": {
+        "host": "127.0.0.1",
+        "port": 45863
+      },
+      "addresses": [
+        "192.0.2.20"
+      ],
+      "publicIp": "203.0.113.42",
+      "tailnet": {
+        "online": true,
+        "dnsName": "office.tail.example.invalid."
+      },
+      "dns": {
+        "status": "matches",
+        "addresses": [
+          "203.0.113.42"
+        ]
+      },
+      "snippets": {
+        "caddy": "office.example.invalid {\n  reverse_proxy http://127.0.0.1:45863\n}",
+        "traefik": "http:\n  routers:\n    agent-office:\n      rule: \"Host(`office.example.invalid`)\"\n      entryPoints: [websecure]\n      service: agent-office\n      tls:\n        certResolver: letsencrypt\n  services:\n    agent-office:\n      loadBalancer:\n        servers:\n          - url: \"http://127.0.0.1:45863\"",
+        "nginx": "server {\n  listen 443 ssl;\n  server_name office.example.invalid;\n  ssl_certificate /path/to/fullchain.pem;\n  ssl_certificate_key /path/to/privkey.pem;\n  location / {\n    proxy_pass http://127.0.0.1:45863;\n    proxy_http_version 1.1;\n    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-Proto $scheme;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_buffering off;\n    proxy_read_timeout 1h;\n  }\n}",
+        "cloudflare": "cloudflared tunnel login\ncloudflared tunnel create agent-office\ncloudflared tunnel route dns agent-office office.example.invalid\n# Configure the named tunnel before running:\ncloudflared tunnel run agent-office",
+        "cloudflareConfig": "tunnel: <TUNNEL-UUID>\ncredentials-file: <CREDENTIALS-JSON-PATH>\ningress:\n  - hostname: office.example.invalid\n    service: http://127.0.0.1:45863\n  - service: http_status:404",
+        "dns": "dig +short A office.example.invalid\ndig +short CNAME office.example.invalid\ncurl --fail https://office.example.invalid/build.json"
+      },
+      "tailscaleCommand": "tailscale serve --bg http://127.0.0.1:45863",
+      "restartRequired": true
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

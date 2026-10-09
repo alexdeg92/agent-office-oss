@@ -11,6 +11,7 @@
  *   - Read-only: runtime writes (flows, skills, chat, restart) are not capabilities; the instance reports readonly.
  *   - Generic names and identifiers; texts in English or French (the instance locale).
  */
+const setupSchema = require('../../schema');
 const TICK_MS = 4000;
 
 function mulberry32(seed) {
@@ -246,4 +247,9 @@ function createRuntime(cfg) {
 // G11: `agent-office doctor`: a synthesised team has no runtime to check
 const doctor = async (ctx) => ctx.add('runtime', 'runtime.demo', 'info', 'runtime.demo');
 
-module.exports = { definition, createRuntime, createDemoTeam, AGENTS, TICK_MS, doctor };
+const setup = { connect: true,
+  env: ({ runtime }) => runtime.demo ? { AO_DEMO_SEED: String(runtime.demo.seed) } : {},
+  configSchema: setupSchema.object({ adapter: setupSchema.literal('demo'), demo: setupSchema.object({ seed: setupSchema.int().min(0).max(999999999) }, { extra: 'reject' }).optional() }, { extra: 'reject' }), name: 'Démo', fields: [], defaultGatewayUrl: null, config: () => ({ adapter: definition.id, demo: { seed: 1 } }),
+  agents: () => AGENTS.map((a) => ({ id: a.id, name: a.name, nameSource: 'demo', isPrimary: a.primary, model: a.model })) };
+setup.discover = async () => setup.agents();
+module.exports = { definition, createRuntime, createDemoTeam, AGENTS, TICK_MS, doctor, setup };

@@ -12,6 +12,36 @@ export const locale = () => (String(fmt.LOCALE).toLowerCase().startsWith('en') ?
 export const intlLocale = (loc = locale()) => (loc === 'en' ? 'en-CA' : 'fr-CA');
 
 const fr = {
+  "egg.hide": "Se cache derrière la plante",
+  "egg.gym": "Au gym",
+  "egg.smoke": "En pause dehors",
+  "egg.arrow.gym": "Voir l’agent au gym",
+  "egg.arrow.smoke": "Voir la pause dehors",
+  "egg.return": "Retour au bureau",
+  "egg.setting": "Animations surprises",
+  "egg.settingHint": "De rares petites pauses quand les agents sont inactifs.",
+  "egg.step.enter": "Entre dans la pièce",
+  "egg.step.curls": "Soulève les haltères",
+  "egg.step.bench": "Fait du développé couché",
+  "egg.step.wipe": "S’essuie le visage",
+  "egg.step.light": "Allume une cigarette",
+  "egg.step.smoke": "Fait une pause sous l’auvent",
+  "egg.step.drop": "Laisse tomber la cigarette",
+  "egg.step.crush": "Écrase la cigarette du pied",
+  "egg.step.shake": "Secoue les gouttes de pluie",
+  "egg.step.leave": "Retourne au bureau",
+
+  'life.coffee': 'Prend un café',
+  'life.water': 'Arrose la plante',
+  'life.window': 'Regarde dehors',
+  'life.book': 'Lit un livre',
+  'life.whiteboard': 'Écrit au tableau',
+  'life.chat': 'Discute',
+  'life.highfive': 'Tape dans la main',
+  'life.wave': 'Salue une visite',
+  'life.sleep': 'Fait une sieste',
+  'life.server': 'Vérifie le serveur',
+
   // ---- Bureau page (editorial frame)
   'office.section': 'Bureau',
   'office.stage': 'Le bureau de {agent}',
@@ -210,7 +240,7 @@ const fr = {
   // ---- names (fallbacks)
   'names.agent': 'L’agent',
   // canonical (3.0) roles; a 2.x role is looked up through canonicalRole
-  'role.primary': 'Agent principal', 'role.subagent': 'Sous-agent', 'role.scheduled': 'Tâche planifiée', 'role.direct': 'Interlocuteur', 'role.group': 'Salon', 'role.conversation': 'Conversation',
+  'role.primary': 'Agent principal', 'role.agent': 'Agent', 'role.subagent': 'Sous-agent', 'role.scheduled': 'Tâche planifiée', 'role.direct': 'Interlocuteur', 'role.group': 'Salon', 'role.conversation': 'Conversation',
   // ---- editor
   'ed.title': 'Personnaliser le bureau',
   'ed.mode': 'Mode', 'ed.mode.layout': 'Disposition', 'ed.mode.characters': 'Personnages', 'ed.mode.theme': 'Thème',
@@ -291,6 +321,36 @@ const fr = {
 };
 
 const en = {
+  "egg.hide": "Hiding behind the plant",
+  "egg.gym": "At the gym",
+  "egg.smoke": "On a break outside",
+  "egg.arrow.gym": "View the agent at the gym",
+  "egg.arrow.smoke": "View the outdoor break",
+  "egg.return": "Back to the office",
+  "egg.setting": "Surprise animations",
+  "egg.settingHint": "Occasional little breaks while agents are idle.",
+  "egg.step.enter": "Entering the room",
+  "egg.step.curls": "Lifting dumbbells",
+  "egg.step.bench": "Doing bench presses",
+  "egg.step.wipe": "Wiping their face",
+  "egg.step.light": "Lighting a cigarette",
+  "egg.step.smoke": "Taking a break under the awning",
+  "egg.step.drop": "Dropping the cigarette",
+  "egg.step.crush": "Crushing the cigarette underfoot",
+  "egg.step.shake": "Shaking off the rain",
+  "egg.step.leave": "Returning to the office",
+
+  'life.coffee': 'Coffee break',
+  'life.water': 'Watering the plant',
+  'life.window': 'Looking outside',
+  'life.book': 'Reading a book',
+  'life.whiteboard': 'Writing on the board',
+  'life.chat': 'Chatting',
+  'life.highfive': 'High five',
+  'life.wave': 'Greeting a visitor',
+  'life.sleep': 'Napping',
+  'life.server': 'Checking the server',
+
   'office.section': 'Office',
   'office.stage': '{agent}’s office',
   'office.agentFallback': 'The agent',
@@ -479,7 +539,7 @@ const en = {
   'scene.itemOf': '{item} · {name}',
   'scene.noLandmarks': 'no landmarks',
   'names.agent': 'The agent',
-  'role.primary': 'Main agent', 'role.subagent': 'Sub-agent', 'role.scheduled': 'Scheduled task', 'role.direct': 'Contact', 'role.group': 'Channel', 'role.conversation': 'Conversation',
+  'role.primary': 'Main agent', 'role.agent': 'Agent', 'role.subagent': 'Sub-agent', 'role.scheduled': 'Scheduled task', 'role.direct': 'Contact', 'role.group': 'Channel', 'role.conversation': 'Conversation',
   'ed.title': 'Customize the office',
   'ed.mode': 'Mode', 'ed.mode.layout': 'Layout', 'ed.mode.characters': 'Characters', 'ed.mode.theme': 'Theme',
   'ed.layoutNarrow': 'The layout is edited on a wider screen.',
@@ -626,6 +686,7 @@ export { ASSET_EN };
 /** A manifest entry's label in the active locale: labelOf(f, 'furniture') → « Poste de travail » / “Desk”. */
 export function labelOf(obj, kind, loc = locale()) {
   if (!obj) return '';
+  if (obj.names?.[loc]) return obj.names[loc];
   if (loc === 'en' && ASSET_EN[`${kind}.${obj.id}`]) return ASSET_EN[`${kind}.${obj.id}`];
   return obj.label ?? obj.id;
 }

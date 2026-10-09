@@ -1,0 +1,12 @@
+{
+  "nullable": [
+    "$.revision",
+    "$.vm",
+    "$.result.backupDir"
+  ],
+  "types": {
+    "$.revision": "number",
+    "$.vm": "any",
+    "$.result.backupDir": "string"
+  }
+}

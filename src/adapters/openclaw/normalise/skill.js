@@ -1,5 +1,6 @@
 'use strict';
 // skills list / info → Skill[] / SkillDetail (data-model.md §6).
+const { safeExternalUrl } = require('../../../../public/v2/url-policy.js');
 const SOURCE = { 'openclaw-bundled': 'bundled', 'openclaw-extra': 'extra', 'openclaw-workspace': 'workspace', 'openclaw-workshop': 'workshop', 'openclaw-custodian': 'custodian' };
 const reqs = (m) => (m ? { bins: m.bins || [], anyBins: m.anyBins || [], env: m.env || [], config: m.config || [], os: m.os || [] } : null);
 
@@ -16,7 +17,7 @@ function normaliseSkills(v, issue) {
     source: source(s.source, issue, '$.skills[].source'), rawSource: s.source || null, bundled: !!s.bundled,
     status: s.disabled ? 'disabled' : s.eligible !== false ? 'active' : 'unavailable',
     visibility: { model: !!s.modelVisible, command: !!s.commandVisible, user: !!s.userInvocable },
-    homepage: s.homepage || null, missing: reqs(s.missing),
+    homepage: safeExternalUrl(s.homepage), missing: reqs(s.missing),
   }));
 }
 
@@ -27,7 +28,7 @@ function normaliseSkillInfo(i, issue) {
     blockedBy: { allowlist: !!i.blockedByAllowlist, agentFilter: !!i.blockedByAgentFilter, platform: !!i.platformIncompatible },
     requirements: reqs(i.requirements), missing: reqs(i.missing),
     install: (i.install || []).map((x) => ({ id: x.id, kind: x.kind, label: x.label || x.kind, bins: x.bins || [] })),
-    homepage: i.homepage || null,
+    homepage: safeExternalUrl(i.homepage),
   };
 }
 

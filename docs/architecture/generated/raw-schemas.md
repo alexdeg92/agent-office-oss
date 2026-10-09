@@ -999,6 +999,11 @@ Tested with OpenClaw 2026.9.8. Undeclared fields: `count`.
 | `$.messages[].stopReason` | `string?` |  |
 | `$.messages[].senderName` | `string?` |  |
 | `$.messages[].senderLabel` | `string?` |  |
+| `$.messages[].senderId` | `string?` |  |
+| `$.messages[].displayName` | `string?` |  |
+| `$.messages[].username` | `string?` |  |
+| `$.messages[].channel` | `string?` |  |
+| `$.messages[].sender` | `unknown?` | opaque (see schema comment) |
 
 ## `gw.rpc.sessions.groups.list` v1
 

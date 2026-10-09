@@ -31,7 +31,7 @@ const PROTECTED = [
   ['POST', '/projects/x/comments/c/retry'], ['GET', '/views/projects/x/comments'], ['POST', '/projects/x/comments'], ['PATCH', '/projects/x/comments/c'], ['DELETE', '/projects/x/comments/c'],   // architect-57
 ];
 // public on purpose: the bootstrap (meta) and first-run setup (its own one-time code; locked once configured)
-const PUBLIC = new Set(['GET /meta', 'GET /setup', 'POST /setup/check', 'POST /setup/discover', 'PUT /setup']);
+const PUBLIC = new Set(['GET /meta', 'GET /setup', 'POST /setup/check', 'POST /setup/discover', 'PUT /setup', 'GET /setup/catalog', 'POST /setup/resume', 'POST /setup/owner', 'POST /setup/detect', 'POST /setup/integrations/plan', 'POST /setup/integrations/apply', 'POST /setup/network']);
 
 // the routes the code declares: `r.<method>('<path>', …)` in src/api/v2/*.js, with whether `authed` guards them
 function declared() {

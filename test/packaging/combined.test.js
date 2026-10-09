@@ -99,3 +99,39 @@ describe('combined proxy headers', () => {
     }
   });
 });
+
+
+it('a restarted one-port install uses the stored listener and DB owner without turning file login into env login', async () => {
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const { spawn } = require('child_process'), { once } = require('events');
+  const { openStore } = require('../../src/store');
+  const { hashPassword } = require('../../src/security/password');
+  const IC = require('../../src/instance-config');
+  const { waitFor } = require('../helpers/harness');
+  const root = path.resolve(__dirname, '../..'), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-combined-owner-'));
+  let child;
+  try {
+    const probe = http.createServer(); const port = await listen(probe); await new Promise(r => probe.close(r));
+    const dataDir = path.join(tmp, 'data'), store = openStore({ dir: dataDir, instance: 'test', ownerName: 'Operator' });
+    const password = 'synthetic-combined-password';
+    try { store.users.createOwner({ email: 'owner@example.invalid', passwordHash: await hashPassword(password), personId: store.owner.id }); }
+    finally { store.close(); }
+    const env = { HOME: tmp, AO_ENV: 'test', AO_CONFIG: path.join(tmp, 'config/config.json'), AO_DATA_DIR: dataDir,
+      AO_PROJECTS_DISCOVERY: '0', PATH: path.dirname(process.execPath) };
+    IC.writeInstanceConfig(IC.configPaths(env), { version: 2, instance: { name: 'Synthetic', locale: 'fr', timeZone: 'UTC' },
+      owner: { displayName: 'Operator', email: 'owner@example.invalid', authSource: 'database' }, runtime: { adapter: 'demo', demo: { seed: 1 } },
+      agents: { primary: null, looks: {} }, network: { mode: 'local', host: '127.0.0.1', port, publicUrl: null, cookieSecure: false } },
+      { version: 2, sessionSecret: 's'.repeat(48), runtimeToken: null });
+    child = spawn(process.execPath, [path.join(root, 'packaging/bin/combined.js')], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = ''; child.stdout.on('data', b => output += b); child.stderr.on('data', b => output += b);
+    await waitFor(() => /AO_READY/.test(output), { what: () => 'combined DB boot: ' + output });
+    const origin = 'http://127.0.0.1:' + port;
+    const login = await fetch(origin + '/backend/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-ao-request': '1', origin }, body: JSON.stringify({ email: 'owner@example.invalid', password }) });
+    assert.equal(login.status, 200, await login.text()); assert.ok(login.headers.get('set-cookie').startsWith('taco_sess='));
+    assert.equal((await fetch(origin + '/build.json')).status, 200);
+    assert.ok(!output.includes(password) && !output.includes('One-time setup code'));
+  } finally {
+    if (child && child.exitCode === null) { const exit = once(child, 'exit'); child.kill('SIGTERM'); await exit; }
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});

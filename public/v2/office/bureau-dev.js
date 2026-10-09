@@ -116,3 +116,12 @@ const until = (cond, ms = 30_000) => new Promise((resolve, reject) => {
   step();
 });
 window.officeBench = { om, services, publish, until, subscribed };
+
+// Explicit opt-in QA controls. Calls the real lifecycle, including work guards and A* walking.
+if (q.get('life') === '1') {
+  const { mountAnimationControls } = await import('./animation-tools.js' + buildQuery);
+  await until(() => document.querySelector('.ao-bureau__stage')?.aoScene);
+  const scene = document.querySelector('.ao-bureau__stage').aoScene;
+  mountAnimationControls(scene, document.getElementById('app'), { weather:q.get('weather')??undefined });
+  window.officeLife = { scene, interact: (...a)=>scene.interact(...a), react: (...a)=>scene.react(...a), surprise:(...a)=>scene.surprise(...a), theme:t=>scene.setTheme(t), weather:w=>{const c=[...scene.chars.values()].find(c=>c.egg?.controller?.room);if(c)c.egg.controller.room.root.dataset.weather=w;} };
+}

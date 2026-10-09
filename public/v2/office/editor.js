@@ -21,6 +21,7 @@ import { defaultAccessoriesFor, canonicalRuleId, canonicalRole, roleOfRule, pres
 const PRESENCE_CHOICES = [0, 15, 30, 60, 120, 240];
 const presenceText = (m) => words(m * 60_000);
 import { resolveTheme } from './theme.js';
+import { SurpriseSetting } from './surprise-setting.js';
 import { s as tr, labelOf, intlLocale } from './strings.js';
 
 const html = htm.bind(h);
@@ -713,6 +714,7 @@ function ThemePanel({ ctl }) {
   return html`
     <section aria-labelledby="ao-theme-title">
       <h3 class="ao-panel__title" id="ao-theme-title">${tr('ed.themeTitle')}</h3>
+      <${SurpriseSetting} />
       <div class="bu-segmented" role="group" aria-label=${tr('ed.themeGroup')}>
         ${['auto', 'day', 'night'].map((id) => [id, tr(`office.theme.${id}`)]).map(([id, label]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(mode === id)} onClick=${() => set(id)}>${label}</button>`)}
       </div>

@@ -230,6 +230,14 @@ const BASE = {
     'session.trace.unavailable': 'Le moteur d’exécution ne permet pas de lire la transcription de cette session. Seuls les faits ci-dessus sont connus.',
     'session.noEvents': 'Aucun événement dans cette session.',
     'session.truncated': '(tronqué)',
+    'session.participants': '{n} participants',
+    'session.subagent.count': '+ {n} sous-agent',
+    'session.subagents.count': '+ {n} sous-agents',
+    'session.subagent.unknown': 'Sous-agent {n}',
+    'session.unknown.human': 'Utilisateur',
+    'session.unknown.human.many': '{n} utilisateurs',
+    'session.unknown.agent': 'Agent',
+    'session.unknown.agent.many': '{n} agents',
     'session.user': 'Utilisateur',
     'session.system': 'Système',
     'session.thinking': 'Note de réflexion',
@@ -878,6 +886,14 @@ const BASE = {
     'session.trace.unavailable': 'The runtime cannot read this session’s transcript. Only the facts above are known.',
     'session.noEvents': 'No event in this session.',
     'session.truncated': '(truncated)',
+    'session.participants': '{n} participants',
+    'session.subagent.count': '+ {n} subagent',
+    'session.subagents.count': '+ {n} subagents',
+    'session.subagent.unknown': 'Subagent {n}',
+    'session.unknown.human': 'User',
+    'session.unknown.human.many': '{n} users',
+    'session.unknown.agent': 'Agent',
+    'session.unknown.agent.many': '{n} agents',
     'session.user': 'User',
     'session.system': 'System',
     'session.thinking': 'Reflection note',
@@ -1324,3 +1340,9 @@ export const duplicateKeys = (l) => {
   return dup;
 };
 
+/** Register a lazy page dictionary without adding it to other pages’ first load. */
+export function registerMessages(part) {
+  if (PARTS.includes(part)) return;
+  PARTS.push(part);
+  for (const l of Object.keys(MESSAGES)) Object.assign(MESSAGES[l], part[l]);
+}

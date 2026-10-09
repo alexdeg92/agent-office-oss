@@ -1,13 +1,16 @@
 {
-  "$comment": "agents[]: the runtime's listing through the gateway being set up (the token from this request or a previous check). model is null when the runtime has none. agents[].projectTag (architect-56): installed|outdated|absent|conflict|unknown, optional until the UI shows it.",
   "nullable": [
+    "$.revision",
+    "$.vm",
+    "$.result.agents[].name",
+    "$.result.agents[].nameSource",
     "$.result.agents[].model"
   ],
   "types": {
     "$.revision": "number",
-    "$.vm": "any"
-  },
-  "additional": {
-    "$.result.agents[].projectTag": "installed"
+    "$.vm": "any",
+    "$.result.agents[].name": "string",
+    "$.result.agents[].nameSource": "string",
+    "$.result.agents[].model": "string"
   }
 }

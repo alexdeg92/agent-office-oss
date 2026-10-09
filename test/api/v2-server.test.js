@@ -23,7 +23,7 @@ describe('API v2 · envelope, errors, meta, me', () => {
     assert.equal(r.status, 200); assert.match(r.headers.get('x-request-id'), /^req_[0-9a-f]{12}$/); assert.equal(r.headers.get('cache-control'), 'no-store');
     const b = await r.json();
     assert.deepEqual(Object.keys(b).sort(), ['data', 'meta']);
-    assert.equal(b.data.contractVersion, '2.5'); assert.equal(b.data.env, 'dev');
+    assert.equal(b.data.contractVersion, '2.7'); assert.equal(b.data.env, 'dev');
     assert.deepEqual(b.data.capabilities, { openclawWrites: true, storeWrites: true });
     for (const k of ['sourceError.timeout', 'error.unauthorized', 'historyKind.status', 'sessionKind.cron', 'runEnd.timeout', 'healthSub.cores']) assert.ok(b.data.labels[k], k);
     assert.ok(b.data.enums.sessionKind.includes('cron'));
@@ -88,7 +88,7 @@ describe('API v2 · SSE (api.md §4.6)', () => {
     const B = openSse(h.base, '/api/v2/stream?topics=health', { cookie: h.cookie });
     try {
       const helloA = await A.next((f) => f.event === 'hello');
-      assert.equal(helloA.data.resumed, false); assert.deepEqual(helloA.data.topics, ['health']); assert.equal(helloA.data.contractVersion, '2.5');
+      assert.equal(helloA.data.resumed, false); assert.deepEqual(helloA.data.topics, ['health']); assert.equal(helloA.data.contractVersion, '2.7');
       assert.match(helloA.id, /^str_[0-9A-Za-z]{22}:1$/);
       const sA = await A.next((f) => f.event === 'snapshot'), sB = await B.next((f) => f.event === 'snapshot');
       assert.equal(sA.id.split(':')[1], '2');

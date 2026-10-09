@@ -1,11 +1,14 @@
 {
-  "$comment": "result.status: connected | unreachable | refused | unauthorized; protocol and latencyMs are null unless connected. revision and vm are always null.",
   "nullable": [
+    "$.revision",
+    "$.vm",
     "$.result.protocol",
     "$.result.latencyMs"
   ],
   "types": {
     "$.revision": "number",
-    "$.vm": "any"
+    "$.vm": "any",
+    "$.result.protocol": "number",
+    "$.result.latencyMs": "number"
   }
 }

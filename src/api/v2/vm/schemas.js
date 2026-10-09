@@ -5,11 +5,13 @@
  * tested against these schemas, so the contract, the examples and the runtime check can't drift apart.
  * Strings are not length-capped here (the builders cap them); enums are closed where api.md closes them.
  */
+const { safeExternalUrl } = require('../../../../public/v2/url-policy.js');
 const s = require('../../../schema');
 
 const R = { extra: 'reject' };
 const str = () => s.string();
 const strN = () => s.string().nullable();
+const externalUrlN = () => s.string().refine((v) => safeExternalUrl(v) === v, 'canonical HTTP(S) URL').nullable();
 const nn = () => s.int().min(0);
 const num = () => s.number();
 const ms = () => s.int().min(0);
@@ -39,7 +41,7 @@ const Kpi = obj({ id: str(), label: LabelRef, value: num().nullable(), unit: UNI
 const LEVEL = oneOf('ok', 'warn', 'alert');
 const SESSION_KIND = oneOf('main', 'dashboard', 'subagent', 'cron', 'chat-direct', 'chat-group', 'acp', 'explicit', 'unrecognized');
 const CHANNEL_ID = s.enumOf(['wechat', 'discord', 'whatsapp', 'unrecognized']).nullable();
-const ROLE = oneOf('main', 'subagent', 'cron', 'dm', 'channel');
+const ROLE = oneOf('main', 'agent', 'subagent', 'cron', 'dm', 'channel');
 
 // ---- §3.1 ----
 const MetaVM = obj({
@@ -73,9 +75,10 @@ const OfficeVM = obj({
 });
 
 // ---- §3.3 ChatVM ----
+const { Sender } = require('../../../engine/model/sender');
 const ChatVM = obj({
   sessionKey: str(), turnPending: obj({ turnId: str(), since: ms() }).nullable(),
-  messages: collection(obj({ id: str(), role: oneOf('user', 'assistant', 'error'), at: ms(), text: str(),
+  messages: collection(obj({ id: str(), role: oneOf('user', 'assistant', 'error'), at: ms(), text: str(), senderInfo: Sender.optional(),
     meta: obj({ model: strN(), tokens: nn().nullable(), durationMs: nn().nullable() }).nullable() })),
 });
 
@@ -129,11 +132,11 @@ const InterlocutorVM = obj({
 // ---- §3.6 Logs, SessionVM ----
 const LogRowVM = obj({ id: str(), kind: SESSION_KIND, channel: CHANNEL_ID, label: str(), title: LabelRef /* 2.4 */, model: strN(), modelProvider: strN(), tokens: nn(), updatedAt: msN(), live: bool(), heartbeat: bool() });
 const LogsPage = obj({ items: collection(LogRowVM), nextCursor: strN() });
-const tr = (kind, extra) => obj(Object.assign({ id: str(), kind: s.literal(kind), at: nn(), text: str(), truncated: bool() }, extra));
+const tr = (kind, extra) => obj(Object.assign({ id: str(), kind: s.literal(kind), at: nn(), senderInfo: Sender.optional(), text: str(), truncated: bool() }, extra));
 const TraceEventVM = s.discriminated('kind', {
   system: tr('system'), thinking: tr('thinking'), observation: tr('observation'), user: tr('user', { sender: strN() }),
   assistant: tr('assistant', { model: strN(), provider: strN(), outputTokens: nn().nullable(), stopReason: s.enumOf(['stop', 'toolUse', 'error', 'unrecognized']).nullable(), error: strN() }),
-  tool: obj({ id: str(), kind: s.literal('tool'), at: nn(), callId: strN(), name: str(),
+  tool: obj({ id: str(), kind: s.literal('tool'), at: nn(), senderInfo: Sender.optional(), callId: strN(), name: str(),
     toolKind: oneOf('search', 'web', 'browser', 'exec', 'file-read', 'file-write', 'memory', 'message', 'image', 'other'),
     input: str(), output: str(), isError: bool(), durationMs: nn().nullable(), truncated: bool() }),
 });
@@ -142,6 +145,8 @@ const SessionVM = obj({
   run: obj({ status: oneOf('idle', 'running', 'succeeded', 'failed'), endReason: s.enumOf(['error', 'timeout', 'killed', 'budget-limited']).nullable() }),
   messageCount: nn().nullable(), window: obj({ from: nn(), to: nn() }), toolCount: nn(),
   traceState: oneOf('fresh', 'stale', 'unavailable'),   // 2.4 (R16-07)
+  participants: collection(Sender),
+  subagents: collection(Sender),
   events: collection(TraceEventVM),
 });
 
@@ -152,7 +157,7 @@ const SkillRowShape = { id: str(), emoji: strN(), description: str(), source: SO
 const SkillListVM = obj({ skills: collection(obj(SkillRowShape)), counts: obj({ total: nn(), active: nn() }) });
 const Req = obj({ bins: arr(str()), anyBins: arr(str()), env: arr(str()), config: arr(str()), os: arr(str()) });
 const SkillDetailVM = obj({
-  skill: obj(Object.assign({}, SkillRowShape, { homepage: strN() })),
+  skill: obj(Object.assign({}, SkillRowShape, { homepage: externalUrlN() })),
   detail: obj({ always: bool(), blockedBy: obj({ allowlist: bool(), agentFilter: bool(), platform: bool() }), requirements: Req.nullable(), missing: Req.nullable(),
     install: arr(obj({ id: str(), kind: str(), label: str(), bins: arr(str()) })) }).nullable(),
   markdown: str(),
@@ -239,12 +244,23 @@ const LayoutVM = obj({
 const UiPrefs = obj({ uiTheme: oneOf('system', 'dark', 'light'), locale: s.enumOf(['fr', 'en']).nullable() });
 
 // Topic name / route → VM schema
-const VM_SCHEMAS = { meta: MetaVM, me: MeVM, office: OfficeVM, chat: ChatVM, flows: FlowListVM, flow: FlowDetailVM, access: AccessVM, interlocutor: InterlocutorVM,
+// First-run setup is a public VM: saved owner identity is never part of its draft.
+const SetupVM = obj({
+  state: oneOf('open', 'locked', 'readonly'), configured: s.boolean(), lockReason: oneOf('missing-secrets').nullable(),
+  adapters: collection(obj({ id: str(), name: str(), connect: s.boolean(), fields: s.array(str()), defaultGatewayUrl: strN() })),
+  draft: obj({ instance: obj({ name: str(), locale: oneOf('fr', 'en'), timeZone: strN() }),
+    owner: obj({ displayName: s.literal(''), email: s.literal(''), passwordSet: s.boolean() }),
+    runtime: obj({ adapter: str(), gatewayUrl: strN(), tokenSet: s.boolean() }) }).nullable(),
+  network: obj({ host: str(), port: s.int().min(1).max(65535) }),
+  suggestedTimeZone: str(), locales: s.array(oneOf('fr', 'en')),
+  integrations: collection(obj({ id: str(), adapters: s.array(str()), default: s.boolean() })),
+});
+const VM_SCHEMAS = { setup: SetupVM, meta: MetaVM, me: MeVM, office: OfficeVM, chat: ChatVM, flows: FlowListVM, flow: FlowDetailVM, access: AccessVM, interlocutor: InterlocutorVM,
   logs: LogsPage, session: SessionVM, skills: SkillListVM, skill: SkillDetailVM, health: HealthVM, projects: BoardVM, project: ProjectVM, history: HistoryPage,
   candidates: CandidatesVM, layout: LayoutVM, prefs: UiPrefs, comments: CommentThreadVM };
 
 // ==== Contract 3.0 (G5, api-v3.md): the VMs that differ, built from the same pieces; every other VM is the 2.x one ====
-const ROLE3 = oneOf('primary', 'subagent', 'scheduled', 'direct', 'group', 'conversation');                              // D3
+const ROLE3 = oneOf('primary', 'agent', 'subagent', 'scheduled', 'direct', 'group', 'conversation');                              // D3
 const SESSION_KIND3 = oneOf('primary', 'subagent', 'scheduled', 'conversation-direct', 'conversation-group', 'conversation', 'internal', 'unrecognized');   // D2
 const CHANNEL_REF = s.string().refine((v) => /^[a-z][a-z0-9-]{0,31}$/.test(v) && v !== 'unrecognized', 'channel ref');      // D2, D5
 const RESOLUTION3 = oneOf('pending', 'resolved', 'failed', 'unresolvable');                                                 // D5
@@ -262,7 +278,7 @@ const OfficeVM3 = obj({
     id: str(), role: ROLE3, name: str(), title: LabelRef, roleLabel: LabelRef, state: s.enumOf(AGENT_STATE), stateSince: ms(),
     stationUid: strN(), look: obj({ character: str(), variant: strN(), accessories: arr(str()) }), ruleId: strN(),
     destination: obj({ kind: oneOf('server', 'meeting'), stationUid: str() }).nullable(), sessionKey: strN(), tokens: nn(), lastSeenAt: msN(), exchanges: Exchanges }))),
-  journal: collection(obj({ id: str(), at: ms(), count: s.int().min(1), actor: ActorVM, text: LabelRef, kind: s.enumOf(LIVE_KIND) })),
+  journal: collection(obj({ id: str(), at: ms(), count: s.int().min(1), actor: ActorVM, text: LabelRef, kind: s.enumOf(LIVE_KIND), occupantId: str().optional(), activity: oneOf('thinking', 'writing', 'calling', 'researching', 'working').optional() })),
   layoutRevision: nn(),
   queue: collection(obj({ id: str(), name: str(), schedule: LabelRef })),
 });
@@ -272,6 +288,8 @@ const SessionVM3 = obj({
   key: str(), label: str(), title: LabelRef, kind: SESSION_KIND3, runtimeKind: strN(), model: strN(), modelProvider: strN(), tokens: nn(), updatedAt: msN(), cwd: strN(),
   run: obj({ status: oneOf('idle', 'running', 'succeeded', 'failed'), endReason: s.enumOf(['error', 'timeout', 'killed', 'budget-limited']).nullable() }),
   messageCount: nn().nullable(), window: obj({ from: nn(), to: nn() }), toolCount: nn(), traceState: oneOf('fresh', 'stale', 'unavailable'),
+  participants: collection(Sender),
+  subagents: collection(Sender),
   events: collection(TraceEventVM),
 });
 const AccessVM3 = obj({
@@ -315,5 +333,5 @@ const VM_SCHEMAS_V3 = Object.assign({}, VM_SCHEMAS, { meta: MetaVM3, office: Off
   access: AccessVM3, interlocutor: InterlocutorVM3, flow: FlowDetailVM3, projects: BoardVM3, layout: LayoutVM3 });
 const schemasFor = (version) => (version === 3 ? VM_SCHEMAS_V3 : VM_SCHEMAS);
 
-module.exports = { VM_SCHEMAS, VM_SCHEMAS_V3, schemasFor, LabelRef, ActorVM, PersonChip, paramsOk, MetaVM, MeVM, OfficeVM, ChatVM, FlowListVM, FlowDetailVM, AccessVM, InterlocutorVM, LogsPage,
+module.exports = { SetupVM, VM_SCHEMAS, VM_SCHEMAS_V3, schemasFor, LabelRef, ActorVM, PersonChip, paramsOk, MetaVM, MeVM, OfficeVM, ChatVM, FlowListVM, FlowDetailVM, AccessVM, InterlocutorVM, LogsPage,
   SessionVM, SkillListVM, SkillDetailVM, HealthVM, BoardVM, ProjectVM, HistoryPage, CandidatesVM, LayoutVM, UiPrefs };

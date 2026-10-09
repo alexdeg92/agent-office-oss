@@ -1,7 +1,7 @@
-# Contract examples (api.md 2.1)
+# Contract examples (api.md 2.7)
 
 **Authoritative example payloads** for every VM and command shared across agents (PM decision on review-07).
-They are the wire contract in executable form. Only the architect edits them.
+They are the wire contract in executable form. PM delegated these contract edits to onboarding-1 for this fix round.
 
 - **Producers** (projects, architect) assert their builders' output has the same shape:
   `compareShape(loadExample('project-vm').data, buildProjectVM(...))` from `test/helpers/contract-shape.js` returns `[]`.
@@ -38,3 +38,6 @@ They are the wire contract in executable form. Only the architect edits them.
 **Strict since S6.2 (R8-08/09):** compare with `compareExample(name, value)`, which also applies the example's sidecar `<name>.types.json` (`nullable` paths, `types` of null-only fields, union `variants`, `opaque` paths). Shape rules (see the checker's header): exact key sets, matching types, `null` compatible with any type, array
 elements matched by their `kind`/`type`/`op` variant, records (`params`, `labels`, `enums`, `overrides`) by value.
 Pass `{ opaque: ['$.data.manifest'] }` for the layout manifest, whose shape is `manifest.schema.json`'s.
+
+
+Contract 2.7/3.2 setup additions: `setup-owner`, `setup-resume`, `setup-detect`, `setup-integration-plan`, `setup-integration-apply`, `setup-network` request/result pairs; `setup-catalog-result` (opaque shared Manifest); `setup-finalize-request`/`-result` (modern DB-owner PUT). `setup-vm.json` explicitly carries listener, integration catalog and connect capability. Its strict schema refuses saved owner identity. Route inventory and live fixtures: `test/setup/contract-examples.test.js` (targeted regeneration via `UPDATE_GOLDEN=1 node --test test/setup/contract-examples.test.js`).

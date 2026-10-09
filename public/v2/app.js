@@ -57,6 +57,7 @@ async function makeStream(meta) {
 // each route's modules) preloads the current URL's chunk while the core loads, and the shell preloads a route on
 // navigation intent, so a page never arrives as an import waterfall. One entry per line: scripts/first-load.js reads them.
 const PAGES = {
+  'bureau-animations': () => import('./office/animations.js' + buildQuery).then((m) => m.AnimationsPage),
   bureau: () => import('./office/page.js' + buildQuery).then((m) => m.BureauPage),
   boutique: () => import('./office/boutique.js' + buildQuery).then((m) => m.BoutiquePage),
   discuter: () => import('./pages/chat.js' + buildQuery).then((m) => m.ChatPage),
@@ -72,7 +73,7 @@ const PAGES = {
   competences: () => import('./pages/skills.js' + buildQuery).then((m) => m.SkillsPage),
   competence: () => import('./pages/skill.js' + buildQuery).then((m) => m.SkillPage),
   sante: () => import('./pages/health.js' + buildQuery).then((m) => m.HealthPage),
-  setup: () => import('./pages/setup.js' + buildQuery).then((m) => m.SetupPage),
+  setup: () => import('./pages/setup.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.SetupPage; }),
   'a-propos': () => import('./pages/about.js' + buildQuery).then((m) => m.AboutPage),
 };
 const pageLoads = new Map();   // name → Promise<Component>

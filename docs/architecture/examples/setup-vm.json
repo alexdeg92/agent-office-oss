@@ -2,6 +2,7 @@
   "data": {
     "state": "open",
     "configured": false,
+    "lockReason": null,
     "adapters": [
       {
         "id": "openclaw",
@@ -10,7 +11,15 @@
           "gatewayUrl",
           "token"
         ],
-        "defaultGatewayUrl": "ws://127.0.0.1:18789"
+        "defaultGatewayUrl": "ws://127.0.0.1:18789",
+        "connect": true
+      },
+      {
+        "id": "demo",
+        "name": "D\u00e9mo",
+        "fields": [],
+        "defaultGatewayUrl": null,
+        "connect": true
       }
     ],
     "draft": {
@@ -30,15 +39,28 @@
         "tokenSet": false
       }
     },
-    "suggestedTimeZone": "Europe/Paris",
+    "network": {
+      "host": "127.0.0.1",
+      "port": 45863
+    },
+    "suggestedTimeZone": "America/Toronto",
     "locales": [
       "fr",
       "en"
+    ],
+    "integrations": [
+      {
+        "id": "projet",
+        "adapters": [
+          "openclaw"
+        ],
+        "default": true
+      }
     ]
   },
   "meta": {
     "modelVersion": 1,
-    "generatedAt": 1791223200000,
+    "generatedAt": 1791288000000,
     "stale": []
   }
 }

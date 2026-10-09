@@ -1,0 +1,36 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "agents": [
+        {
+          "id": "atlas",
+          "status": "installed",
+          "changed": [
+            "skill",
+            "block"
+          ],
+          "backup": "/tmp/agent-office-synthetic/data/integrations/backups/atlas-AGENTS.md-1791313200000-52aa8ef96678847cb87d20d7",
+          "reason": null
+        },
+        {
+          "id": "scribe",
+          "status": "installed",
+          "changed": [
+            "skill",
+            "block"
+          ],
+          "backup": "/tmp/agent-office-synthetic/data/integrations/backups/scribe-AGENTS.md-1791313200000-7ae79f191c98b8c3588423fb",
+          "reason": null
+        }
+      ]
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

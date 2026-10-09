@@ -330,5 +330,13 @@ Today `PORTAL_READONLY=1` blocks every non-GET route, because staging shares the
 
 ## 8. What is deliberately not stored
 - **Sessions, transcripts, cron jobs, cron runs, skills, channels:** OpenClaw owns them. Agent Office only stores **references** (session keys and run ids in history payloads) and the derived HistoryEvents.
-- **Secrets:** no tokens, no cookies, no passwords, no raw emails (`git_email_hash` only).
+- **Secrets:** no plaintext passwords, runtime/session tokens or cookie contents. New onboarding intentionally stores the owner login email and scrypt hash in `users`; repository author hints still use `git_email_hash`. Every DB backup containing owner credentials is sensitive.
 - **Login sessions:** they stay stateless HMAC cookies (`taco_sess`).
+
+## Onboarding owners and recovery (migrations 014–015)
+
+`users` stores stable id, Person foreign key, case-insensitive unique login email, scrypt hash, timestamps and the sole supported role `owner`. Migration 015 removes unimplemented admin/member roles, adds durable `setup_status`/`setup_config_hash` metadata, and permits the separate `agent` peer inventory role. DB-auth ownership is the users row's Person link; `persons.is_owner` remains a legacy bootstrap compatibility field, not another authority for DB login. DB cookies carry `userId`; env/file credentials continue to work independently.
+
+An open setup draft amends the same users/person rows and seeds its layout in one SQLite transaction. Finalization stores the validated layout and planned config digest in a transaction, publishes private files, then sets `configured`. Boot reconciles a matching digest after a crash; a missing owner or mismatched open draft opens code-protected local recovery. A configured owner cannot be reset through setup. Missing private secrets serve locked setup with a restore-and-restart message; they never reopen setup writes or reset the owner.
+
+This is an intentional exception to the former no-login-credentials-in-the-store boundary: the DB holds a password hash, never a plaintext password or runtime/session token. Private DB backups consequently include the owner hash even without `--include-secrets`; that flag includes the separate instance secrets needed for a complete restore. New onboarding saves `owner.authSource="database"` in config and keeps only the session signing secret and runtime token in `secrets.json`. The users repository is never projected directly into an API response.

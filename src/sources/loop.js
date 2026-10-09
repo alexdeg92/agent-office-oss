@@ -21,6 +21,7 @@ function startSources({ runtime, engine, enrichment = null }) {
     if (!enrichment) return;
     const ids = new Set();
     for (const s of engine.sessions()) if (s.class.interlocutorId && !s.class.heartbeatOf) ids.add(s.class.interlocutorId);
+    for (const session of engine.sessions()) for (const p of engine.transcript(session.key)?.participants || []) if (p.kind === 'human') ids.add(p.id);
     const mine = [...ids].filter((id) => enrichment.handles(id));
     await enrichment.resolveAll(mine);
   }

@@ -10,6 +10,7 @@
  * G2 keeps today's channel ids (`gw.rpc.*`, `gw.event.*`, `cli.*`, `config.openclaw`) because they are on the
  * wire (data-quality channels, goldens). Namespacing them per adapter comes with contract 3.0 (G5).
  */
+const setupSchema = require('../../schema');
 const { normaliseAgents } = require('./normalise/agent');
 const { normaliseCronJobs, normaliseCronRuns } = require('./normalise/cron');
 const { normaliseSkills, normaliseSkillInfo } = require('./normalise/skill');
@@ -74,11 +75,13 @@ const definition = {
     sessionGroups: (v) => v.groups.slice().sort((a, b) => a.position - b.position || a.name.localeCompare(b.name)).map((g) => ({ id: g.name, name: g.name, position: g.position })) },
   classifySession,
   // architect-54: the project tag, from the no-op `projet` tool calls in a canonical transcript (never from message text)
+  resolveSender: require('./sender').resolveSender,
+  stripEnvelope: require('./sender').stripEnvelope,
   projectHints: (transcript) => require('./project-hint').projectHintsOf(transcript),
   // architect-55: trace events no view shows (the project-tag call is metadata only)
   hiddenTraceEvent: (ev) => require('./project-hint').isProjectTagEvent(ev),
   // What this runtime can do (ADR-001 §3). G2 reports today's behaviour; the UI starts reading it in 3.0.
-  capabilities: () => ({ sessions: true, transcripts: true, activity: 'run-state',
+  capabilities: () => ({ sessions: true, transcripts: true, senderCapture: true, activity: 'run-state',
     // G5: flows.multiAgent, since `cron add` takes --agent (api-v3.md D7)
     flows: { read: true, write: true, schedules: ['cron', 'every', 'at'], multiAgent: true }, skills: { read: true, toggle: true, detail: true },
     channels: true, interlocutors: true, chat: true, restart: true, costs: true, subagents: true, sessionGroups: true }),
@@ -98,7 +101,7 @@ function restartService(cfg) {
 }
 
 // Connection-bound parts, built at the composition root (server.js).
-function createRuntime(cfg) {
+function createRuntime(cfg, { senderCaptures = null } = {}) {
   const { Gateway } = require('./transport');
   const { createCli } = require('./cli');
   const { tapGateway, tapCli } = require('./taps');
@@ -108,17 +111,28 @@ function createRuntime(cfg) {
   const gw = new Gateway({ url: cfg.gatewayUrl, gatewayToken: cfg.gatewayToken, identityPath: cfg.identityPath, stateDbPath: cfg.stateDbPath });
   const cli = createCli({ bin: cfg.openclawBin, home: cfg.openclawHome, readonly: cfg.readonly });
   const reads = bindReads({ gw, cli });   // §12.4: every read here has its capability true
+  const capture = senderCaptures && cfg.senderCapture !== false && !cfg.readonlyStore ? require('./sender-capture').createSenderCapture(senderCaptures) : null;
+  const boundDefinition = { ...definition,
+    capabilities: () => ({ ...definition.capabilities(), senderCapture: !!capture }),
+    normalise: { ...definition.normalise, transcript: (key, value, at, window, issue, ctx = {}) => {
+      if (capture) { try { capture.observe(key, value.messages, ctx.session); } catch {} }
+      return normaliseTranscript(key, value, at, window, issue, { ...ctx, capturedSender: capture?.lookup });
+    } },
+    resolveSender: (raw, ctx = {}) => definition.resolveSender(raw, { ...ctx, capturedSender: capture?.lookup }),
+  };
+  let stopCapture = null;
   let groupsTimer = null, groupsSoon = null, attached = null;
   const loops = [];
   // R1-11: SKILL.md bodies, read only inside OpenClaw's documented skill roots (agent workspaces from the engine)
   const skillDocs = createSkillDocReader({ home: cfg.openclawHome, bin: cfg.openclawBin,
     workspaces: () => (attached ? attached.agents().map((a) => a.workspace).filter(Boolean) : []) });
   return {
-    definition, gw, cli, reads,
+    definition: boundDefinition, gw, cli, reads,
     imageGenerators: require('./image-capabilities').bindImageCapabilities({ gw, cli }),
     attach(engine) {
       attached = engine;
       tapGateway(gw, engine); tapCli(cli, engine); engine.setReads(reads);
+      stopCapture = capture?.watch(gw, (key) => engine.session(key));
       // S7b: the session-group catalog changes rarely: read it on connect, every GROUPS_REFRESH_MS while connected,
       // and shortly after a catalog-only `sessions.changed` ({reason: 'groups'}, no sessionKey).
       const refreshGroups = () => { if (gw.connected) engine.request('sessionGroups').catch(() => {}); };
@@ -129,7 +143,7 @@ function createRuntime(cfg) {
       });
       groupsTimer = setInterval(refreshGroups, every(GROUPS_REFRESH_MS)); if (groupsTimer.unref) groupsTimer.unref();
     },
-    close() { clearInterval(groupsTimer); clearTimeout(groupsSoon); for (const t of loops) clearInterval(t); },
+    close() { stopCapture?.(); clearInterval(groupsTimer); clearTimeout(groupsSoon); for (const t of loops) clearInterval(t); },
     /**
      * The runtime's own read loops (moved out of the v1 legacy runtime at S16 prep, same order and periods). Every read
      * goes through the taps. `hooks.refreshed()` runs after each full refresh (interlocutor enrichment).
@@ -187,4 +201,31 @@ const doctor = (ctx) => require('./doctor').doctor(ctx);
 const projectTag = () => Object.assign({}, require('./integration'), {
   cli: ({ openclawBin, openclawHome, readonly = false }) => require('./cli').createCli({ bin: openclawBin, home: openclawHome, readonly }) });
 
-module.exports = { definition, createRuntime, runtimeHealth, ROUTES, doctor, projectTag };
+const setup = { connect: true,
+  env: ({ runtime, token }) => ({ OC_GATEWAY_URL: runtime.openclaw.gatewayUrl, ...(token ? { OC_GATEWAY_TOKEN: token } : {}) }),
+  overrideEnv({ env, runtime, effective }) {
+    const { cleanUrl } = require('./connection');
+    if (env.OC_GATEWAY_URL !== undefined && env.OC_GATEWAY_TOKEN === undefined &&
+        cleanUrl(env.OC_GATEWAY_URL) !== cleanUrl(runtime.openclaw.gatewayUrl)) delete effective.OC_GATEWAY_TOKEN;
+  },
+  configSchema: setupSchema.object({ adapter: setupSchema.literal('openclaw'), openclaw: setupSchema.object({ gatewayUrl: setupSchema.string().refine(url => /^wss?:\/\/[^\s/?#]+(?:\/[^\s]*)?$/.test(url), 'ws(s) URL') }, { extra: 'reject' }) }, { extra: 'reject' }), credential: require('./connection').credential, name: 'OpenClaw', fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789',
+  config: (rt) => ({ adapter: definition.id, openclaw: { gatewayUrl: rt.gatewayUrl } }),
+  probe: (opts) => require('./transport').probeGateway(opts) };
+setup.discover = async ({ gw, detected = [] }) => {
+  const listing = await gw.call('agents.list', {});
+  return (Array.isArray(listing?.agents) ? listing.agents : []).filter(a => a && /^[A-Za-z0-9_-]{1,64}$/.test(a.id || '')).map(a => {
+    const local = detected.find(d => d.id === a.id);
+    const name = local?.name || (typeof a.name === 'string' && a.name.trim() ? a.name.trim().slice(0, 80) : null);
+    return { id: a.id, name, nameSource: local?.name ? local.nameSource : name ? 'runtime' : null, isPrimary: listing.defaultId === a.id,
+      model: typeof a.model === 'string' ? a.model : typeof a.model?.primary === 'string' ? a.model.primary : null };
+  });
+};
+setup.integrationAgents = async ({ paths, agents }) => {
+  if (agents?.some(a => a.workspace)) return agents.filter(a => a.workspace);
+  if (!paths.openclawBin || !paths.openclawHome) return [];
+  const I = projectTag();
+  const agentsFromCli = await I.discoverAgents(I.cli(paths), { home: paths.openclawHome }) || [];
+  return agentsFromCli.map(a => ({ ...a, workspace: require('path').resolve(paths.openclawHome, a.workspace) }));
+};
+const detect = (ctx) => require('../detectors/openclaw').detect(ctx);
+module.exports = { paths: require('./paths').paths, definition, createRuntime, runtimeHealth, ROUTES, doctor, projectTag, setup, detect };

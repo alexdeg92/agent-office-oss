@@ -203,6 +203,7 @@ const LABELS = Object.freeze({
   "liveEvent.run.failed": "Une exécution de {occupant} a échoué.",
   "liveEvent.run.started": "{occupant} a commencé une exécution.",
   "liveEvent.run.succeeded": "{occupant} a terminé une exécution.",
+  "occupantRole.agent": "Agent",
   "occupantRole.channel": "Canal",
   "occupantRole.conversation": "Conversation",
   "occupantRole.cron": "Exécution planifiée",

@@ -79,7 +79,7 @@ function exchangesOf(transcript, now, windowMs = EXCHANGE_WINDOW_MS) {
   return { recent: at.filter((t) => t <= now && now - t <= windowMs).length, windowMs, lastAt: Math.max(...at) };
 }
 
-function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = officeDefaults(), P = P2 }) {
+function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = officeDefaults(), configuredAgents = {}, P = P2 }) {
   const gw = engine.gateway();
   const sessions = engine.sessions();
   const agents = engine.agents();
@@ -90,18 +90,32 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
   const derived = deriveOccupants({ sessions, activityFor: () => null, gwConnected: gw.connected, now,
     mainKey: primary ? primary.mainSessionKey || undefined : undefined });
 
+  // Named onboarding agents remain visible while idle; delegated session occupants still derive normally.
+  const hasName = id => Object.hasOwn(configuredAgents, id) && typeof configuredAgents[id] === 'string';
+  for (const a of agents.filter(a => a.id !== primary?.id && hasName(a.id))) {
+    const id = 'agent:' + a.id;
+    if (derived.some(o => o.id === id)) continue;
+    const session = sessions.filter(s => s.class.agentId === a.id && !s.class.heartbeatOf && ['primary', 'explicit', 'dashboard', 'acp'].includes(s.class.kind))
+      .sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0))[0];
+    derived.push({ id, role: 'agent', sessionKey: session?.key || null, state: !gw.connected ? 'offline' : session?.run.status === 'running' ? 'working' : 'idle', tokens: session?.usage.total || 0, lastSeenAt: session?.updatedAt || null });
+  }
+
   const sourceName = (o) => {
     if (o.role === 'primary') return primaryName || 'Agent principal';
+    if (o.role === 'agent' && hasName(o.id.slice(6))) return configuredAgents[o.id.slice(6)];
     const s = o.sessionKey ? engine.session(o.sessionKey) : null;
     if (o.role === 'scheduled' && s && s.class.cronJobId && names.flowName) return names.flowName(s.class.cronJobId) || 'Tâche planifiée';
+    if (o.role === 'subagent' && s?.label) return s.label;
     return s ? sessionLabel(s, names) : o.id;
   };
   // Q03-A01: the occupant's title as a LabelRef (the UI's language); genuine names are raw params
   const named = (name) => ({ key: 'sessionTitle.named', params: { name } });
   const sourceTitle = (o) => {
     if (o.role === 'primary') return primaryName ? named(primaryName) : { key: 'occupantRole.' + P.occupantRole('primary') };
+    if (o.role === 'agent' && hasName(o.id.slice(6))) return named(configuredAgents[o.id.slice(6)]);
     const s = o.sessionKey ? engine.session(o.sessionKey) : null;
     if (o.role === 'scheduled' && s && s.class.cronJobId && names.flowName && names.flowName(s.class.cronJobId)) return named(names.flowName(s.class.cronJobId));
+    if (o.role === 'subagent' && s?.label) return named(s.label);
     return s ? sessionTitle(s, names) : named(o.id);
   };
   const resolved = layout.rules.resolveOccupants(layout.layout, layout.index,
@@ -152,7 +166,7 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
     const params = {};
     if (e.kind === 'cron.fired') params.job = (names.flowName && names.flowName(e.cronJobId)) || '';
     else if (/^(run|occupant)\.|^activity$/.test(e.kind)) params.occupant = occName(e);
-    return { id: e.id, at: e.at, count: e.count, actor: actorOf(e.actor), text: Object.keys(params).length ? { key: 'liveEvent.' + P.liveKind(e.kind), params } : { key: 'liveEvent.' + P.liveKind(e.kind) }, kind: P.liveKind(e.kind) };
+    return { id: e.id, at: e.at, count: e.count, actor: actorOf(e.actor), text: Object.keys(params).length ? { key: 'liveEvent.' + P.liveKind(e.kind), params } : { key: 'liveEvent.' + P.liveKind(e.kind) }, kind: P.liveKind(e.kind), ...(P.version === 3 && e.occupantId ? { occupantId: P.occupantId(e.occupantId) } : {}), ...(P.version === 3 && e.activity ? { activity: e.activity } : {}) };
   });
 
   const queue = jobs.filter((j) => j.enabled)

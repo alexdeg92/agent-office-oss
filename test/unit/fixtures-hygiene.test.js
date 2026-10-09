@@ -48,7 +48,7 @@ describe('fixtures hygiene', () => {
 describe('committed tree: no capture-derived file', () => {
   const { execFileSync } = require('child_process');
   const ROOT = path.resolve(__dirname, '..', '..');
-  const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' });
+  const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   let inGit = true; try { git('rev-parse', '--is-inside-work-tree'); } catch (_) { inGit = false; }
 
   it('test/fixtures/local/ and test/golden/local/ are gitignored', { skip: !inGit && 'not a git checkout' }, () => {

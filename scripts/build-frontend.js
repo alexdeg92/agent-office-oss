@@ -9,7 +9,7 @@ const { ROOT: UI_ROOT, buildId, writePreloads } = require('./first-load');
 const ROOT = path.join(__dirname, '..');
 
 function buildFrontend(root = ROOT) {
-  for (const script of ['sync-design.js', 'build-vm-schemas.js']) {
+  for (const script of ['sync-design.js', 'build-vm-schemas.js', 'build-character-pack-contract.js']) {
     const r = spawnSync(process.execPath, [path.join(root, 'scripts', script)], { cwd: root, stdio: 'inherit' });
     if (r.error) throw r.error;
     if (r.status !== 0) throw new Error(`${script} failed (exit ${r.status})`);

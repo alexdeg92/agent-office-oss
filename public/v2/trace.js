@@ -1,3 +1,4 @@
+import { senderKey, senderName } from './sender.js';
 // Pure helpers for the session transcript (Trace README): TraceEvent[] (data-model §2.1, transcript order) →
 // the tree (turns with their tool calls) and the waterfall rows. Presentational grouping only; no data is derived.
 
@@ -16,7 +17,13 @@ export function buildTree(events) {
   const openAgent = () => { const n = { type: 'agent', event: null, thinking: pending, notes: [], tools: [] }; pending = []; nodes.push(n); return n; };
   for (const e of events || []) {
     switch (e && e.kind) {
-      case 'user': if (pending.length) openAgent(); nodes.push({ type: 'human', event: e }); break;
+      case 'user': {
+        if (pending.length) openAgent();
+        const previous = nodes.at(-1), key = senderKey(e);
+        if (previous?.type === 'human' && key && key === senderKey(previous.event)) previous.events.push(e);
+        else nodes.push({ type: 'human', event: e, events: [e] });
+        break;
+      }
       case 'system': nodes.push({ type: 'system', event: e }); break;
       case 'thinking': pending.push(e); break;
       case 'assistant': { const n = { type: 'agent', event: e, thinking: pending, notes: [], tools: [] }; pending = []; nodes.push(n); break; }
@@ -51,8 +58,8 @@ export function waterfall(events) {
     const durMs = Math.max(0, ends[i] - e.at);
     const kind = e.kind === 'user' ? 'human' : e.kind === 'tool' ? (e.isError ? 'error' : 'tool')
       : e.kind === 'assistant' && e.stopReason === 'error' ? 'error' : 'agent';
-    const label = e.kind === 'tool' ? e.name : e.kind === 'user' && e.sender ? e.sender : LABEL[e.kind] || e.kind;
-    return { key: e.id || `${i}:${e.kind}:${e.at}`, label, kind, toolKind: e.kind === 'tool' ? e.toolKind : null,
+    const label = e.kind === 'tool' ? e.name : e.kind === 'user' ? senderName(e, LABEL.user) : LABEL[e.kind] || e.kind;
+    return { event: e, key: e.id || `${i}:${e.kind}:${e.at}`, label, kind, toolKind: e.kind === 'tool' ? e.toolKind : null,
       start: ((e.at - t0) / span) * 100, len: (durMs / span) * 100, durMs: e.kind === 'tool' ? e.durationMs ?? null : durMs };
   });
   return { t0, t1, totalMs: span, rows };

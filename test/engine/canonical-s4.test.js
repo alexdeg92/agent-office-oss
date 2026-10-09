@@ -19,8 +19,19 @@ function snapshot(e, sc) {
   const runs = Object.fromEntries(Object.keys((sc.rpc['cron.runs'] || {}).files || {}).map((id) => [id, (e.cronRuns(id) || { runs: null }).runs]));
   const infos = Object.fromEntries(Object.keys((sc.cli && sc.cli['skills.info']) || {}).map((n) => [n, e.skillInfo(n)]));
   const transcripts = Object.fromEntries(Object.keys((sc.rpc['sessions.get'] || {}).files || {}).map((k) => [k, e.transcript(k)]));
-  return JSON.parse(JSON.stringify({ agents: e.agents(), cronJobs: e.cronJobs(), cronRuns: runs, skills: e.skills(), skillInfo: infos,
+  const value = JSON.parse(JSON.stringify({ agents: e.agents(), cronJobs: e.cronJobs(), cronRuns: runs, skills: e.skills(), skillInfo: infos,
     channels: e.channels(), transcripts, config: e.config() }));
+  // These legacy scenarios have instance-specific agent names. Keep newly added sender fields neutral in goldens;
+  // the sender conformance and HTTP suites assert the actual configured names using generic synthetic fixtures.
+  const neutral = (p) => p && p.kind === 'agent' && p.name ? { ...p, name: '<configured agent>' } : p;
+  for (const t of Object.values(value.transcripts)) if (t) {
+    t.participants = t.participants?.map(neutral) || null;
+    for (const event of t.events) {
+      if (event.kind === 'user' && event.senderInfo?.kind === 'agent' && event.senderInfo.name) event.sender = '<configured agent>';
+      event.senderInfo = neutral(event.senderInfo);
+    }
+  }
+  return value;
 }
 
 // Written from data-model.md, not from the normalisers.

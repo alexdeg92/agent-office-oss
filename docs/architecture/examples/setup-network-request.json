@@ -1,0 +1,6 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "domain": "office.example.invalid",
+  "port": 45863,
+  "publicIp": true
+}

@@ -32,14 +32,30 @@
         "at": 1791223000000,
         "sender": "Owner",
         "text": "Résume le dépôt.",
-        "truncated": false
+        "truncated": false,
+        "senderInfo": {
+          "kind": "human",
+          "id": "human:unknown:example",
+          "name": "Owner",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        }
       },
       {
         "id": "ev:1:0",
         "kind": "thinking",
         "at": 1791223004000,
         "text": "Je lis le README.",
-        "truncated": false
+        "truncated": false,
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas",
+          "name": "Atlas",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        }
       },
       {
         "id": "ev:1:1",
@@ -52,7 +68,15 @@
         "output": "# Agent Office",
         "isError": false,
         "durationMs": 120,
-        "truncated": false
+        "truncated": false,
+        "senderInfo": {
+          "kind": "tool",
+          "id": "tool:read",
+          "name": "read",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        }
       },
       {
         "id": "ev:2:0",
@@ -64,9 +88,36 @@
         "text": "Voici le résumé…",
         "truncated": false,
         "stopReason": "stop",
-        "error": null
+        "error": null,
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas",
+          "name": "Atlas",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        }
       }
-    ]
+    ],
+    "participants": [
+      {
+        "kind": "human",
+        "id": "human:unknown:example",
+        "name": "Owner",
+        "runtime": "demo",
+        "channel": null,
+        "avatarHint": null
+      },
+      {
+        "kind": "agent",
+        "id": "agent:atlas",
+        "name": "Atlas",
+        "runtime": "demo",
+        "channel": null,
+        "avatarHint": null
+      }
+    ],
+    "subagents": []
   },
   "meta": {
     "modelVersion": 1,

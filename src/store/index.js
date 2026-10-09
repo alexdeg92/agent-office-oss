@@ -13,10 +13,12 @@ const { createQuarantineRepo } = require('./repos/quarantine');
 const { createCachesRepo } = require('./repos/caches');
 const { createAuditRepo } = require('./repos/audit');
 const { createPersonsRepo } = require('./repos/persons');
+const { createUsersRepo } = require('./repos/users');
 const { createSessionsRepo } = require('./repos/sessions');
 const { createTokensRepo } = require('./repos/tokens');
 const { createOfficeRepo } = require('./repos/office');
 const { createCommentsRepo } = require('./repos/comments');
+const { createSenderCapturesRepo } = require('./repos/sender-captures');
 const { every } = require('../ops/timescale');
 
 const FLUSH_MS = 5000;
@@ -31,7 +33,7 @@ function msUntilNextHour(hour, from = new Date()) {
 }
 
 // G8 (operations.md §3): `retention` { auditDays, issueDays } (config; defaults RETENTION)
-function openStore({ dir, instance, ownerName, renameOwner = false, now = () => Date.now(), log = (m) => console.log(m), retention = null }) {
+function openStore({ dir, instance, ownerName, renameOwner = false, seedOwner = true, now = () => Date.now(), log = (m) => console.log(m), retention = null }) {
   const keep = { auditMs: (retention && retention.auditDays ? retention.auditDays * DAY : RETENTION.auditMs), resolvedIssueMs: (retention && retention.issueDays ? retention.issueDays * DAY : RETENTION.resolvedIssueMs) };
   const handle = openDatabase({ dir, instance, now, log });
   const { db } = handle;
@@ -46,11 +48,14 @@ function openStore({ dir, instance, ownerName, renameOwner = false, now = () => 
   const caches = createCachesRepo(db, { onInvalid });
   const audit = createAuditRepo(db);
   const persons = createPersonsRepo(db, { now });
+  const users = createUsersRepo(db, { now });
   const sessions = createSessionsRepo(db);
   const tokens = createTokensRepo(db, { now });
   const office = createOfficeRepo(db, { now });
   const comments = createCommentsRepo(db, { now });   // architect-57
-  const owner = withTx(db, () => persons.ensureOwner(ownerName, { rename: renameOwner }));
+  const senderCaptures = createSenderCapturesRepo(db, { now, retentionDays: retention?.senderDays || 30 });
+  if (seedOwner) withTx(db, () => persons.ensureOwner(ownerName, { rename: renameOwner }));
+  const setup = require('./repos/setup').createSetupRepo(db, { persons, users, office, tx: fn => withTx(db, fn) });
   const timers = [];
 
   function flushQuarantine() {
@@ -89,8 +94,8 @@ function openStore({ dir, instance, ownerName, renameOwner = false, now = () => 
     flushQuarantine();
     const pruned = withTx(db, () => ({ audit: audit.prune(t - keep.auditMs),
       issues: quarantine.pruneResolved(t - keep.resolvedIssueMs) + quarantine.pruneMuted(t - keep.auditMs),
-      revoked: sessions.prune(t), seen: office.pruneSeen(t) }));
-    log(`store: maintenance pruned audit=${pruned.audit}, issues=${pruned.issues}, revoked=${pruned.revoked}, seen=${pruned.seen}`);   // counts only
+      revoked: sessions.prune(t), seen: office.pruneSeen(t), senders: senderCaptures.prune() }));
+    log(`store: maintenance pruned audit=${pruned.audit}, issues=${pruned.issues}, revoked=${pruned.revoked}, seen=${pruned.seen}, senders=${pruned.senders}`);   // counts only
     const file = handle.backup('daily');
     return { backup: file, pruned };
   }
@@ -103,13 +108,16 @@ function openStore({ dir, instance, ownerName, renameOwner = false, now = () => 
     arm();
   }
 
+  let closed = false, closedOwner = null;
   function close() {
+    if (closed) return;
+    closedOwner = persons.owner(); closed = true;
     for (const t of timers.splice(0)) clearTimeout(t);
     try { flushQuarantine(); } finally { handle.close(); }
   }
 
-  return { db, dir: handle.dir, file: handle.file, version: handle.version, applied: handle.applied, owner,
-    quarantine, caches, audit, persons, sessions, tokens, office, comments, withTx: (fn) => withTx(db, fn),
+  return { db, dir: handle.dir, file: handle.file, version: handle.version, applied: handle.applied, get owner() { return closed ? closedOwner : persons.owner(); }, setup,
+    quarantine, caches, audit, persons, users, sessions, tokens, office, comments, senderCaptures, withTx: (fn) => withTx(db, fn),
     bindEngine, flushQuarantine, maintenance, startMaintenance, backup: handle.backup, close,
     ping: () => !!db.prepare('SELECT 1 AS ok').get(),   // G8: /readyz's store check
   };

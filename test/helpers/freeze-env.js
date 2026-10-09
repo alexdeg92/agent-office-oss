@@ -23,3 +23,10 @@ os.totalmem = () => 16e9;
 os.freemem = () => 6e9;
 os.uptime = () => 3 * 86400 + 4 * 3600 + 5;
 os.hostname = () => 'fake-host';
+
+// Browser and HTTP child servers use the same network-guide injection seam as unit tests.
+// Never discover or execute a host Tailscale, read interfaces, resolve DNS or fetch externally.
+const network = require('../../src/ops/onboarding-network');
+const { networkFixtures } = require('./onboarding-network-fixture');
+const originalNetworkGuide = network.createNetworkGuide;
+network.createNetworkGuide = options => originalNetworkGuide({ ...options, ...networkFixtures(options.env) });

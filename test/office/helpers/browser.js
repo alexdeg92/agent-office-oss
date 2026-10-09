@@ -80,7 +80,7 @@ async function launch() {
     await send('Network.enable', {}, sessionId);
     await send('Network.setBlockedURLs', { urls: ['*://fonts.googleapis.com/*', '*://fonts.gstatic.com/*'] }, sessionId);
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
-    await send('Page.navigate', { url: base + urlPath }, sessionId);
+    await send('Page.navigate', { url: new URL(urlPath, base).href }, sessionId);
     const api = {
       /** Evaluate an async function body in the page; returns its JSON value or throws the page error. */
       async eval(body) {
@@ -109,7 +109,7 @@ async function launch() {
         await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile: width <= 480 }, sessionId);
       },
       async screenshot(clip) {
-        const r = await send('Page.captureScreenshot', { format: 'png', ...(clip && { clip: { ...clip, scale: 1 } }) }, sessionId);
+        const r = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: !!clip, ...(clip && { clip: { ...clip, scale: 1 } }) }, sessionId);
         return Buffer.from(r.result.data, 'base64');
       },
       async touch(type, points) { await send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], i) => ({ x, y, id: i })) }, sessionId); },

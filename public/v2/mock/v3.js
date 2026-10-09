@@ -73,7 +73,7 @@ export function meta(m, { capabilities = null } = {}) {
   if (m.primaryAgent) labels['agent.' + m.primaryAgent.id] = m.primaryAgent.name;
   const { channel, ...enums } = m.enums || {};
   return {
-    ...m, apiVersion: 3, contractVersion: '3.0',
+    ...m, apiVersion: 3, contractVersion: '3.2',
     runtime: { ...m.runtime, version: m.runtime.version ?? null, capabilities: capabilities || m.runtime.capabilities || CAPABILITIES },
     instance: { name: null, ...m.instance },
     locales: ['fr', 'en'],

@@ -912,6 +912,61 @@
         }
       },
       "description": "Batch 5b coverage computed by build-manifest.mjs (look × delivered pose × accessory). complete = renderers hide the deprecated v1 overlays by default."
+    },
+    "characterPacks": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "packs",
+        "pending"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "names",
+              "packManifest",
+              "thumbnail",
+              "variants"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "names": {
+                "type": "object",
+                "required": [
+                  "fr",
+                  "en"
+                ],
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "packManifest": {
+                "$ref": "#/$defs/path"
+              },
+              "thumbnail": {
+                "$ref": "#/$defs/path"
+              },
+              "variants": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        },
+        "pending": {
+          "type": "array"
+        }
+      }
     }
   },
   "$defs": {
@@ -1072,6 +1127,96 @@
         },
         "walking-nw": {
           "$ref": "#/$defs/poseEntry"
+        },
+        "life-sleep-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-error-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-success-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-stretch-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-highfive-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-highfive-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-cupwalk-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-cupwalk-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-cupwalk-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-cupwalk-nw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-book-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-book-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-book-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-book-nw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-drink-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-drink-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-drink-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-drink-nw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-water-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-water-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-water-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-water-nw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-pen-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-pen-se": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-pen-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-pen-nw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-readseat-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-phone-sw": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-phone-ne": {
+          "$ref": "#/$defs/poseEntry"
+        },
+        "life-readseat-sw": {
+          "$ref": "#/$defs/poseEntry"
         }
       }
     },
@@ -1149,6 +1294,96 @@
           "$ref": "#/$defs/path"
         },
         "walking-nw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-sleep-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-error-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-success-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-stretch-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-highfive-se": {
+          "$ref": "#/$defs/path"
+        },
+        "life-highfive-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-cupwalk-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-cupwalk-se": {
+          "$ref": "#/$defs/path"
+        },
+        "life-cupwalk-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-cupwalk-nw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-book-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-book-se": {
+          "$ref": "#/$defs/path"
+        },
+        "life-book-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-book-nw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-drink-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-drink-se": {
+          "$ref": "#/$defs/path"
+        },
+        "life-drink-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-drink-nw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-water-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-water-se": {
+          "$ref": "#/$defs/path"
+        },
+        "life-water-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-water-nw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-pen-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-pen-se": {
+          "$ref": "#/$defs/path"
+        },
+        "life-pen-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-pen-nw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-readseat-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-phone-sw": {
+          "$ref": "#/$defs/path"
+        },
+        "life-phone-ne": {
+          "$ref": "#/$defs/path"
+        },
+        "life-readseat-sw": {
           "$ref": "#/$defs/path"
         }
       }
@@ -1294,6 +1529,96 @@
         },
         "walking-nw": {
           "$ref": "#/$defs/landmarks"
+        },
+        "life-sleep-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-error-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-success-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-stretch-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-highfive-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-highfive-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-cupwalk-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-cupwalk-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-cupwalk-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-cupwalk-nw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-book-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-book-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-book-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-book-nw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-drink-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-drink-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-drink-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-drink-nw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-water-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-water-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-water-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-water-nw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-pen-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-pen-se": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-pen-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-pen-nw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-readseat-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-phone-sw": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-phone-ne": {
+          "$ref": "#/$defs/landmarks"
+        },
+        "life-readseat-sw": {
+          "$ref": "#/$defs/landmarks"
         }
       }
     },
@@ -1405,6 +1730,96 @@
         },
         "walking-nw": {
           "$ref": "#/$defs/layerPair"
+        },
+        "life-sleep-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-error-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-success-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-stretch-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-highfive-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-highfive-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-cupwalk-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-cupwalk-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-cupwalk-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-cupwalk-nw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-book-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-book-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-book-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-book-nw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-drink-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-drink-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-drink-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-drink-nw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-water-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-water-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-water-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-water-nw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-pen-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-pen-se": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-pen-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-pen-nw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-readseat-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-phone-sw": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-phone-ne": {
+          "$ref": "#/$defs/layerPair"
+        },
+        "life-readseat-sw": {
+          "$ref": "#/$defs/layerPair"
         }
       }
     },
@@ -1447,6 +1862,13 @@
             "seatAnchor": {
               "$ref": "#/$defs/point",
               "description": "Seated hip contact (image px). When the station has a seat point, the pose is placed so this pixel lands on it (stationRegistration seatFormula: characterTopLeft = seatTopLeft + seat.seatAnchor − pose.seatAnchor)."
+            },
+            "handAnchor": {
+              "$ref": "#/$defs/point",
+              "description": "The hand contact for an interaction prop, in authored pixels."
+            },
+            "fxAnchor": {
+              "$ref": "#/$defs/point"
             }
           },
           "oneOf": [

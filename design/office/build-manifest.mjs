@@ -4,6 +4,7 @@
 import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { normalizeLandmarks } from '../../public/v2/office/landmarks.js';
+import packRegistry from '../../packaging/character-pack-registry.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const ANCHORS = JSON.parse(readFileSync(root + 'assets/anchors.json', 'utf8'));
 const A = ANCHORS.assets;
@@ -15,16 +16,19 @@ const has = (rel) => !!A[rel] && existsSync(root + 'assets/' + rel);
 const POSES = ['idle', 'working', 'thinking', 'talking', 'walking', 'walking-se', 'celebrating', 'sleeping', 'alert'];
 // Batch 6 (BRIEF, facing and desk behaviour): seated with the back to the camera, swivels, sofa, back walks.
 const SEATED_POSES = ['seated-ne', 'working-ne', 'reading-ne', 'thinking-ne', 'sleeping-ne', 'seated-swivel', 'seated-turn-sw',
-  'seated-wave-sw', 'seated-talking-sw', 'seated-celebrating-sw', 'seated-alert-sw', 'sofa-sit-sw', 'sofa-sleep-sw', 'walking-ne', 'walking-nw'];
+  'seated-wave-sw', 'seated-talking-sw', 'seated-celebrating-sw', 'seated-alert-sw', 'sofa-sit-sw', 'sofa-sleep-sw', 'walking-ne', 'walking-nw',
+  'life-sleep-ne', 'life-error-sw', 'life-success-sw', 'life-stretch-ne', 'life-highfive-se', 'life-highfive-sw',
+  'life-cupwalk-sw', 'life-cupwalk-se', 'life-cupwalk-ne', 'life-cupwalk-nw', 'life-book-sw', 'life-book-se', 'life-book-ne', 'life-book-nw', 'life-drink-sw', 'life-drink-se', 'life-drink-ne', 'life-drink-nw', 'life-water-sw', 'life-water-se', 'life-water-ne', 'life-water-nw', 'life-pen-sw', 'life-pen-se', 'life-pen-ne', 'life-pen-nw', 'life-readseat-ne', 'life-phone-sw', 'life-phone-ne', 'life-readseat-sw', 'egg-curl-low-sw','egg-curl-high-sw','egg-smoke-sw','egg-crush-sw','egg-bench-low-sw','egg-bench-high-sw','egg-wipe-sw','egg-light-sw','egg-hide-sw','egg-shake-sw'];
 const FRAME_MS = 350;
-const poseSet = (dir) => Object.fromEntries(POSES.filter((p) => has(`${dir}/${p}.png`)).map((p) => [p, P(`${dir}/${p}.png`)]));
+const poseSet = (dir) => Object.fromEntries(POSES.filter((p) => has(`${dir}/${p}.png`)).map((p) => { const rel = `${dir}/${p}.png`, hand = A[rel].handAnchor; return [p, hand ? { image:P(rel), handAnchor:{x:hand[0],y:hand[1]} } : P(rel)]; }));
 // A Batch 6 pose is <pose>.png, or a frame loop <pose>.1.png, <pose>.2.png, …; it carries its own
 // anchor/canvas when they differ from the character's (seat anchors).
+const assetFile = (dir, p) => [`${dir}/${p}.webp`, `${dir}/${p}.png`].find(has);
 const frameFile = (dir, p, n) => [`${dir}/${p}-${n}.png`, `${dir}/${p}.${n}.png`].find(has);
 const seatedEntry = (dir, p, base) => {
   const frames = [];
   for (let n = 1; n <= 9 && frameFile(dir, p, n); n++) frames.push(frameFile(dir, p, n));
-  const first = frames[0] ?? (has(`${dir}/${p}.png`) ? `${dir}/${p}.png` : null);
+  const first = frames[0] ?? assetFile(dir, p);
   if (!first) return null;
   const a = A[first];
   const extra = {};
@@ -32,6 +36,8 @@ const seatedEntry = (dir, p, base) => {
   if (a.canvas && (a.canvas[0] !== base.canvas.w || a.canvas[1] !== base.canvas.h)) extra.canvas = { w: a.canvas[0], h: a.canvas[1] };
   // Seated poses are placed by their hip contact on the seat (stationRegistration seatFormula).
   if (a.seatAnchor) extra.seatAnchor = { x: a.seatAnchor[0], y: a.seatAnchor[1] };
+  if (a.fxAnchor) extra.fxAnchor = { x: a.fxAnchor[0], y: a.fxAnchor[1] };
+  if (a.handAnchor) extra.handAnchor = { x: a.handAnchor[0], y: a.handAnchor[1] };
   if (frames.length > 1) return { frames: frames.map(P), frameMs: a.frameMs ?? FRAME_MS, ...extra };
   return Object.keys(extra).length ? { image: P(first), ...extra } : P(first);
 };
@@ -44,7 +50,7 @@ const CHAR_BASE = { anchor: { x: 96, y: 276 }, canvas: { w: 192, h: 288 } };
 const landmarkSet = (dir) => {
   const out = {};
   for (const p of [...POSES, ...SEATED_POSES]) {
-    const file = has(`${dir}/${p}.png`) ? `${dir}/${p}.png` : frameFile(dir, p, 1);
+    const file = assetFile(dir, p) ?? frameFile(dir, p, 1);
     const lm = normalizeLandmarks(A[file]?.landmarks ?? A[file]?.headLandmarks);
     if (lm) out[p] = lm;
   }
@@ -54,9 +60,9 @@ const landmarkSet = (dir) => {
 const layerSet = (dir) => {
   const out = {};
   const pair = (base) => {
-    const back = has(`${base}.back.png`) ? P(`${base}.back.png`) : undefined;
-    const front = has(`${base}.front.png`) ? P(`${base}.front.png`) : undefined;
-    return back || front ? { ...(back && { back }), ...(front && { front }) } : null;
+    const back = [`${base}.back.webp`, `${base}.back.png`].find(has);
+    const front = [`${base}.front.webp`, `${base}.front.png`].find(has);
+    return back || front ? { ...(back && { back: P(back) }), ...(front && { front: P(front) }) } : null;
   };
   for (const p of [...POSES, ...SEATED_POSES]) {
     const one = pair(`${dir}/${p}`);
@@ -127,19 +133,27 @@ function deskSeated() {
   const [cx, cy] = reg.chairOriginTileOffset;
   const chair = A[chairRel];
   const turnRel = 'Office/furniture/chair.png';
-  // Reuse each chair bitmap for two DOM layers. Only the near armrest crosses the occupant;
-  // the backrest, cushion and wheelbase stay behind, just like the sofa composition.
+  // Rear-facing chair: its backrest is between the viewer and the seated back.
+  // Reuse the bitmap with an authored clip so the cushion/base stay below the body.
+  // When the agent faces the viewer, the backrest stays behind and only the arm crosses.
   const armrest = [[66, 38], [91, 29], [95, 32], [95, 36], [74, 47], [66, 46]];
   const turnArmrest = [[56, 48], [80, 40], [86, 43], [86, 48], [62, 55], [55, 53]];
+  const backrest = chair.foregroundBackrestClip.map(([x,y]) => [x / chair.canvas[0] * 100, y / chair.canvas[1] * 100]);
   const at = { x: cx, y: cy };
   const back = { image: P(chairRel), anchor: anchor(chairRel), size: size(chairRel), at, seatAnchor: { x: chair.seatAnchor[0], y: chair.seatAnchor[1] } };
   const turn = { image: P(turnRel), anchor: anchor(turnRel), size: size(turnRel), at, seatAnchor: { x: A[turnRel].seatAnchor[0], y: A[turnRel].seatAnchor[1] } };
   const parts = {
     chair: back,
     'chair-front': { ...back, clip: armrest },
+    'chair-backrest': { ...back, clip: backrest },
     'chair-turn': turn,
     'chair-turn-front': { ...turn, clip: turnArmrest },
   };
+  if (has('Office/furniture/mug.webp')) {
+    const rel = 'Office/furniture/mug.webp', a = A[rel].anchor, d = A['Office/furniture/desk.png'].anchor;
+    // Mug bottom contacts this authored point on the desktop, in desk image pixels.
+    parts.mug = { image: P(rel), size: size(rel), anchor: { x: d[0] - 55 + a[0], y: d[1] - 125 + a[1] } };
+  }
   if (has('Office/furniture/keyboard.png')) {
     parts.keyboard = {
       image: P('Office/furniture/keyboard.png'),
@@ -152,11 +166,11 @@ function deskSeated() {
     seat: { x: cx + 0.5, y: cy + 0.5 },
     facing: 'ne',
     seatFrom: 'chair',
-    stack: ['desk', 'monitor', 'keyboard', 'chair', 'character', 'chair-front'],
+    stack: ['desk', 'monitor', 'keyboard', 'mug', 'chair', 'character', 'chair-backrest', 'chair-front'],
     // Timmy's rear desk art is larger than his sofa sitting frame. The scale applies to
     // the entire pose (body and accessories) about the hip contact, never to the feet.
     scaleByCharacter: { timmy: 0.85 },
-    turned: { seatFrom: 'chair-turn', stack: ['desk', 'monitor', 'keyboard', 'chair-turn', 'character', 'chair-turn-front'] },
+    turned: { seatFrom: 'chair-turn', stack: ['desk', 'monitor', 'keyboard', 'mug', 'chair-turn', 'character', 'chair-turn-front'] },
     parts,
   };
 }
@@ -233,9 +247,12 @@ const ACC = [
   ['scarf', 'Foulard', 'neck'],
   ['badge', 'Badge', 'badge'],
 ];
+const enabledPacks = JSON.parse(readFileSync(root + 'office/character-packs.enabled.json', 'utf8'));
+const characterPacks = packRegistry.requireEnabledCharacterRegistry(root + 'assets/Characters', enabledPacks);
 
 const manifest = {
   version: 2,
+  characterPacks,
   projection: { kind: 'dimetric-2:1', tileWidth: 96, tileHeight: 48, artScale: 2, wallHeight: 144 },
   pending: [
     'Batch 5b (accessory contract v2): back/front accessory layers per pose and per character/variant, and head landmarks per pose in anchors.json',

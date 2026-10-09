@@ -67,3 +67,9 @@ export function parse(md) {
   flushPara();
   return blocks;
 }
+
+// Summary/preview text uses the same supported Markdown syntax as the full trace.
+export function plainText(md) {
+  const inline = (nodes) => nodes.map((n) => n.c ? inline(n.c) : n.v || '').join('');
+  return parse(md).map((b) => b.items ? b.items.map(inline).join('\n') : b.c ? inline(b.c) : b.v || '').filter(Boolean).join('\n');
+}

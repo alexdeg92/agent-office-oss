@@ -1,0 +1,33 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "instance": {
+    "name": "Synthetic Office",
+    "locale": "en",
+    "timeZone": "UTC"
+  },
+  "owner": {
+    "displayName": "Synthetic Operator",
+    "email": "owner@example.invalid"
+  },
+  "runtime": {
+    "adapter": "openclaw",
+    "gatewayUrl": "ws://127.0.0.1:39283"
+  },
+  "agents": {
+    "primary": "atlas",
+    "names": {
+      "atlas": "Orion",
+      "scribe": "Lyra"
+    },
+    "looks": {}
+  },
+  "integrations": {
+    "projet": true,
+    "reviewed": true
+  },
+  "network": {
+    "mode": "local",
+    "port": 45863,
+    "publicUrl": null
+  }
+}

@@ -24,7 +24,6 @@ const { mountHealth } = require('./src/ops/health');
 const express = require('express');
 const IC = require('./src/instance-config');
 const { createSetup } = require('./src/api/v2/setup');
-const { probeGateway } = require('./src/adapters/openclaw/transport');
 const { buildMetaVM, buildMetaVM3 } = require('./src/api/v2/vm/meta');
 const { apiVersionOf } = require('./src/api/v2/routes');
 const { okBody } = require('./src/api/v2/envelope');
@@ -66,7 +65,9 @@ function holdDataDir(dir) {
 const files = readFiles();
 securePermissions(files);
 if (files.orphanSecrets) console.warn('Agent Office: an interrupted setup left secrets.json without config.json; it is ignored, and the next setup replaces it');
-const effective = IC.effectiveEnv(process.env, files);
+let effective;
+try { effective = IC.effectiveEnv(process.env, files); }
+catch (e) { console.error('Agent Office: refusing to start: ' + e.message); process.exit(1); }
 if (IC.isConfigured(effective) || IC.envConfigured(process.env)) bootFull(effective, files);
 else bootSetup(files);
 
@@ -85,12 +86,18 @@ function bootFull(env, files) {
     if (!e.code) console.error(e.stack);
     process.exit(1);
   }
+  if (cfg.authDatabase && !store.setup.reconcile(files.config)) {
+    store.close();
+    console.warn('Agent Office: database owner setup needs local recovery; use the fresh setup code.');
+    return bootSetup(files, { recovery: true });
+  }
+  store.office.migrateConfiguredPeers(cfg.agentNames);
   // G2 (ADR-001): the runtime adapter (one per instance; OpenClaw today, chosen by the instance config in G4)
   const adapter = adapterById(cfg.runtimeAdapter);   // G6: 'openclaw' or 'demo' (instance config runtime.adapter / AO_RUNTIME)
-  const runtime = adapter.createRuntime(cfg);
+  const runtime = adapter.createRuntime(cfg, { senderCaptures: store.senderCaptures });
 
   // The engine sees every raw input, validates it and quarantines what it can't accept; v2/v3 read only the engine.
-  const engine = createEngine({ adapter: adapter.definition, primary: cfg.primaryAgent });
+  const engine = createEngine({ adapter: runtime.definition || adapter.definition, primary: cfg.primaryAgent, agentNames: cfg.agentNames, senderContext: () => ({ operator: store.owner, people: store.persons.senderPeople() }) });
   store.bindEngine(engine);       // quarantine restored from the store, written behind
   runtime.attach(engine);         // the adapter's taps: every runtime read is ingested
 
@@ -101,6 +108,7 @@ function bootFull(env, files) {
     cache: store.caches.interlocutors, log: (m) => console.log(m) } });
 
   const auth = createAuth({ secret: cfg.sessionSecret, ttlMs: cfg.sessionTtlMs, email: cfg.loginEmail, password: cfg.loginPassword, passwordHash: cfg.passwordHash,
+    credential: cfg.authDatabase ? (email) => email == null ? store.users.owner() : store.users.credential(email) : null,
     cookieSecure: cfg.cookieSecure, revocations: store.sessions, audit: (row) => store.audit.append(row), ownerPersonId: () => store.owner.id, throttle });
   let v2 = null;
   const app = createApp({
@@ -119,7 +127,7 @@ function bootFull(env, files) {
     mountRoutes: (a) => {
       mountHealth(a, () => ({ mode: 'app', store, engine }));   // G8: /healthz, /readyz (operations.md §1)
       auth.mountRoutes(a, { isGwConnected: () => engine.gateway().connected });   // login, logout, /api/me: every mode
-      const setup = createSetup({ env: process.env, files, probe: probeGateway, engine, throttle });   // locked: configured
+      const setup = createSetup({ env: process.env, files, engine, throttle });   // locked: configured
       v2 = mountV2(a, { auth, engine, cfg, store, runtime, enrichment, setup });   // S6: /api/v2 (meta, me, health view, mute, typed stream)
     },
   });
@@ -139,9 +147,10 @@ function bootFull(env, files) {
 
 // ================= setup mode (G4) =================
 // Only the static UI, GET /api/v2/meta (instance.configured: false) and the setup routes; every other API route is
-// 503 `not-configured`. No store or runtime is opened until setup is saved; only the data dir's lock is taken (R30-01).
-function bootSetup(files) {
-  const env = process.env;
+// 503 `not-configured`. A pristine first run takes only the data-dir lock. The store opens for an owner draft/resume;
+// the runtime starts after publication. Local recovery also uses the setup-code gate.
+function bootSetup(files, { recovery = false } = {}) {
+  const env = recovery ? IC.effectiveEnv(process.env, files) : process.env;
   const cfg = { instance: ['production', 'staging', 'dev', 'test'].includes(env.AO_ENV) ? env.AO_ENV : 'dev', readonly: env.PORTAL_READONLY === '1',
     readonlyStore: true, configured: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', instanceLocale: 'fr' };
   const port = Number(env.PORT || 18789), host = env.HOST || '127.0.0.1';
@@ -152,6 +161,7 @@ function bootSetup(files) {
     const { resolveDataDir, defaultDataDir, identityOf } = require('./src/config');
     const named = env.AO_ENV || (env.PORTAL_READONLY === '1' ? 'staging' : env.NODE_ENV === 'production' ? 'production' : 'dev');
     const inst = ['production', 'staging', 'dev', 'test'].includes(named) ? named : 'dev';
+    cfg.instance = inst;
     const dir = resolveDataDir(env, inst);
     if (inst !== 'production' && identityOf(dir) === identityOf(defaultDataDir(env, 'production'))) {
       console.error(`Refusing to start: the ${inst} instance would use production's data dir (${dir}). Set AO_DATA_DIR.`); process.exit(1);
@@ -160,13 +170,23 @@ function bootSetup(files) {
     setupDataDir = dir;
   }
   let server = null;
-  const setup = createSetup({ env, files, probe: probeGateway, paths: openclawPaths(env), dataDir: setupDataDir, log: (m) => console.log(m), throttle,
+  const setup = createSetup({ env, files, recovery, paths: openclawPaths(env), dataDir: setupDataDir, instance: cfg.instance, log: (m) => console.log(m), throttle,
     onConfigured: () => {
       // the files now exist: hand the port over to the configured app, in this process
+      for (const sig of ['SIGTERM', 'SIGINT']) process.removeListener(sig, closeSetup);
+      setup.close();
       server.close();
       if (server.closeAllConnections) server.closeAllConnections();
-      server.once('close', () => { const next = readFiles(); bootFull(IC.effectiveEnv(process.env, next), next); });
+      server.once('close', () => {
+        const next = readFiles(), nextEnv = IC.effectiveEnv(process.env, next);
+        // Keep the listener and browser origin for this session; saved network changes apply on restart.
+        Object.assign(nextEnv, { HOST: host, PORT: String(port), AO_PUBLIC_URL: env.AO_PUBLIC_URL || '',
+          PORTAL_COOKIE_SECURE: env.PORTAL_COOKIE_SECURE || (String(env.AO_PUBLIC_URL || '').startsWith('https://') ? '1' : '0') });
+        bootFull(nextEnv, next);
+      });
     } });
+  const closeSetup = () => { setup.close(); process.exit(0); };
+  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, closeSetup);
   const notConfigured = (req, res) => sendError(req, res, new ApiError('upstream_unavailable', { details: [{ issue: 'not-configured' }] }));
   const app = createApp({
     readonly: cfg.readonly, publicDir: path.join(__dirname, 'public'), apiOnly: env.AO_API_ONLY === '1',
@@ -186,7 +206,7 @@ function bootSetup(files) {
     },
   });
   server = app.listen(port, host, () => {
-    console.log('Agent Office (setup mode) listening on http://' + host + ':' + port + ' — open /v2/ to configure this instance');
+    console.log('Agent Office setup URL: http://' + (env.AO_UI_HOST || host) + ':' + (env.AO_UI_PORT || port) + (env.AO_UI_PORT ? '/' : '/v2/'));
     console.log('AO_READY ' + JSON.stringify({ mode: 'setup', port }));   // a fixed, structured readiness line (supervisors, tests)
   });
 }

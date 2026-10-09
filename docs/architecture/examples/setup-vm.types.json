@@ -1,23 +1,15 @@
 {
-  "$comment": "Shape sidecar for setup-vm.json (api.md §5.7, G4). state 'locked' | 'readonly' → draft is null (nothing about the instance is shown before setup or after it). draft.instance.timeZone is null until chosen (suggestedTimeZone is the server process's zone). G6: adapters lists 'demo' too (fields [], defaultGatewayUrl null: no connection). integrations (architect-56) is optional until the UI shows it.",
   "nullable": [
-    "$.adapters[].defaultGatewayUrl",
     "$.draft",
-    "$.draft.instance.timeZone"
+    "$.draft.instance.timeZone",
+    "$.draft.runtime.gatewayUrl",
+    "$.adapters[].defaultGatewayUrl",
+    "$.lockReason"
   ],
   "types": {
     "$.draft.instance.timeZone": "string",
-    "$.adapters[].defaultGatewayUrl": "string"
-  },
-  "additional": {
-    "$.integrations": [
-      {
-        "id": "projet",
-        "adapters": [
-          "openclaw"
-        ],
-        "default": true
-      }
-    ]
+    "$.adapters[].defaultGatewayUrl": "string",
+    "$.draft.runtime.gatewayUrl": "string",
+    "$.lockReason": "string"
   }
 }

@@ -12,10 +12,12 @@ const base = { PORTAL_EMAIL: 'a@example.invalid', PORTAL_SECRET: 's'.repeat(40),
 
 describe('G8 · retention', () => {
   it('settings: defaults 365 / 30 days; env within bounds; out of bounds refuses to start', () => {
-    assert.deepEqual(loadConfig(base).retention, { auditDays: 365, issueDays: 30 });
-    assert.deepEqual(loadConfig(Object.assign({ AO_AUDIT_RETENTION_DAYS: '90', AO_ISSUE_RETENTION_DAYS: '14' }, base)).retention, { auditDays: 90, issueDays: 14 });
+    assert.deepEqual(loadConfig(base).retention, { auditDays: 365, issueDays: 30, senderDays: 30 });
+    assert.deepEqual(loadConfig(Object.assign({ AO_AUDIT_RETENTION_DAYS: '90', AO_ISSUE_RETENTION_DAYS: '14', AO_SENDER_RETENTION_DAYS: '7' }, base)).retention, { auditDays: 90, issueDays: 14, senderDays: 7 });
+    assert.equal(loadConfig(base).senderCapture, true);
+    assert.equal(loadConfig({ ...base, AO_SENDER_CAPTURE: '0' }).senderCapture, false);
     const { spawnSync } = require('child_process');
-    for (const [k, v] of [['AO_AUDIT_RETENTION_DAYS', '7'], ['AO_ISSUE_RETENTION_DAYS', '400'], ['AO_AUDIT_RETENTION_DAYS', 'x']]) {
+    for (const [k, v] of [['AO_AUDIT_RETENTION_DAYS', '7'], ['AO_ISSUE_RETENTION_DAYS', '400'], ['AO_AUDIT_RETENTION_DAYS', 'x'], ['AO_SENDER_RETENTION_DAYS', '0'], ['AO_SENDER_RETENTION_DAYS', '366']]) {
       const r = spawnSync(process.execPath, ['-e', "require('./src/config').loadConfig(" + JSON.stringify(Object.assign({ [k]: v }, base)) + ')'], { cwd: path.join(__dirname, '..', '..'), encoding: 'utf8' });
       assert.equal(r.status, 1, k + '=' + v); assert.match(r.stderr, new RegExp(k));
     }

@@ -5,14 +5,14 @@
       "ok": true,
       "status": "connected",
       "protocol": 4,
-      "latencyMs": 42
+      "latencyMs": 0
     },
     "revision": null,
     "vm": null
   },
   "meta": {
     "modelVersion": 1,
-    "generatedAt": 1791223200000,
+    "generatedAt": 1791288000000,
     "stale": []
   }
 }

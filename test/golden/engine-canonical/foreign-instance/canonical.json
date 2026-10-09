@@ -210,6 +210,26 @@
       "sessionKey": "agent:atlas:telegram:direct:foreign-user",
       "fetchedAt": 1791313200000,
       "messageCount": 2,
+      "participants": [
+        {
+          "kind": "human",
+          "id": "telegram-user:foreign-user",
+          "name": null,
+          "runtime": "openclaw",
+          "channel": "telegram",
+          "avatarHint": null,
+          "delegation": null
+        },
+        {
+          "kind": "agent",
+          "id": "agent:atlas",
+          "name": "<configured agent>",
+          "runtime": "openclaw",
+          "channel": "telegram",
+          "avatarHint": null,
+          "delegation": null
+        }
+      ],
       "window": {
         "from": 0,
         "to": 2
@@ -219,6 +239,15 @@
           "id": "ev:0:0",
           "kind": "user",
           "at": 1791313170000,
+          "senderInfo": {
+            "kind": "human",
+            "id": "telegram-user:foreign-user",
+            "name": null,
+            "runtime": "openclaw",
+            "channel": "telegram",
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Can you check the release notes?",
           "truncated": false,
           "sender": null
@@ -227,6 +256,15 @@
           "id": "ev:1:0",
           "kind": "assistant",
           "at": 1791313180000,
+          "senderInfo": {
+            "kind": "agent",
+            "id": "agent:atlas",
+            "name": "<configured agent>",
+            "runtime": "openclaw",
+            "channel": "telegram",
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "On it.",
           "truncated": false,
           "model": null,

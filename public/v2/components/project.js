@@ -1,3 +1,4 @@
+import { senderColour } from '../sender.js';
 // Projets building blocks on the Bureau classes: thumb, priority, status, the four flag kinds, avatars.
 import { html, useState } from '../lib.js';
 import { Icon } from './ui.js';
@@ -70,7 +71,7 @@ export function Avatar({ person, size, title }) {
   const cls = ['bu-avatar', 'bu-avatar--' + person.kind, size ? 'bu-avatar--' + size : ''].filter(Boolean).join(' ');
   const label = title || person.name;
   const content = person.avatarUrl ? html`<img src=${person.avatarUrl} alt="" />` : person.kind === 'agent' ? html`<${Icon} name="agent" />` : initials(person.name);
-  return html`<span class=${cls} data-agent-state=${person.kind === 'agent' && person.state ? person.state : undefined} title=${label} role="img" aria-label=${label}>${content}</span>`;
+  return html`<span class=${cls} data-agent-state=${person.kind === 'agent' && person.state ? person.state : undefined} title=${label} role="img" aria-label=${label} ref=${(el) => { if (el && person.kind === 'human') { el.style.backgroundColor = senderColour({ senderInfo: { id: person.id } }); el.style.color = '#fff'; } }}>${content}</span>`;
 }
 
 export function AvatarStack({ people, hiddenCount = 0, size = 'sm', hiddenNames }) {

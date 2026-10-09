@@ -7,6 +7,7 @@ const runtimeKindOf = (P, s) => { const rk = P.runtimeKind(s.class.kind); return
 
 const LIMIT_DEFAULT = 50, LIMIT_MAX = 200;
 const tail = (s, n) => String(s || '').slice(-n);
+const { projectEvents, participantsOf } = require('../../../engine/model/sender');
 const { messageCountOf } = require('../../../projects/session-summary');
 
 /**
@@ -17,8 +18,8 @@ const { messageCountOf } = require('../../../projects/session-summary');
  */
 function sessionTitle(s, names = {}) {
   const c = s.class;
-  // G3b: a Discord interlocutor shows its snowflake's last 6 digits (unchanged); any other family its opaque id, at
-  // most 24 chars (before G3b they had no id at all and rendered « Utilisateur » / « Canal » with an empty id)
+  // Room titles may identify the room by a bounded ID. Unknown people use the same localized
+  // fallback on every runtime/channel; their opaque IDs never substitute for a person's name.
   const idOf = (iid) => { if (!iid) return ''; if (/^discord-(user|channel):/.test(iid)) return tail(iid, 6); return tail(iid.slice(iid.indexOf(':') + 1), 24); };
   const named = (name) => ({ key: 'sessionTitle.named', params: { name } });
   let t;
@@ -26,7 +27,7 @@ function sessionTitle(s, names = {}) {
     case 'primary': t = { key: 'sessionTitle.main' }; break;
     case 'subagent': t = { key: 'sessionTitle.subagent', params: { id: String(c.subagentId || '').slice(0, 4) } }; break;
     case 'scheduled': { const n = names.flowName && c.cronJobId ? names.flowName(c.cronJobId) : null; t = n ? { key: 'sessionTitle.cronNamed', params: { name: n } } : { key: 'sessionTitle.cron' }; break; }
-    case 'conversation-direct': { const n = names.interlocutorName && c.interlocutorId ? names.interlocutorName(c.interlocutorId) : null; t = n ? named(n) : { key: 'sessionTitle.user', params: { id: idOf(c.interlocutorId) } }; break; }
+    case 'conversation-direct': { const n = (names.interlocutorName && c.interlocutorId ? names.interlocutorName(c.interlocutorId) : null) || names.senderName?.(s); t = n ? named(n) : { key: 'sessionTitle.user', params: { id: '' } }; break; }
     case 'conversation-group': { const n = names.interlocutorName && c.interlocutorId ? names.interlocutorName(c.interlocutorId) : null; t = n ? named(n) : { key: 'sessionTitle.channel', params: { id: idOf(c.interlocutorId) } }; break; }
     case 'dashboard': t = { key: 'sessionTitle.dashboard' }; break;
     case 'explicit': t = s.displayName ? named(s.displayName) : { key: 'sessionTitle.explicit', params: { id: c.explicitKey || tail(s.key, 12) } }; break;
@@ -94,7 +95,15 @@ function logsTopicOf({ kind, heartbeat }) {
 // trace is shown), 'unavailable' (the runtime has no transcript capability). Never an empty "success".
 function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P = P2) {
   if (!s) return null;
-  const events = t ? t.events.map((e) => Object.assign({}, e)) : [];
+  const context = names.senderContext?.(s) || {};
+  const events = projectEvents(t?.events, context);
+  const participants = participantsOf([
+    ...projectEvents((t?.participants || []).map((senderInfo) => ({ senderInfo })), context), ...events,
+    ...projectEvents((names.delegatedSessions?.(s) || []).map((child) => ({ senderInfo: {
+      kind: 'agent', id: child.key, name: null, runtime: context.runtime || 'generic', channel: s.class.channel || null,
+      avatarHint: null, delegation: { sessionKey: child.key, label: child.label || child.displayName || child.goal?.objective || null },
+    } })), context),
+  ]);
   return Object.assign({ key: s.key, label: sessionLabel(s, names), title: sessionTitle(s, names), kind: P.sessionKind(s.class.kind) }, runtimeKindOf(P, s), {
     model: s.model ? s.model.id : null, modelProvider: s.model ? s.model.provider : s.provider,
     tokens: s.usage.total, updatedAt: s.updatedAt, cwd: s.cwd,
@@ -103,6 +112,8 @@ function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P 
     window: t ? { from: t.window.from, to: t.window.to } : { from: 0, to: 0 },
     toolCount: events.filter((e) => e.kind === 'tool').length,
     traceState,
+    participants: participants.filter((p) => !p.delegation),
+    subagents: participants.filter((p) => p.kind === 'agent' && p.delegation),
     events,
   });
 }

@@ -103,7 +103,7 @@ describe('R22-03 · a fresh instance serves the v3 bootstrap (meta and setup) be
   it('GET /api/v3/meta → a 3.0 MetaVM with configured:false; /api/v3/setup works like v2', async () => {
     const meta = await h.get('/api/v3/meta');
     assert.equal(meta.status, 200, meta.text);
-    assert.deepEqual([meta.json.data.apiVersion, meta.json.data.contractVersion, meta.json.data.instance.configured], [3, '3.0', false]);
+    assert.deepEqual([meta.json.data.apiVersion, meta.json.data.contractVersion, meta.json.data.instance.configured], [3, '3.2', false]);
     const setup = await h.get('/api/v3/setup');
     assert.equal(setup.status, 200); assert.equal(setup.json.data.state, 'open');
     assert.equal((await h.get('/api/v3/views/office')).status, 503, 'everything else waits for configuration');
@@ -192,7 +192,7 @@ describe('R22-08 · mount aliases in another case pick the version their path na
     const s = openSse(h.base, '/API/V3/stream?topics=office', { cookie: h.cookie });
     try {
       const hello = await s.next((e) => e.event === 'hello');
-      assert.equal(hello.data.contractVersion, '3.0');
+      assert.equal(hello.data.contractVersion, '3.2');
       const r = await h.request('POST', `/API/V3/stream/${hello.data.streamId}/topics`, { add: ['health'] });
       assert.equal(r.status, 200, 'the stream id is found in the v3 hub: ' + r.text);
     } finally { s.close(); }

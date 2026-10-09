@@ -179,7 +179,7 @@
         "properties": {
           "agentId": {
             "type": "string",
-            "pattern": "^(main|primary|\\*(subagent|cron|dm|channel|scheduled|direct|group|conversation)|(subagent|cron|dm|channel|scheduled|direct|group|conversation):[^\\s]{1,128})$",
+            "pattern": "^(main|primary|\\*(agent|subagent|cron|dm|channel|scheduled|direct|group|conversation)|(agent|subagent|cron|dm|channel|scheduled|direct|group|conversation):[^\\s]{1,128})$",
             "description": "The primary agent (\"main\" in 2.x, \"primary\" in 3.0), an exact OccupantId (\"subagent:<subjectId>\", \"dm:<id>\" ≡ \"direct:<id>\" …), or a default rule \"*<role>\". Both vocabularies are accepted (ADR-001 §12.6: main ≡ primary, cron ≡ scheduled, dm ≡ direct, channel ≡ group; conversation is 3.0). Matching: exact id → \"*<role>\" → \"*conversation\" (conversation roles) → \"*subagent\"."
           },
           "match": {
@@ -192,6 +192,7 @@
               "kind": {
                 "enum": [
                   "main",
+                  "agent",
                   "subagent",
                   "cron",
                   "dm",

@@ -5,15 +5,27 @@
       "agents": [
         {
           "id": "atlas",
-          "name": "Atlas",
+          "name": "Orion",
+          "nameSource": "IDENTITY.md",
           "isPrimary": true,
-          "model": "anthropic/claude-sonnet-5"
+          "model": "anthropic/claude-sonnet-5",
+          "projectTag": "absent"
         },
         {
           "id": "scribe",
           "name": "Scribe",
+          "nameSource": "runtime",
           "isPrimary": false,
-          "model": null
+          "model": "mistral/mistral-large-3",
+          "projectTag": "absent"
+        },
+        {
+          "id": "reviewer",
+          "name": "Aaron",
+          "nameSource": "runtime",
+          "isPrimary": false,
+          "model": "acme-llm/acme-1",
+          "projectTag": "unknown"
         }
       ]
     },
@@ -22,7 +34,7 @@
   },
   "meta": {
     "modelVersion": 1,
-    "generatedAt": 1791223200000,
+    "generatedAt": 1791288000000,
     "stale": []
   }
 }

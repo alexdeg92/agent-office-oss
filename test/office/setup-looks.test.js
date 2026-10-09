@@ -43,10 +43,10 @@ describe('setup looks (O5)', () => {
     const missing = [];
     for (const [kind, map] of [['character', idx.characters], ['accessory', idx.accessories], ['furniture', idx.furniture], ['theme', idx.themes]]) {
       for (const o of map.values()) {
-        if (!S.ASSET_EN[`${kind}.${o.id}`]) missing.push(`${kind}.${o.id}`);
-        for (const v of o.variants ?? []) if (!S.ASSET_EN[`variant.${v.id}`]) missing.push(`variant.${v.id}`);
+        if (!o.names?.en && !S.ASSET_EN[`${kind}.${o.id}`]) missing.push(`${kind}.${o.id}`);
+        for (const v of o.variants ?? []) if (!v.names?.en && !S.ASSET_EN[`variant.${v.id}`]) missing.push(`variant.${v.id}`);
       }
     }
-    assert.deepEqual(missing, [], 'add them to ASSET_EN in public/v2/office/strings.js');
+    assert.deepEqual(missing, [], 'provide names.en in the pack or ASSET_EN in strings.js');
   });
 });

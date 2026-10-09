@@ -123,7 +123,7 @@ describe('G6 · selected by the instance config, and by setup', () => {
     try {
       const code = h.setupCode();
       const vm = (await h.get('/api/v2/setup')).json.data;
-      assert.deepEqual(vm.adapters.find((a) => a.id === 'demo'), { id: 'demo', name: 'Démo', fields: [], defaultGatewayUrl: null });
+      assert.deepEqual(vm.adapters.find((a) => a.id === 'demo'), { id: 'demo', name: 'Démo', connect: true, fields: [], defaultGatewayUrl: null });
       const post = (p, b, m = 'POST') => fetch(h.base + p, { method: m, headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.assign({ setupCode: code }, b)) }).then(async (r) => ({ status: r.status, json: await r.json() }));
       assert.equal((await post('/api/v2/setup/check', { runtime: { adapter: 'demo' } })).json.data.result.status, 'connected');
       assert.deepEqual((await post('/api/v2/setup/discover', { runtime: { adapter: 'demo' } })).json.data.result.agents.map((a) => a.id), ['nova', 'sage', 'pixel']);

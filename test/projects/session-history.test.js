@@ -62,7 +62,7 @@ describe('session history rows · end to end (an auto-added project, its sub-age
     assert.ok(typeof item.text.params.session.params.agent === 'string' && item.text.params.session.params.agent.length > 0, 'the agent\'s name');
     assert.ok(Number.isInteger(item.text.params.messages) && item.text.params.messages > 0, JSON.stringify(item.text));
     assert.equal(item.session.route, '/journaux/' + encodeURIComponent(SUB));
-    assert.match(item.session.summary, /^Demandeur : .* → .* : 1 étape → Résultat : Voici le plan en quatre étapes\.$/, item.session.summary);
+    assert.match(item.session.summary, /^Agent : .* → .* : 1 étape → Résultat : Voici le plan en quatre étapes\.$/, item.session.summary);
     assert.doesNotMatch(JSON.stringify(item), /\{messages\}/);
     for (const v of ['v2', 'v3']) {
       const page = (await h.get(`/api/${v}/views/projects/${card.id}/history`)).json.data;

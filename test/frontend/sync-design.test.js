@@ -17,6 +17,7 @@ function offenders(files) {
   return files.map(rel).filter((r) => {
     if (r.startsWith('../')) return false;   // mock/examples: contract examples, not design assets
     if (/^fonts\/([\w-]+\.woff2|OFL-[\w-]+\.txt)$/.test(r)) return false;   // self-hosted fonts and the licence the OFL requires with them
+    if (/^assets\/Characters\/[a-z][a-z0-9-]*\/manifest\.json$/.test(r)) return false;
     if (PROVENANCE.some((re) => re.test(r))) return true;
     return !ALLOWED_OTHER.has(r) && !RUNTIME_EXT.has(extname(r).toLowerCase());
   });
@@ -27,6 +28,14 @@ test('sync-design plans runtime assets only (no provenance, no data files under 
   assert.deepEqual(offenders(planned), []);
   const worn = planned.map(rel).filter((r) => /(^|\/)worn(\/|$)/i.test(r) || /(^|\/)debug(\/|$)/i.test(r) || /diagnostic/i.test(r));
   assert.deepEqual(worn, []);
+});
+
+test('planned and shipped pack manifests match the enabled registry, including after a pack is disabled', () => {
+  const manifest=JSON.parse(readFileSync(new URL('../../design/office/manifest.example.json',import.meta.url)));
+  const expected=manifest.characterPacks.packs.map(p=>p.id).sort();
+  const ids=files=>files.map(rel).flatMap(r=>{const m=/^assets\/Characters\/([a-z][a-z0-9-]*)\/manifest\.json$/.exec(r);return m?[m[1]]:[];}).sort();
+  assert.deepEqual(ids(sync.plan().map(([,d])=>d)),expected);
+  assert.deepEqual(ids(walk(sync.DEST)),expected);
 });
 
 test('public/v2/bureau on disk holds no provenance file and no local path (/home/) in any file, binary included', () => {

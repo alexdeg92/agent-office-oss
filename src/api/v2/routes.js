@@ -12,6 +12,7 @@ const { createVersionedTopics } = require('./topics');
 const { project2x } = require('./project2x');
 const { project3x } = require('./project3x');
 const { createStreamHub } = require('./stream');
+const { officeSignalFrame } = require('./office-signals');
 const { buildHealthVM, createHealthSeries } = require('./vm/health');
 const { buildMetaVM, buildMetaVM3, buildMeVM, capabilitiesOf } = require('./vm/meta');
 const { mountProjects } = require('./projects');
@@ -75,6 +76,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   // data changes → topics (coalesced); connection changes → system frames
   engine.on('ingested', () => topics.invalidate());
   engine.on('change', (c) => { topics.invalidate(); if (c && c.channel === 'gateway.connection') { hubs[2].broadcastSystem(); hubs[3].broadcastSystem(); } });
+  const onOfficeLive = e => { for (const P of [project2x, project3x]) { const frame = officeSignalFrame(e, P); if (frame) hubs[P.version].broadcastOffice(frame); } };
+  engine.on('live', onOfficeLive);
   const sampler = setInterval(() => { series.sample(); topics.invalidate('health'); }, every(60000));
   if (sampler.unref) sampler.unref();
   series.sample();
@@ -114,8 +117,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     ok(res, { ok: true, result: { state }, revision: null, vm: null });
   });
 
-  const views = mountViews({ r, engine, topics, store, runtime, enrichment, authed, ok, now, isSubscribed: (id) => hubs[2].isSubscribed(id) || hubs[3].isSubscribed(id) });
-  const commands = mountCommands({ r, engine, topics, runtime, authed, guard, ok, views, now, log });
+  const views = mountViews({ configuredAgents: cfg.agentNames || {}, r, engine, topics, store, runtime, enrichment, authed, ok, now, isSubscribed: (id) => hubs[2].isSubscribed(id) || hubs[3].isSubscribed(id) });
+  const commands = mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, views, now, log });
   // S14b: the office layout and the UI prefs (store)
   const office = store ? mountOfficeLayout({ r, store, topics, authed, guard, ok, now, actorOf: views.actorOf, timeZone: cfg.timeZone,
     actorRefOf: () => ({ kind: 'human', personId: store.owner.id }) }) : null;
@@ -142,7 +145,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   app.use(['/api/v2', '/api/v3'], r);
   app.use(['/api/v2', '/api/v3'], errorMiddleware(log));   // errors raised before the router (body parsing)
   return { topics, hub, hubs, series, projects, thread, views, commands, office,
-    close: () => { clearInterval(sampler); views.close(); if (thread) thread.close(); if (office) office.close(); topics.close(); hubs[2].closeAll(); hubs[3].closeAll(); if (projects) projects.close(); } };
+    close: () => { engine.removeListener('live', onOfficeLive); clearInterval(sampler); views.close(); if (thread) thread.close(); if (office) office.close(); topics.close(); hubs[2].closeAll(); hubs[3].closeAll(); if (projects) projects.close(); } };
 }
 
 module.exports = { mountV2, writeClassOf, WRITE_CLASSES, apiVersionOf };

@@ -8,7 +8,7 @@ export const PROPOSED_AGENT = { id: 'main', name: 'Timmy', avatarUrl: assetUrl('
 export const META = {
   modelVersion: 1,
   apiVersion: 2,
-  contractVersion: '2.4',
+  contractVersion: '2.7',
   serverVersion: 'maquette',
   env: 'dev',
   capabilities: { openclawWrites: true, storeWrites: true },

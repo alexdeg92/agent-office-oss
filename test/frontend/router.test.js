@@ -109,3 +109,15 @@ test('F7: at /v2/ nothing outside the mount point is in the app', () => {
   assert.equal(parse('/v2x/sante').name, 'introuvable');
   assert.equal(safeReturn('/sante', 'https://h.example'), null);
 });
+
+test('27: animation sandbox route is authenticated, lazy and outside navigation at either mount', () => {
+  for (const basePath of ['/v2/', '/']) {
+    configure({basePath,apiBase:'/backend'});
+    const path=href('bureau-animations',{}, {agents:6,anim:'gym'}),[pathname,query]=path.split('?');
+    const m=parse(pathname,'?'+query);
+    assert.equal(m.name,'bureau-animations');assert.equal(m.query.agents,'6');
+    assert.equal(activeNav(m),'bureau');assert.equal(activeTab(m),'bureau');assert.ok(!m.route.public);
+    assert.ok(!NAV.some(r=>r.name==='bureau-animations'));
+  }
+  configure({basePath:'/v2/',apiBase:''});
+});

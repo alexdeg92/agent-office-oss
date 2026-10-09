@@ -1,6 +1,6 @@
 'use strict';
 // review-32 R32-01 (P1) and the rest of R30-02: a restore never destroys every copy of a store. Failures are injected
-// into the swap's renames and the cleanup's unlinks (restore's `ops.fs` seam). Whatever fails, the advertised final
+// into the swap's renames and the cleanup's unlinks (restore's `ops.beforeOperation` seam). Whatever fails, the advertised final
 // state is true, and at least one complete, intact store survives: the new one verified in place, or the previous one.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -21,8 +21,10 @@ const SECRETS = (tok) => JSON.stringify({ version: 1, sessionSecret: 's'.repeat(
 // an fs whose renameSync/rmSync throw EIO once, for the call matching `when(op, path)`
 function faulty(when) {
   let fired = 0;
-  const wrap = (op) => (...a) => { if (!fired && when(op, String(a[0]))) { fired++; throw Object.assign(new Error('injected EIO'), { code: 'EIO' }); } return fs[op](...a); };
-  return { renameSync: wrap('renameSync'), rmSync: wrap('rmSync'), get fired() { return fired; } };
+  return { beforeOperation(kind, from, to) {
+    const op = kind === 'remove' ? 'rmSync' : 'renameSync';
+    if (!fired && when(op, String(from), String(to))) { fired++; throw Object.assign(new Error('injected EIO'), { code: 'EIO' }); }
+  }, get fired() { return fired; } };
 }
 // a store file's facts, from a private copy (with its WAL): intact, and which store it is (the target has r32_marker)
 function facts(file) {
@@ -67,7 +69,7 @@ describe('R32-01 · a restore never destroys every copy of a store', () => {
       prerestores: () => (fs.existsSync(path.join(data, 'backups')) ? fs.readdirSync(path.join(data, 'backups')).filter((f) => /prerestore/.test(f)).map((f) => path.join(data, 'backups', f)) : []),
       leftovers: () => fs.readdirSync(data).concat(fs.readdirSync(cfg)).filter((f) => /\.rollback-/.test(f)) };
   }
-  const run = (t, fsx) => restore({ dataDir: t.data, paths: t.paths, file: bk, instance: 'test', force: true, ops: { fs: fsx } });
+  const run = (t, fsx) => restore({ dataDir: t.data, paths: t.paths, file: bk, instance: 'test', force: true, ops: fsx });
 
   for (const [name, when] of [
     ['the FIRST moved-aside file (the previous store)', (op, p) => op === 'rmSync' && /\.agent-office\.sqlite\.rollback-/.test(p)],
@@ -99,11 +101,9 @@ describe('R32-01 · a restore never destroys every copy of a store', () => {
   it('the swap fails AND a rollback rename fails: the pre-restore copy is kept and the previous store survives intact somewhere; the error says so', async () => {
     const t = target();
     let n = 0;
-    const fsx = { rmSync: fs.rmSync, renameSync: (a, b) => {
-      // 1) placing the staged config fails; 2) putting the previous store back fails
-      if (/config\.json$/.test(String(b)) && !/rollback/.test(String(b)) && n === 0) { n++; throw Object.assign(new Error('EIO'), { code: 'EIO' }); }
-      if (/\.agent-office\.sqlite\.rollback-/.test(String(a)) && String(b).endsWith('agent-office.sqlite') && n === 1) { n++; throw Object.assign(new Error('EIO'), { code: 'EIO' }); }
-      return fs.renameSync(a, b);
+    const fsx = { beforeOperation: (kind, a, b) => {
+      if (kind === 'place' && /config\.json$/.test(String(b)) && n === 0) { n++; throw Object.assign(new Error('EIO'), { code: 'EIO' }); }
+      if (kind === 'rollback' && /\.agent-office\.sqlite\.rollback-/.test(String(a)) && n === 1) { n++; throw Object.assign(new Error('EIO'), { code: 'EIO' }); }
     } };
     await assert.rejects(run(t, fsx), (e) => e.code === 'failed' && /could not be rolled back completely/.test(e.reason));
     assert.equal(n, 2);

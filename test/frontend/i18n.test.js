@@ -3,7 +3,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { setMeta, t, label, msg, rich, setLang, negotiate, messageKeys } from '../../public/v2/i18n.js';
-import { MESSAGES, duplicateKeys } from '../../public/v2/messages.js';
+import { MESSAGES, duplicateKeys, registerMessages } from '../../public/v2/messages.js';
+import * as onboardingMessages from '../../public/v2/messages/onboarding.js';
+// Audit lazy dictionaries too, without pulling them into the shipped core graph.
+registerMessages(onboardingMessages);
 import { LABELS_EN } from '../../public/v2/locales/labels.en.js';
 
 const NB = ' ';

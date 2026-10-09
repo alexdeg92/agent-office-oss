@@ -33,12 +33,18 @@ const decodeKey = (k) => { try { return decodeURIComponent(k); } catch (_) { ret
  * @param {object} p.enrichment the selected enrichers (src/enrichers: peek, resolve, nameOf, onChange), may be null
  * @param {Function} p.authed, p.ok
  */
-function mountViews({ r, engine, topics, store, runtime, enrichment = null, authed, ok, isSubscribed = () => false, now = () => Date.now() }) {
+function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, enrichment = null, authed, ok, isSubscribed = () => false, now = () => Date.now() }) {
   // G7 (ADR-001 §14.2): interlocutor profiles come from the selected enrichers (InterlocutorProfile, cached only)
   const peek = enrichment ? (id) => enrichment.peek(id) : () => ({ resolution: 'unresolvable', profile: null });
   const names = {
+    senderContext: (s) => ({ runtime: runtime?.definition?.id || 'generic', sessionKey: s.key, operator: s.class.kind === 'dashboard' || s.class.explicitKey === 'portal-chat' ? store?.owner : null,
+      agent: (() => { const a = engine.agents().find((a) => a.id === s.class.agentId); return a ? { ...a, id: 'agent:' + a.id } : null; })(), people: store?.persons.senderPeople?.() || store?.persons.list() || [],
+      sessionOf: (key) => engine.session(key),
+      nameOf: (id) => enrichment?.nameOf(id), avatarOf: (id) => enrichment?.peek(id)?.profile?.avatarUrl }),
     conversationMessageCount: (key) => engine.conversationMessageCount?.(key),
+    delegatedSessions: (s) => engine.sessions().filter((child) => child.class.kind === 'subagent' && (child.parentKey === s.key || s.childKeys?.includes(child.key))),
     interlocutorName: (id) => (enrichment ? enrichment.nameOf(id) : null),
+    senderName: (s) => { const { projectEvents } = require('../../engine/model/sender'); return projectEvents(engine.transcript(s.key)?.events, names.senderContext(s)).find((e) => e.senderInfo?.kind === 'human' && e.senderInfo.name)?.senderInfo.name || null; },
     flowName: (jobId) => { const j = engine.cronJobs().find((x) => x.id === jobId); return j ? j.name : null; },
   };
   const actorOf = (ref) => {
@@ -65,7 +71,7 @@ function mountViews({ r, engine, topics, store, runtime, enrichment = null, auth
     return Object.assign({}, off, { layout: l.data, revision: l.revision });
   };
   topics.define('office', { build: (_, P) => {
-    const vm = buildOfficeVM({ engine, now: now(), tracker, names, actorOf, layout: activeLayout(), P });
+    const vm = buildOfficeVM({ engine, now: now(), tracker, names, actorOf, layout: activeLayout(), configuredAgents, P });
     // R22-04: the inventory of occupants seen is kept whatever contract built the office, in CANONICAL (3.0) form;
     // LayoutVM serves it per version. A change refreshes the layout topic (its agentsSeen).
     if (store && store.office) {
@@ -161,6 +167,9 @@ function mountViews({ r, engine, topics, store, runtime, enrichment = null, auth
     // the session row IS the view's data; a failed or unavailable transcript read leaves the trace as it was (or
     // empty), and the response carries the failed source in meta.stale (R14-07)
     await pull('transcript', key, { full: true }, { force: true });
+    const humans = (engine.transcript(key)?.participants || []).filter((p) => p.kind === 'human' && enrichment?.handles(p.id)).map((p) => p.id);
+    if (humans.length) await enrichment.resolveAll(humans).catch(() => {});
+    topics.invalidateIds([topicOf('session', key)]);
     send(res, topicOf('session', key));
   });
   r.get('/views/access', authed, (req, res) => send(res, 'access'));

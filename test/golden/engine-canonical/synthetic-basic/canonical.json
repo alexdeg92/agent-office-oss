@@ -474,6 +474,26 @@
       "sessionKey": "agent:main:main",
       "fetchedAt": 1791223200000,
       "messageCount": 4,
+      "participants": [
+        {
+          "kind": "human",
+          "id": "human:unknown:agent:main:main",
+          "name": "Owner",
+          "runtime": "openclaw",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": null
+        },
+        {
+          "kind": "agent",
+          "id": "agent:main",
+          "name": "<configured agent>",
+          "runtime": "openclaw",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": null
+        }
+      ],
       "window": {
         "from": 0,
         "to": 4
@@ -483,6 +503,15 @@
           "id": "ev:0:0",
           "kind": "user",
           "at": 1791223020000,
+          "senderInfo": {
+            "kind": "human",
+            "id": "human:unknown:agent:main:main",
+            "name": "Owner",
+            "runtime": "openclaw",
+            "channel": null,
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Quel temps fera-t-il demain ?",
           "truncated": false,
           "sender": "Owner"
@@ -491,6 +520,15 @@
           "id": "ev:1:0",
           "kind": "assistant",
           "at": 1791223022000,
+          "senderInfo": {
+            "kind": "agent",
+            "id": "agent:main",
+            "name": "<configured agent>",
+            "runtime": "openclaw",
+            "channel": null,
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Je regarde la météo.",
           "truncated": false,
           "model": "model-a",
@@ -503,6 +541,15 @@
           "id": "ev:1:1",
           "kind": "tool",
           "at": 1791223022000,
+          "senderInfo": {
+            "kind": "tool",
+            "id": "tool:web_search",
+            "name": "web_search",
+            "runtime": "openclaw",
+            "channel": null,
+            "avatarHint": null,
+            "delegation": null
+          },
           "callId": "call_1",
           "name": "web_search",
           "toolKind": "search",
@@ -516,6 +563,15 @@
           "id": "ev:3:0",
           "kind": "assistant",
           "at": 1791223027000,
+          "senderInfo": {
+            "kind": "agent",
+            "id": "agent:main",
+            "name": "<configured agent>",
+            "runtime": "openclaw",
+            "channel": null,
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Demain : ensoleillé, 18 °C.",
           "truncated": false,
           "model": "model-a",
@@ -530,6 +586,29 @@
       "sessionKey": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
       "fetchedAt": 1791223200000,
       "messageCount": 3,
+      "participants": [
+        {
+          "kind": "agent",
+          "id": "agent:main",
+          "name": "<configured agent>",
+          "runtime": "openclaw",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": null
+        },
+        {
+          "kind": "agent",
+          "id": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+          "name": null,
+          "runtime": "openclaw",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": {
+            "sessionKey": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
+            "label": null
+          }
+        }
+      ],
       "window": {
         "from": 0,
         "to": 3
@@ -539,14 +618,32 @@
           "id": "ev:0:0",
           "kind": "user",
           "at": 1791223080000,
+          "senderInfo": {
+            "kind": "agent",
+            "id": "agent:main",
+            "name": "<configured agent>",
+            "runtime": "openclaw",
+            "channel": null,
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Analyse le dépôt.",
           "truncated": false,
-          "sender": null
+          "sender": "<configured agent>"
         },
         {
           "id": "ev:1:0",
           "kind": "tool",
           "at": 1791223081000,
+          "senderInfo": {
+            "kind": "tool",
+            "id": "tool:exec",
+            "name": "exec",
+            "runtime": "openclaw",
+            "channel": null,
+            "avatarHint": null,
+            "delegation": null
+          },
           "callId": "tu_1",
           "name": "exec",
           "toolKind": "exec",
@@ -562,6 +659,26 @@
       "sessionKey": "agent:main:discord:direct:100000000000000001",
       "fetchedAt": 1791223200000,
       "messageCount": 2,
+      "participants": [
+        {
+          "kind": "human",
+          "id": "discord-user:100000000000000001",
+          "name": "Guest",
+          "runtime": "openclaw",
+          "channel": "discord",
+          "avatarHint": null,
+          "delegation": null
+        },
+        {
+          "kind": "agent",
+          "id": "agent:main",
+          "name": "<configured agent>",
+          "runtime": "openclaw",
+          "channel": "discord",
+          "avatarHint": null,
+          "delegation": null
+        }
+      ],
       "window": {
         "from": 0,
         "to": 2
@@ -571,6 +688,15 @@
           "id": "ev:0:0",
           "kind": "user",
           "at": 1791223140000,
+          "senderInfo": {
+            "kind": "human",
+            "id": "discord-user:100000000000000001",
+            "name": "Guest",
+            "runtime": "openclaw",
+            "channel": "discord",
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Salut Timmy",
           "truncated": false,
           "sender": "Guest"
@@ -579,6 +705,15 @@
           "id": "ev:1:0",
           "kind": "assistant",
           "at": 1791223145000,
+          "senderInfo": {
+            "kind": "agent",
+            "id": "agent:main",
+            "name": "<configured agent>",
+            "runtime": "openclaw",
+            "channel": "discord",
+            "avatarHint": null,
+            "delegation": null
+          },
           "text": "Bonjour Guest !",
           "truncated": false,
           "model": null,

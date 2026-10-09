@@ -1,0 +1,13 @@
+{
+  "$fixture": { "source": "synthetic", "channel": "sender.conformance", "origin": "synthetic" },
+  "body": { "kind": "json", "value": {
+  "sessionKey": "agent:atlas:discord:channel:100000000000000099",
+  "humans": [
+    { "id": "100000000000000001", "name": "Mira" },
+    { "id": "100000000000000002", "name": "Jules" },
+    { "id": "100000000000000003", "name": "Noor" }
+  ],
+  "agent": { "id": "agent:atlas", "name": "Atlas" },
+  "operator": { "id": "per_operator", "name": "Camille" }
+  } }
+}

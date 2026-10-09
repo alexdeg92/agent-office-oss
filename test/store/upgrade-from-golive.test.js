@@ -50,7 +50,7 @@ after(() => {
 });
 
 describe('upgrade from the go-live release', () => {
-  it('migrates a 5a38aec store to the latest (012), keeps its data, backs up first, and refuses a downgrade', () => {
+  it('migrates a 5a38aec store to the latest (015), keeps its data, backs up first, and refuses a downgrade', () => {
     const tree = worktree();
     const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-golive-data-'));
     cleanup.push(data);
@@ -59,8 +59,8 @@ describe('upgrade from the go-live release', () => {
     const marker = JSON.parse(seeded.stdout.trim());
     const logs = [];
     const opened = openDatabase({ dir: data, instance: 'test', log: (line) => logs.push(line) });
-    assert.deepEqual(opened.applied, [7, 8, 9, 10, 11, 12]);
-    assert.equal(opened.db.prepare('SELECT max(version) AS v FROM schema_migrations').get().v, 12);
+    assert.deepEqual(opened.applied, [7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    assert.equal(opened.db.prepare('SELECT max(version) AS v FROM schema_migrations').get().v, 15);
     assert.match(logs.join('\n'), /pre-migration backup agent-office-premigrate-v006-/);
 
     const project = opened.db.prepare('SELECT name, summary FROM projects WHERE id = ?').get(marker.projectId);
@@ -115,7 +115,7 @@ describe('upgrade from the go-live release', () => {
     assert.match(refused.message, /newer than this build/);
     assert.equal(sha256(file), before);
     const still = new DatabaseSync(file, { readOnly: true });
-    assert.equal(still.prepare('SELECT max(version) AS v FROM schema_migrations').get().v, 12);
+    assert.equal(still.prepare('SELECT max(version) AS v FROM schema_migrations').get().v, 15);
     assert.equal(still.prepare('SELECT name FROM projects').get().name, 'Agent Office');
     still.close();
   });

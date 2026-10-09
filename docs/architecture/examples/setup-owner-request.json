@@ -1,0 +1,9 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "owner": {
+    "displayName": "Synthetic Operator",
+    "email": "owner@example.invalid",
+    "password": "synthetic-owner-password",
+    "passwordConfirmation": "synthetic-owner-password"
+  }
+}

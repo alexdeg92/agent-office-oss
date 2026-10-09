@@ -13,7 +13,10 @@ function exportTree(dest) {
   const allowedRoots = new Set(['src', 'public', 'scripts', 'test', 'docs', 'packaging', 'integrations', '.github']);
   const rootFiles = new Set(['package.json', 'package-lock.json', 'server.js', 'gateway.js', 'README.md', 'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', '.env.example', '.gitignore', '.dockerignore']);
   const sourceAssets = new Set(plan().map(([src]) => path.relative(ROOT, src).split(path.sep).join('/')));
-  const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT }).toString().split('\0').filter(Boolean);
+  // ls-files --cached also lists tracked files deleted in the worktree. Export the current tree,
+  // including staged/unstaged removals, rather than attempting to copy those index-only paths.
+  const deleted = new Set(execFileSync('git', ['ls-files', '-z', '--deleted'], { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter(Boolean));
+  const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter((file) => file && !deleted.has(file));
   // The built frontend is intentionally ignored by git, but needed in the exported checkout.
   function built(dir) {
     for (const entry of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {

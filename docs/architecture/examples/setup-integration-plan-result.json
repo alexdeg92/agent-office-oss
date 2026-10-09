@@ -1,0 +1,46 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "planId": "nXwsTblE87aD0nkSPNP0vneo",
+      "agents": [
+        {
+          "id": "atlas",
+          "status": "absent",
+          "files": [
+            "/tmp/agent-office-synthetic/workspaces/atlas/skills/projet/SKILL.md",
+            "/tmp/agent-office-synthetic/workspaces/atlas/skills/projet/projet.js",
+            "/tmp/agent-office-synthetic/workspaces/atlas/AGENTS.md"
+          ],
+          "uninstallFiles": [
+            "/tmp/agent-office-synthetic/workspaces/atlas/skills/projet/SKILL.md",
+            "/tmp/agent-office-synthetic/workspaces/atlas/skills/projet/projet.js",
+            "/tmp/agent-office-synthetic/workspaces/atlas/AGENTS.md"
+          ]
+        },
+        {
+          "id": "scribe",
+          "status": "absent",
+          "files": [
+            "/tmp/agent-office-synthetic/workspaces/scribe/skills/projet/SKILL.md",
+            "/tmp/agent-office-synthetic/workspaces/scribe/skills/projet/projet.js",
+            "/tmp/agent-office-synthetic/workspaces/scribe/AGENTS.md"
+          ],
+          "uninstallFiles": [
+            "/tmp/agent-office-synthetic/workspaces/scribe/skills/projet/SKILL.md",
+            "/tmp/agent-office-synthetic/workspaces/scribe/skills/projet/projet.js",
+            "/tmp/agent-office-synthetic/workspaces/scribe/AGENTS.md"
+          ]
+        }
+      ],
+      "backupDir": "/tmp/agent-office-synthetic/data/integrations/backups"
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

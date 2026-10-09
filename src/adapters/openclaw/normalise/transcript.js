@@ -7,6 +7,8 @@
 const TOOL_KIND = [[/web_search|search/, 'search'], [/fetch|web/, 'web'], [/browser/, 'browser'], [/exec|bash|shell/, 'exec'],
   [/read|file/, 'file-read'], [/write|edit/, 'file-write'], [/memory/, 'memory'], [/discord|message/, 'message'], [/image/, 'image']];
 const toolKind = (n) => { n = String(n || '').toLowerCase(); for (const [re, k] of TOOL_KIND) if (re.test(n)) return k; return 'other'; };
+const { resolveSender, stripEnvelope, delegatedSender } = require('../sender');
+const { participantsOf, nameOf } = require('../../../engine/model/sender');
 const STOP = new Set(['stop', 'toolUse', 'error']);
 
 function clip(s, n) { s = String(s == null ? '' : s); return s.length > n ? { text: s.slice(0, n), truncated: true } : { text: s, truncated: false }; }
@@ -22,10 +24,35 @@ function textOf(c) {
 // role raises enum.unmapped (path only, never the value), so new content can't vanish silently.
 const METADATA_PARTS = new Set(['openai_responses_terminal', 'agent']);
 const ROLES = new Set(['system', 'user', 'assistant', 'toolResult', 'tool']);
+const jsonObject = (value) => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null; } catch { return null; }
+};
+// Pair successful spawn results with their own call before windowing/clipping. Labels never come
+// from a different call or from prose that merely mentions a spawn.
+function delegatedLabelsOf(messages) {
+  const calls = new Map(), labels = new Map();
+  for (const m of messages) if (m.role === 'assistant' && Array.isArray(m.content)) for (const p of m.content) {
+    if (!p || !['toolCall', 'tool_use', 'toolUse'].includes(p.type) || (p.name || p.toolName) !== 'sessions_spawn') continue;
+    const id = p.toolCallId || p.id || p.toolUseId || p.tool_use_id;
+    const args = jsonObject(p.input || p.args || p.arguments || p.parameters || p.params);
+    if (id) calls.set(id, nameOf(args?.label, args?.task));
+  }
+  for (const m of messages) if (['toolResult', 'tool'].includes(m.role) && !m.isError) {
+    const first = Array.isArray(m.content) ? m.content[0] : null;
+    const id = m.toolCallId || first?.toolCallId || first?.toolUseId || first?.id;
+    if (!calls.has(id)) continue;
+    const result = jsonObject(m.details) || jsonObject(textOf(m.content));
+    const key = result?.childSessionKey;
+    if (typeof key === 'string' && key.trim() && !['error', 'forbidden', 'rejected'].includes(result.status)) labels.set(key, calls.get(id) || labels.get(key) || null);
+  }
+  return labels;
+}
 // Seen in captures, content not rendered yet (data-model §2.1): known, deliberately skipped, not drift.
 const METADATA_ROLES = new Set(['custom', 'operator']);
 
-function normaliseTranscript(sessionKey, v, fetchedAt, window = 120, issue = () => {}) {
+function normaliseTranscript(sessionKey, v, fetchedAt, window = 120, issue = () => {}, context = {}) {
+  const ctx = { ...context, sessionKey, delegatedLabels: delegatedLabelsOf(v.messages) };
   const all = v.messages, msgs = all.slice(-window);
   const results = {};
   for (const m of msgs) {
@@ -41,7 +68,8 @@ function normaliseTranscript(sessionKey, v, fetchedAt, window = 120, issue = () 
   msgs.forEach((m, mi) => {
     const at = m.timestamp || 0;
     if (m.role === 'system') { const c = clip(textOf(m.content), 8000); events.push({ id: evId(mi, 0), kind: 'system', at, text: c.text, truncated: c.truncated }); return; }
-    if (m.role === 'user') { const c = clip(textOf(m.content), 8000); events.push({ id: evId(mi, 0), kind: 'user', at, sender: m.senderName || m.senderLabel || null, text: c.text, truncated: c.truncated }); return; }
+    if (m.role === 'user') { const rawText = textOf(m.content), senderInfo = resolveSender(m, { ...ctx, text: rawText });
+      const c = clip(stripEnvelope(rawText), 8000); events.push({ id: evId(mi, 0), kind: senderInfo.kind === 'system' ? 'system' : 'user', at, ...(senderInfo.kind === 'system' ? {} : { sender: senderInfo.name }), senderInfo, text: c.text, truncated: c.truncated }); return; }
     if (METADATA_ROLES.has(m.role)) return;
     if (!ROLES.has(m.role)) { issue('enum.unmapped', 'warn', '$.messages[].role', 'value not in the table'); return; }
     if (m.role !== 'assistant') return;
@@ -75,7 +103,11 @@ function normaliseTranscript(sessionKey, v, fetchedAt, window = 120, issue = () 
     }
     events.push(...extra);
   });
-  return { sessionKey, fetchedAt, messageCount: all.length, window: { from: all.length - msgs.length, to: all.length }, events };
+  for (const event of events) if (!event.senderInfo) event.senderInfo = resolveSender({ role: event.kind === 'tool' ? 'tool' : event.kind === 'system' ? 'system' : 'assistant', name: event.name }, ctx);
+  return { participants: participantsOf([
+    ...all.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => ({ senderInfo: resolveSender(m, { ...ctx, text: textOf(m.content) }) })),
+    ...[...ctx.delegatedLabels.keys()].map((key) => ({ senderInfo: delegatedSender(key, { ...ctx, channel: ctx.session?.class.channel || null }) })),
+  ]), sessionKey, fetchedAt, messageCount: all.length, window: { from: all.length - msgs.length, to: all.length }, events };
 }
 
 module.exports = { normaliseTranscript, toolKind };

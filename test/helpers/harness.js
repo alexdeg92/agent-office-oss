@@ -79,10 +79,10 @@ async function startServer(sc, opts = {}) {
   };
   if (opts.readonly) env.PORTAL_READONLY = '1';
   // G4: a fresh install: no login env and no runtime token (setup supplies them; HOME is a temp dir, so no config file)
-  if (opts.setupMode) for (const k of ['PORTAL_EMAIL', 'PORTAL_PASSWORD', 'PORTAL_SECRET', 'OC_GATEWAY_TOKEN']) delete env[k];
+  if (opts.setupMode || opts.loginEnv === false) for (const k of ['PORTAL_EMAIL', 'PORTAL_PASSWORD', 'PORTAL_SECRET', 'OC_GATEWAY_TOKEN']) delete env[k];
   if (opts.failCli) env.FAKE_OC_FAIL = opts.failCli;
   Object.assign(env, opts.env || {});
-  if (opts.prepare) await opts.prepare(tmp);   // G4: e.g. a stored instance config under tmp/.config/agent-office
+  if (opts.prepare) await opts.prepare(tmp, { env, gateway: gw });   // G4: e.g. a stored instance config under tmp/.config/agent-office
 
   // AO_SERVER_ENTRY (test-only): run another server file, e.g. the pre-S1 baseline when creating goldens.
   const entry = process.env.AO_SERVER_ENTRY ? path.resolve(ROOT, process.env.AO_SERVER_ENTRY) : path.join(ROOT, 'server.js');

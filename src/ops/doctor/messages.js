@@ -10,6 +10,7 @@ const fr = {
   'source.env': 'environnement', 'source.file': 'fichier',
 
   'env.login.ok': 'Connexion du propriétaire : {names} présents ({sources})',
+  'env.login.partial': 'Connexion partielle dans l’environnement : {names}; le serveur refusera de démarrer sans modifier la connexion enregistrée',
   'env.login.missing': 'Connexion incomplète : {names} manquant(s); le serveur refusera de démarrer',
   'env.login.setup': 'Rien n’est configuré : le serveur démarrera en mode configuration initiale',
   'env.login.plaintext': 'PORTAL_PASSWORD (en clair) est obsolète : générez PORTAL_PASSWORD_HASH avec « agent-office hash-password »',
@@ -120,6 +121,7 @@ const en = {
   'source.env': 'environment', 'source.file': 'file',
 
   'env.login.ok': 'Owner login: {names} present ({sources})',
+  'env.login.partial': 'Partial environment login: {names}; the server will refuse to start without changing the stored login',
   'env.login.missing': 'Incomplete login: {names} missing; the server will refuse to start',
   'env.login.setup': 'Nothing is configured: the server will start in first-run setup mode',
   'env.login.plaintext': 'PORTAL_PASSWORD (plaintext) is deprecated: generate PORTAL_PASSWORD_HASH with `agent-office hash-password`',

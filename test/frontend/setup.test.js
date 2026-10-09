@@ -13,35 +13,30 @@ setMeta({ labels: {}, enums: {} });
 const NB = ' ';
 const base = () => ({ code: '', adapter: 'openclaw', gatewayUrl: '', token: '', check: null, agents: null, primary: null, looks: {}, name: '', owner: '', email: '', password: '', password2: '', passwordSet: false, locale: 'fr', timeZone: 'UTC' });
 
-test('each step blocks until its answers are complete; no step can be skipped', () => {
+test('onboarding chapters cannot skip owner, detection, connection, names or network validation', () => {
+  const at = (name, s) => R.blocker(R.STEPS.indexOf(name), s);
   let s = base();
-  assert.equal(R.reachable(s), 0);
-  assert.equal(R.blocker(0, s), 'setup.err.code');
-  s = { ...s, code: 'AO-1' };
-  assert.equal(R.blocker(1, s), 'setup.err.url');
-  s = { ...s, gatewayUrl: 'http://x' };
-  assert.equal(R.blocker(1, s), 'setup.err.url', 'only ws:// or wss://');
-  s = { ...s, gatewayUrl: 'ws://127.0.0.1:18789' };
-  assert.equal(R.reachable(s), 2);
-  s = { ...s, check: { ok: false, status: 'refused' } };
-  assert.equal(R.blocker(2, s), 'setup.err.check');
-  s = { ...s, check: { ok: true, protocol: 4, latencyMs: 40 }, agents: [] };
-  assert.equal(R.blocker(3, s), 'setup.err.agents', 'zero agents blocks');
-  s = { ...s, agents: [{ id: 'a1', name: 'Orion' }], primary: 'a1' };
-  assert.equal(R.reachable(s), 5);
-  s = { ...s, name: 'Bureau', email: 'pas-un-courriel' };
-  assert.equal(R.blocker(5, s), 'setup.err.owner');
-  s = { ...s, owner: 'Camille' };
-  assert.equal(R.blocker(5, s), 'setup.err.email');
-  s = { ...s, email: 'nom@example.invalid' };
-  assert.equal(R.blocker(5, s), 'setup.err.password', 'a password is required unless one is set');
-  assert.equal(R.blocker(5, { ...s, passwordSet: true }), null);
-  assert.equal(R.blocker(5, { ...s, password: 'court', password2: 'court' }), 'setup.err.passwordShort');
-  assert.equal(R.blocker(5, { ...s, password: 'douze-car-123', password2: 'douze-car-124' }), 'setup.err.passwordMatch');
-  s = { ...s, password: 'douze-car-123', password2: 'douze-car-123', timeZone: 'Mars/Olympus' };
-  assert.equal(R.blocker(5, s), 'setup.err.zone');
-  s = { ...s, timeZone: 'Europe/Paris' };
-  assert.equal(R.reachable(s), 6, 'review is the last step before the save');
+  assert.equal(R.reachable(s), 0); assert.equal(at('welcome', s), 'setup.err.code');
+  assert.equal(at('welcome', { ...s, resumePending: true }), 'setup.err.code');
+  assert.equal(at('welcome', { ...s, resumePending: true, code: 'AO-1' }), null, 'resume requires the code before private owner details');
+  s = { ...s, code: 'AO-1' }; assert.equal(at('welcome', s), 'setup.err.owner');
+  s.owner = 'Operator'; assert.equal(at('welcome', s), 'setup.err.email');
+  s.email = 'operator@example.invalid'; assert.equal(at('welcome', s), 'setup.err.password');
+  assert.equal(at('welcome', { ...s, password: 'short', password2: 'short' }), 'setup.err.passwordShort');
+  assert.equal(at('welcome', { ...s, password: 'long-password', password2: 'different' }), 'setup.err.passwordMatch');
+  s.passwordSet = true; assert.equal(R.reachable(s), 1);
+  s.detections = []; assert.equal(at('runtime', s), 'setup.err.url');
+  s.gatewayUrl = 'ws://127.0.0.1:18789'; assert.equal(R.reachable(s), R.STEPS.indexOf('gateway'));
+  s.check = { ok: true }; s.agents = []; assert.equal(at('agents', s), 'setup.err.agents');
+  s.agents = [{ id: 'a1', name: null }]; assert.equal(at('agents', s), 'onboarding.name.required');
+  s.agents[0].name = 'Orion'; assert.equal(at('identities', s), 'setup.err.primary');
+  s.primary = 'a1'; assert.equal(at('office', s), 'setup.err.name');
+  s.name = 'Bureau'; s.timeZone = 'Mars/Base'; assert.equal(at('office', s), 'setup.err.zone');
+  s.timeZone = 'UTC'; s.network = { mode: 'public', port: 18789, publicUrl: 'http://office.example.com' };
+  assert.equal(at('network', s), 'onboarding.network.invalid');
+  s.network.publicUrl = 'https://office.example.com'; assert.equal(R.reachable(s), R.STEPS.indexOf('review'));
+  assert.equal(R.validNetwork({ mode: 'local', port: 0 }), false);
+  assert.equal(R.validNetwork({ mode: 'local', port: 18789, publicUrl: null }), true);
 });
 
 test('a connection change invalidates the check, the agents and the identities', () => {
@@ -117,9 +112,9 @@ test('G6: the demo runtime takes no connection: no URL or token field, check and
   const demo = vm.adapters.find((a) => a.id === 'demo');
   assert.deepEqual([demo.fields, demo.defaultGatewayUrl], [[], null]);
   const s = { ...base(), code: 'AO-1', adapter: 'demo', fields: [], gatewayUrl: '', token: 'reste-d-avant' };
-  assert.equal(R.blocker(1, s), null, 'no gateway address is asked for');
+  assert.equal(R.blocker(R.STEPS.indexOf('runtime'), s), null, 'no gateway address is asked for');
   assert.deepEqual(R.runtimeBody(s), { adapter: 'demo' }, 'neither a URL nor a leftover token');
-  assert.equal(R.blocker(1, { ...s, adapter: 'openclaw', fields: ['gatewayUrl', 'token'] }), 'setup.err.url');
+  assert.equal(R.blocker(R.STEPS.indexOf('runtime'), { ...s, adapter: 'openclaw', fields: ['gatewayUrl', 'token'] }), 'setup.err.url');
   const db = createSetup();
   const check = db.check({ setupCode: SETUP_CODE, runtime: { adapter: 'demo' } }).result;
   assert.deepEqual([check.ok, check.protocol], [true, null]);
@@ -204,4 +199,21 @@ test('architect-56 · the mock: discovery reports each agent’s tag, the save i
   assert.equal(createSetup({ hook: 'etiquette-conflit' }).save(body()).result.integrations.projet.status, 'conflict');
   assert.equal(createSetup({ hook: 'etiquette-erreur' }).save(body()).result.integrations.projet.status, 'failed');
   assert.equal(createSetup().save(body({ integrations: { projet: 'oui' } })).error[0], 400);
+});
+
+
+test('modern mock onboarding endpoints: owner first, detection, reviewed per-agent installs and write-only secrets', () => {
+  const db = createSetup();
+  const owner = { displayName: 'Operator', email: 'owner@example.invalid', password: 'synthetic-password', passwordConfirmation: 'synthetic-password' };
+  const b = { setupCode: SETUP_CODE, owner, runtime: { adapter: 'openclaw', gatewayUrl: 'ws://synthetic:1234' } };
+  assert.equal(db.onboard('owner', { ...b, setupCode: 'wrong' }).error[0], 403);
+  assert.equal(db.onboard('owner', b).result.owner.passwordSet, true);
+  assert.ok(!JSON.stringify(db.vm()).includes(owner.password));
+  assert.deepEqual(db.onboard('detect', b).result.runtimes, []);
+  const p = db.onboard('integrations/plan', b).result;
+  assert.equal(p.agents.length, 2);
+  const apply = { ...b, planId: p.planId, agentIds: p.agents.map(a => a.id), confirmed: true };
+  assert.ok(db.onboard('integrations/apply', apply).result.agents.every(a => a.status === 'installed'));
+  assert.ok(db.onboard('integrations/apply', { ...apply, action: 'uninstall' }).result.agents.every(a => a.status === 'absent'));
+  assert.equal(db.onboard('network', { ...b, action: 'probe' }).result.ok, true);
 });

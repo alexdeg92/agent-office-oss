@@ -6,8 +6,10 @@ import { defaultAccessoriesFor, sortAccessories } from './layout-rules.js';
 import { accessoryLayers } from './assets.js';
 
 /** Characters in manifest order, with their variants (an empty list when the character has none). */
-export function characterChoices(index) {
-  return [...index.characters.values()].map((c) => ({ id: c.id, role: c.role ?? null, label: c.label, variants: (c.variants ?? []).map((v) => ({ id: v.id, label: v.label, swatch: v.swatch ?? null })) }));
+export function characterChoices(index, loc = 'fr') {
+  return [...index.characters.values()].map((c) => ({ id: c.id, role: c.role ?? null, names: c.names,
+    label: c.names?.[loc] ?? c.label, variants: (c.variants ?? []).map((v) => ({ id: v.id, names: v.names,
+      label: v.names?.[loc] ?? v.label, swatch: v.swatch ?? null })) }));
 }
 
 /** Accessories grouped by slot, in manifest order: [[slot, [accessory…]]…] (slots without accessories omitted). */
@@ -90,6 +92,8 @@ export function withAccessory(index, look, id) {
 
 /** Is the accessory drawn for this look yet (v2 layers for its idle pose)? Undrawn gear is still saved. */
 export function accessoryDrawn(index, look, id) {
+  const character = index.characters.get(look.character);
+  if (character?.packManifest && !character.packLoaded) return character.accessorySupport?.[id]?.supported === true;
   const layers = accessoryLayers(index, look.character, [id], 'idle', look.variant, { legacy: false });
   return layers.back.length + layers.front.length > 0;
 }

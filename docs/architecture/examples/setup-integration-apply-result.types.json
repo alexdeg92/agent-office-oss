@@ -1,0 +1,14 @@
+{
+  "nullable": [
+    "$.revision",
+    "$.vm",
+    "$.result.agents[].backup",
+    "$.result.agents[].reason"
+  ],
+  "types": {
+    "$.revision": "number",
+    "$.vm": "any",
+    "$.result.agents[].backup": "string",
+    "$.result.agents[].reason": "string"
+  }
+}

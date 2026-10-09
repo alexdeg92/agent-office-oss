@@ -10,6 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
+const safe = require('../ops/safe-fs');
+const { Stage } = require('../ops/sqlite-artifacts');
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 const DB_FILE = 'agent-office.sqlite';
@@ -94,7 +96,8 @@ function assertTestSafeDir(dir, instance) {
   }
 }
 
-function openDatabase({ dir, instance, now = () => Date.now(), migrationsDir = MIGRATIONS_DIR, log = () => {} }) {
+function openDatabase({ dir, instance, now = () => Date.now(), migrationsDir = MIGRATIONS_DIR, log = () => {}, backupHook = () => {} }) {
+  dir = dir ? safe.canonicalPath(dir) : dir;
   if (!dir) throw new StoreError('no-data-dir', 'AO_DATA_DIR is not set');
   assertTestSafeDir(dir, instance);
   const migrationsKnown = listMigrations(migrationsDir);
@@ -128,23 +131,28 @@ function openDatabase({ dir, instance, now = () => Date.now(), migrationsDir = M
 
   const backupsDir = path.join(dir, 'backups');
   function backup(kind = 'daily') {
-    fs.mkdirSync(backupsDir, { recursive: true, mode: 0o700 });
+    // The worker has its own read connection and cannot include this connection's
+    // uncommitted changes. Keep VACUUM's original caller-transaction refusal.
+    if (db.isTransaction) throw new StoreError('backup-in-transaction', 'cannot back up a store with an active transaction');
+    const parent = safe.capture(dir); safe.verifyTrusted(parent.chain);
+    const existing = fs.existsSync(backupsDir) ? fs.lstatSync(backupsDir, { bigint: true }) : null;
+    safe.mutate(backupsDir, { type: 'mkdir', trusted: true, expectedParents: parent.chain,
+      expectedIdentity: existing ? { dev: String(existing.dev), ino: String(existing.ino) } : null });
+    safe.verifyTrusted(safe.capture(backupsDir).chain);
     const name = kind === 'daily' ? `agent-office-${stamp(now())}.sqlite` : `agent-office-premigrate-v${String(current).padStart(3, '0')}-${now()}.sqlite`;
-    const out = path.join(backupsDir, name);
-    // R8-05: VACUUM INTO a unique temporary file, chmod it, then atomically rename it over the destination. A failed
-    // backup leaves the previous one (and the retention inventory) untouched.
-    const tmp = path.join(backupsDir, `.tmp-${process.pid}-${now()}-${Math.random().toString(36).slice(2)}.sqlite`);
+    const out = path.join(backupsDir, name), target = safe.receipt(out, { missing: true });
+    const source = safe.receipt(file), stage = new Stage(backupsDir, { hook: backupHook, label: 'store-backup' });
     try {
-      db.prepare('VACUUM INTO ?').run(tmp);
-      fs.chmodSync(tmp, 0o600);
-      fs.renameSync(tmp, out);
-    } catch (e) {
-      try { fs.rmSync(tmp, { force: true }); } catch (_) {}
-      throw e;
-    }
+      stage.run('sqlite-copy', { source, vacuum: true });
+      const [row] = stage.sql([{ sql: 'PRAGMA integrity_check', mode: 'get' }], { readOnly: true });
+      if (!row || Object.values(row)[0] !== 'ok') throw new StoreError('backup-failed', 'backup verification failed');
+      stage.publish(target, { exclusive: kind !== 'daily' });
+    } finally { stage.cleanup(); }
     const prefix = kind === 'daily' ? /^agent-office-\d{8}\.sqlite$/ : /^agent-office-premigrate-/;
-    const all = fs.readdirSync(backupsDir).filter((f) => prefix.test(f)).sort();
-    for (const f of all.slice(0, Math.max(0, all.length - KEEP[kind === 'daily' ? 'daily' : 'premigrate']))) fs.rmSync(path.join(backupsDir, f));
+    const all = fs.readdirSync(backupsDir).filter(f => prefix.test(f)).sort();
+    for (const f of all.slice(0, Math.max(0, all.length - KEEP[kind === 'daily' ? 'daily' : 'premigrate']))) {
+      const cap = safe.receipt(path.join(backupsDir, f)); safe.guarded(cap, { type: 'remove', identity: cap.identity });
+    }
     return out;
   }
 

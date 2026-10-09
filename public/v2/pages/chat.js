@@ -1,3 +1,5 @@
+import { SenderAvatar } from '../components/sender.js';
+import { senderName } from '../sender.js';
 // Discuter (frontend-22: the Bureau chat, design/components/Chat): ChatVM from
 // GET /api/v2/views/chat, kept fresh by the `chat` topic (api.md §3.3); POST /api/v2/chat/messages → 202 (§5.2).
 // One fixed session, the last 50 messages, one pending turn at a time. The page states only what the VM proves:
@@ -154,13 +156,13 @@ function Message({ m, now, onRetry }) {
   const time = html`<time datetime=${new Date(m.at).toISOString()} title=${fmt.dateTime(m.at, now)}>${fmt.time(m.at)}</time>`;
   if (m.role === 'user') {
     return html`<div class="bu-msg bu-msg--user">
-      <div class="bu-msg__head"><span class="bu-sr-only">${msg('chat.you')}</span><span class="bu-msg__meta">${time}${m.id.startsWith('pending_') ? ' · ' + msg('chat.sent') : ''}</span></div>
+      <div class="bu-msg__head"><${SenderAvatar} event=${m} /><span class="bu-msg__who">${senderName(m, msg('chat.you'))}</span><span class="bu-msg__meta">${time}${m.id.startsWith('pending_') ? ' · ' + msg('chat.sent') : ''}</span></div>
       <div class="bu-msg__bubble">${m.text}</div></div>`;
   }
   const error = m.role === 'error';
   return html`<div class=${'bu-msg bu-msg--agent' + (error ? ' bu-msg--error' : '')}>
     <div class="bu-msg__head"><${Avatar} state=${error ? 'error' : undefined} />
-      <span class="bu-msg__who">${error ? msg('chat.failed') : agentName()}</span>
+      <span class="bu-msg__who">${error ? msg('chat.failed') : senderName(m, agentName())}</span>
       <span class="bu-msg__meta">${time}${metaParts.length ? ' · ' + metaParts.join(' · ') : ''}</span></div>
     ${error ? html`<div class="bu-msg__bubble"><p>${m.text}</p>
         ${onRetry ? html`<button type="button" class="bu-btn bu-btn--sm ao-chat__retry" onClick=${onRetry}><${Icon} name="undo" />${msg('chat.retry')}</button>` : null}</div>`

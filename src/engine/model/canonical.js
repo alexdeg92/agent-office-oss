@@ -4,13 +4,16 @@
  * object is validated against these at runtime (as Session is in model/session.js); an invalid one is
  * quarantined as shape.invalid under '$.canonical.<type>…' and not admitted.
  */
+const { safeExternalUrl } = require('../../../public/v2/url-policy.js');
 const s = require('../../schema');
+const { Sender, Participant } = require('./sender');
 const { CHANNEL_REF } = require('./kinds');   // G3b
 
 const ms = () => s.ms().nullable();
 const nn = () => s.int().min(0);
 const str = () => s.string();
 const strN = () => s.string().nullable();
+const externalUrlN = () => s.string().refine((v) => safeExternalUrl(v) === v, 'canonical HTTP(S) URL').nullable();
 const R = { extra: 'reject' };
 
 const Agent = s.object({
@@ -64,13 +67,13 @@ const Skill = s.object({
   name: s.string().min(1), emoji: strN(), description: str(), source: s.enumOf(SOURCES), rawSource: strN(), bundled: s.boolean(),
   status: s.enumOf(['active', 'disabled', 'unavailable']),
   visibility: s.object({ model: s.boolean(), command: s.boolean(), user: s.boolean() }, R),
-  homepage: strN(), missing: Req.nullable(),
+  homepage: externalUrlN(), missing: Req.nullable(),
 }, R);
 const SkillInfo = s.object({
   name: s.string().min(1), filePath: strN(), always: s.boolean(), source: s.enumOf(SOURCES),
   blockedBy: s.object({ allowlist: s.boolean(), agentFilter: s.boolean(), platform: s.boolean() }, R),
   requirements: Req.nullable(), missing: Req.nullable(),
-  install: s.array(s.object({ id: str(), kind: str(), label: str(), bins: s.array(str()) }, R)), homepage: strN(),
+  install: s.array(s.object({ id: str(), kind: str(), label: str(), bins: s.array(str()) }, R)), homepage: externalUrlN(),
 }, R);
 
 const Channel = s.object({
@@ -84,18 +87,19 @@ const Channel = s.object({
 }, R);
 
 const evId = () => s.string().refine((x) => /^ev:\d+:\d+$/.test(x), 'event id');   // S7b: 'ev:<message>:<part>' (TraceEventVM.id)
-const tr = (kind, extra) => s.object(Object.assign({ id: evId(), kind: s.literal(kind), at: nn(), text: str(), truncated: s.boolean() }, extra), R);
+const tr = (kind, extra) => s.object(Object.assign({ id: evId(), kind: s.literal(kind), at: nn(), senderInfo: Sender.optional(), text: str(), truncated: s.boolean() }, extra), R);
 const TraceEvent = s.discriminated('kind', {
   system: tr('system'), thinking: tr('thinking'), observation: tr('observation'),
   user: tr('user', { sender: strN() }),
   assistant: tr('assistant', { model: strN(), provider: strN(), outputTokens: nn().nullable(),
     stopReason: s.enumOf(['stop', 'toolUse', 'error', 'unrecognized']).nullable(), error: strN() }),
-  tool: s.object({ id: evId(), kind: s.literal('tool'), at: nn(), callId: strN(), name: str(),
+  tool: s.object({ id: evId(), kind: s.literal('tool'), at: nn(), senderInfo: Sender.optional(), callId: strN(), name: str(),
     toolKind: s.enumOf(['search', 'web', 'browser', 'exec', 'file-read', 'file-write', 'memory', 'message', 'image', 'other']),
     input: str(), output: str(), isError: s.boolean(), durationMs: nn().nullable(), truncated: s.boolean() }, R),
 });
 const Transcript = s.object({
   sessionKey: s.string().min(1), fetchedAt: nn(), messageCount: nn(),
+  participants: s.array(Participant).optional(),
   window: s.object({ from: nn(), to: nn() }, R), events: s.array(TraceEvent),
 }, R).refine((t) => t.window.to >= t.window.from && t.window.to === t.messageCount, 'window within messages');
 

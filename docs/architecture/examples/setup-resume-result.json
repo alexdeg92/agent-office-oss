@@ -1,0 +1,19 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "owner": {
+        "displayName": "Synthetic Operator",
+        "email": "owner@example.invalid",
+        "passwordSet": true
+      }
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

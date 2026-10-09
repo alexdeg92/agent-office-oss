@@ -52,8 +52,24 @@ export function lookLayers(index, look, pose = 'idle') {
   return [...acc.back.map((a) => a.path), body.path, ...acc.front.map((a) => a.path)];
 }
 
-export const Figure = ({ index, look, pose, assetBase, label, cls }) => html`<span class=${'ao-sc-figure ' + (cls || '')} role=${label ? 'img' : undefined} aria-label=${label || undefined}
-  aria-hidden=${label ? undefined : 'true'}>${lookLayers(index, look, pose).map((p, i) => html`<img key=${i} src=${resolveUrl(p, assetBase)} alt="" draggable="false" />`)}</span>`;
+export const Figure = ({ index, look, pose, assetBase, label, cls, thumbnail = false }) => {
+  const [, refresh] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const controller = new AbortController();
+    const c = index.characters.get(look.character);
+    if (!thumbnail && c?.packManifest && !c.packLoaded) {
+      import('./character-pack-loader.js' + buildQuery).then(m => m.ensureCharacterPack(index, look.character, assetBase, { signal: controller.signal }))
+        .then(() => { if (live) refresh(n => n + 1); }).catch(() => {});
+    }
+    return () => { live = false; controller.abort(); };
+  }, [index, look.character, assetBase, thumbnail]);
+  const ch = index.characters.get(look.character), v = ch?.variants?.find(v => v.id === look.variant);
+  const thumb = v?.thumbnail ?? ch?.thumbnail;
+  const paths = thumbnail && thumb ? [thumb] : lookLayers(index, look, pose);
+  return html`<span class=${'ao-sc-figure ' + (cls || '')} role=${label ? 'img' : undefined} aria-label=${label || undefined}
+    aria-hidden=${label ? undefined : 'true'}>${paths.map((p, i) => html`<img key=${i} src=${resolveUrl(p, assetBase)} alt="" draggable="false" loading=${thumbnail ? 'lazy' : undefined} decoding="async" />`)}</span>`;
+};
 
 export function SetupCharacters({ agents = [], value = null, onChange, manifest: given = null, assetBase = config.assetBase, selected = null, onSelect = null, embedded = false }) {
   useCss();
@@ -156,7 +172,7 @@ function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect
           <div class="ao-sc__cards">${choices.map((c) => html`<label key=${c.id} class=${'ao-sc__card' + (c.id === look.character ? ' is-on' : '')}>
             <input type="radio" name=${'ao-sc-char-' + agent.id} value=${c.id} checked=${c.id === look.character}
               onChange=${() => { const next = M.withCharacter(index, look, c.id); setHint(null); update(next, s('setup.set.character', { name: agent.name, character: charLabel(index.characters.get(c.id)) })); }} />
-            <${Figure} index=${index} look=${M.withCharacter(index, { character: null, variant: null, accessories: [] }, c.id)} pose="idle" assetBase=${assetBase} cls="ao-sc-figure--sm" />
+            <${Figure} index=${index} look=${M.withCharacter(index, { character: null, variant: null, accessories: [] }, c.id)} pose="idle" assetBase=${assetBase} thumbnail=${true} cls="ao-sc-figure--sm" />
             <span>${charLabel(index.characters.get(c.id))}</span></label>`)}</div>
         </fieldset>
         ${variants.length ? html`<fieldset class="ao-sc__set"><legend class="ao-sc__label">${s('setup.colour')}</legend>

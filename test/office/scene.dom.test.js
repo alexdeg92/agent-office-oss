@@ -47,7 +47,7 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
       const el = sc.chars.get('main').el;
       // Settled: decodes keep being answered (requests made later, e.g. after the swivel, are held too) until the
       // final pose is the one displayed and faded in.
-      await H.until(() => { H.releaseAll(); return /sofa-sit-sw\.png$/.test(sc.chars.get('main').displayed?.querySelector('[data-layer=body]')?.getAttribute('src') ?? '')
+      await H.until(() => { H.releaseAll(); return /life-error-sw\.webp$/.test(sc.chars.get('main').displayed?.querySelector('[data-layer=body]')?.getAttribute('src') ?? '')
         && sc.chars.get('main').displayed.classList.contains('is-in'); });
       // Any stale group would be dropped by the crossfade timer: wait for that timer to have run (no pose group fading).
       await H.until(() => [...el.querySelectorAll('.ao-pose')].every((g) => g === sc.chars.get('main').displayed));
@@ -56,7 +56,7 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
     `);
     assert.equal(r.count, 1);
     // Timmy works seated (Batch 6): an error swivels him to face the camera.
-    assert.match(r.body, /timmy\/sofa-sit-sw\.png$/);
+    assert.match(r.body, /timmy\/life-error-sw\.webp$/);
     await p.close();
   });
 
@@ -760,7 +760,7 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
     const r = await p.eval(`
       for (const fn of window.officeBench.services.cueListeners) fn({ type: 'cue', occupantId: 'main', cue: 'celebrating', at: Date.now() });
       const scene = document.querySelector('.ao-bureau__stage').aoScene;
-      await window.officeBench.until(() => scene.chars.get('main').cue === 'celebrating' && scene.chars.get('main').renderedPose === 'sofa-sit-sw');
+      await window.officeBench.until(() => scene.chars.get('main').cue === 'celebrating' && scene.chars.get('main').renderedPose === 'life-success-sw');
       const motion = scene.chars.get('main').el.dataset.motion;
       [...document.querySelectorAll('.ao-bureau__theme .bu-segmented__opt')].find((b) => b.textContent === 'Nuit').click();
       await window.officeBench.until(() => document.querySelector('.ao-office').dataset.officeTheme === 'night' && document.querySelector('.ao-bureau__theme [aria-pressed="true"]')?.textContent === 'Nuit');

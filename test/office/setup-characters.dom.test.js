@@ -68,6 +68,20 @@ describe('setup « characters » step (O5)', { skip, timeout: 120_000 }, () => {
     await p.close();
   });
 
+  it('English setup uses each pack’s character and variant names', async () => {
+    const p = await step('lang=en');
+    try {
+      const result = await p.eval(`const m=await (await fetch('/design/office/manifest.example.json')).json();
+        return m.characterPacks.packs.map(pack=>({expected:pack.names.en,
+          actual:document.querySelector('.ao-sc__card input[value="'+pack.id+'"]')?.closest('label').innerText}));`);
+      for (const row of result) assert.equal(row.actual.trim(), row.expected);
+      await p.eval(`document.querySelector('.ao-sc__card input[value="orbit"]').click();`);
+      await p.waitFor(`document.querySelector('.ao-sc__swatch input[value="pearl"]')`);
+      assert.match(await p.eval(`return document.querySelector('.ao-sc__swatch input[value="pearl"]').closest('label').innerText;`), /Pearl/);
+      assert.deepEqual(p.logs, []);
+    } finally { await p.close(); }
+  });
+
   it('a given value is kept where valid and repaired where not', async () => {
     const value = encodeURIComponent(JSON.stringify({ lyra: { character: 'subagent', variant: 'teal', accessories: ['cap', 'headphones', 'bogus'] }, vega: { character: 'gone' } }));
     const p = await step(`value=${value}`);

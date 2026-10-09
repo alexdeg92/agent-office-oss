@@ -17,6 +17,7 @@ import { streamUnconfirmed } from '../stream.js';
 import * as fmtTz from '../fmt.js';
 import { Icon, Ago, Skeleton } from '../components/ui.js';
 import { OfficeScene } from './scene.js';
+import { SurpriseSetting } from './surprise-setting.js';
 import { STATES } from './states.js';
 import { indexManifest, resolveUrl } from './assets.js';
 import { itemName, resolveOccupants, canonicalRuleId, presenceMinutes } from './layout-rules.js';
@@ -47,7 +48,7 @@ const occupantsKey = (list) => list.map((o) => [o.id, o.state, o.stateSince, o.s
  * O9: an annex room, a read-only scene of its own (zoom and fit, nameplates, selection; no editor, no theme toggle).
  * The same cues reach it (a cue for an agent elsewhere is ignored by its scene).
  */
-function Annex({ annex, lay, selected, onSelect, unconfirmed }) {
+function Annex({ annex, lay, selected, onSelect, unconfirmed, signals }) {
   const host = useRef(null);
   const sceneRef = useRef(null);
   useEffect(() => {
@@ -56,12 +57,13 @@ function Annex({ annex, lay, selected, onSelect, unconfirmed }) {
       onSelect: (id) => onSelect(id), primaryName: () => primaryName(), timeZone: () => fmtTz.timeZone() });
     sceneRef.current = scene;
     const listeners = (services.cueListeners ??= new Set());
-    const onCue = (f) => { if (annex.occupants.some((o) => o.id === f.occupantId)) sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null }); };
+    const onCue = (f) => { if (annex.occupants.some((o) => o.id === f.occupantId)) (f.signal ? sceneRef.current?.signal(f.occupantId, f.signal) : sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null })); };
     listeners.add(onCue);
     return () => { listeners.delete(onCue); scene.destroy(); sceneRef.current = null; };
   }, []);
   useEffect(() => { sceneRef.current?.setLayout(annex.layout); sceneRef.current?.setTheme(lay.theme.resolved); }, [lay.theme.resolved, annex.layout.items.length]);
   useEffect(() => { sceneRef.current?.setOccupants(named(annex.occupants)); }, [occupantsKey(annex.occupants)]);
+  useEffect(() => { sceneRef.current?.setSignals(signals); }, [signals]);
   useEffect(() => { sceneRef.current?.select(annex.occupants.some((o) => o.id === selected) ? selected : null); }, [selected, occupantsKey(annex.occupants)]);
   useEffect(() => { sceneRef.current?.setFrozen(unconfirmed); }, [unconfirmed]);
   return html`<section class=${'ao-bureau__annex' + (unconfirmed ? ' ao-bureau__annex--last' : '')} aria-labelledby=${'ao-annex-' + annex.n}>
@@ -239,7 +241,7 @@ export function BureauPage({ match }) {
           <${Stage} key=${stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : plan.office} lay=${lay} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} />
         </div>
         ${editing || !plan.annexes.length ? null : html`<div class="ao-bureau__annexes">
-          ${plan.annexes.map((a) => html`<${Annex} key=${a.id + ':' + stageLang} annex=${a} lay=${lay} selected=${selected} onSelect=${select} unconfirmed=${unconfirmed} />`)}
+          ${plan.annexes.map((a) => html`<${Annex} signals=${vm.journal} key=${a.id + ':' + stageLang} annex=${a} lay=${lay} selected=${selected} onSelect=${select} unconfirmed=${unconfirmed} />`)}
         </div>`}
       </div>
       <aside class="ao-bureau__side" aria-label=${editing ? tr('office.customize') : tr('office.rosterLabel')}>
@@ -334,6 +336,7 @@ function ThemeToggle({ lay }) {
   }
   const opts = ['auto', 'day', 'night'].map((id) => [id, tr(`office.theme.${id}`)]);
   return html`<div class="ao-bureau__theme">
+    <${SurpriseSetting} />
     <span class="ao-bureau__themelabel" id="ao-theme-label">${tr('office.margin.theme')}</span>
     <div class="bu-segmented" role="group" aria-labelledby="ao-theme-label" aria-busy=${busy ? 'true' : undefined}>
       ${opts.map(([id, text]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(mode === id)} disabled=${busy} onClick=${() => set(id)}>${text}</button>`)}
@@ -367,7 +370,7 @@ function Stage({ vm, occupants, lay, selected, onSelect, visits, editing, setEdi
     if (canWrite) scene.addControl({ label: tr('office.customize'), text: true, icon: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>', onClick: () => (phone() ? openShop() : setEditing(true)) });
     // SSE cue frames (app.js forwards them to services.cueListeners).
     const listeners = (services.cueListeners ??= new Set());
-    const onCue = (f) => sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null });
+    const onCue = (f) => (f.signal ? sceneRef.current?.signal(f.occupantId, f.signal) : sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null }));
     listeners.add(onCue);
     return () => { listeners.delete(onCue); editorRef.current?.close?.({ saved: false }); scene.destroy(); sceneRef.current = null; };
   }, []);
@@ -386,6 +389,7 @@ function Stage({ vm, occupants, lay, selected, onSelect, visits, editing, setEdi
     sceneRef.current.setOccupants(named(occupants));
   }, [occupantsKey(occupants)]);
 
+  useEffect(() => { sceneRef.current?.setSignals(vm.journal); }, [vm.journal]);
   useEffect(() => { sceneRef.current?.select(selected); }, [selected, vm.occupants]);
   // office-dev-22: visitors come to the agent (desk, or the meeting table for a real conversation).
   const visitsKey = JSON.stringify(visits ?? null);
@@ -478,6 +482,8 @@ const ROSTER_GROUPS = [
 ];
 
 function Roster({ occupants, selected, onSelect, now, unconfirmed, manifest }) {
+  const [eggs,setEggs]=useState({});
+  useEffect(()=>{const update=e=>setEggs(prev=>({...prev,[e.detail.id]:e.detail.kind}));document.addEventListener('office-surprise',update);return ()=>document.removeEventListener('office-surprise',update);},[]);
   // The reader's own open/closed choices per group win over the defaults (errors open; a group holding the selection).
   const [toggled, setToggled] = useState({});
   // An agent card (O3): portrait in its state ring, name, role, and the state pill. Its accessible name is its visible
@@ -489,7 +495,7 @@ function Roster({ occupants, selected, onSelect, now, unconfirmed, manifest }) {
       <span class="bu-cell-main"><span class="ao-roster__name ao-agentcard__name">${nameOf(o)}</span>
         <span class="bu-cell-sub">${L(o.roleLabel)}${o.stationUid || isVisitor(o) ? '' : ` · ${tr('office.noStation')}`}</span>
         ${o.presence ? html`<span class="ao-agentcard__seen">${o.presenceLabel}</span>` : null}</span>
-      <${StateChip} state=${o.state} live=${!unconfirmed && !o.presence} title=${unconfirmed ? tr('office.lastState', { state: stateLabel(o.state) }) : forState(o, now)} />
+      ${eggs[o.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[o.id]}>${tr('egg.'+eggs[o.id])}</span>` : html`<${StateChip} state=${o.state} live=${!unconfirmed && !o.presence} title=${unconfirmed ? tr('office.lastState', { state: stateLabel(o.state) }) : forState(o, now)} />`}
     </button></li>`;
   if (!occupants.length) return html`<p class="bu-text-secondary">${tr('office.empty')}</p>`;
   if (occupants.length <= ROSTER_GROUP_OVER) return html`<ul class="ao-bureau__roster">${occupants.map(card)}</ul>`;

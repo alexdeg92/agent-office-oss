@@ -2,8 +2,8 @@
 //   0 welcome (one-time setup code) → 1 runtime → 2 gateway check → 3 agents → 4 identities → 5 office → 6 review → 7 done.
 // Nothing here stores or echoes the runtime token or the owner password; a change to the connection invalidates the check and the agents.
 
-export const STEPS = ['welcome', 'runtime', 'gateway', 'agents', 'identities', 'office', 'review', 'done'];
-export const NUMBERED = STEPS.slice(1, 7);   // the six numbered chapters
+export const STEPS = ['welcome', 'detection', 'runtime', 'gateway', 'agents', 'identities', 'office', 'skills', 'network', 'review', 'done'];
+export const NUMBERED = STEPS.slice(1, -1);   // the six numbered chapters
 
 /** api.md 2.5 §5.7 (G6): an adapter declares the runtime fields it takes; `demo` takes none (no gateway, no token). */
 export const takes = (s, field) => !Array.isArray(s.fields) || s.fields.includes(field);
@@ -14,13 +14,14 @@ export const validZone = (z) => { try { return !!z && !!new Intl.DateTimeFormat(
 /** The first problem that blocks leaving `step` (a message key), or null when the step is complete. */
 export function blocker(step, s) {
   switch (STEPS[step]) {
-    case 'welcome': return s.code.trim() ? null : 'setup.err.code';
+    case 'welcome': return !s.code.trim() ? 'setup.err.code' : s.resumePending ? null : !s.owner.trim() ? 'setup.err.owner' : !validEmail(s.email) ? 'setup.err.email' : passwordBlocker(s);
+    case 'detection': return s.detections ? null : 'onboarding.detect.wait';
     case 'runtime': return !s.adapter ? 'setup.err.adapter' : !takes(s, 'gatewayUrl') || validUrl(s.gatewayUrl) ? null : 'setup.err.url';
     case 'gateway': return s.check && s.check.ok ? null : 'setup.err.check';
-    case 'agents': return s.agents && s.agents.length ? null : 'setup.err.agents';
-    case 'identities': return s.primary && s.agents.some((a) => a.id === s.primary) ? null : 'setup.err.primary';
-    case 'office': return !s.name.trim() ? 'setup.err.name' : !s.owner.trim() ? 'setup.err.owner' : !validEmail(s.email) ? 'setup.err.email'
-      : passwordBlocker(s) || (!validZone(s.timeZone) ? 'setup.err.zone' : null);
+    case 'agents': return !s.agents?.length ? 'setup.err.agents' : s.agents.some(a => !a.name?.trim()) ? 'onboarding.name.required' : null;
+    case 'identities': return !s.primary || !s.agents.some(a => a.id === s.primary) ? 'setup.err.primary' : s.ownerSaved && s.agents.some(a => !s.looks[a.id]?.character) ? 'onboarding.styles.wait' : null;
+    case 'office': return !s.name.trim() ? 'setup.err.name' : !validZone(s.timeZone) ? 'setup.err.zone' : null;
+    case 'network': return !validNetwork(s.network) ? 'onboarding.network.invalid' : null;
     default: return null;
   }
 }
@@ -38,8 +39,14 @@ export function reachable(s) {
 }
 
 /** A connection change invalidates everything learned from the previous connection (explorer-05). */
+export function validNetwork(n) {
+  if (!n || !['local', 'lan', 'tailnet', 'public', 'tunnel'].includes(n.mode) || !Number.isInteger(n.port) || n.port < 1 || n.port > 65535) return false;
+  if (n.mode === 'local') return !n.publicUrl;
+  try { const u = new URL(n.publicUrl); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password && !u.search && !u.hash && u.pathname === '/' && (n.mode === 'lan' || u.protocol === 'https:'); } catch { return false; }
+}
+
 export function withConnection(s, patch) {
-  return { ...s, ...patch, check: null, agents: null, primary: null, looks: {} };
+  return { ...s, ...patch, check: null, agents: null, primary: null, looks: {}, skillPlan: null, skillResults: null, skillsConfirmed: false };
 }
 
 /** The gateway check as a sentence: { key, params, tone }. */
@@ -62,8 +69,9 @@ export function payload(s, vm) {
     instance: { name: s.name.trim(), locale: s.locale, timeZone: s.timeZone },
     owner: { displayName: s.owner.trim(), email: s.email.trim(), ...(s.password ? { password: s.password } : {}) },
     runtime: runtimeBody(s),
-    agents: { primary: s.primary, looks: s.looks },
-    ...(offersProjet(vm, s) ? { integrations: { projet: s.projet !== false } } : {}),
+    agents: { primary: s.primary, looks: s.looks, ...(s.ownerSaved ? { names: Object.fromEntries((s.agents || []).map(a => [a.id, a.name.trim()])) } : {}) },
+    ...(s.ownerSaved ? { network: s.network } : {}),
+    ...(offersProjet(vm, s) ? { integrations: { projet: s.projet !== false, ...(s.ownerSaved ? { reviewed: true } : {}) } } : {}),
   };
 }
 

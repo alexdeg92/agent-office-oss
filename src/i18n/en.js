@@ -204,6 +204,7 @@ const LABELS = Object.freeze({
   "liveEvent.run.failed": "A run by {occupant} failed.",
   "liveEvent.run.started": "{occupant} started a run.",
   "liveEvent.run.succeeded": "{occupant} completed a run.",
+  "occupantRole.agent": "Agent",
   "occupantRole.channel": "Channel",
   "occupantRole.conversation": "Conversation",
   "occupantRole.cron": "Scheduled run",

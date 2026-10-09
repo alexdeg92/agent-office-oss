@@ -42,7 +42,7 @@ describe('G5 · /api/v3 on a foreign instance', () => {
 
   it('3.0 vocabularies: ids, roles, kinds, channels, interlocutors, flows, board, labels', async () => {
     const meta = await get('/api/v3/meta');
-    assert.deepEqual([meta.apiVersion, meta.contractVersion, meta.instance.locale, meta.runtime.capabilities.flows.multiAgent], [3, '3.0', 'en', true]);
+    assert.deepEqual([meta.apiVersion, meta.contractVersion, meta.instance.locale, meta.runtime.capabilities.flows.multiAgent], [3, '3.2', 'en', true]);
     assert.ok(!('channel' in meta.enums) && meta.enums.sessionKind.includes('internal'));
     assert.equal(meta.labels['sessionKind.main'], undefined); assert.ok(meta.labels['sessionKind.primary']);
     assert.equal(meta.labels['channel.telegram'], 'Telegram', 'the adapter\'s channel label, as data');
@@ -85,7 +85,7 @@ describe('G5 · /api/v3 on a foreign instance', () => {
     const s2 = openSse(h.base, '/api/v2/stream?topics=office', { cookie: h.cookie });
     try {
       const hello3 = await s3.next((e) => e.event === 'hello'), hello2 = await s2.next((e) => e.event === 'hello');
-      assert.equal(hello3.data.contractVersion, '3.0'); assert.equal(hello2.data.contractVersion, '2.5');
+      assert.equal(hello3.data.contractVersion, '3.2'); assert.equal(hello2.data.contractVersion, '2.7');
       const o3 = await s3.next((e) => e.data && e.data.topic === 'office'), o2 = await s2.next((e) => e.data && e.data.topic === 'office');
       assert.equal(o3.data.data.occupants[0].id, 'primary'); assert.equal(o2.data.data.occupants[0].id, 'main');
     } finally { s3.close(); s2.close(); }

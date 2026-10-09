@@ -1,0 +1,89 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "runtimes": [
+        {
+          "runtime": "claude-code",
+          "name": "Claude Code",
+          "found": true,
+          "confidence": "presence",
+          "supported": false,
+          "connection": null,
+          "agents": []
+        },
+        {
+          "runtime": "codex",
+          "name": "Codex",
+          "found": true,
+          "confidence": "presence",
+          "supported": false,
+          "connection": null,
+          "agents": []
+        },
+        {
+          "runtime": "cursor-cli",
+          "name": "Cursor CLI",
+          "found": false,
+          "confidence": "none",
+          "supported": false,
+          "connection": null,
+          "agents": []
+        },
+        {
+          "runtime": "hermes",
+          "name": "Hermes",
+          "found": false,
+          "confidence": "none",
+          "supported": false,
+          "connection": null,
+          "agents": []
+        },
+        {
+          "runtime": "openclaw",
+          "name": "OpenClaw",
+          "found": true,
+          "confidence": "config",
+          "supported": true,
+          "connection": {
+            "gatewayUrl": "ws://127.0.0.1:39283",
+            "tokenSet": true
+          },
+          "agents": [
+            {
+              "id": "atlas",
+              "name": "Orion",
+              "nameSource": "IDENTITY.md",
+              "isPrimary": true,
+              "model": null
+            },
+            {
+              "id": "scribe",
+              "name": null,
+              "nameSource": null,
+              "isPrimary": false,
+              "model": null
+            }
+          ]
+        },
+        {
+          "runtime": "opencode",
+          "name": "opencode",
+          "found": false,
+          "confidence": "none",
+          "supported": false,
+          "connection": null,
+          "agents": []
+        }
+      ],
+      "selected": "openclaw"
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

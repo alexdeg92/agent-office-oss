@@ -171,7 +171,7 @@ describe('G11 · configuration, files, data and store (no server)', () => {
     const h = fs.mkdtempSync(path.join(home, 'bad-'));
     let r = await doctor(['--json'], base(h, { PORTAL_EMAIL: 'o@example.invalid', OC_GATEWAY_TOKEN: M.token }));
     noSecrets(r); let rep = JSON.parse(r.stdout);
-    assert.equal(one(rep, 'env.login').status, 'fail'); assert.match(one(rep, 'env.login').message, /PORTAL_SECRET, PORTAL_PASSWORD_HASH/); assert.equal(r.status, 2);
+    assert.equal(one(rep, 'env.login').status, 'fail'); assert.match(one(rep, 'env.login').message, /PORTAL_EMAIL/); assert.equal(one(rep, 'env.login').key, 'env.login.partial'); assert.equal(r.status, 2);
     const badHash = 'scrypt$' + M.key;
     r = await doctor(['--json'], base(h, { PORTAL_EMAIL: 'o@example.invalid', PORTAL_SECRET: M.secret, PORTAL_PASSWORD_HASH: badHash, OC_GATEWAY_TOKEN: M.token }));
     noSecrets(r, [badHash]); rep = JSON.parse(r.stdout);

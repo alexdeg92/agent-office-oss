@@ -75,7 +75,7 @@ function conversationSummary(transcript, { agent = '', locale = 'fr', hidden = n
   const outcome = replies.findLast((e) => e.text.trim().length >= 60) || replies.at(-1);
   const en = locale === 'en';
   const parts = [];
-  if (ask) parts.push(`${ask.sender || (en ? 'Requester' : 'Demandeur')} : ${firstLine(ask.text.split('[Subagent Task]').at(-1)) || ''}`);
+  if (ask) parts.push(`${ask.senderInfo?.name || ask.sender || (ask.senderInfo?.kind === 'agent' ? 'Agent' : en ? 'User' : 'Utilisateur')} : ${firstLine(ask.text.split('[Subagent Task]').at(-1)) || ''}`);
   if (result.steps) parts.push(`${agent || (en ? 'Agent' : 'Agent')} : ${result.steps} ${en ? (result.steps === 1 ? 'step' : 'steps') : (result.steps === 1 ? 'étape' : 'étapes')}${result.files.length ? ' · ' + result.files.join(', ') : ''}`);
   if (outcome) parts.push(`${en ? 'Result' : 'Résultat'} : ${String(outcome.text).replace(/\s+/g, ' ').trim().slice(0, 280)}`);
   return parts.length ? parts.join(' → ') : null;

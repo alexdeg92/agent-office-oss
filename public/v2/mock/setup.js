@@ -18,7 +18,7 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
   let wrongCodes = 0;
   let blockedUntil = 0;   // R22-10: the throttle is a time window; after its Retry-After the code is accepted again
   let spent = false;   // R20-03: the code is single-use; a successful save spends it and locks the instance
-  let tokenSet = false;
+  let tokenSet = false, plan = null, installed = new Set();
   const draft = { instance: { name: '', locale: 'fr', timeZone: null }, owner: { displayName: '', email: '', passwordSet: false },
     runtime: { adapter: 'openclaw', gatewayUrl: 'ws://127.0.0.1:18789', tokenSet: false } };
   const refuse = (status, code, message, details, extra) => ({ error: [status, code, message, details, extra] });
@@ -41,12 +41,36 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
   const status = () => (hook === 'injoignable' ? 'unreachable' : hook === 'refuse' ? 'refused' : hook === 'jeton' ? 'unauthorized' : 'connected');
   return {
     configured: () => state === 'locked' && !hook,
+    onboard(action, b) {
+      const e = guard(b); if (e) return e;
+      if (action === 'resume') return { result: { owner: draft.owner.passwordSet ? { ...draft.owner } : null } };
+      if (action === 'owner') {
+        const o = b.owner || {};
+        if (!o.displayName?.trim() || !/^[^@\s]+@[^@\s]+$/.test(o.email || '') || (!draft.owner.passwordSet && (o.password?.length < 12 || !o.password || o.password !== o.passwordConfirmation))) return refuse(400, 'validation_failed', 'Compte invalide.');
+        draft.owner = { displayName: o.displayName.trim(), email: o.email.toLowerCase(), passwordSet: true };
+        return { result: { created: true, owner: { ...draft.owner } } };
+      }
+      if (action === 'detect') return { result: { runtimes: [], selected: null } };
+      if (action === 'integrations/plan') {
+        const discovered = this.discover(b); if (discovered.error) return discovered;
+        plan = { planId: 'synthetic-plan', agents: discovered.result.agents.map(a => ({ id: a.id, status: b.runtime.adapter === 'demo' ? 'unsupported' : installed.has(a.id) ? 'installed' : 'absent', files: b.runtime.adapter === 'demo' ? [] : ['/synthetic/' + a.id + '/skills/projet/SKILL.md', '/synthetic/' + a.id + '/skills/projet/projet.js', '/synthetic/' + a.id + '/AGENTS.md'] })), backupDir: '/synthetic/data/integrations/backups' };
+        return { result: plan };
+      }
+      if (action === 'integrations/apply') {
+        if (!plan || b.planId !== plan.planId || b.confirmed !== true || !b.agentIds?.length || b.agentIds.some(id => !plan.agents.some(a => a.id === id && a.status !== 'unsupported'))) return refuse(400, 'validation_failed', 'Plan invalide.');
+        for (const id of b.agentIds) b.action === 'uninstall' ? installed.delete(id) : installed.add(id);
+        return { result: { agents: b.agentIds.map(id => ({ id, status: installed.has(id) ? 'installed' : 'absent', changed: [], backup: null, reason: null })) } };
+      }
+      if (action === 'network') return { result: b.action === 'probe' ? { ok: true, status: 200, issue: null } : { bind: { host: '127.0.0.1', port: b.port || 18789 }, addresses: ['127.0.0.1'], publicIp: null, tailnet: null, dns: { status: 'not-requested', addresses: [] }, snippets: {}, tailscaleCommand: 'tailscale serve --bg http://127.0.0.1:18789', restartRequired: true } };
+      return refuse(404, 'not_found', 'Route inconnue.');
+    },
     vm: () => { const out = {
       state,
-      configured: state === 'locked',
-      adapters: [{ id: 'openclaw', name: 'OpenClaw', fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789' },
-        { id: 'demo', name: 'Démo', fields: [], defaultGatewayUrl: null }],   // G6: no connection (api.md 2.5 §5.7)
-      draft: state === 'open' ? { instance: { ...draft.instance }, owner: { ...draft.owner }, runtime: { ...draft.runtime, tokenSet } } : null,
+      configured: state === 'locked', lockReason: null,
+      network: { host: '127.0.0.1', port: 18789 },
+      adapters: [{ id: 'openclaw', name: 'OpenClaw', connect: true, fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789' },
+        { id: 'demo', name: 'Démo', connect: true, fields: [], defaultGatewayUrl: null }],   // G6: no connection (api.md 2.5 §5.7)
+      draft: state === 'open' ? { instance: { ...draft.instance }, owner: { displayName: '', email: '', passwordSet: draft.owner.passwordSet }, runtime: { ...draft.runtime, tokenSet } } : null,
       suggestedTimeZone: 'UTC',          // the server process's zone (ADR §12.7), never a built-in installation zone
       locales: ['fr', 'en'],
       integrations: [{ id: 'projet', adapters: ['openclaw'], default: true }],   // architect-56
@@ -66,12 +90,12 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
       const e = guard(b); if (e) return e;
       const bad = runtimeIssue(b.runtime);
       if (bad) return refuse(400, 'validation_failed', 'Certaines valeurs sont invalides.', [bad]);
-      if (b.runtime.adapter === 'demo') return { result: { agents: DEMO_AGENTS.map((a) => ({ ...a })) } };
+      if (b.runtime.adapter === 'demo') return { result: { agents: DEMO_AGENTS.map((a) => ({ ...a, nameSource: 'demo', projectTag: 'unknown' })) } };
       if (status() !== 'connected') return refuse(502, 'upstream_failed', 'Le moteur n’a pas répondu.', [{ issue: status() }]);
       if (hook === 'sans-agent') return { result: { agents: [] } };
       return { result: { agents: [
-        { id: 'atelier-agent', name: 'Orion', isPrimary: true, model: 'model-a', projectTag: hook === 'etiquette-deja' ? 'installed' : hook === 'etiquette-conflit' ? 'conflict' : 'absent' },
-        { id: 'code-agent', name: 'Lyra', isPrimary: false, model: null, projectTag: 'outdated' },
+        { id: 'atelier-agent', name: 'Orion', nameSource: 'runtime', isPrimary: true, model: 'model-a', projectTag: hook === 'etiquette-deja' ? 'installed' : hook === 'etiquette-conflit' ? 'conflict' : 'absent' },
+        { id: 'code-agent', name: 'Lyra', nameSource: 'runtime', isPrimary: false, model: null, projectTag: 'outdated' },
       ] } };
     },
     save(b) {
@@ -87,13 +111,13 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
       const rtIssue = runtimeIssue(b.runtime);
       if (rtIssue) issues.push(rtIssue);
       if (!b.agents || !/^[A-Za-z0-9_-]{1,64}$/.test(String(b.agents.primary || ''))) issues.push({ field: 'agents.primary', issue: 'invalid' });
-      if (b.integrations != null && (typeof b.integrations !== 'object' || Object.keys(b.integrations).some((k) => k !== 'projet') || (b.integrations.projet != null && typeof b.integrations.projet !== 'boolean'))) issues.push({ field: 'integrations', issue: 'invalid' });
+      if (b.integrations != null && (typeof b.integrations !== 'object' || Object.keys(b.integrations).some((k) => !['projet', 'reviewed'].includes(k)) || (b.integrations.projet != null && typeof b.integrations.projet !== 'boolean'))) issues.push({ field: 'integrations', issue: 'invalid' });
       if (issues.length) return refuse(400, 'validation_failed', 'Certaines valeurs sont invalides.', issues);
       if (saveFailuresLeft > 0) { saveFailuresLeft--; return refuse(503, 'upstream_unavailable', 'L’enregistrement a échoué. Réessayez.'); }
       state = 'locked'; spent = true;
       Object.assign(draft, { instance: { ...b.instance }, owner: { displayName: b.owner.displayName, email: b.owner.email, passwordSet: true } });
       const optIn = !(b.integrations && b.integrations.projet === false);
-      const projet = b.runtime.adapter !== 'openclaw' ? { status: 'skipped', reason: 'adapter' } : !optIn ? { status: 'skipped', reason: 'opted-out' }
+      const projet = b.integrations?.reviewed ? { status: 'skipped', reason: 'reviewed' } : b.runtime.adapter !== 'openclaw' ? { status: 'skipped', reason: 'adapter' } : !optIn ? { status: 'skipped', reason: 'opted-out' }
         : hook === 'etiquette-conflit' ? { status: 'conflict', reason: 'skill-not-ours' } : hook === 'etiquette-erreur' ? { status: 'failed', reason: 'error' } : { status: 'installed' };
       return { result: { configured: true, integrations: { projet } } };
     },

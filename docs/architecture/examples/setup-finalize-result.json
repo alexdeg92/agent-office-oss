@@ -1,0 +1,21 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "configured": true,
+      "integrations": {
+        "projet": {
+          "status": "skipped",
+          "reason": "reviewed"
+        }
+      }
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

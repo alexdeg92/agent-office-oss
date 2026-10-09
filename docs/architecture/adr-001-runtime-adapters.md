@@ -80,6 +80,7 @@ interface RuntimeAdapter {
 interface Capabilities {
   sessions: true;                                   // the minimum an adapter must provide
   transcripts: boolean;
+  senderCapture?: boolean;                       // optional exact-message attribution cache; absent means unavailable
   activity: 'run-state' | 'events' | 'none';        // what activity granularity the runtime can give (data-model §3)
   flows: { read: boolean; write: boolean; schedules: ('cron' | 'every' | 'at')[] };
   skills: { read: boolean; toggle: boolean; detail: boolean };
@@ -151,23 +152,20 @@ The UI receives `LabelRef {key: '<kind>.<raw>'}` as today, plus `MetaVM.labels` 
 
 ## 5. Instance config
 
-**One file, non-secret:** `agent-office.config.json`, found through `$AO_CONFIG`, else `$XDG_CONFIG_HOME/agent-office/config.json`. It's validated by a schema at boot, and a bad field refuses to start with its path. **Secrets live in env or a secret file only**: the runtime token, the session secret, the login password. **Precedence:** env (secrets and overrides) → config file → built-in defaults, and **the defaults contain nothing personal**.
+**One file, non-secret:** `agent-office.config.json`, found through `$AO_CONFIG`, else `$XDG_CONFIG_HOME/agent-office/config.json`. It's validated by a schema at boot, and a bad field refuses to start with its path. **Runtime/session secrets live in env or a secret file only**: the runtime token and session secret. Legacy v1 stores its password hash in the secret file; v2 DB auth stores the owner email/hash in users, with no second credential copy. **Precedence:** env (secrets and overrides) → config file → built-in defaults, and **the defaults contain nothing personal**.
 
 ```jsonc
 {
-  "instance": { "name": "Bureau d'Owner", "locale": "fr-CA", "timeZone": "America/Toronto" },
-  "owner": { "displayName": "Owner", "email": "…" },                 // login identity (password in env)
-  "runtime": {
-    "adapter": "openclaw",
-    "openclaw": { "gatewayUrl": "ws://127.0.0.1:18793", "home": "/home/<user>", "bin": "openclaw",
-                  "configPath": "~/.openclaw/openclaw.json", "identityPath": "~/.openclaw/identity/device.json" }
-  },
-  "agents": { "primary": null, "names": {} },                        // null = discovered
-  "projects": { "codeHosts": [{ "kind": "github", "owners": ["<owner>"] }], "workspaceRoots": ["~/dev"] },
-  "office": { "characters": { "primary": "taco" } },
-  "labels": { "channel": { "openclaw-weixin": "WeChat" } }
+  "version": 2,
+  "instance": { "name": "Office", "locale": "fr", "timeZone": "UTC" },
+  "owner": { "displayName": "Operator", "email": "operator@example.invalid", "authSource": "database" },
+  "runtime": { "adapter": "openclaw", "openclaw": { "gatewayUrl": "ws://127.0.0.1:18789" } },
+  "agents": { "primary": "atlas", "names": { "openclaw": { "atlas": "Atlas" } }, "looks": {} },
+  "integrations": { "projet": true }
 }
 ```
+
+The strict reader accepts v1 legacy file auth and v2 DB auth as distinct versions. v1 requires secrets.passwordHash; v2 secrets contains only version, sessionSecret and runtimeToken. Only a complete env login replaces file auth; every partial login environment is refused with variable names only, preserving stored DB authentication. These DB/config migrations are forward-only; rollback restores a private pre-upgrade DB/config/secrets backup. Setup owner/person/layout/status commit together; publication is reconciled by a stored config digest after a crash. A valid DB config with no owner opens fresh local code-protected recovery; a missing private secrets file serves locked setup with a restore-and-restart message, no setup code and no writes.
 
 - **First run (G4):** with no config file and no setup lock, `/v2/` shows « Configuration » (instance name, owner, runtime connection test, code hosts, workspace roots). It's protected by a one-time setup token printed to the server log, and it writes the file (0600) atomically. **No setup over a read-only instance.**
 - **Today's env variables keep working** (`OC_*`, `PORTAL_*`, `AO_*`) and override the file. A one-shot `scripts/config-from-env.js` writes the file from the current env for existing installs (Owner's).
@@ -478,6 +476,7 @@ The earlier "store schema unchanged" claim was wrong. **Migration 004 (G3b):**
 - **Live:** a tick every 4 s moves conversations, the primary's bursts, sub-agents, flow runs and transcripts. The office, journal, logs and flows move with it.
 - **Clean:** zero data-quality issues over 200 ticks (tested), and no personal value.
 - **Read-only for runtime writes:** no write capability, so `meta.readonly`, and flows, skill toggles, chat and restart don't exist on it (404 `not_found`, api-v3.md D1; R22-05). Store features (projects, layout) work, so people can try the product.
+- **Setup capability:** `setup.connect: true` means the adapter can be selected and configured during setup. It does not imply a remote socket or connection fields: Demo supplies `fields: []` and `defaultGatewayUrl: null`, and its readiness check succeeds locally. Presence-only adapters declare `connect: false` and cannot be selected as transports. This setup descriptor flag is separate from the runtime feature capabilities.
 - **Selected by:** `runtime: { adapter: 'demo', demo: { seed } }` in the instance config, `AO_RUNTIME=demo`, or choosing « Démo » in setup (no connection fields). v1 never mounts with it.
 
 ### 13.2 What the demo showed is still OpenClaw-flavoured in the core (to fix before a third adapter)
@@ -487,7 +486,7 @@ The earlier "store schema unchanged" claim was wrong. **Migration 004 (G3b):**
 | `Config` (canonical) | `discord` is a top-level field of the runtime config projection | `channels.<ref>.{policy…}` per channel, so access policies work for any channel family (AccessVM D5 already shows them null elsewhere) |
 | Flows commands | create and edit take `cron` + `tz` (OpenClaw's `cron add` flags) | a `Schedule` input (`cron` / `every` / `at`), validated per `runtime.capabilities.flows.schedules` |
 | Chat | the chat session is the runtime's explicit key (`sessionKeyFor(agent, 'portal-chat')`) | keep the hook, but let an adapter say it has no explicit sessions (chat then creates a conversation) |
-| Setup | `ADAPTERS` (fields, default URL) is a list in `setup.js` | each adapter declares its setup fields and its probe (`definition.setup = { fields, probe, discover }`) |
+| Setup | `ADAPTERS` (fields, default URL) is a list in `setup.js` | each adapter owns `detect(ctx)` and `setup = { connect, fields, defaultGatewayUrl, configSchema, config, env, overrideEnv?, credential?, probe?, discover }`; detect/discover return canonical `{id,name,nameSource,isPrimary,model}` rows. The core never calls runtime-specific listing RPCs. Presence-only detection is not a transport; multiple detected connectable transports require operator choice. |
 | v1 | the legacy API and runtime are OpenClaw-only | deleted at S16 (`s16-v1-removal.md`) |
 | Skill docs | `skillDoc(filePath)` reads a local file | an adapter read (`skillDoc(name)`), so a remote runtime can serve it |
 
@@ -557,3 +556,7 @@ type InterlocutorProfile =
 `src/enrichers/discord.js` keeps its REST lookups, pacing, cache, TTLs and preload, and adds the definition: families `['discord']`, its cache profiles, and the mapping from Discord's raw profiles to `InterlocutorProfile`. That mapping is display name, avatar URL, bot flag and creation time for users; name, channel-type slug, topic and guild name for rooms, and it moves here from the access VM. The v1 legacy routes keep using its legacy methods until S16.
 
 **Gate:** v2 and v3 byte-identical over the golden corpus before and after; a foreign family gets a grammar-derived id and an `unresolvable` profile with Discord selected or not; with `enrichers: []`, Discord interlocutors are `unresolvable` (v3) or `pending` (v2), and no lookup is made.
+
+## Sender identity amendment (2026-10-08)
+
+Per-message identity belongs to the canonical engine model, not to a runtime or a channel-specific frontend. See [sender-identities.md](sender-identities.md) for the neutral Sender/Participant schemas, adapter hooks, generic CLI defaults and shared conformance gate. Runtime envelope parsing stays inside its adapter.

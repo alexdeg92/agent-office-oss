@@ -14,6 +14,7 @@ import { RestartGatewayModal } from '../components/restart.js';
 import { useOpenclawWrites } from './flows.js';
 import { skillTopic, StatusChip, visibilityText } from './skills.js';
 import * as rules from './skills-rules.js';
+import { safeExternalUrl } from '../url-policy.js';
 
 const enc = encodeURIComponent;
 const yesNo = (v) => msg(v ? 'common.yes' : 'common.no');
@@ -35,6 +36,7 @@ export function SkillPage({ match }) {
   }
   if (vm.data === undefined) return html`<div class="bu-page ao-frame ao-frame--detail ao-skill" aria-busy="true"><${Back} /><${Skeleton} kind="title" /><${Skeleton} w="60" /><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div>`;
   const { skill: s, detail: d, markdown, flow, needsRestart } = vm.data;
+  const homepage = safeExternalUrl(s.homepage);
   const enabled = s.status !== 'disabled';
   const canToggle = runtimeCan('skills.toggle');
   const canRestart = runtimeCan('restart');
@@ -69,7 +71,7 @@ export function SkillPage({ match }) {
         ${canToggle ? html`<label class="bu-switch"><input type="checkbox" role="switch" checked=${enabled} disabled=${busy} aria-busy=${busy ? 'true' : undefined}
           aria-describedby=${writes ? undefined : 'skill-ro'} onChange=${(e) => { e.currentTarget.checked = enabled; toggle(); }} />${msg(enabled ? 'skill.switch' : 'skill.switch.off')}</label>` : null}
       </span>
-      ${s.homepage ? html`<a class="bu-btn bu-btn--ghost bu-btn--sm" href=${s.homepage} target="_blank" rel="noopener noreferrer"><${Icon} name="external" />${msg('skill.action.homepage')}</a>` : null}
+      ${homepage ? html`<a class="bu-btn bu-btn--ghost bu-btn--sm" href=${homepage} target="_blank" rel="noopener noreferrer"><${Icon} name="external" />${msg('skill.action.homepage')}</a>` : null}
       ${!canToggle ? html`<p class="bu-caption bu-text-tertiary ao-ro" id="skill-ro"><${Icon} name="info" />${msg('skill.capability.toggle')}</p>`
         : writes ? null : html`<p class="bu-caption bu-text-tertiary ao-ro ao-skill__ro" id="skill-ro"><${Icon} name="info" />${msg('skill.readonly')}</p>`}
     </div>

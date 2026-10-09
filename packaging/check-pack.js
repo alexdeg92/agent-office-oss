@@ -7,7 +7,9 @@ const fs = require('node:fs');
 
 // Compressed tarball. 15 MB would drop login art or office sprites (those pngs barely gzip).
 // The runtime set (manifest sprites plus the illustrations and logos the UI names) lands near 22 MB.
-const PACK_BUDGET_BYTES = 25 * 1024 * 1024;
+// 55 MiB: the 24 MiB app plus up to eleven bundled character packs at their 2.5 MiB cap (characters-2a).
+// Past that, packs ship as separate downloads instead of growing this budget.
+const PACK_BUDGET_BYTES = 55 * 1024 * 1024;
 
 const RULES = [
   { why: 'fixtures/local', re: /(^|\/)fixtures\/local(\/|$)/ },

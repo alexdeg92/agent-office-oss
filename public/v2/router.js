@@ -14,6 +14,7 @@ export function inApp(pathname) {
 
 // Ordered as the sidebar (Nav README). `tab` = mobile bottom bar slot.
 export const ROUTES = [
+  { name: 'bureau-animations', path: '/bureau/test-animations', parent: 'bureau', tab: 'bureau' },
   { name: 'bureau', path: '/bureau', label: true, icon: 'bureau', question: true, tab: 'bureau' },
   { name: 'discuter', path: '/discuter', label: true, icon: 'discuter', question: true, tab: 'discuter', needs: 'chat' },
   { name: 'flux', path: '/flux', label: true, icon: 'flux', question: true, tab: 'plus', needs: 'flows.read' },

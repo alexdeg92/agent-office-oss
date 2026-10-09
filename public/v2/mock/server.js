@@ -229,10 +229,12 @@ async function handle2(method, path, body) {
     const slow = globalThis.location ? Number(new URLSearchParams(location.search).get('setup-lent')) || 0 : 0;
     await sleep(p.endsWith('/check') ? slow || 1200 : p.endsWith('/discover') ? slow || 900 : 300);
     const db = setupDb();
+    if (method === 'GET' && p === '/api/v2/setup/catalog') return ok(await fetch(assetUrl('bureau/office/manifest.example.json')).then(r => r.json()));
     if (method === 'GET' && p === '/api/v2/setup') return ok(db.vm());
     const out = method === 'POST' && p === '/api/v2/setup/check' ? db.check(body)
       : method === 'POST' && p === '/api/v2/setup/discover' ? db.discover(body)
-      : method === 'PUT' && p === '/api/v2/setup' ? db.save(body) : null;
+      : method === 'PUT' && p === '/api/v2/setup' ? db.save(body)
+      : method === 'POST' ? db.onboard(p.slice('/api/v2/setup/'.length), body) : null;
     if (!out) return fail(404, 'not_found', 'Route inconnue (maquette).');
     if (out.error) {
       const [st, code, message, details, extra] = out.error;
@@ -543,7 +545,7 @@ export class MockEventSource {
     setTimeout(() => {
       if (this.readyState === 2) return;
       this.readyState = 1;
-      this._emit('hello', { type: 'hello', streamId: this.streamId, serverEpoch: SERVER_EPOCH, modelVersion: META.modelVersion, contractVersion: config.apiVersion === 3 ? '3.0' : META.contractVersion,
+      this._emit('hello', { type: 'hello', streamId: this.streamId, serverEpoch: SERVER_EPOCH, modelVersion: META.modelVersion, contractVersion: config.apiVersion === 3 ? v3.meta(META).contractVersion : META.contractVersion,
         serverTime: Date.now(), resumed: false, topics: [...this.topics] });
       this._emit('system', { type: 'system', gateway: scenario === 'panne' ? 'down' : 'up', capabilities: META.capabilities });
       for (const t of this.topics) this._snapshot(t);

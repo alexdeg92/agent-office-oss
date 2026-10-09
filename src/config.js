@@ -32,26 +32,8 @@ function identityOf(p, hops = 0) {
     rest.push(path.basename(cur)); cur = up;
   }
 }
-// The openclaw executable: the first `openclaw` on PATH, then <home>/.npm-global/bin/openclaw (npm's user prefix).
-function findOpenclawBin(env, home) {
-  const fs = require('fs');
-  const isExec = (f) => { try { fs.accessSync(f, fs.constants.X_OK); return fs.statSync(f).isFile(); } catch (_) { return false; } };
-  for (const dir of String(env.PATH || '').split(path.delimiter).filter(Boolean)) {
-    const f = path.join(dir, 'openclaw'); if (isExec(f)) return f;
-  }
-  return path.join(home, '.npm-global', 'bin', 'openclaw');
-}
-function openclawPaths(env) {
-  const home = path.resolve(env.OC_HOME || env.HOME || os.homedir());   // also the HOME the openclaw CLI runs with
-  const dir = path.join(home, '.openclaw');
-  return {
-    openclawHome: home,
-    identityPath: env.OC_IDENTITY || path.join(dir, 'identity', 'device.json'),
-    stateDbPath: env.OC_STATE_DB || path.join(dir, 'state', 'openclaw.sqlite'),
-    openclawConfigPath: env.OC_CONFIG || path.join(dir, 'openclaw.json'),
-    openclawBin: env.OC_BIN || findOpenclawBin(env, home),
-  };
-}
+// Compatibility export; runtime path conventions are owned by the default adapter.
+const openclawPaths = env => require('./adapters').defaultAdapter().paths(env);
 function validTimeZone(tz) {
   if (!tz) return null;
   try { new Intl.DateTimeFormat('en', { timeZone: tz }); return tz; } catch (_) { die(`AO_TIME_ZONE is not an IANA time zone (got ${JSON.stringify(tz)})`, 'AO_TIME_ZONE', 'invalid'); }
@@ -87,7 +69,7 @@ function loadConfig(env = process.env) {
     if (!isHash(env.PORTAL_PASSWORD_HASH)) die('PORTAL_PASSWORD_HASH is not a valid scrypt hash (generate one with: agent-office hash-password)', 'PORTAL_PASSWORD_HASH', 'invalid');
   } else if (env.PORTAL_PASSWORD) {
     if (env.AO_ENV !== 'test' && !throwing) console.warn('Agent Office: PORTAL_PASSWORD (plaintext) is deprecated; store PORTAL_PASSWORD_HASH instead (agent-office hash-password) and remove PORTAL_PASSWORD.');
-  } else die('Missing required env var PORTAL_PASSWORD_HASH (see .env.example)', 'PORTAL_PASSWORD_HASH', 'missing');
+  } else if (env.AO_AUTH_DATABASE !== '1') die('Missing required env var PORTAL_PASSWORD_HASH (see .env.example)', 'PORTAL_PASSWORD_HASH', 'missing');
   const readonly = env.PORTAL_READONLY === '1';
   const instance = env.AO_ENV || (readonly ? 'staging' : env.NODE_ENV === 'production' ? 'production' : 'dev');
   if (!['production', 'staging', 'dev', 'test'].includes(instance)) die(`AO_ENV must be production, staging, dev or test (got ${JSON.stringify(instance)})`, 'AO_ENV', 'invalid');
@@ -110,6 +92,8 @@ function loadConfig(env = process.env) {
     // literal. Each stays overridable (OC_* env today, the instance config in G4).
     ...openclawPaths(env),
     loginEmail: (env.PORTAL_EMAIL || '').toLowerCase(),
+    authDatabase: env.AO_AUTH_DATABASE === '1',
+    agentNames: env.AO_AGENT_NAMES ? JSON.parse(env.AO_AGENT_NAMES) : {},
     // S6.1: the owner's display name (MeVM.displayName, the owner Person). Not a secret. Default: the e-mail's local part.
     displayName: (env.PORTAL_DISPLAY_NAME || '').trim().slice(0, 80) || null,
     loginPassword: env.PORTAL_PASSWORD_HASH ? null : env.PORTAL_PASSWORD,
@@ -124,13 +108,14 @@ function loadConfig(env = process.env) {
     readonly,
     // storage.md §6: store writes (projects, layout, prefs, mute) are refused only when PORTAL_READONLY_STORE=1
     readonlyStore: env.PORTAL_READONLY_STORE === '1',
+    senderCapture: env.AO_SENDER_CAPTURE !== '0',
     // Go-live topology (PM): the UI is served elsewhere and the API sits behind a reverse proxy at a stripped
     // prefix (/backend). API-only: no static files, no SPA fallbacks; non-API paths are a JSON 404.
     apiOnly: env.AO_API_ONLY === '1',
     // G6: the runtime adapter (instance config `runtime.adapter`, or AO_RUNTIME): 'openclaw' (default) or 'demo' (a
     // synthesised team; read-only; v1 never mounts with it). runtimeWritable: whether runtime commands can exist at all.
     // G8 (operations.md §3): retention, in days, within bounds (a value out of bounds refuses to start)
-    retention: { auditDays: daysOf(env, 'AO_AUDIT_RETENTION_DAYS', 365, 30, 3650), issueDays: daysOf(env, 'AO_ISSUE_RETENTION_DAYS', 30, 7, 365) },
+    retention: { auditDays: daysOf(env, 'AO_AUDIT_RETENTION_DAYS', 365, 30, 3650), issueDays: daysOf(env, 'AO_ISSUE_RETENTION_DAYS', 30, 7, 365), senderDays: daysOf(env, 'AO_SENDER_RETENTION_DAYS', 30, 1, 365) },
     runtimeAdapter: runtimeAdapterOf(env),
     // G7 (ADR-001 §14.2): the interlocutor enrichers (instance config `enrichers`, AO_ENRICHERS comma-separated; '' = none)
     enrichers: enrichersOf(env),

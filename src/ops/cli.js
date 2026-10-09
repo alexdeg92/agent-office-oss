@@ -35,7 +35,7 @@ async function run(command, args, env = process.env, out = (m) => process.stdout
   try {
     if (command === 'backup') {
       const r = await backup({ dataDir, paths, out: o.file, includeSecrets: o.includeSecrets, force: o.force });
-      out(`backup ok: instance ${r.instance}, schema v${r.schema}${r.hasConfig ? ', config' : ''}${r.hasSecrets ? ', secrets (keep this file private)' : ', no secrets'}`);
+      out(`backup ok: instance ${r.instance}, schema v${r.schema}${r.hasConfig ? ', config' : ''}${r.hasCredentialHashes ? ', credential hashes (sensitive; keep this file private)' : ''}${r.hasSecretsFile ? ', secrets file (keep this file private)' : r.hasCredentialHashes ? ', no secrets file' : ', no secrets'}`);
     } else {
       const r = await restore({ dataDir, paths, file: o.file, instance, force: o.force });
       out(`restore ok: instance ${r.instance}, schema v${r.schema}${r.prerestore ? ', previous store kept in backups/' : ''}${Object.entries(r.files).map(([k, v]) => `, ${k} ${v}`).join('')}`);

@@ -212,7 +212,7 @@ Who is on stage in the office, where, and in what state. The server decides this
 type AgentState = 'idle' | 'thinking' | 'working' | 'researching' | 'writing' | 'calling' | 'waiting' | 'error' | 'offline';
 // The 9 states of the brief; 1:1 with --bu-state-* tokens and the poses table in design/office/README.md §4.2.
 
-type OccupantRole = 'primary' | 'subagent' | 'scheduled' | 'direct' | 'group' | 'conversation';   // canonical (G3b)
+type OccupantRole = 'primary' | 'agent' | 'subagent' | 'scheduled' | 'direct' | 'group' | 'conversation';   // canonical (G3b)
 // SessionKind → role: primary→primary, subagent→subagent, scheduled→scheduled, conversation-direct→direct,
 // conversation-group→group, conversation→conversation. Occupant id 'primary' (else '<role>:<subject>').
 // 2.x wire and layout.schema.json agents[].match.kind (project2x): primary→main, scheduled→cron, direct→dm,
@@ -221,6 +221,7 @@ type OccupantRole = 'primary' | 'subagent' | 'scheduled' | 'direct' | 'group' | 
 
 type OccupantCue = 'delegating' | 'talking' | 'celebrating';           // transient, sent as SSE 'cue' events, never stored
 
+// Peers: agent:<agentId> (role agent). Delegates: subagent:<subjectId>; identities never overlap.
 type OccupantId = string;   // 'main' | `${role}:${subjectId}`, e.g. 'subagent:4f2a…', 'dm:1234…'
 
 interface OfficeOccupant {
@@ -352,7 +353,7 @@ interface Skill {                // executable contract: src/engine/model/canoni
   bundled: boolean;
   status: SkillStatus;          // disabled ? 'disabled' : eligible ? 'active' : 'unavailable'
   visibility: { model: boolean; command: boolean; user: boolean };
-  homepage: Url | null;         // only from `skills info` in practice
+  homepage: Url | null;         // canonical bounded HTTP(S); api.md §3.7 (list or info metadata)
   missing: Requirements | null; // not in `skills list` items (capture); only `skills info` has it
 }
 // `skills info` → SkillInfo, kept per name in the engine (engine.skillInfo(name)), on demand:
@@ -361,7 +362,7 @@ interface SkillInfo {
   blockedBy: { allowlist: boolean; agentFilter: boolean; platform: boolean };
   requirements: Requirements | null; missing: Requirements | null;
   install: { id: string; kind: string; label: string; bins: string[] }[];
-  homepage: Url | null;
+  homepage: Url | null;         // same navigation policy as Skill.homepage
 }
 // The SKILL.md body, front matter and the derived flow (steps/outputs) are VIEW data: SkillDetailVM (api.md §3.7)
 // reads the file at render time, with realpath containment (R1-11, S7).

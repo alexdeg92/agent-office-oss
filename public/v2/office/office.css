@@ -71,6 +71,10 @@
 @keyframes ao-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.015); } }
 @keyframes ao-bob1 { from { transform: translateY(0); } to { transform: translateY(-1px); } }
 @keyframes ao-bob2 { from { transform: translateY(2px); } to { transform: translateY(-2px); } }
+.ao-char[data-locomotion="floats"][data-motion="walk"] .ao-pose { animation: ao-hover 1.6s ease-in-out infinite; }
+.ao-char[data-locomotion="rolls"][data-motion="walk"] .ao-pose,
+.ao-char[data-locomotion="floats"]:not([data-motion="walk"]) .ao-pose { animation: none; }
+@keyframes ao-hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
 @keyframes ao-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } }
 @keyframes ao-shake { 0%, 100% { translate: 0 0; } 16%, 50%, 83% { translate: -2px 0; } 33%, 66% { translate: 2px 0; } }
 
@@ -203,3 +207,42 @@ html.ao-fs-lock, html.ao-fs-lock body { overflow: hidden; }
 @keyframes ao-bubble { 0%, 100% { transform: translateX(-50%); } 50% { transform: translateX(-50%) translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .ao-plate[data-talking]::after { animation: none; } }
 .ao-office[data-reduced-motion] .ao-plate[data-talking]::after, .ao-office[data-paused] .ao-plate[data-talking]::after { animation: none; }
+
+/* Held objects live in the body raster; overlays contain steam and droplets only. */
+.ao-life-fx { position:absolute;z-index:3;pointer-events:none; }
+.ao-life-fx i { position:absolute;width:5px;height:17px;border-radius:50%; }
+.ao-life-fx--steam i { width:3px;height:8px;border-left:1px solid #eee8dcaa;background:none;bottom:2px;left:-4px;transform:rotate(12deg);animation:ao-life-steam 1.8s ease-out infinite; }
+.ao-life-fx--steam i:nth-child(2) { left:0;animation-delay:-.6s; }
+.ao-life-fx--steam i:nth-child(3) { left:4px;animation-delay:-1.2s; }
+.ao-life-fx--drops i { background:#79b9d2;top:10px;left:16px;height:8px;animation:ao-life-drops 1s linear infinite; }
+.ao-life-fx--drops i:nth-child(2) { left:25px;animation-delay:-.33s; }
+.ao-life-fx--drops i:nth-child(3) { left:33px;animation-delay:-.66s; }
+@keyframes ao-life-steam { to { translate:0 -25px;opacity:0; } }
+@keyframes ao-life-drops { to { translate:0 18px;opacity:0; } }
+.ao-office[data-reduced-motion] .ao-life-fx i { animation:none; }
+.ao-office[data-paused] .ao-life-fx i { animation-play-state:paused; }
+
+/* Round 2: state glyphs use the unscaled, always-foreground nameplate layer. */
+.ao-life-bubble { position:absolute; bottom:calc(100% + 5px); left:50%; transform:translateX(-50%); min-width:30px; padding:3px 7px; border-radius:10px; background:var(--bu-surface); border:1px solid var(--bu-border-default); box-shadow:var(--bu-shadow-1); color:var(--bu-text-primary); font:700 20px/26px sans-serif; text-align:center; pointer-events:none; }
+.ao-life-bubble[data-kind="success"] { color:var(--bu-success); border-color:var(--bu-success-border); }
+.ao-life-bubble[data-kind="error"] { color:var(--bu-danger); border-color:var(--bu-danger-border); }
+.ao-life-bubble[data-kind="sleep"] { animation:ao-zzz 2.5s ease-out infinite; }
+.ao-life-bubble[data-kind="highfive"] { color:var(--bu-warning); animation:ao-clap .7s ease-out infinite; }
+.life-steam { animation:ao-steam 1.8s ease-out infinite; }
+.life-drops { stroke-width:3; animation:ao-water .8s ease-out infinite; }
+@keyframes ao-zzz { from { opacity:.7; transform:translate(-50%,3px); } to { opacity:1; transform:translate(-50%,-6px); } }
+@keyframes ao-clap { 50% { transform:translateX(-50%) scale(1.25); } }
+@keyframes ao-steam { from { opacity:1; transform:translateY(3px); } to { opacity:.2; transform:translateY(-5px); } }
+@keyframes ao-water { from { opacity:1; transform:translateY(0); } to { opacity:.35; transform:translateY(7px); } }
+.ao-office[data-reduced-motion] .ao-life-bubble,.ao-office[data-reduced-motion] .life-steam,.ao-office[data-reduced-motion] .life-drops { animation:none !important; }
+.ao-office[data-paused] .ao-life-bubble,.ao-office[data-paused] .life-steam,.ao-office[data-paused] .life-drops { animation-play-state:paused; }
+
+.ao-life-clap { position:absolute; color:#ffe29b; text-shadow:0 0 3px #795326; font:700 24px/1 sans-serif; z-index:4; transform:translate(-50%,-50%); pointer-events:none; animation:ao-hand-clap .7s ease-in-out infinite; }
+@keyframes ao-hand-clap { 50% { transform:translate(-50%,-50%) scale(1.35); } }
+.ao-office[data-reduced-motion] .ao-life-clap { animation:none; }
+.ao-office[data-paused] .ao-life-clap { animation-play-state:paused; }
+
+.ao-egg-arrow{position:absolute;top:45%;z-index:105;width:36px;height:48px;border:1px solid #84929d;border-radius:12px;background:#f4eee2;color:#233446;font:32px system-ui;cursor:pointer;animation:ao-arrow-pulse 1s ease-in-out infinite}
+.ao-egg-arrow[data-side=left]{left:8px}.ao-egg-arrow[data-side=right]{right:8px}.ao-egg-arrow:focus-visible{outline:3px solid var(--bu-accent,#7eafee);outline-offset:3px}
+[data-reduced-motion] .ao-egg-arrow{animation:none}.ao-char[data-egg=tiptoe]{animation:ao-tiptoe .6s ease-in-out infinite}.ao-egg-foliage{pointer-events:none}
+@keyframes ao-arrow-pulse{50%{opacity:.55;scale:1.08}}@keyframes ao-tiptoe{50%{translate:0 -2px}}

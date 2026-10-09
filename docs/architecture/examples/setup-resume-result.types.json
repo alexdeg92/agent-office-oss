@@ -1,0 +1,11 @@
+{
+  "nullable": [
+    "$.revision",
+    "$.vm",
+    "$.result.owner"
+  ],
+  "types": {
+    "$.revision": "number",
+    "$.vm": "any"
+  }
+}

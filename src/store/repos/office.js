@@ -56,6 +56,23 @@ function createOfficeRepo(db, { now = () => Date.now() } = {}) {
         return { ok: true, layout: toLayout(active.get()) };
       });
     },
+    // Upgrade only the peer rules written by onboarding-1, identified by their configured label.
+    // Ordinary delegated-session rules keep their subagent:<subject> identity.
+    migrateConfiguredPeers(names = {}) {
+      return tx(() => {
+        const current = this.active();
+        if (!current) return false;
+        const data = structuredClone(current.data); let changed = false;
+        for (const rule of data.agents || []) {
+          if (!rule.agentId?.startsWith('subagent:') || rule.role !== 'Agent' || rule.match?.kind !== 'subagent') continue;
+          const id = rule.agentId.slice(9);
+          if (!Object.hasOwn(names, id) || rule.name !== names[id]) continue;
+          rule.agentId = 'agent:' + id; rule.match.kind = 'agent'; changed = true;
+        }
+        if (changed) this.save({ expectedRevision: current.revision, data, actor: SYSTEM });
+        return changed;
+      });
+    },
     revisions(layoutId) { return revs.all(layoutId, KEEP_REVISIONS).map((x) => ({ revision: x.revision, updatedAt: x.saved_at, updatedBy: JSON.parse(x.updated_by_json) })); },
     revision(layoutId, n) { const x = rev.get(layoutId, n); return x ? { revision: x.revision, updatedAt: x.saved_at, updatedBy: JSON.parse(x.updated_by_json), data: JSON.parse(x.data_json) } : null; },
     // occupants seen (role from the OfficeVM, name its display name)

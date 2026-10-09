@@ -67,7 +67,7 @@ const OVERRIDE_ALIASES = { cronJobs: 'flows', cronRuns: 'flowRuns' };
 // `normalise` is injectable so tests can prove the canonical goldens catch a corrupted normaliser.
 // `overrides` replaces S4 normalisers by name (agents, cronJobs, cronRuns, skills, skillInfo, channels,
 // transcript, config): tests use it to prove the canonical goldens catch a corrupted normaliser.
-function createEngine({ adapter, schemas, now = () => Date.now(), normalise, overrides = {}, primary = null } = {}) {
+function createEngine({ adapter, schemas, now = () => Date.now(), normalise, overrides = {}, primary = null, agentNames = {}, senderContext = () => ({}) } = {}) {
   adapter = adapter || defaultAdapter().definition;
   schemas = schemas || schemasOf(adapter);
   const N = Object.assign({}, adapter.normalise);
@@ -207,6 +207,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   const admitAll = (schema, typeName, list, rec) => list.map((x) => admit(schema, typeName, x, rec)).filter(Boolean);
 
   // Canonical operations (the adapter's routes map raw channels onto them; `x` is the route-prepared value).
+  const namedAgents = (rows) => Array.isArray(rows) ? rows.map(a => a && Object.hasOwn(agentNames, a.id) && typeof agentNames[a.id] === 'string' ? { ...a, name: agentNames[a.id] } : a) : rows;
   const ACCEPT = {
     'sessions.page': (x, rec, env, issues) => {
       const rowsDropped = issues.some((i) => i.code === 'shape.item-dropped');
@@ -217,7 +218,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     // S7b: a catalog-only event (key null) carries no session row
     'sessions.changed': (row, rec) => { if (!row.key) return; reg.acceptChanged(row, rec); afterSessions(); },
     sessionGroups: (v, rec) => { canon.sessionGroups = admitAll(C.SessionGroup, 'sessionGroup', N.sessionGroups(v), rec); },
-    agents: (v, rec) => { canon.agents = admitAll(C.Agent, 'agent', N.agents(v), rec); updatePrimary(); },
+    agents: (v, rec) => { canon.agents = admitAll(C.Agent, 'agent', namedAgents(N.agents(v)), rec); updatePrimary(); },
     flows: (v, rec) => { canon.cronJobs = admitAll(C.CronJob, 'cronJob', N.flows(v, issueFn(rec)), rec); },
     flowRuns: (v, rec, env, issues, key) => {
       if (!key) return;
@@ -231,7 +232,11 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     channels: (v, rec) => { canon.channelsRaw = v; canon.channels = admitAll(C.Channel, 'channel', N.channels(v, issueFn(rec), canon.config), rec); },
     transcript: (v, rec, env, issues, key) => {
       if (!key) return;
-      const t = N.transcript(key, v, now(), fullTranscripts.has(key) ? Infinity : undefined, issueFn(rec));
+      const session = reg.get(key);
+      const agentOf = (id) => { const a = canon.agents.find((a) => a.id === id); return a ? { ...a, id: 'agent:' + a.id } : null; };
+      const context = { ...senderContext(), runtime: adapter.id || 'generic', sessionKey: key, session,
+        agent: agentOf(session?.class.agentId), parentAgent: agentOf(reg.get(session?.parentKey)?.class.agentId), agentOf, sessionOf: (key) => reg.get(key) };
+      const t = N.transcript(key, v, now(), fullTranscripts.has(key) ? Infinity : undefined, issueFn(rec), context);
       const e = admit(C.Transcript, 'transcript', t, rec);
       if (e) { conversationCounts.set(key, v.messages.filter((m) => m.role === 'user' || m.role === 'assistant').length); keepTranscript(key, e); }
     },
@@ -323,7 +328,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     },
     'sessions.upsert': (row, rec) => { const e = admit(SessionContract, 'session', row, rec); if (!e) return; reg.acceptChanged(e, rec); afterSessions(); },
     // Lists replace the previous one only when EVERY item is admitted (all-or-nothing: the last good list stays).
-    agents: (v, rec) => { const l = allAdmitted(C.Agent, 'agent', v, rec); if (l) { canon.agents = l; updatePrimary(); } },
+    agents: (v, rec) => { const l = allAdmitted(C.Agent, 'agent', namedAgents(v), rec); if (l) { canon.agents = l; updatePrimary(); } },
     flows: (v, rec) => { const l = allAdmitted(C.CronJob, 'cronJob', v, rec); if (l) canon.cronJobs = l; },
     flowRuns: (v, rec, key) => { const l = allAdmitted(C.CronRun, 'cronRun', v, rec); if (l) canon.cronRuns.set(key, { fetchedAt: now(), runs: l }); },
     skills: (v, rec) => { const l = allAdmitted(C.Skill, 'skill', v, rec); if (l) canon.skills = l; },
@@ -538,10 +543,11 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   }
 
   return {
-    ingest, ingestCanonical, setReads, request, setOpenclawVersion, setSourceDown, setGatewayConnected, setRuntimeNotConfigured, runtime, quarantine, on: ev.on.bind(ev),
+    ingest, ingestCanonical, setReads, request, setOpenclawVersion, setSourceDown, setGatewayConnected, setRuntimeNotConfigured, runtime, quarantine, on: ev.on.bind(ev), removeListener: ev.removeListener.bind(ev),
     // api.md §5.3: → the new state, null for an unknown id; throws code 'error-not-mutable' for an error issue
     setIssueMuted(fp, muted) { const st = quarantine.setMuted(fp, muted); checkStatus(); return st; },
     gateway: () => Object.assign({}, gateway),
+    senderPeople: () => senderContext().people || [],
     agents: () => canon.agents,
     primaryAgent,
     // more schema field names that issue paths may name (e.g. the VM schemas: their checks report schema paths, value-free)

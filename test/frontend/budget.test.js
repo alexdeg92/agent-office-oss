@@ -35,6 +35,15 @@ test('first load: requests, JS and CSS stay within the budget (raw and gzip)', (
   assert.deepEqual(over, [], 'first-load budget (node scripts/first-load.js prints the table)');
 });
 
+test('setup owns its onboarding dictionary and styles; signed-in pages do not load them', () => {
+  const dictionary = 'messages/onboarding.js';
+  assert.ok(!r.files.some((f) => f.rel === dictionary));
+  assert.ok(r.routes.setup.modules.includes(dictionary));
+  for (const [name, route] of Object.entries(r.routes)) if (name !== 'setup') assert.ok(!route.modules.includes(dictionary), name);
+  assert.doesNotMatch(readFileSync(ROOT + '/app.css', 'utf8'), /\.ao-(?:setup|onb)[\s_-]/);
+  assert.doesNotMatch(readFileSync(ROOT + '/index.html', 'utf8'), /rel="stylesheet"[^>]*setup\.css/);
+});
+
 test('F11: pages are lazy chunks; each route\'s modules are in route-preload.js (no waterfall on arrival or navigation)', () => {
   assert.equal(readFileSync(ROOT + '/route-preload.js', 'utf8'), routePreloadScript(), 'run: node scripts/first-load.js --write');
   const paths = routePaths();

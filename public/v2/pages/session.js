@@ -1,5 +1,8 @@
 // Session transcript (S10): SessionVM from GET /api/v2/views/sessions/:key, kept fresh by `session:<encodedKey>`.
 // Two views (Trace README), in the URL as ?vue=arbre|chronologie: the tree (turns + tool calls) and the waterfall.
+import { SenderAvatar } from '../components/sender.js';
+import { SessionParticipants } from '../components/session-participants.js';
+import { senderName } from '../sender.js';
 import { html } from '../lib.js';
 import { useTopic } from '../hooks.js';
 import { services } from '../services.js';
@@ -48,6 +51,7 @@ export function SessionPage({ match }) {
         ${s.run.endReason ? html`<span class="bu-caption bu-text-tertiary">${t('runEnd.' + s.run.endReason)}</span>` : null}
       </div>
       <h2 class="bu-detail-header__title ao-session__title" id="session-titre">${s.title ? label(s.title) : s.label}</h2>
+      <${SessionParticipants} participants=${s.participants} subagents=${s.subagents} />
       <p class="bu-mono-sm bu-text-tertiary ao-session__key">${s.key}</p>
       <dl class="ao-session__facts">
         <div><dt>${msg('session.model')}</dt><dd class="bu-mono-sm">${modelText(s) || '—'}</dd></div>
@@ -84,7 +88,6 @@ function Text({ e }) {
   return html`${e.text}${e.truncated ? html`<span class="ao-trunc"> ${msg('session.truncated')}</span>` : null}`;
 }
 
-function initialsOf(name) { const p = String(name || '?').trim().split(/\s+/); return (p.length > 1 ? p[0][0] + p[1][0] : p[0].slice(0, 2)).toUpperCase(); }
 
 function Tree({ events, live, order }) {
   const nodes = ordered(buildTree(events), order);
@@ -92,11 +95,11 @@ function Tree({ events, live, order }) {
     ${nodes.map((n, i) => {
       const nodeKey = n.event?.id || n.tools[0]?.id || n.thinking[0]?.id || i;
       if (n.type === 'human') {
-        const who = n.event.sender || msg('session.user');
+        const who = senderName(n.event, msg('session.user'));
         return html`<li key=${nodeKey} class="bu-trace__node bu-trace__node--human">
-          <span class="bu-avatar bu-avatar--human" aria-hidden="true">${initialsOf(who)}</span>
+          <${SenderAvatar} event=${n.event} />
           <div class="bu-trace__head"><span class="bu-trace__who">${who}</span><${When} at=${n.event.at} /></div>
-          <${Prose} e=${n.event} />
+          ${(n.events || [n.event]).map((e) => html`<${Prose} key=${e.id} e=${e} />`)}
         </li>`;
       }
       if (n.type === 'system') {
@@ -110,7 +113,7 @@ function Tree({ events, live, order }) {
       const meta = e ? [e.model, e.outputTokens != null ? fmt.tokens(e.outputTokens) : null].filter(Boolean).join(' · ') : '';
       return html`<li key=${nodeKey} class="bu-trace__node">
         <${Avatar} person=${agentChip()} />
-        <div class="bu-trace__head"><span class="bu-trace__who">${agentName()}</span>${e ? html`<${When} at=${e.at} />` : null}${meta ? html`<span class="bu-trace__meta">${meta}</span>` : null}</div>
+        <div class="bu-trace__head"><span class="bu-trace__who">${senderName(e, agentName())}</span>${e ? html`<${When} at=${e.at} />` : null}${meta ? html`<span class="bu-trace__meta">${meta}</span>` : null}</div>
         ${n.thinking.map((th, k) => html`<details key=${'th' + k} class="ao-thinking"><summary><${Icon} name="state-thinking" />${msg('session.thinking')}</summary><p><${Text} e=${th} /></p></details>`)}
         ${e && e.text ? html`<${Prose} e=${e} />` : null}
         ${e && e.stopReason === 'error' ? html`<div class="bu-banner bu-banner--danger"><${Icon} name="alert" /><span class="bu-banner__text">${msg('session.stoppedOnError')}${e.error ? html` <code>${e.error}</code>` : null}</span></div>` : null}
@@ -146,7 +149,7 @@ function Waterfall({ events, order }) {
   return html`<div class="bu-card ao-waterfall-card"><div class="bu-waterfall" role="table" aria-label=${msg('session.timelineLabel')}>
     <div class="bu-waterfall__axis" role="row"><span role="columnheader">${msg('session.wf.step')}</span><span role="columnheader">${fmt.time(w.t0, { seconds: true })} → ${fmt.time(w.t1, { seconds: true })} · ${fmt.duration(w.totalMs)}</span><span role="columnheader">${msg('session.wf.duration')}</span></div>
     ${ordered(w.rows, order).map((r) => html`<div key=${r.key} role="row" class="ao-contents">
-      <span class="bu-waterfall__label" role="cell">${r.toolKind ? html`<${Icon} name=${'tool-' + r.toolKind} />` : null}${r.label}</span>
+      <span class="bu-waterfall__label" role="cell">${r.toolKind ? html`<${Icon} name=${'tool-' + r.toolKind} />` : null}${r.event?.kind === 'user' ? html`<${SenderAvatar} event=${r.event} />${senderName(r.event, msg('session.user'))}` : r.label}</span>
       <span class="bu-waterfall__track" role="cell" aria-label=${msg('session.wf.start', { pct: Math.round(r.start) })}><span class=${'bu-waterfall__bar' + (r.kind === 'tool' ? '' : ' bu-waterfall__bar--' + r.kind)} ref=${(el) => { if (el) { el.style.setProperty('--start', r.start.toFixed(2) + '%'); el.style.setProperty('--len', r.len.toFixed(2) + '%'); } }}></span></span>
       <span class="bu-waterfall__dur" role="cell">${r.durMs != null ? fmt.duration(r.durMs) : '—'}</span>
     </div>`)}

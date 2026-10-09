@@ -1,0 +1,61 @@
+.ao-break{position:absolute;inset:0;z-index:110;background:#dbe9ea;overflow:hidden;opacity:0;transform:translateX(-100%);transition:transform var(--transition,700ms) ease,opacity var(--transition,700ms) ease;pointer-events:none;border-radius:inherit;color:#243344}
+.ao-break[data-kind=smoke]{transform:translateX(100%);background:#c6e3f5}
+.ao-break[data-open=true]{opacity:1;transform:translateX(0);pointer-events:auto}
+.ao-break[data-theme=night]{background:#172338;color:#f9f5e8}
+.ao-break[data-weather=rain]{background:#718898}
+.ao-break[data-theme=night][data-weather=rain]{background:#243345}
+.ao-break-world{position:absolute;left:0;top:0;width:1536px;height:1024px;transform-origin:0 0}
+.ao-break-art{position:absolute;width:1536px;height:1024px;left:0;top:0}
+.ao-break[data-theme=night] .ao-break-art{filter:brightness(.58) saturate(.75)}
+.ao-break[data-weather=rain] .ao-break-art{filter:brightness(.77) saturate(.7)}
+.ao-break[data-theme=night][data-weather=rain] .ao-break-art{filter:brightness(.48) saturate(.7)}
+.ao-break-sky{position:absolute;inset:0;background:radial-gradient(circle at 86% 12%,#fff2ac 0 20px,transparent 21px)}
+.ao-break[data-theme=night] .ao-break-sky{background:radial-gradient(circle at 86% 12%,#f3ecbd 0 15px,transparent 16px),radial-gradient(circle at 15% 8%,#fff 0 1px,transparent 2px),radial-gradient(circle at 64% 15%,#fff 0 1px,transparent 2px),radial-gradient(circle at 42% 9%,#fff 0 1px,transparent 2px)}
+.ao-break[data-weather=rain] .ao-break-sky{opacity:.25}
+ .ao-break-actor{position:absolute;width:192px;height:288px;z-index:5;transform:scale(var(--actor-scale,1));transform-origin:0 0}
+.ao-break-body,.ao-break-pose,.ao-break-pose img{position:absolute;inset:0;width:192px;height:288px}.ao-break-pose img{object-fit:contain}
+.ao-break-fx{position:absolute;inset:0;pointer-events:none}.ao-break-fx i{position:absolute;display:none}
+.egg-ember{width:6px;height:5px;border-radius:50%;background:#ff9b45;box-shadow:0 0 12px 4px #ff743b;left:var(--fx-x);top:var(--fx-y)}
+.egg-puff{width:17px;height:17px;border-radius:50%;background:#e5e5de99;left:var(--fx-x);top:calc(var(--fx-y) - 14px)}
+.egg-puff:nth-child(3){animation-delay:-.8s}.egg-puff:nth-child(4){animation-delay:-1.6s}
+.ao-break-actor[data-fx=smoke] .egg-puff{display:block;animation:egg-puff 2.4s linear infinite}
+.ao-break-actor[data-fx=smoke] .egg-ember,.ao-break-actor[data-fx=ember] .egg-ember{display:block}
+.egg-sweat{left:145px;top:85px;width:8px;height:15px;border-radius:60% 60% 60% 0;background:#88d6eb;border:1px solid #3e7187;transform:rotate(-30deg)}
+.egg-sweat:nth-child(6){left:155px;top:99px;animation-delay:-.6s}
+.ao-break-actor[data-fx=sweat] .egg-sweat{display:block;animation:egg-sweat 1.2s infinite}
+.ao-break-actor[data-step=shake]{animation:egg-shake .3s linear 3}
+.egg-butt{width:19px;height:5px;left:calc(var(--floor-x) - 26px);top:calc(var(--floor-y) - 4px);background:linear-gradient(90deg,#e39a5c 0 30%,#e3dcc5 30%);border:1px solid #4e5353;transform:rotate(-20deg)}
+.ao-break-actor[data-step=drop] .egg-butt{display:block;animation:egg-drop .65s ease-in}
+.ao-break-actor[data-step=crush]{animation:egg-twist .45s ease-in-out 3}
+.ao-break-window{position:absolute;background:linear-gradient(#8fc6e7,#d5e7db);overflow:hidden;pointer-events:none}
+.ao-break[data-theme=night] .ao-break-window{background:radial-gradient(circle at 75% 30%,#edeab8 0 7px,transparent 8px),radial-gradient(circle at 18% 70%,#fff 0 1px,transparent 2px),#25354c}
+.ao-break[data-kind=smoke] .ao-break-window{background:#aacdd6}
+.ao-break[data-kind=smoke][data-theme=night] .ao-break-window{background:#e9c979;box-shadow:0 0 22px #edc68066}
+.ao-break-window i{display:none;position:absolute;width:2px;height:46px;background:#c5e2e8;left:27%;top:18%;transform:rotate(15deg);animation:egg-glass 2s linear infinite}
+.ao-break-window i:nth-child(2){left:66%;top:5%;animation-delay:-.8s}.ao-break-window i:nth-child(3){left:83%;top:34%;animation-delay:-1.4s}
+.ao-break[data-weather=rain] .ao-break-window i{display:block}
+.ao-break-lamp{display:none;position:absolute;width:84px;height:40px;background:#fff2b877;border-radius:50%;filter:blur(12px);translate:-42px -20px}
+.ao-break[data-theme=night] .ao-break-lamp{display:block}
+.ao-break-puddle{display:none;position:absolute;width:158px;height:40px;border-radius:50%;background:#91bbc477;border:2px solid #a6c4ce;z-index:3;translate:-79px -20px}
+.ao-break-puddle:after{content:'';position:absolute;inset:8px 28px;border:2px solid #d3e6e988;border-radius:50%;animation:egg-ripple 1.8s infinite}
+.ao-break[data-weather=rain] .ao-break-puddle{display:block}
+.ao-break-rain{display:none;position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}
+.ao-break[data-kind=smoke][data-weather=rain] .ao-break-rain{display:block}
+.ao-break-rain i{position:absolute;width:1px;height:22px;background:#d7e6e999;transform:rotate(15deg);animation:egg-rain .65s linear infinite}
+@media(min-width:768px){.ao-break-rain i{width:2px;height:28px;background:#d7e6e9cc}.ao-break-window i{width:3px;background:#dceef4}}
+.ao-break-caption{position:absolute;left:14px;bottom:14px;background:#f8f4eb;color:#2c3c4a;border:1px solid #b7b9ac;padding:7px 11px;border-radius:9px;font-size:13px;z-index:7;max-width:65%}
+.ao-break-back{position:absolute;top:12px;right:12px;border:1px solid #8d9a9d;border-radius:8px;background:#f8f4eb;color:#293c4a;min-height:36px;padding:6px 10px;font:inherit;z-index:7}
+.ao-break[data-reduced=true]{transform:none!important;transition-property:opacity}
+.ao-break[data-reduced=true] *{animation:none!important}
+@keyframes egg-puff{from{opacity:.7;transform:translate(0,0) scale(.5)}to{opacity:0;transform:translate(-30px,-70px) scale(2.2)}}
+@keyframes egg-sweat{to{translate:0 13px;opacity:0}}
+@keyframes egg-drop{from{translate:0 -120px;rotate:-70deg}to{translate:0 0;rotate:0deg}}
+@keyframes egg-twist{50%{rotate:4deg}}
+@keyframes egg-shake{50%{translate:5px 0}}
+@keyframes egg-rain{to{translate:-30px 150px}}
+@keyframes egg-ripple{from{scale:.4;opacity:1}to{scale:1.3;opacity:0}}
+
+@keyframes egg-glass{to{translate:0 35px;opacity:.2}}
+
+.ao-break-actor[data-step=enter] .ao-break-body{animation:egg-walk .36s ease-in-out infinite}
+@keyframes egg-walk{50%{translate:0 -2px}}

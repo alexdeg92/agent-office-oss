@@ -1,6 +1,6 @@
 # Local install: one process. The UI is at / and the API at /backend, on port 18789.
 # A production split (API-only plus a separate web process behind a proxy) is commented below.
-# Secrets come from env_file only. Do not put tokens in this file.
+# Env-managed secrets come from env_file; first-run onboarding uses the persistent DB/config volumes. Do not put tokens in this file.
 # From the repo root: docker compose -f packaging/docker/compose.yml up --build
 
 name: agent-office
@@ -13,7 +13,7 @@ services:
     image: agent-office:local
     env_file:
       - path: ../../.env
-        required: true
+        required: false
     environment:
       NODE_ENV: production
       AO_ENV: production

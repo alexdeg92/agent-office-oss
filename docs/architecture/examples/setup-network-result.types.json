@@ -1,0 +1,14 @@
+{
+  "nullable": [
+    "$.revision",
+    "$.vm",
+    "$.result.tailnet",
+    "$.result.publicIp",
+    "$.result.tailnet.dnsName"
+  ],
+  "types": {
+    "$.revision": "number",
+    "$.vm": "any",
+    "$.result.publicIp": "string"
+  }
+}

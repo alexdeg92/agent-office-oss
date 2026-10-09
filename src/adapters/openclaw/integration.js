@@ -12,6 +12,9 @@
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { mutate, read: safeRead } = require('../../ops/safe-fs');
+const readOwned = (file, fsx) => safeRead(file, { roots: [path.dirname(file)], maxBytes: 16 * 1024 * 1024, fsx }).text;
 
 const START = '<!-- agent-office:projet:debut -->', END = '<!-- agent-office:projet:fin -->';
 const OURS = 'agent-office:projet';   // the mark in every file we write
@@ -123,7 +126,7 @@ function blockSpan(text) {
 /** → { agentId, workspace, status, skill: 'ours'|'absent'|'foreign'|'outdated', block: 'present'|'absent'|'outdated'|'broken' } */
 function inspect(agent, { locale, fsx = fs } = {}) {
   const want = expected(agent.workspace, locale);
-  const read = (f) => { try { return fsx.readFileSync(f, 'utf8'); } catch (_) { return null; } };
+  const read = (f) => { try { return readOwned(f, fsx); } catch (e) { if (e.code === 'EUNSAFEPATH') throw e; return null; } };
   let skill = 'absent';
   if (fsx.existsSync(want.dir)) {
     const got = Object.fromEntries(Object.keys(want.files).map((f) => [f, read(path.join(want.dir, f))]));
@@ -143,18 +146,18 @@ function inspect(agent, { locale, fsx = fs } = {}) {
 function backup(file, agentId, { backupDir, fsx = fs, now = Date.now } = {}) {
   if (!fsx.existsSync(file)) return null;
   if (!backupDir) throw Object.assign(new Error('no backup directory'), { code: 'ENOBACKUPDIR' });
-  fsx.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(agentId)) throw Object.assign(new Error('invalid agent id'), { code: 'EUNSAFEPATH' });
   const base = `${agentId}-AGENTS.md-`;
-  const out = path.join(backupDir, base + now());
-  fsx.copyFileSync(file, out); fsx.chmodSync(out, 0o600);
-  const all = fsx.readdirSync(backupDir).filter((f) => f.startsWith(base)).sort((a, b) => Number(a.slice(base.length)) - Number(b.slice(base.length)));
-  for (const f of all.slice(0, Math.max(0, all.length - BACKUPS_KEPT))) fsx.rmSync(path.join(backupDir, f), { force: true });
+  const out = path.join(backupDir, base + now() + '-' + crypto.randomBytes(12).toString('hex'));
+  mutate(out, { type: 'write', text: readOwned(file, fsx), mode: 0o600, exclusive: true }, { fsx });
+  const all = fsx.readdirSync(backupDir).filter(f => f.startsWith(base)).map(f => ({ f, stat: fsx.lstatSync(path.join(backupDir, f), { bigint: true }) }))
+    .filter(x => x.stat.isFile() && !x.stat.isSymbolicLink() && /^\d+(?:-[a-f0-9]{24})?$/.test(x.f.slice(base.length)))
+    .sort((a, b) => parseInt(a.f.slice(base.length), 10) - parseInt(b.f.slice(base.length), 10));
+  for (const x of all.slice(0, Math.max(0, all.length - BACKUPS_KEPT))) mutate(path.join(backupDir, x.f), { type: 'remove', identity: { dev: String(x.stat.dev), ino: String(x.stat.ino) } }, { fsx });
   return out;
 }
-function writeAtomic(file, text, { fsx = fs, mode = 0o644 } = {}) {
-  const tmp = `${file}.agent-office-tmp-${process.pid}`;
-  fsx.writeFileSync(tmp, text, { mode });
-  fsx.renameSync(tmp, file);
+function writeAtomic(file, text, { fsx = fs, mode = 0o600 } = {}) {
+  return mutate(file, { type: 'write', text, mode, preserveMode: true }, { fsx });
 }
 // near the top: right after the first level-1 heading in the first 30 lines, else at the very top
 function insertBlock(text, block) {
@@ -173,14 +176,14 @@ function install(agent, { locale, force = false, dryRun = false, backupDir = nul
   const done = [];
   if (before.skill !== 'ours') {
     done.push('skill');
-    if (!dryRun) { fsx.mkdirSync(want.dir, { recursive: true }); for (const [f, t] of Object.entries(want.files)) writeAtomic(path.join(want.dir, f), t, { fsx, mode: f.endsWith('.js') ? 0o755 : 0o644 }); }
+    if (!dryRun) { for (const [f, t] of Object.entries(want.files)) writeAtomic(path.join(want.dir, f), t, { fsx, mode: f.endsWith('.js') ? 0o755 : 0o644 }); }
   }
   let bak = null;
   if (before.block !== 'present') {
     done.push('block');
     const file = path.join(agent.workspace, 'AGENTS.md');
     if (!dryRun) {
-      const text = fsx.existsSync(file) ? fsx.readFileSync(file, 'utf8') : '';
+      const text = fsx.existsSync(file) ? readOwned(file, fsx) : '';
       const span = blockSpan(text);
       let next;
       if (span && span !== 'broken') next = text.slice(0, span.start) + want.block + text.slice(span.end);
@@ -193,7 +196,7 @@ function install(agent, { locale, force = false, dryRun = false, backupDir = nul
   return { agentId: agent.id, done, backup: bak, status: dryRun ? before.status : 'installed', dryRun };
 }
 
-/** Removes exactly what install added: the block (AGENTS.md backed up first) and our skill directory (only if ours). */
+/** Removes exactly what install added: the block (AGENTS.md backed up first) and owned skill files (the directory only when empty). */
 function uninstall(agent, { locale, dryRun = false, backupDir = null, fsx = fs, now = Date.now } = {}) {
   const before = inspect(agent, { locale, fsx });
   const done = [], kept = [];
@@ -202,7 +205,7 @@ function uninstall(agent, { locale, dryRun = false, backupDir = null, fsx = fs, 
   if (before.block === 'present' || before.block === 'outdated') {
     done.push('block');
     if (!dryRun) {
-      const text = fsx.readFileSync(file, 'utf8');
+      const text = readOwned(file, fsx);
       const span = blockSpan(text);
       // the block and the blank lines insertBlock added around it
       const next = (text.slice(0, span.start).replace(/\n\n$/, '\n') + text.slice(span.end).replace(/^\n\n/, '\n')).replace(/^\n/, '');
@@ -212,7 +215,15 @@ function uninstall(agent, { locale, dryRun = false, backupDir = null, fsx = fs, 
   } else if (before.block === 'broken') kept.push('block-markers-broken');
   if (before.skill === 'ours' || before.skill === 'outdated') {
     done.push('skill');
-    if (!dryRun) fsx.rmSync(expected(agent.workspace, locale).dir, { recursive: true, force: true });
+    if (!dryRun) {
+      const want = expected(agent.workspace, locale), alternate = expected(agent.workspace, localeOf(locale) === 'en' ? 'fr' : 'en');
+      for (const [name, text] of Object.entries(want.files)) {
+        const removed = mutate(path.join(want.dir, name), { type: 'remove', contents: [text, alternate.files[name]] }, { fsx });
+        if (!removed.changed && fsx.existsSync(path.join(want.dir, name))) kept.push('skill-file-not-ours:' + name);
+      }
+      // Unknown entries (including temporary links) are never recursively deleted.
+      mutate(want.dir, { type: 'emptyDir' }, { fsx });
+    }
   } else if (before.skill === 'foreign') kept.push('skill-not-ours');
   return { agentId: agent.id, done, kept, backup: bak, dryRun };
 }
@@ -223,7 +234,7 @@ async function discoverAgents(cli, { home }) {
   if (!r.ok) return null;
   const out = r.out || '';
   const i = out.search(/[[{]/);
-  let v; try { v = JSON.parse(out.slice(i)); } catch (_) { return null; }
+  let v; try { v = JSON.parse(out.slice(i)); } catch (e) { if (e.code === 'EUNSAFEPATH') throw e; return null; }
   const list = Array.isArray(v) ? v : (v && (v.agents || v.items)) || [];
   return list.filter((a) => a && typeof a.id === 'string' && typeof a.workspace === 'string')
     .map((a) => ({ id: a.id, workspace: expandHome(a.workspace, home), isDefault: !!(a.isDefault || a.default) }));

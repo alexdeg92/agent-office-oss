@@ -1,12 +1,14 @@
 # API contract (v2)
 
-**Contract version 2.5** (2026-10-06: first-run setup §5.7; 2.4: named session-group refs; 2.3: project images; 2.2: S6.1 live findings and review R8; 2.1 merged the office-dev, projects and frontend proposals). This document is the single source of truth for the HTTP and SSE wire format between the server (architect) and its consumers (frontend `/v2`, office-dev, projects). Only the architect edits it; proposals go through the PM.
+**Contract version 2.7** (2026-10-08: Sender identity and participants; 2.5, 2026-10-06: first-run setup §5.7; 2.4: named session-group refs; 2.3: project images; 2.2: S6.1 live findings and review R8; 2.1 merged the office-dev, projects and frontend proposals). This document is the single source of truth for the HTTP and SSE wire format between the server (architect) and its consumers (frontend `/v2`, office-dev, projects). Only the architect edits it; proposals go through the PM.
 
-**Contract 3.0** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` keeps serving 2.5 byte-identical until the UI has moved (`migration-v3.md`).
+**Contract 3.2** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.7 until the UI has moved (`migration-v3.md`).
 
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
+| 2.7 | 2026-10-09 | Locked missing-secrets recovery page; strict named partial-login boot errors; first-run DB owner and code-gated resumption/amendment/recovery; adapter-owned detection/discovery and connect capability; explicit `agent:<id>` peer occupants and role `agent`; runtime-scoped display names; reviewed installation plans with safe descriptor I/O and rollback; network guide; config v2 with strict v1 reader. Setup route examples and `SetupVM` schema are executable. Same additions in contract 3.2. |
+| 2.6 | 2026-10-08 | Runtime-neutral Sender identity (`senderInfo` on trace/chat messages), `SessionVM.participants` for humans and primary agents plus `SessionVM.subagents` with linked delegation labels/tasks, metadata-free display text and plain-text summaries, stable human avatars and sender grouping. `user.sender` remains a compatibility display string. See [sender-identities.md](sender-identities.md). |
 | 2.5 | 2026-10-06 | **Compatibility exception (G5; review-22 R22-09):** `MetaVM.labels` no longer carries the server-only `prompt.*` keys (`prompt.projectSummary`, `prompt.noSources`: agent prompts, never UI text) on 2.x either. Every other 2.x byte is unchanged by G5. <br>**G4 first-run setup (§5.7, ADR-001 §5).** New routes `GET /api/v2/setup`, `POST /api/v2/setup/check`, `POST /api/v2/setup/discover`, `PUT /api/v2/setup`, from frontend-12 §2 with these changes: **`owner.password`** (write-only) in `PUT`, and `draft.owner.passwordSet`; **`SetupVM.configured`**; **`draft` is null** unless `state` is `open`; a locked instance answers 403 **`forbidden` `{issue:'locked'}`** (`readonly` stays for a read-only instance); results use the standard `CommandResult` envelope. **`MetaVM.instance.configured: boolean`** (additive). Examples `setup-vm`, `setup-check-request`/`-result`, `setup-discover-result`, `setup-save-request`/`-result`, `error-403-setup` (+ sidecars). |
 | backend-1 | 2026-10-07 | Project delivery adds `working` and `no-reply`, durable deferred session/child following, summary-event delivery states, and `POST /projects/:id/comments/:cid/retry {agentId}` (202, original author, failed/no-reply only). Linked-session prompt context now contains real requests and final results. Comment creation accepts optional `replyTo`; id/name mentions fold case and accents, and answers stay under the exact mentioning comment even in nested replies. Same extension on v2/v3. |
 | 2.4 | 2026-10-06 | **Named session-group refs (PM decision on architect-14, BRIEF Decisions log 2026-10-06).** A `sessionGroup` source's ref is now **`{by: 'group', groupId: SessionGroupId, name}`**: the runtime's group, so sessions filed into it later join the project. `{by: 'keys', sessionKeys}` stays **only as a fallback** for runtimes without groups; `{by: 'interlocutor'}` is unchanged. Applies to `ProjectSourceInput`, `ProjectVM.sources[].ref` and `CandidateVM.sources[].ref`. **`SessionGroupId`** is opaque (1–200 chars). OpenClaw 2026.9.8 keys its catalog by name, so there `groupId === name`, and **a rename yields a new id** (the source then matches no sessions until it's relinked). Examples `project-vm`, `error-409-project` (main example now `by: 'group'`; `interlocutor` and `keys` are sidecar variants), `candidates-vm` (a group candidate `sg:group:Automations`), `import-request`/`import-result` updated. <br>**S7b (implementation, no shape change):** every read view in §3 is served from the engine. New authoritative examples `flow-list-vm`, `flow-detail-vm`, `logs-page`, `access-vm`, `interlocutor-vm`, `skill-list-vm`, `skill-detail-vm` (+ sidecars); `office-vm`'s queue `day` param is the string `"1"` like everywhere else. Only the first logs page **at the default size (50)** is a topic; other sizes and later pages are one-shot. Labels added: `schedule.*`, `flowHealth.*`, `runStatus.skipped/unrecognized`, `delivery.*`, `sessionTarget.*`, `wakeMode.*`, `payloadKind.*`, `accessPolicy.*`, `execSecurity.*`, `interlocutorKind.*`, `resolution.*`, `discordChannelType.*`, `kpi.flowsTotal {n}`; **`kpi.idle` takes `{agent}`** (was « Timmy au repos », ADR §12.9); enum `flowHealth`. |
@@ -122,7 +124,7 @@ interface Kpi { id: string; label: LabelRef; value: number | null; unit: Unit; s
 ### 3.1 MetaVM, MeVM
 ```ts
 interface MetaVM {
-  modelVersion: number; apiVersion: 2; contractVersion: '2.5'; serverVersion: string;
+  modelVersion: number; apiVersion: 2; contractVersion: '2.7'; serverVersion: string;
   env: 'production' | 'staging' | 'dev';     // mock mode is allowed only when meta is 404 or env !== 'production'
   capabilities: {                            // R3-10: two independent switches
     openclawWrites: boolean;                 // false when PORTAL_READONLY=1 (flows, skills, restart, chat)
@@ -147,7 +149,7 @@ interface MeVM { email: string; displayName: string /* 2.2: owner's name (PORTAL
                gateway: 'up' | 'down'; capabilities: MetaVM['capabilities']; sessionExpiresAt: Ms }
 ```
 ```json
-{ "data": { "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.5", "serverVersion": "2026.10.5-s6", "env": "staging",
+{ "data": { "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.7", "serverVersion": "2026.10.5-s6", "env": "staging",
   "capabilities": { "openclawWrites": false, "storeWrites": true }, "readonly": true,
   "labels": { "agentState.working": "Exécute", "projectStatus.in-progress": "En cours", "healthSub.cores": "Sur {n} cœurs" },
   "enums": { "projectStatus": ["idea", "todo", "in-progress", "in-review", "shipped"] } },
@@ -196,15 +198,62 @@ Authoritative example: `docs/architecture/examples/office-vm.json`. On 2026.9.8,
 interface ChatVM {
   sessionKey: SessionKey;                    // the portal's chat session ('agent:main:explicit:portal-chat' expected)
   turnPending: { turnId: string; since: Ms } | null;
-  messages: Collection<{ id: string; role: 'user' | 'assistant' | 'error'; at: Ms; text: string;
+  messages: Collection<{ id: string; role: 'user' | 'assistant' | 'error'; at: Ms; text: string; senderInfo?: Sender;
                          meta: { model: string | null; tokens: number | null; durationMs: number | null } | null }>;   // last 50, chronological
 }
 ```
 ```json
-{ "data": { "sessionKey": "agent:main:explicit:portal-chat", "turnPending": null,
-  "messages": [ { "id": "m_1", "role": "user", "at": 1791223000000, "text": "Bonjour", "meta": null },
-    { "id": "m_2", "role": "assistant", "at": 1791223004000, "text": "Bonjour Owner !", "meta": { "model": "gpt-5.5", "tokens": 120, "durationMs": 3900 } } ] },
-  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [], "topic": { "id": "chat", "rev": 7 } } }
+{
+  "data": {
+    "sessionKey": "agent:main:explicit:portal-chat",
+    "turnPending": null,
+    "messages": [
+      {
+        "id": "m_1",
+        "role": "user",
+        "at": 1791223000000,
+        "text": "Bonjour",
+        "meta": null,
+        "senderInfo": {
+          "kind": "human",
+          "id": "per_operator",
+          "name": "Camille",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        }
+      },
+      {
+        "id": "m_2",
+        "role": "assistant",
+        "at": 1791223004000,
+        "text": "Bonjour Owner !",
+        "meta": {
+          "model": "gpt-5.5",
+          "tokens": 120,
+          "durationMs": 3900
+        },
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas",
+          "name": "Atlas",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        }
+      }
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "chat",
+      "rev": 7
+    }
+  }
+}
 ```
 
 ### 3.4 FlowListVM, FlowDetailVM, CronRunVM
@@ -299,9 +348,11 @@ interface SessionVM {
   window: { from: number; to: number }; toolCount: number;
   traceState: 'fresh' | 'stale' | 'unavailable';   // 2.4 (R16-07): fresh = the last transcript read succeeded; stale = it failed (or none
                                              // yet), the last good trace is shown; unavailable = the runtime can't read transcripts
+  participants: Collection<Participant>;    // 2.6: humans and primary agents, unique by identity
+  subagents: Collection<Sender>;           // delegated agents; delegation.sessionKey links to their trace
   events: Collection<TraceEventVM>;          // 2.1: chronological, keyed; id = 'ev:<messageIndex>:<partIndex>' (stable across fetches)
 }
-type TraceEventVM = TraceEvent & { id: string };   // data-model §2.1; appends arrive as upserts on ['events']
+type TraceEventVM = TraceEvent & { id: string; senderInfo?: Sender };   // data-model §2.1; appends arrive as upserts on ['events']
 ```
 Authoritative example: `docs/architecture/examples/session-vm.json`.
 ```json
@@ -311,6 +362,8 @@ Authoritative example: `docs/architecture/examples/session-vm.json`.
 ```
 
 ### 3.7 Skills
+`SkillDetailVM.skill.homepage` is `null` or a canonical absolute HTTP/HTTPS URL, with at most 2,048 UTF-16 code units before and after normalization. Plain HTTP is permitted for homepage navigation. The shared `public/v2/url-policy.js` policy rejects credentials (including empty userinfo), whitespace/control characters, encoded ASCII controls, backslashes, malformed URLs/escapes and other schemes. Adapters normalize list/info metadata; the VM builder also filters both candidates (a refused list value can fall back to a valid info value). Canonical and v2/v3 VM schemas require the normalized form. The UI repeats the same policy and omits the action on refusal, retaining `target="_blank" rel="noopener noreferrer"`. This is outbound navigation only: no server fetch or DNS/IP filtering.
+
 ```ts
 interface SkillRowVM { id: string /* name */; emoji: string | null; description: string; source: SkillSource; status: 'active' | 'disabled' | 'unavailable';
                        visibility: { model: boolean; command: boolean; user: boolean } }
@@ -526,7 +579,7 @@ A **topic id** is `name` or `name:<param>` or `name?<k>=<v>[&…]`, with params 
 Each frame has `event: <type>`, `id: <streamId>:<seq>` (seq starts at 1 per stream and increases by 1 per frame) and `data: <JSON>`.
 ```ts
 type SseFrame =
-  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.5'; serverTime: Ms; resumed: boolean; topics: string[];
+  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.7'; serverTime: Ms; resumed: boolean; topics: string[];
       rejected?: { topic: string; issue: 'unknown-topic' }[] /* 2.4: unknown topics asked at open */ }
   | { type: 'snapshot'; topic: string; rev: number; data: unknown }
   | { type: 'delta'; topic: string; rev: number; baseRev: number; ops: DeltaOp[] }
@@ -766,11 +819,11 @@ The primary agent writes to Projets with `Authorization: Bearer <token>` on `/ap
 - A request with a bearer **never uses a cookie** sent with it.
 - **Audit:** every attempt, with actor `{ kind: 'agent', personId }` and `token:<id>` in `detail` (`token-scope token:<id>` for a refused scope, `rate-limited token:<id>`); a bad token is `token.request` / `rejected` / `unauthorized` as anonymous.
 
-### 5.7 First-run setup (G4, ADR-001 §5; 2.5)
-An instance with **no configuration** (no config file, and the env lacks the login identity) boots in **setup mode**: only `GET /api/v2/meta` (`instance.configured: false`), these routes and the static UI are served. Every other API route answers 503 `upstream_unavailable` (`issue:'not-configured'`). Setup is **never** available on a read-only instance (`state:'readonly'`) or once configured (`state:'locked'`).
+### 5.7 First-run setup (ADR-001 §5; 2.7)
+An instance with **no configuration** (no config file, and the env lacks the login identity) boots in **setup mode**: only `GET /api/v2/meta` (`instance.configured: false`), these routes and the static UI are served. Every other API route answers 503 `upstream_unavailable` (`issue:'not-configured'`). Setup is unavailable on a read-only instance (`state:'readonly'`) or a configured instance with its owner (`state:'locked'`). A DB-auth config whose owner row is missing, or whose persisted open setup draft does not match the published config digest, boots local recovery with a fresh code. A missing private secrets file serves locked setup with `lockReason: "missing-secrets"`, no setup code or writes, and a restore-and-restart message.
 
-- **The setup code:** a one-time code (`AO-XXXX-XXXX`, 40 bits from an unambiguous alphabet) printed to the server log at boot in setup mode, never stored. Every route below needs it in the body as `setupCode`. A wrong code → 403 `forbidden` `{field:'setupCode', issue:'invalid'}` (`error-403-setup.json`), and it counts toward the login throttle (6 failures → 429 `rate_limited` with `Retry-After`). **Setup and login share one throttle state** for the process, across the handoff (R21-05). A successful `PUT /api/v2/setup` spends it.
-- **Write-only secrets:** `runtime.token` and `owner.password` are accepted and **never echoed, logged or audited**. `draft` only reports `tokenSet` / `passwordSet`. A token given to `check` is kept in memory for `discover` and `PUT` (so the client need not resend it), until the process ends.
+- **The setup code:** a one-time code (`AO-XXXX-XXXX`, 40 bits from an unambiguous alphabet) printed to the server log at boot in setup mode, never stored. It expires after **30 minutes on a monotonic clock**; expiration returns 403 `{field:'setupCode',issue:'expired'}` and discards remembered connection secrets and integration plans. Restart Agent Office locally to obtain a new code; no remote endpoint regenerates it. Owner creation/config publication recheck expiration after password derivation; async discovery/probes/plans discard results after expiry. Each synchronous per-agent file operation admitted before expiry may finish, but no later agent starts after expiry. Every POST/PUT below needs it in the body as `setupCode`; GET state/catalog expose only public setup metadata. A wrong code → 403 `forbidden` `{field:'setupCode', issue:'invalid'}` (`error-403-setup.json`), and it counts toward the login throttle (6 failures → 429 `rate_limited` with `Retry-After`). **Setup and login share one throttle state** for the process, across the handoff (R21-05). A successful `PUT /api/v2/setup` spends it.
+- **Write-only secrets:** `runtime.token` and `owner.password` are accepted and **never echoed, logged or audited**. `draft` only reports `tokenSet` / `passwordSet`. A token given to `check` is kept in memory for `discover` and `PUT` (so the client need not resend it), until setup expires, publishes or the process ends.
 
 | Route | Body | Response |
 | --- | --- | --- |
@@ -781,20 +834,23 @@ An instance with **no configuration** (no config file, and the env lacks the log
 
 ```ts
 interface SetupVM {
+  network: { host: string; port: number }; // public listener from server config, including the combined supervisor
   state: 'open' | 'locked' | 'readonly';
   configured: boolean;
-  adapters: Array<{ id: string; name: string; fields: string[]; defaultGatewayUrl: string | null }>;   // G6: 'demo' (fields [], null): no connection
+  lockReason: 'missing-secrets' | null; // restore matching private secrets and restart; no setup writes
+  adapters: Array<{ id: string; name: string; connect: boolean; fields: string[]; defaultGatewayUrl: string | null }>;   // connect means selectable for setup; demo is true with fields [] and no gateway
   draft: null | {                       // null unless state is 'open': nothing about an instance is shown to a visitor
     instance: { name: string; locale: 'fr' | 'en'; timeZone: string | null };
-    owner: { displayName: string; email: string; passwordSet: boolean };
-    runtime: { adapter: string; gatewayUrl: string; tokenSet: boolean };
+    owner: { displayName: ""; email: ""; passwordSet: boolean }; // identity only from code-gated resume
+    runtime: { adapter: string; gatewayUrl: string | null; tokenSet: boolean };
   };
   suggestedTimeZone: string;            // the server process's zone (ADR §12.7)
   locales: Array<'fr' | 'en'>;
+  integrations: Array<{id: string; adapters: string[]; default: boolean}>;
 }
 ```
 - **`PUT` validation** (400 `validation_failed`, one detail per field): `instance.name` 1–80 chars; `instance.locale` ∈ `locales`; `instance.timeZone` an IANA zone; `owner.displayName` 1–80; `owner.email` an address; `owner.password` ≥ 12 chars, **required unless `passwordSet`**; `runtime.adapter` a listed adapter (`openclaw`, or `demo`: a synthesised read-only team that takes no other runtime field, G6); for `openclaw`, `runtime.gatewayUrl` `ws(s)://host[:port][/path]` and a token **required unless `tokenSet`**; `agents.primary` an agent id (`[A-Za-z0-9_-]{1,64}`); `agents.looks` a map agentId → `{ character, variant: string|null, accessories: string[] }`.
-- **What `PUT` writes:** the instance config file (`$AO_CONFIG`, else `$XDG_CONFIG_HOME/agent-office/config.json`; 0600, atomically: temp file + rename) with the non-secret values, and the **secret file** `secrets.json` next to it (0600): the scrypt hash of the password, a new session secret, the runtime token. **Env always wins** over both, and **any login variable in the env (`PORTAL_EMAIL`, `PORTAL_SECRET`, `PORTAL_PASSWORD_HASH`, `PORTAL_PASSWORD`) means the instance is configured by env: setup is locked for good** and the file never supplies a missing piece of that login. Then the server **switches to the configured app in-process on the same port**, once every in-flight setup request has answered (a losing concurrent `PUT` gets its 403 `{issue:'locked'}`, R21-04): the client reloads and signs in.
+- **What `PUT` writes:** the instance config file (`$AO_CONFIG`, else `$XDG_CONFIG_HOME/agent-office/config.json`; 0600, atomically: temp file + rename) with the non-secret values, and the **secret file** `secrets.json` next to it (0600): the scrypt hash of the password, a new session secret, the runtime token. **Env always wins** over both, and **only a complete environment login replaces file auth**; a partial set of `PORTAL_EMAIL`, `PORTAL_SECRET`, `PORTAL_PASSWORD_HASH`, `PORTAL_PASSWORD` is a named boot error, never a deletion of database auth. Then the server **switches to the configured app in-process on the same port**, once every in-flight setup request has answered (a losing concurrent `PUT` gets its 403 `{issue:'locked'}`, R21-04): the client reloads and signs in.
 - **Publication (R21-03):** one publisher at a time (an `O_EXCL` lock file next to the config; a dead process's lock is taken over); `secrets.json` first, then `config.json`, the **commit marker**; each through a private temporary and `link()`, which never overwrites an existing file. A crash before the commit leaves `secrets.json` alone, which boot ignores (a warning) and the next setup replaces: setup is never stranded. Another process publishing → 409 `conflict` `{issue:'publishing'}`.
 - **Permissions (R21-01):** at every start, `secrets.json` and `config.json` must be 0600, their directory and the data dir 0700. Ours and too open → fixed, with a warning naming the path; someone else's → the server refuses to start and prints the `chmod` to run.
 - **Diagnostics (R21-02):** a config file with undeclared fields fails startup with their parent path, count and types (`$.instance: 2 undeclared fields (number, string)`), never their names.
@@ -812,3 +868,32 @@ interface SetupVM {
 - **Examples are the contract (2.1, PM on review-07):** `docs/architecture/examples/*.json` holds an authoritative payload for every VM and command shared across agents (README there). **Producers** (projects, architect) assert `compareShape(example, builderOutput)` from `test/helpers/contract-shape.js` returns `[]`; **consumers** (frontend, office-dev) build their mocks from those files. A shape change is example + changelog first, then producers and consumers. `test/api/contract-examples.test.js` checks the examples' own consistency (409 ↔ ProjectVM, history pages ↔ `recentHistory`, import ↔ candidates, LayoutVM ↔ design/office). The JSON snippets in this document are illustrations; where they differ, the example files win.
 - **Route tests:** every route and command against FakeGateway + fake CLI, including each `issue` value and the 409 `current` payload.
 - **SSE tests:** the exact §4.6 sequences, covering two clients, gap → resync, the board move, and resume within and after 2 min.
+
+Sender extension (2.6): see [sender-identities.md](sender-identities.md) for the shared Sender/Participant schema and adapter conformance hooks. TraceEventVM and ChatVM messages accept `senderInfo`; SessionVM carries a `participants` collection.
+
+### 5.7.1 Owner, detection, installation and network contracts (2.7)
+
+These routes are mounted under both `/api/v2` and `/api/v3`. Every POST requires the logged one-time `setupCode`, follows the existing throttle, and refuses writes when setup is locked or readonly. They return the standard `Ok<CommandResult>` envelope. Existing setup request examples remain valid for legacy clients.
+
+| Route | Request additions beyond `setupCode` | Result |
+| --- | --- | --- |
+| `POST /setup/resume` | none | Private saved `{owner:{displayName,email,passwordSet}|null}` after setup-code admission. Public GET never returns saved name/email. |
+| `POST /setup/owner` | `owner: {displayName, email, password, passwordConfirmation}`; password ≥12 characters and matching confirmation | `{created:true, owner:{displayName,email,passwordSet:true}}`. Creates or amends the one DB owner while setup is open, in a transaction with its Person/layout seed/setup status. A password is required on creation; omitted on amendment it preserves the hash. Never returns password/hash. |
+| `POST /setup/detect` | none | `{runtimes:[{runtime,name,found,confidence,supported,agents,connection}],selected}`. Agents have `id`, nullable `name`, `nameSource`, primary/model hints. Connection has gateway URL and `tokenSet`; token/workspace fields are omitted. |
+| `GET /setup/catalog` | none; open setup only | `Ok<Manifest>` with all shipped characters and enabled packs, shared with the Store/layout validator. |
+| `POST /setup/integrations/plan` | `runtime`, `locale` | `{planId,agents:[{id,status,files,uninstallFiles}],backupDir}`. Server-owned adapter targets; expires in ten minutes; planning writes nothing. |
+| `POST /setup/integrations/apply` | `planId`, `agentIds`, `confirmed:true`, optional `action:'install'|'uninstall'` | `{agents:[{id,status,changed,backup,reason}]}`. Rejects stale plans/symlinks. Stages private preimages, then applies the selected set. A later failure restores completed changes; a concurrent replacement refuses rollback (`EROLLBACK`) and retains recovery preimages. Install/uninstall use descriptor I/O with pinned parents; uninstall removes only unchanged owned files and empty directories. |
+| `POST /setup/network` | inspection: `domain?`, `port?`, `publicIp?:boolean`; access check: `action:'probe',url` | inspection: bind/addresses/tailnet/public IP/DNS/snippets; probe: `{ok,status,issue}` from bounded `/build.json` fetch. No system files are changed. |
+
+The core delegates discovery to `adapter.setup.discover`; the adapter reconciles detected config/identity names and its transport listing; missing names remain null, with an optional source field. New onboarding uses the DB owner from the first step, so the final `PUT /setup` omits the password. `agents.names` in PUT contains editable local names; config v2 stores them under `agents.names[adapterId]`; `agents.looks` seeds the validated initial layout. `integrations.reviewed:true` prevents the legacy post-save install; the explicit install step owns every confirmed change. Optional `network:{mode,port,publicUrl}` is normalized to Agent Office's own bind/origin/cookie configuration. Modes are local/LAN/tailnet/public/tunnel; the latter three require HTTPS. Current listener/origin settings remain active until restart. Legacy env/file owner logins remain supported. New DB-auth `taco_sess` payloads identify the stable `users.id`; old DB cookies without it require a fresh login, and legacy email cookies retain their verification path.
+
+
+`selected` is null when more than one detected transport has `setup.connect:true`; selection then belongs to the operator. Presence-only detectors cannot become transports by setting a detector flag. No empty config invents an agent or primary. Named peer occupants use `agent:<agentId>` / role `agent`; delegate occupants remain `subagent:<subjectId>` / role `subagent`, including when the ids match. The subagent KPI counts only delegates. Previously saved onboarding peer rules migrate by their configured labels; ordinary delegate rules stay intact.
+
+**Publication and versions:** modern owner setup publishes config/secrets **version 2**, with `owner.authSource="database"` and no password hash in secrets. Strict v1 remains readable (no authSource/names/network; required secrets passwordHash). DB owner/person/layout/open status commit together; final layout/config digest commit before file publication; status becomes configured afterward. Boot reconciles the digest if publication finished before a crash. These forward DB/config migrations require a private pre-upgrade backup to roll back; an old binary cannot read v2 or the newer DB schema. See operations.md.
+
+**Gateway overrides:** adapters map their own runtime config/credentials into the effective environment. Changing a gateway URL without its token drops the stored credential unless the normalized destination is unchanged.
+
+**Environment auth:** only a complete env login (email, session secret, password or hash) replaces file auth. Every partial login environment, including `PORTAL_SECRET` alone, refuses startup with declared variable names only. Stored DB mode and email are never deleted by an incomplete override.
+
+**Executable fixtures:** each new route has `setup-owner`, `setup-resume`, `setup-detect`, `setup-integration-plan`, `setup-integration-apply`, or `setup-network` request/result examples; catalog uses `setup-catalog-result`, modern PUT uses `setup-finalize-request`/`-result`. `test/setup/contract-examples.test.js` inventories actual mounted routes and checks live synthetic HTTP responses against these examples and the strict `SetupVM` schema. Legacy check/discover/save examples remain supported.

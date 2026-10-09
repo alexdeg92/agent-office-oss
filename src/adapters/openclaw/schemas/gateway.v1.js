@@ -122,7 +122,7 @@ const schemas = {
     messages: s.array(s.object({
       role: s.string(), content: Content.nullable().optional(), timestamp: ms(), usage: MessageUsage.optional(),
       toolCallId: str(), toolName: str(), isError: bool(), errorMessage: str(),
-      model: str(), provider: str(), api: str(), stopReason: str(), senderName: str(), senderLabel: str(),
+      model: str(), provider: str(), api: str(), stopReason: str(), senderName: str(), senderLabel: str(), senderId: str(), displayName: str(), username: str(), channel: str(), sender: s.unknown().optional(),
     }, { known: ['provenance', 'idempotencyKey', '__openclaw', 'responseId', 'responseModel', 'diagnostics', 'display', 'details', 'customType', 'excludeFromContext'] }), { perItem: true }),
   }),
 

@@ -2,6 +2,7 @@
 // SkillListVM, SkillDetailVM (api.md §3.7). Pure builders over canonical Skill / SkillInfo plus the SKILL.md body
 // (read by the adapter under R1-11). S7: the v1 `skillSteps` / `outputTags` heuristics live here as flowOf().
 
+const { safeExternalUrl } = require('../../../../public/v2/url-policy.js');
 const ORDER = { active: 0, unavailable: 1, disabled: 2 };
 
 function rowVM(s) {
@@ -43,7 +44,7 @@ function buildSkillDetailVM(skill, info, doc, needsRestart) {
   if (!skill) return null;
   const markdown = (doc && doc.markdown) || '';
   return {
-    skill: Object.assign(rowVM(skill), { homepage: skill.homepage || (info && info.homepage) || null }),
+    skill: Object.assign(rowVM(skill), { homepage: safeExternalUrl(skill.homepage) || safeExternalUrl(info && info.homepage) }),
     detail: info ? { always: info.always, blockedBy: Object.assign({}, info.blockedBy), requirements: info.requirements, missing: info.missing,
       install: info.install.map((x) => ({ id: x.id, kind: x.kind, label: x.label, bins: x.bins.slice() })) } : null,
     markdown,

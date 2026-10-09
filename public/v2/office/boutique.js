@@ -222,7 +222,7 @@ function LooksPanel({ tab, index, draft, occupants, seen, canWrite, agentId, onA
           <button type="button" class=${'bu-card bu-card--interactive ao-shop__card' + (focus === x.id ? ' bu-card--selected' : '')} aria-pressed=${String(focus === x.id)} onClick=${() => setFocus(focus === x.id ? null : x.id)}>
             <span class="ao-shop__thumb ao-shop__thumb--fig">
               ${tab === 'couleurs' && x.swatch ? html`<span class="ao-shop__swatch" style=${{ background: safeColor(x.swatch) }}></span>` : null}
-              <${Figure} index=${index} look=${tab === 'accessoires' ? (x.on ? look : x.toggled) : x.look} pose="idle" assetBase=${assetBase()} /></span>
+              <${Figure} index=${index} look=${tab === 'accessoires' ? (x.on ? look : x.toggled) : x.look} pose="idle" assetBase=${assetBase()} thumbnail=${tab !== 'accessoires'} /></span>
             <span class="ao-shop__name">${itemName(x)}</span>
             <span class=${'ao-shop__badge' + (x.on ? ' is-on' : '')}>${x.on ? tr(tab === 'accessoires' ? 'shop.wearing' : 'shop.currentShort') : wornText(x.wornBy) ?? tr('shop.free')}</span>
           </button></li>`)}
@@ -304,4 +304,3 @@ function SaveBar({ draft, canWrite }) {
     <p class="bu-sr-only" aria-live="polite">${draft.announcement}</p>
   </div>`;
 }
-

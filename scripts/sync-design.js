@@ -64,8 +64,25 @@ function shippedAssetKeys() {
     else if (value && typeof value === 'object') Object.values(value).forEach(visit);
   };
   visit(manifest);
-  const text = walkText(path.join(ROOT, 'public', 'v2')).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+  for (const pack of manifest.characterPacks?.packs ?? []) {
+    const rel = pack.packManifest.replace(/^assets\//, '');
+    const file = path.join(ROOT, 'design', 'assets', rel);
+    keys.add(rel);
+    const prefix = path.posix.dirname(rel) + '/';
+    const readPack = node => {
+      if (typeof node === 'string' && node.endsWith('.webp')) keys.add(prefix + node);
+      else if (Array.isArray(node)) node.forEach(readPack);
+      else if (node && typeof node === 'object') Object.values(node).forEach(readPack);
+    };
+    readPack(JSON.parse(fs.readFileSync(file, 'utf8')));
+  }
+  // The generated import map names the previous build's files. It cannot keep a disabled pack alive.
+  const text = walkText(path.join(ROOT, 'public', 'v2')).map((file) => fs.readFileSync(file, 'utf8')
+    .replace(/<script\b[^>]*type=["']importmap["'][^>]*>[\s\S]*?<\/script>/gi, '')).join('\n');
   for (const match of text.matchAll(/bureau\/assets\/([A-Za-z0-9_@./+-]+)/g)) keys.add(match[1]);
+  // Lazy scene registries resolve paths against the office asset base rather than
+  // naming bureau/ directly. Their declared image bundles must ship as well.
+  for (const match of text.matchAll(/\bassets\/((?:Office|Characters|Logos|ProjectCovers|Illustrations)\/[A-Za-z0-9_@./+-]+)/g)) keys.add(match[1]);
   if (text.includes('bureau/assets/Logos/')) {
     const logos = path.join(ROOT, 'design', 'assets', 'Logos');
     for (const rel of walk(logos)) keys.add('Logos/' + rel);
@@ -101,7 +118,7 @@ function plan() {
     for (const rel of walk(srcDir)) {
       const key = g + '/' + rel;
       if (SKIP.some((re) => re.test(key)) || SKIP_SHIP.some((re) => re.test(key))) continue;
-      if (!KEEP_EXT.has(path.extname(rel).toLowerCase())) continue;
+      if (!KEEP_EXT.has(path.extname(rel).toLowerCase()) && !/^Characters\/[a-z][a-z0-9-]*\/manifest\.json$/.test(key)) continue;
       if (!shipped.has(key)) continue;
       pairs.push([path.join(srcDir, rel), path.join(DEST, 'assets', g, rel)]);
     }

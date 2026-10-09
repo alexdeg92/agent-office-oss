@@ -94,11 +94,31 @@ describe('R8-05 · a failed backup keeps the previous one', () => {
     const first = h.backup('daily');
     const before = snapshot(path.join(sub('data'), 'backups'));
     h.db.exec('BEGIN');                                                  // VACUUM INTO fails inside a transaction
-    assert.throws(() => h.backup('daily'));
+    assert.throws(() => h.backup('daily'), { code: 'backup-in-transaction' });
     h.db.exec('ROLLBACK');
     assert.ok(fs.existsSync(first));
     assert.deepEqual(snapshot(path.join(sub('data'), 'backups')), before, 'no temp file left, nothing deleted');
     h.close();
+  });
+  it('an actual worker VACUUM error surfaces without publishing or changing retention', () => {
+    let inject = false, reached = false;
+    const h = openDatabase({ dir: sub('worker-data'), instance: 'test', now: () => Date.UTC(2026, 9, 5, 12),
+      backupHook: (step, ctx) => {
+        if (inject && step === 'store-backup:sqlite-copy') {
+          // Preserve the admitted inode, but make its output nonempty: SQLite's
+          // real VACUUM INTO must refuse it. No mocked exception replaces SQLite.
+          reached = true; fs.writeFileSync(ctx.file, 'synthetic occupied output', { flag: 'r+' });
+        }
+      } });
+    try {
+      const first = h.backup('daily'), before = snapshot(path.join(sub('worker-data'), 'backups'));
+      inject = true;
+      assert.throws(() => h.backup('daily'), { code: 'ERR_SQLITE_ERROR' });
+      assert.equal(reached, true, 'the real worker VACUUM handoff was exercised');
+      assert.ok(fs.existsSync(first));
+      assert.deepEqual(snapshot(path.join(sub('worker-data'), 'backups')), before, 'no replacement, pruning or staging residue');
+      inject = false; assert.doesNotThrow(() => h.backup('daily'), 'a later healthy backup succeeds');
+    } finally { h.close(); }
   });
 });
 

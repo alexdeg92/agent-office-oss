@@ -41,7 +41,8 @@ function checkEnv(ctx) {
   const sourceOf = (k) => (env[k] !== undefined && env[k] !== '' ? 'env' : 'file');
   const password = eff.PORTAL_PASSWORD_HASH ? 'PORTAL_PASSWORD_HASH' : eff.PORTAL_PASSWORD ? 'PORTAL_PASSWORD' : null;
   const present = LOGIN.filter((k) => eff[k]).concat(password ? [password] : []);
-  if (!IC.isConfigured(eff) && !IC.envConfigured(env) && !files.config) add('env', 'env.login', 'info', 'env.login.setup');
+  if (ctx.loginError) add('env', 'env.login', 'fail', 'env.login.partial', { names: IC.LOGIN_ENV.filter(k => env[k] !== undefined).join(', ') });
+  else if (!IC.isConfigured(eff) && !IC.envConfigured(env) && !files.config) add('env', 'env.login', 'info', 'env.login.setup');
   else if (present.length < 3) {
     const missing = LOGIN.filter((k) => !eff[k]).concat(password ? [] : ['PORTAL_PASSWORD_HASH']);
     add('env', 'env.login', 'fail', 'env.login.missing', { names: missing.join(', ') });
@@ -51,7 +52,7 @@ function checkEnv(ctx) {
     if (password === 'PORTAL_PASSWORD') add('env', 'env.password', 'warn', 'env.login.plaintext');
   }
   // what loadConfig would refuse (the variable's name and a closed reason, never its value)
-  if (IC.isConfigured(eff)) {
+  if (!ctx.loginError && IC.isConfigured(eff)) {
     try {
       ctx.cfg = tryLoadConfig(eff);
       add('env', 'env.config', 'ok', 'env.config.ok', { instance: ctx.cfg.instance, adapter: ctx.cfg.runtimeAdapter });
@@ -226,14 +227,19 @@ async function runDoctor(opts = {}) {
   try { files = IC.readInstanceConfig(env); } catch (e) {
     files = { paths: IC.configPaths(env), config: null, secrets: null, orphanSecrets: false, error: e.message };
   }
-  const eff = IC.effectiveEnv(env, files.error ? { config: null, secrets: null } : files);
+  let eff, loginError = null;
+  try { eff = IC.effectiveEnv(env, files.error ? { config: null, secrets: null } : files); }
+  catch (e) {
+    if (!(e instanceof IC.ConfigError) || e.file !== 'environment') throw e;
+    loginError = e; eff = { ...env }; // rejected login overrides never inherit stored credentials
+  }
   const named = eff.AO_ENV || (eff.PORTAL_READONLY === '1' ? 'staging' : eff.NODE_ENV === 'production' ? 'production' : 'dev');
   const instance = ['production', 'staging', 'dev', 'test'].includes(named) ? named : '?';   // an invalid AO_ENV is reported by name (env.config), not echoed
   const localeOf = (x) => { const l = String(x || '').toLowerCase().split(/[-_.]/)[0]; return l === 'fr' || l === 'en' ? l : null; };
   const locale = localeOf(opts.locale) || localeOf(eff.AO_LOCALE) || localeOf(env.LC_ALL) || localeOf(env.LANG) || 'fr';
   const checks = [];
   const ctx = {
-    env, eff, files, instance, locale, cfg: null,
+    env, eff, files, instance, locale, loginError, cfg: null,
     dataDir: path.resolve(opts.dataDir || eff.AO_DATA_DIR || defaultDataDir(eff, instance === '?' ? 'dev' : instance)),
     timeoutMs: opts.timeoutMs || 8000, now: opts.now || Date.now, fetchImpl: opts.fetchImpl || fetch,
     t: (key, params) => format(locale, key, params),

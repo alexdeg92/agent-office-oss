@@ -33,12 +33,22 @@ describe('G3b · the UI locale falls back to the instance locale, not to French'
   });
 });
 
-describe('G3b · conversations on any channel get a usable title (never an empty id)', () => {
+describe('G3b · conversation titles use known names and an honest unknown-person fallback on every channel', () => {
   const { sessionTitle } = require('../../src/api/v2/vm/logs');
   const s = (kind, interlocutorId) => ({ key: 'k', displayName: null, class: { kind, heartbeatOf: null, interlocutorId } });
-  it('Discord keeps its 6-digit tail; other families show their opaque id (at most 24 chars)', () => {
-    assert.deepEqual(sessionTitle(s('conversation-direct', 'discord-user:100000000000000001')), { key: 'sessionTitle.user', params: { id: '000001' } });
-    assert.deepEqual(sessionTitle(s('conversation-direct', 'telegram-user:foreign-user')), { key: 'sessionTitle.user', params: { id: 'foreign-user' } });
+  it('unknown direct conversations have no ID suffix, including Discord and future channel families', () => {
+    for (const peer of ['discord-user:100000000000000001', 'telegram-user:foreign-user', 'whatsapp-user:synthetic-peer',
+      'matrix-user:synthetic-peer', 'future-channel-user:opaque-peer', null]) {
+      assert.deepEqual(sessionTitle(s('conversation-direct', peer)), { key: 'sessionTitle.user', params: { id: '' } });
+    }
+  });
+  it('known interlocutor or per-message sender names still name direct conversations', () => {
+    const direct = s('conversation-direct', 'future-channel-user:opaque-peer');
+    assert.deepEqual(sessionTitle(direct, { interlocutorName: () => 'Mira', senderName: () => 'Jules' }), { key: 'sessionTitle.named', params: { name: 'Mira' } });
+    assert.deepEqual(sessionTitle(direct, { senderName: () => 'Jules' }), { key: 'sessionTitle.named', params: { name: 'Jules' } });
+  });
+  it('unknown rooms retain their bounded identifiers', () => {
+    assert.deepEqual(sessionTitle(s('conversation-group', 'discord-channel:100000000000000099')), { key: 'sessionTitle.channel', params: { id: '000099' } });
     assert.deepEqual(sessionTitle(s('conversation-group', 'slack-room:C0ACME')), { key: 'sessionTitle.channel', params: { id: 'C0ACME' } });
     assert.equal(sessionTitle(s('conversation-group', 'matrix-room:!' + 'x'.repeat(40) + ':example.org')).params.id.length, 24);
   });

@@ -31,6 +31,32 @@ function at006() {
 }
 
 describe('G3b · migration 007', () => {
+  it('a full ladder uses users.person_id ahead of a legacy owner marker', () => {
+    const h = openDatabase({ dir: path.join(dir, 'full'), instance: 'test' });
+    try {
+      const insert = h.db.prepare('INSERT INTO persons (id, kind, name, is_owner, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1)');
+      insert.run('per_legacy', 'human', 'Legacy', 1); insert.run('per_current', 'human', 'Current', 0);
+      h.db.prepare("INSERT INTO users (id, person_id, email, password_hash, role, created_at, updated_at) VALUES ('usr_owner', 'per_current', 'owner@example.invalid', 'synthetic-not-a-login-hash', 'owner', 1, 1)").run();
+      const persons = createPersonsRepo(h.db);
+      assert.equal(persons.owner().id, 'per_current'); assert.equal(persons.owner().links.isOwner, true);
+      assert.equal(persons.list().find(p => p.id === 'per_legacy').links.isOwner, undefined);
+      assert.equal(persons.ensureOwner('Keep current').id, 'per_current');
+    } finally { h.close(); }
+  });
+  it('a partial ladder has no users table and retains legacy owner seeding and lookup', () => {
+    const h = at006();
+    try {
+      assert.equal(h.db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'users'").get(), undefined);
+      const persons = createPersonsRepo(h.db, { now: () => 100 });
+      assert.equal(persons.owner(), null);
+      const owner = persons.ensureOwner('Legacy owner');
+      assert.equal(owner.name, 'Legacy owner'); assert.equal(owner.links.isOwner, true);
+      assert.equal(persons.ensureOwner('Ignored name').id, owner.id);
+      assert.equal(persons.owner().name, 'Legacy owner');
+      assert.equal(persons.ensureOwner('Amended', { rename: true }).name, 'Amended');
+      assert.equal(persons.list().filter(p => p.links.isOwner).length, 1);
+    } finally { h.close(); }
+  });
   it('keeps every Discord cache row byte-identical and copies persons.discord_user_id into person_identities', () => {
     const h = at006();
     try {

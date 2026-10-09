@@ -37,7 +37,7 @@ describe('G5 · contract 3.0 examples', () => {
       assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.types.json')), `${n}: sidecar`);
       assert.ok(v3(n).data && v3(n).meta, n);
     }
-    assert.equal(v3('meta-vm').data.contractVersion, '3.0'); assert.equal(v3('meta-vm').data.apiVersion, 3);
+    assert.equal(v3('meta-vm').data.contractVersion, '3.2'); assert.equal(v3('meta-vm').data.apiVersion, 3);
   });
 
   it('1. each differs from its 2.x example in shape only by the documented deltas', () => {

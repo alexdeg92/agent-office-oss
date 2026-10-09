@@ -57,7 +57,7 @@ describe('i18n · migration 006 keeps the preferences', () => {
       assert.throws(() => pre.db.exec(`INSERT INTO ui_prefs (key, value_json, updated_at) VALUES ('locale', '"en"', 1)`), /CHECK/);
       pre.close();
       const h = openDatabase({ dir, instance: 'test' });
-      assert.deepEqual(h.applied, [6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(h.applied, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
       assert.equal(h.db.prepare("SELECT value_json FROM ui_prefs WHERE key = 'uiTheme'").get().value_json, '"dark"');
       h.db.exec(`INSERT INTO ui_prefs (key, value_json, updated_at) VALUES ('locale', '"en"', 1)`);
       h.close();

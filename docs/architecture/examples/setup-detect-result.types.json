@@ -1,0 +1,18 @@
+{
+  "nullable": [
+    "$.revision",
+    "$.vm",
+    "$.result.runtimes[].connection",
+    "$.result.runtimes[].agents[].name",
+    "$.result.runtimes[].agents[].nameSource",
+    "$.result.runtimes[].agents[].model",
+    "$.result.runtimes[].connection.gatewayUrl"
+  ],
+  "types": {
+    "$.revision": "number",
+    "$.vm": "any",
+    "$.result.runtimes[].agents[].name": "string",
+    "$.result.runtimes[].agents[].nameSource": "string",
+    "$.result.runtimes[].agents[].model": "string"
+  }
+}

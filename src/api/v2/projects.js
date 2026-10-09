@@ -17,6 +17,7 @@ const { createProjectService, ProjectError } = require('../../projects');
 const { createProjectsRepository } = require('../../store/repos/projects');
 const { ApiError, invalid } = require('./errors');
 const { labelsFor, resolveLocale } = require('../../i18n');
+const { projectEvents, participantsOf } = require('../../engine/model/sender');
 const { capabilitiesOf } = require('./vm/meta');
 
 const REFRESH_EVERY_MS = 10 * 60 * 1000;
@@ -46,7 +47,14 @@ function sessionInfoOf(engine, { enrichment = null, runtime = null, locale = 'fr
     const s = engine.session(key);
     if (!s) return null;
     const c = s.class || {};
-    const transcript = engine.transcript(key);
+    const rawTranscript = engine.transcript(key);
+    const senderContext = { runtime: runtime?.definition?.id || 'generic', sessionKey: key,
+      people: engine.senderPeople?.() || [], nameOf: (id) => enrichment?.nameOf(id), avatarOf: (id) => enrichment?.peek(id)?.profile?.avatarUrl };
+    const transcript = rawTranscript ? { ...rawTranscript, events: projectEvents(rawTranscript.events, senderContext) } : null;
+    const participants = participantsOf([
+      ...projectEvents((rawTranscript?.participants || []).map((senderInfo) => ({ senderInfo })), senderContext),
+      ...(transcript?.events || []),
+    ]);
     const agent = (engine.agents().find((a) => a.id === c.agentId) || {}).name || c.agentId || '';
     const person = (c.interlocutorId && enrichment ? enrichment.nameOf(c.interlocutorId) : null) ||
       (c.kind === 'conversation-direct' ? transcript?.events?.find((e) => e.kind === 'user' && e.sender)?.sender : null);
@@ -63,10 +71,7 @@ function sessionInfoOf(engine, { enrichment = null, runtime = null, locale = 'fr
     const people = [];
     if (c.agentId) people.push({ id: `agent:${c.agentId}${c.subagentId ? ':subagent:' + c.subagentId : ''}`, kind: 'agent', name: agent,
       avatarUrl: null, state: null });
-    const senders = [...new Set((transcript?.events || []).filter((e) => e.kind === 'user' && e.sender).map((e) => e.sender))];
-    if (c.kind === 'conversation-direct' && (person || senders.length)) people.push({ id: c.interlocutorId || 'sender:' + senders[0], kind: 'human',
-      name: person || senders[0], avatarUrl: enrichment?.peek?.(c.interlocutorId)?.profile?.avatarUrl || null, state: null });
-    else for (const name of senders) people.push({ id: 'sender:' + name, kind: 'human', name, avatarUrl: null, state: null });
+    for (const p of participants) if (p.kind === 'human') people.push({ id: p.avatarHint?.startsWith('person:') ? p.avatarHint.slice(7) : p.id, kind: 'human', name: p.name || (locale === 'en' ? 'User' : 'Utilisateur'), avatarUrl: /^https?:\/\//.test(p.avatarHint || '') ? p.avatarHint : null, state: null });
     return { label, people, channel, messages: messageCountOf(s, transcript, engine.conversationMessageCount?.(key)), summary: conversationSummary(transcript, { agent, locale, hidden }), tokens };
   };
 }

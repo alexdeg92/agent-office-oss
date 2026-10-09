@@ -28,7 +28,7 @@ describe('office-dev-25: hip-on-seat chair composition', { skip, timeout: 120_00
     await p.close();
   });
 
-  it('every shipped look and seated state keeps its hip on the cushion, between the chair and front armrest, at 1440 and 360', async () => {
+  it('every shipped look and seated state keeps its hip on the cushion, with the correct foreground backrest and armrest, at 1440 and 360', async () => {
     const p = await browser.page('/test/office/harness.html');
     await p.waitFor('window.H?.ready');
     for (const width of [1440, 360]) {
@@ -52,8 +52,11 @@ describe('office-dev-25: hip-on-seat chair composition', { skip, timeout: 120_00
           if (!(Number(img.style.zIndex) < Number(c.el.style.zIndex) && Number(c.el.style.zIndex) < Number(arm.style.zIndex))) errors.push(label + ': wrong chair layer order');
           if (img.hidden || arm.hidden || !arm.style.clipPath.startsWith('polygon(')) errors.push(label + ': armrest not painted');
           const chairs = Object.entries(n.parts).filter(([name, el]) => name.includes('chair') && !el.hidden);
-          if (chairs.length !== 2) errors.push(label + ': duplicate chair facings');
-          if (front && c.renderedPose !== 'sofa-sit-sw') errors.push(label + ': not using the proven seated frame');
+          if (chairs.length !== (front ? 2 : 3)) errors.push(label + ': duplicate/missing chair layers');
+          const backrest = n.parts['seated:chair-backrest'];
+          if (front ? !backrest.hidden : backrest.hidden || !backrest.style.clipPath.startsWith('polygon(') || Number(backrest.style.zIndex) <= Number(c.el.style.zIndex)) errors.push(label + ': chair backrest is not over the seated back');
+          const expectedFront = c.reaction === 'success' ? 'life-success-sw' : c.reaction === 'error' || c.occ.state === 'error' ? 'life-error-sw' : 'sofa-sit-sw';
+          if (front && c.renderedPose !== expectedFront) errors.push(label + ': wrong seated frame');
           const bodies = [...c.displayed.querySelectorAll('[data-layer=body]')].filter(i => !i.hidden);
           if (bodies.length !== 1 || bodies.some(i => !i.complete || !i.naturalWidth)) errors.push(label + ': body frame missing');
           if ([...c.displayed.querySelectorAll('img')].some(i => i.naturalWidth !== c.poseCanvas.w)) errors.push(label + ': accessory canvas mismatch');
@@ -62,10 +65,10 @@ describe('office-dev-25: hip-on-seat chair composition', { skip, timeout: 120_00
           const label = ch.id + '/' + variant.id;
           for (const state of states) {
             sc.setOccupants([{ id: 'main', role: 'main', sourceName: label, state, stateSince: Date.now(), stationUid: 'st-timmy', look: { character: ch.id, variant: variant.id, accessories: ['cap','headphones','scarf'] } }]);
-            await check(label + ':' + state, state === 'error');
+            const current = sc.chars.get('main'); sc._clear(current, current.reactionTimer); current.reaction = null; sc._renderPose(current); await check(label + ':' + state, state === 'error');
           }
           const c = sc.chars.get('main');
-          c.occ.state = 'working'; c.wave = true; sc._renderPose(c);
+          c.occ.state = 'working'; c.reaction = null; c.wave = true; sc._renderPose(c);
           await check(label + ':selection', true);
           const expectedOrigin = [c.poseSeat.x * c.poseScale / sc.proj.artScale, c.poseSeat.y * c.poseScale / sc.proj.artScale];
           const origin = c.displayed.style.transformOrigin.split(' ').map(parseFloat);

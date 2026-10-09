@@ -1,13 +1,15 @@
-# Agent Office API, contract 3.0 (`/api/v3`)
+# Agent Office API, contract 3.2 (`/api/v3`)
 
 **Status:** served on `/api/v3` (G5, architect-35; ADR-001 §9 and §12). Examples: `examples/v3/`. The runtime check validates every 3.0 VM against the 3.0 schemas (`VM_SCHEMAS_V3`; the frontend's `validateVM(name, vm, 3)`).
 
-**What 3.0 is:** the same API as 2.5 (api.md), on **`/api/v3`**, with the **open vocabularies as the canonical names** and **no personal value or field name**. Every route, method, body, envelope, error code, SSE frame and rule of api.md 2.5 applies unchanged, **except the deltas D1–D10 below**. A VM not listed here has the same shape and values as in 2.5 (its example is `examples/<name>.json`). The v3 examples are written for a foreign instance (primary agent `atlas` « Atlas », Telegram, Europe/Paris), so none of them carries a home-instance value.
+**3.2 changelog (2026-10-09):** locked missing-secrets setup and named partial-login boot errors; the setup/owner recovery, config v2 and safe installation contracts of api.md 2.7 apply on v3 too. Peer occupants add role `agent` and id `agent:<agentId>`; delegates retain their own identity/KPI. Setup fixtures are shared across v2/v3.
 
-**2.x stays.** `/api/v2` keeps serving 2.5, **byte-identical**, from the same canonical core through the 2.x projection (`project2x`), until the frontend and office have moved (then S16 removes it). Both versions share one engine, one store, one set of runtime reads and one chat state; only the VM projection differs. A client uses ONE version for everything (views, commands, stream): a v3 topic is never sent on a v2 stream, nor the reverse.
+**What 3.0 is:** the same API as 2.7 (api.md), on **`/api/v3`**, with the **open vocabularies as the canonical names** and **no personal value or field name**. Every route, method, body, envelope, error code, SSE frame and rule of api.md 2.7 applies unchanged, **except the deltas D1–D10 below**. A VM not listed here has the same shape and values as in 2.7 (its example is `examples/<name>.json`). The v3 examples are written for a foreign instance (primary agent `atlas` « Atlas », Telegram, Europe/Paris), so none of them carries a home-instance value.
+
+**2.x stays.** `/api/v2` serves revision 2.7, from the same canonical core through the 2.x projection (`project2x`), until the frontend and office have moved (then S16 removes it). Both versions share one engine, one store, one set of runtime reads and one chat state; only the VM projection differs. A client uses ONE version for everything (views, commands, stream): a v3 topic is never sent on a v2 stream, nor the reverse.
 
 ## D1 · MetaVM
-- `apiVersion: 3`, `contractVersion: '3.0'` (also in the stream's `hello`).
+- `apiVersion: 3`, `contractVersion: '3.2'` (also in the stream's `hello`).
 - **`runtime`**: `{ id, name, gatewayLabel, version: string | null, capabilities }`. `capabilities` is the adapter's declaration (ADR §3): `sessions`, `transcripts`, `activity`, `flows {read, write, schedules}`, `skills {read, toggle, detail}`, `channels`, `interlocutors`, `chat`, `restart`, `costs`, `subagents`, `sessionGroups`. **The UI hides or disables by capability**; a command whose capability is false is 404 `not_found`.
 - **`instance`**: `{ name: string | null, timeZone, locale, configured }` (`name` from setup or `AO_INSTANCE_NAME`).
 - **`locales`**: `['fr', 'en']`.
@@ -15,16 +17,16 @@
 - **`enums`**: `sessionKind` (D2), `occupantRole` (D3) and `interlocutorKind` (D5) are the 3.0 lists; **`channel` is removed** (open).
 
 ## D2 · Session kinds and channels (`LogRowVM`, `SessionVM`, logs query)
-- `kind`: `'primary' | 'subagent' | 'scheduled' | 'conversation-direct' | 'conversation-group' | 'conversation' | 'internal' | 'unrecognized'`.
+- `kind`: `'primary' | 'agent' | 'subagent' | 'scheduled' | 'conversation-direct' | 'conversation-group' | 'conversation' | 'internal' | 'unrecognized'`.
   - `conversation` = a chat-shaped key whose scope the adapter doesn't know (still interactive, still in the office).
   - `internal` = a runtime's own session (OpenClaw: dashboard, ACP, explicit keys).
 - **`runtimeKind: string | null`** (new, after `kind`): the runtime's own kind for an `internal` session (`dashboard`, `acp`, `explicit`), else null. Labelled `runtimeKind.<x>` (raw fallback).
 - `channel`: a **`ChannelRef`** (`^[a-z][a-z0-9-]{0,31}$`: `discord`, `telegram`, `slack`, `matrix`…) or null. **`unrecognized` doesn't exist in 3.0.**
 - `GET /api/v3/views/logs?kind=` takes a 3.0 kind (`internal` included); a 2.x kind is 400. Topics `logs?kind=<3.0 kind>`.
-- Conversation titles: `sessionTitle.user` / `sessionTitle.channel` with `{id}` = the interlocutor's id within its channel (Discord: the last 6 digits, as 2.x).
+- Conversation titles use a known person name for DMs; unknown people use `sessionTitle.user` with an empty `{id}`. Room titles may retain their channel identifier.
 
 ## D3 · OfficeVM (and the office's journal)
-- `OccupantRole`: `'primary' | 'subagent' | 'scheduled' | 'direct' | 'group' | 'conversation'`; `roleLabel` is `occupantRole.<role>`.
+- `OccupantRole`: `'primary' | 'agent' | 'subagent' | 'scheduled' | 'direct' | 'group' | 'conversation'`; `roleLabel` is `occupantRole.<role>`.
 - `OccupantId`: **`'primary'`** for the primary agent, else `'<role>:<subject>'` (`scheduled:<jobId>`, `direct:<interlocutorId or key>`…). The same ids in `journal[].occupantId`, cues and LiveEvents.
 - `ruleId`: the layout rule's id (3.0 layout names, D4).
 
@@ -64,9 +66,13 @@
 
 ## Commands, stream, errors
 - Every 2.5 command exists on `/api/v3` with the same path, body and result, except D4's layout names and D7's `agentId`. CSRF, the agent token (§5.6, with its v3 paths), setup (§5.7) and the read-only rules are identical.
-- `GET /api/v3/stream` and its transport POSTs work as §4, with v3 topic VMs and `contractVersion: '3.0'` in `hello`.
+- `GET /api/v3/stream` and its transport POSTs work as §4, with v3 topic VMs and `contractVersion: '3.2'` in `hello`.
 
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
 | 3.0 | 2026-10-06 | First 3.0 contract (G5): D1–D10. Examples `examples/v3/` (`meta-vm`, `office-vm`, `logs-page`, `session-vm`, `access-vm`, `interlocutor-vm`, `health-vm`, `flow-detail-vm`, `board-vm`, `layout-vm`), held to these deltas by `test/api/contract-v3-examples.test.js`. |
+
+## Sender extension · revision 3.1
+
+The shared [Sender/Participant contract](sender-identities.md) also applies on `/api/v3`: `senderInfo` on trace and chat messages, a `participants` collection for humans and primary agents plus `subagents` for delegated sessions on SessionVM, and metadata-free prose. Its runtime/channel fields are open identifiers. SSE hello advertises 3.1. Version 2 advertises 2.6 and retains its compatibility sender string.

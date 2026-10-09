@@ -44,9 +44,10 @@ describe('portability · a foreign instance end to end (ADR-001 §12.8)', () => 
     const logs = await get('/api/v2/views/logs?limit=200&heartbeat=include');
     assert.equal(logs.items.length, 7);
     assert.deepEqual(logs.items.filter((x) => x.kind === 'unrecognized'), [], 'no unrecognized kind');
-    // 2.x has no telegram/slack/matrix ChannelId: they project to 'unrecognized' WITH a usable title (the 3.0 wire has the slug)
+    // 2.x has no telegram/slack/matrix ChannelId: they project to 'unrecognized' (the 3.0 wire has the slug).
+    // Unknown people get a localized User title without an opaque ID suffix, consistently across channels.
     const tg = logs.items.find((x) => x.id === 'agent:atlas:telegram:direct:foreign-user');
-    assert.deepEqual([tg.kind, tg.channel, tg.title], ['chat-direct', 'unrecognized', { key: 'sessionTitle.user', params: { id: 'foreign-user' } }]);
+    assert.deepEqual([tg.kind, tg.channel, tg.title], ['chat-direct', 'unrecognized', { key: 'sessionTitle.user', params: { id: '' } }]);
   });
 
   it('meta: Atlas is the primary; the instance time zone and locale are the configured ones', async () => {

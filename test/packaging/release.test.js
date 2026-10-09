@@ -66,7 +66,8 @@ describe('release tooling', () => {
     const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
     const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
     const firstHeading = changelog.split('\n').find((line) => line.startsWith('## '));
-    assert.equal(firstHeading, `## ${version} - 2026-10-06`);
+    // The newest section leads; the packaged version (bumped by release.sh after the tests) must have one too.
+    assert.match(firstHeading, /^## \d+\.\d+\.\d+ - \d{4}-\d{2}-\d{2}$/);
     const notes = tools.releaseNotes(changelog, version);
     assert.match(notes, new RegExp('^## ' + version.replace(/\./g, '\\.') + ' '));
     assert.equal(notes.includes('## 0.9.0'), false);

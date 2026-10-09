@@ -20,7 +20,7 @@ const { createLoginThrottle } = require('./security/login-throttle');
 const COOKIE = 'taco_sess';
 
 function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword = null, passwordHash = null, cookieSecure = false, revocations = null,
-  throttle = createLoginThrottle(), audit = null, ownerPersonId = () => null }) {
+  throttle = createLoginThrottle(), audit = null, ownerPersonId = () => null, credential = null }) {
   // the hash to verify against: the configured one, else the plaintext's (hashed once, lazily)
   let hashReady = null;
   const theHash = () => hashReady || (hashReady = passwordHash ? Promise.resolve(passwordHash) : loginPassword ? hashPassword(loginPassword) : Promise.resolve(null));
@@ -43,6 +43,7 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     let p; try { p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch (_) { return null; }
     if (!p || typeof p !== 'object' || !Number.isFinite(p.exp) || p.exp < Date.now()) return null;
     if (p.sid != null && (typeof p.sid !== 'string' || (revocations && revocations.isRevoked(p.sid)))) return null;
+    if (credential && p.userId !== credential(null)?.id) return null;
     return p;
   }
   // Malformed percent-encoding is ignored (that cookie is treated as absent → 401), never a 500 (R1-08).
@@ -76,9 +77,11 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const email = typeof body.email === 'string' ? body.email.toLowerCase().trim().slice(0, 320) : '';
       const password = typeof body.password === 'string' ? body.password : '';
-      const emailOk = crypto.timingSafeEqual(digest(email), emailDigest);
+      const account = credential ? credential(email) : null;
+      const emailOk = credential ? !!account && account.role === 'owner' : crypto.timingSafeEqual(digest(email), emailDigest);
       let passwordOk = false;
-      try { passwordOk = await verifyPassword(password, await theHash()); } finally { /* released below */ }   // always runs: no timing difference
+      // Unknown DB e-mails still pay the same scrypt cost as the owner.
+      try { passwordOk = await verifyPassword(password, credential ? (account || credential(null))?.password_hash : await theHash()); } finally { /* released below */ }
       if (!emailOk || !passwordOk) {
         gate.release(false);   // the attempt was already counted at admission
         record(req, 'rejected', 'invalid-credentials');
@@ -86,7 +89,7 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
       }
       gate.release(true);
       record(req, 'ok', null, ownerPersonId());
-      const cookie = signSession({ email, exp: Date.now() + ttlMs, sid: crypto.randomBytes(16).toString('hex') });
+      const cookie = signSession({ email, ...(credential ? { userId: account.id } : {}), exp: Date.now() + ttlMs, sid: crypto.randomBytes(16).toString('hex') });
       res.setHeader('Set-Cookie', COOKIE + '=' + cookie + attrs(ttlMs / 1000));
       res.json({ ok: true, email });
     });

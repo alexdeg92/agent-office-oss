@@ -6,7 +6,7 @@ import { html } from '../lib.js';
 import { msg } from '../i18n.js';
 import { SetupCharacters } from '../office/setup-characters.js';
 
-export function IdentitiesStep({ agents, value, onChange }) {
+export function IdentitiesStep({ agents, value, onChange, manifest }) {
   return html`<div class="ao-setup__identities">
     <fieldset class="ao-setup__primary">
       <legend class="bu-card__title">${msg('setup.ids.primary')}</legend>
@@ -16,7 +16,7 @@ export function IdentitiesStep({ agents, value, onChange }) {
     </fieldset>
     <section class="ao-setup__looks" aria-labelledby="setup-looks">
       <h3 class="bu-card__title" id="setup-looks">${msg('setup.ids.looks')}</h3>
-      <${SetupCharacters} embedded=${true} agents=${agents.map((a) => ({ id: a.id, name: a.name, primary: a.id === value.primary }))} value=${value.looks}
+      <${SetupCharacters} manifest=${manifest} embedded=${true} agents=${agents.map((a) => ({ id: a.id, name: a.name, primary: a.id === value.primary }))} value=${value.looks}
         onChange=${(looks) => onChange({ ...value, looks })} />
     </section>
   </div>`;

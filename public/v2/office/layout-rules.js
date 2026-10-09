@@ -9,7 +9,7 @@ export const MAX_ITEMS = 40;
 export const NAME_MAX = 24;
 export const ROLE_MAX = 32;
 export const MAX_ACCESSORIES = 5;
-export const ROLES = ['main', 'subagent', 'cron', 'dm', 'channel'];
+export const ROLES = ['main', 'agent', 'subagent', 'cron', 'dm', 'channel'];
 /**
  * Station kinds an occupant can call home (auto allocation and explicit `station`), in allocation
  * order: every desk, then every lounge (contract 2.0, data-model §12). Others are destinations only.
@@ -192,8 +192,8 @@ export function checkPlacement(layout, index, cand) {
 // form: main ≡ primary, cron ≡ scheduled, dm ≡ direct, channel ≡ group; subagent is unchanged; conversation is new
 // in 3.0 (its default rule *conversation also styles direct and group occupants that have no rule of their own).
 const CANON = { main: 'primary', primary: 'primary', cron: 'scheduled', scheduled: 'scheduled', dm: 'direct', direct: 'direct',
-  channel: 'group', group: 'group', subagent: 'subagent', conversation: 'conversation' };
-const LEGACY = { primary: 'main', scheduled: 'cron', direct: 'dm', group: 'channel', subagent: 'subagent' };   // 3.0 → 2.x (no 2.x name for conversation)
+  channel: 'group', group: 'group', agent: 'agent', subagent: 'subagent', conversation: 'conversation' };
+const LEGACY = { primary: 'main', agent: 'agent', scheduled: 'cron', direct: 'dm', group: 'channel', subagent: 'subagent' };   // 3.0 → 2.x (no 2.x name for conversation)
 const CONVERSATION_ROLES = ['direct', 'group', 'conversation'];
 /** A role in its canonical (3.0) form, or null when it isn't a role of either vocabulary. */
 export const canonicalRole = (role) => CANON[role] ?? null;

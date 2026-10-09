@@ -103,7 +103,7 @@ function createApp({ readonly, readonlyStore = false, publicDir, mountRoutes, au
     const p = canonicalOf(req);
     if (p === null) return res.status(400).type('text/plain').send('Bad request');
     if (SHELL_ALIASES.has(p)) return sendShell(res);
-    if (p === '/v2/build.json') { res.setHeader('Cache-Control', 'no-store'); return res.json({ buildId: readBuild().buildId }); }
+    if (p === '/v2/build.json' || p === '/build.json') { res.setHeader('Cache-Control', 'no-store'); return res.json({ buildId: readBuild().buildId }); }
     const requestedBuild = req.query.v, deployedBuild = readBuild().buildId;
     if (p.startsWith('/v2/') && /\.(js|mjs|css|json)$/.test(p) && requestedBuild && deployedBuild && requestedBuild !== deployedBuild) {
       res.setHeader('Cache-Control', 'no-store');

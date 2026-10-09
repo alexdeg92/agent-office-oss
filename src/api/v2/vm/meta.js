@@ -30,7 +30,7 @@ function buildMetaVM(cfg, { engine = null, locale = 'fr' } = {}) {
 // ---- contract 3.0 (G5, api-v3.md D1) ----
 const ENUMS_V3 = Object.freeze(Object.assign(Object.fromEntries(Object.entries(ENUMS).filter(([k]) => k !== 'channel')), {
   sessionKind: ['primary', 'subagent', 'scheduled', 'conversation-direct', 'conversation-group', 'conversation', 'internal', 'unrecognized'],
-  occupantRole: ['primary', 'subagent', 'scheduled', 'direct', 'group', 'conversation'],
+  occupantRole: ['primary', 'agent', 'subagent', 'scheduled', 'direct', 'group', 'conversation'],
   interlocutorKind: ['user', 'room'],
 }));
 // Labels for the OPEN vocabularies, as data: every channel, provider, model and agent that occurred gets an entry (the

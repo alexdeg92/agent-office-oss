@@ -21,7 +21,7 @@ export function createChat(now = Date.now(), { empty = false, failTurns = false,
   let pending = null;
   let replies = 0;
   return {
-    vm: () => ({ sessionKey: 'agent:main:explicit:portal-chat', turnPending: pending ? { turnId: pending.turnId, since: pending.since } : null, messages: messages.slice(-50) }),
+    vm: () => ({ sessionKey: 'agent:main:explicit:portal-chat', turnPending: pending ? { turnId: pending.turnId, since: pending.since } : null, messages: messages.slice(-50).map((m) => ({ ...m, senderInfo: { kind: m.role === 'user' ? 'human' : m.role === 'error' ? 'system' : 'agent', id: m.role === 'user' ? 'per_operator' : m.role === 'error' ? 'system:runtime' : 'agent:atlas', name: m.role === 'user' ? 'Camille' : m.role === 'assistant' ? 'Atlas' : null, runtime: 'demo', channel: null, avatarHint: null } })) }),
     /** POST /api/v2/chat/messages → { turnId } | { error: [status, code, message, details] } */
     post(text, changed) {
       if (typeof text !== 'string' || !text.trim() || text.length > 8000) return { error: [400, 'validation_failed', 'Le message doit contenir entre 1 et 8000 caractères.', [{ field: 'text', issue: 'length' }]] };

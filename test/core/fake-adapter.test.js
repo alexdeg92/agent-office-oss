@@ -57,6 +57,18 @@ describe('core · fake adapter without OpenClaw shapes (§12.4)', () => {
     assert.deepEqual(meta.runtime, { id: 'fake', name: 'Fake Runtime', gatewayLabel: 'Serveur factice' });
   });
 
+  it('onboarding names apply to any canonical adapter without mutating its input or bypassing bad rows', () => {
+    const engine = createEngine({ adapter: fakeAdapter(), now: () => NOW, agentNames: { helper: 'Orion' } });
+    const row = { id: 'helper', name: null, workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: null };
+    assert.equal(engine.ingestCanonical('agents', [row]).ok, true);
+    assert.equal(engine.agents()[0].name, 'Orion'); assert.equal(row.name, null);
+    assert.equal(engine.ingestCanonical('agents', [null]).ok, false);
+    assert.equal(engine.agents()[0].name, 'Orion', 'last good list survives a bad row');
+    const plain = createEngine({ adapter: fakeAdapter(), now: () => NOW });
+    assert.equal(plain.ingestCanonical('agents', [{ ...row, id: 'constructor', name: 'Valid name' }]).ok, true);
+    assert.equal(plain.agents()[0].name, 'Valid name', 'Object prototype properties are never names');
+  });
+
   it('a complete snapshot deletes absent sessions; an upsert adds one; an invalid canonical row is quarantined, not admitted', () => {
     const engine = createEngine({ adapter: fakeAdapter(), now: () => NOW });
     engine.ingestCanonical('sessions.snapshot', [session('s:1'), session('s:2')]);

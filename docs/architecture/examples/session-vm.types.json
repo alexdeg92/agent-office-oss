@@ -1,6 +1,73 @@
 {
   "$comment": "Shape sidecar for session-vm.json (api.md §3.6, data-model §2.1).",
-  "nullable": ["$.model", "$.modelProvider", "$.updatedAt", "$.cwd", "$.run.endReason", "$.messageCount", "$.events[].sender", "$.events[].callId",
-    "$.events[].durationMs", "$.events[].model", "$.events[].provider", "$.events[].outputTokens", "$.events[].stopReason"],
-  "types": { "$.events[].error": "string" }
+  "nullable": [
+    "$.model",
+    "$.modelProvider",
+    "$.updatedAt",
+    "$.cwd",
+    "$.run.endReason",
+    "$.messageCount",
+    "$.events[].sender",
+    "$.events[].callId",
+    "$.events[].durationMs",
+    "$.events[].model",
+    "$.events[].provider",
+    "$.events[].outputTokens",
+    "$.events[].stopReason",
+    "$.events[].senderInfo.name",
+    "$.events[].senderInfo.channel",
+    "$.events[].senderInfo.avatarHint",
+    "$.participants[].name",
+    "$.participants[].channel",
+    "$.participants[].avatarHint",
+    "$.subagents[].name",
+    "$.subagents[].channel",
+    "$.subagents[].avatarHint",
+    "$.subagents[].delegation.label",
+    "$.events[].senderInfo.delegation.label",
+    "$.events[].senderInfo.delegation",
+    "$.participants[].delegation",
+    "$.participants[].delegation.label"
+  ],
+  "types": {
+    "$.events[].error": "string",
+    "$.events[].senderInfo.name": "string",
+    "$.events[].senderInfo.channel": "string",
+    "$.events[].senderInfo.avatarHint": "string",
+    "$.participants[].name": "string",
+    "$.participants[].channel": "string",
+    "$.participants[].avatarHint": "string",
+    "$.subagents[].channel": "string",
+    "$.subagents[].name": "string",
+    "$.subagents[].avatarHint": "string",
+    "$.subagents[].delegation.label": "string"
+  },
+  "variants": {
+    "$.subagents": [
+      [
+        {
+          "kind": "agent",
+          "id": "delegated:review",
+          "name": "Review the changes",
+          "runtime": "generic",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": {
+            "sessionKey": "delegated:review",
+            "label": "Review the changes"
+          }
+        }
+      ]
+    ]
+  },
+  "additional": {
+    "$.events[].senderInfo.delegation": {
+      "sessionKey": "delegated:review",
+      "label": "Review the changes"
+    },
+    "$.participants[].delegation": {
+      "sessionKey": "child/opaque",
+      "label": "Review"
+    }
+  }
 }

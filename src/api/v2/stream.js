@@ -169,6 +169,7 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
   });
 
   function broadcastSystem(extra = {}) { for (const st of streams.values()) if (!st.closed) write(st, 'system', Object.assign({ type: 'system' }, systemState(), extra)); }
+  function broadcastOffice(frame) { for (const st of streams.values()) if (!st.closed && st.topics.has('office')) write(st, 'cue', frame); }
   function toast(level, message) { for (const st of streams.values()) if (!st.closed) write(st, 'toast', { type: 'toast', level, message }); }
 
   // R1-09: a revoked session's streams close at once
@@ -179,7 +180,7 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
 
   function closeAll() { for (const st of [...streams.values()]) closeStream(st, 'shutdown'); }
 
-  return { open, changeTopics, resync, broadcastSystem, toast, revokeSession, closeAll, isSubscribed, serverEpoch, _streams: streams };
+  return { open, changeTopics, resync, broadcastSystem, broadcastOffice, toast, revokeSession, closeAll, isSubscribed, serverEpoch, _streams: streams };
 }
 
 // A session's identity: its sid (S6 cookies) or, for an older cookie, email + expiry.

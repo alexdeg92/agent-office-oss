@@ -1,0 +1,10 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "planId": "nXwsTblE87aD0nkSPNP0vneo",
+  "agentIds": [
+    "atlas",
+    "scribe"
+  ],
+  "confirmed": true,
+  "action": "install"
+}

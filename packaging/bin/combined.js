@@ -65,7 +65,7 @@ function proxyHeaders(headers, { remoteAddress, listenPort, apiPort }) {
 }
 
 function apiChildEnv(env, apiPort) {
-  return { ...env, HOST: '127.0.0.1', PORT: String(apiPort), AO_API_ONLY: '1', AO_TRUST_PROXY: 'loopback' };
+  return { ...env, AO_UI_HOST: env.HOST || '127.0.0.1', AO_UI_PORT: env.PORT || '18789', HOST: '127.0.0.1', PORT: String(apiPort), AO_API_ONLY: '1', AO_TRUST_PROXY: 'loopback' };
 }
 
 function backendTarget(url) {
@@ -123,11 +123,16 @@ function forward(req, res, apiPort, target, listenPort) {
 }
 
 function startCombined({ root, env = process.env } = {}) {
+  const IC = require('../../src/instance-config');
+  const configured = IC.effectiveEnv(env, IC.readInstanceConfig(env));
+  // Resolve listener settings here; each process reads its own instance config.
+  env = { ...env, HOST: configured.HOST || '127.0.0.1', PORT: configured.PORT || '18789' };
   const host = env.HOST || '127.0.0.1';
   const port = Number(env.PORT || 18789);
   const ui = createFrontendServer({
     root: path.join(root, 'public', 'v2'),
     basePath: '/',
+    publicUrl: configured.AO_PUBLIC_URL || null,
     apiBase: '/backend',
   });
   let api = null;

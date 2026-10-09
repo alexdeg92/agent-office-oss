@@ -57,7 +57,11 @@ function rowsSeed(now) {
 let seq = 0;
 const ev = (o) => ({ ...o });
 // TraceEvent ids are stable: `ev:<messageIndex>:<partIndex>` (BRIEF, PM on frontend-03).
-const withIds = (events) => events.map((e, i) => (e.id ? e : { id: `ev:${i}:0`, ...e }));
+const identityOf = (e) => ({ kind: e.kind === 'user' ? 'human' : e.kind === 'system' ? 'system' : e.kind === 'tool' ? 'tool' : 'agent',
+  id: e.kind === 'user' ? 'demo-user:' + (e.sender || 'unknown') : e.kind === 'tool' ? 'tool:' + e.name : e.kind === 'system' ? 'system:runtime' : 'agent:atlas',
+  name: e.kind === 'user' ? e.sender || null : e.kind === 'tool' ? e.name : e.kind === 'system' ? null : 'Atlas', runtime: 'demo', channel: null, avatarHint: null });
+const withIds = (events) => events.map((e, i) => ({ id: `ev:${i}:0`, ...e, senderInfo: e.senderInfo || identityOf(e) }));
+const participantsOf = (events) => [...new Map(events.filter((e) => ['human', 'agent'].includes(e.senderInfo.kind)).map((e) => [e.senderInfo.id, e.senderInfo])).values()];
 
 /** A plausible transcript for a row: user ask, thinking, tool calls (one failing), the answer. */
 function transcriptFor(row, now) {
@@ -80,6 +84,14 @@ function transcriptFor(row, now) {
     text: `Voici ce que j’ai trouvé :\n\n1. Les données sont à jour.\n2. Le test en échec est connu comme instable ; je l’ai relancé.\n\nJe vous envoie le résumé sur Discord.`, truncated: false, stopReason: 'toolUse', error: null }));
   events.push(ev({ kind: 'tool', at: at(55), callId: 'c' + ++seq, name: 'message', toolKind: 'message', input: '{"channel":"discord","to":"' + (sender || 'Owner') + '"}', output: 'Message envoyé.', isError: false, durationMs: 640, truncated: false }));
   events.push(ev({ kind: 'assistant', at: at(57), model: row.model, provider: null, outputTokens: 24, text: 'C’est fait.', truncated: false, stopReason: 'stop', error: null }));
+  if (row.kind === 'chat-group') {
+    const human = (name, id, text, seconds) => ev({ kind: 'user', at: at(seconds), sender: name, text, truncated: false, senderInfo: { kind: 'human', id: 'discord-user:' + id, name, runtime: 'demo', channel: 'discord', avatarHint: null } });
+    events.splice(events[0]?.kind === 'system' ? 1 : 0, 1,
+      human('Mira', '100000000000000001', 'Préparons la prochaine version du portail.', 0),
+      human('Mira', '100000000000000001', 'Je propose de commencer par les tests de connexion.', 1),
+      human('Jules', '100000000000000002', 'Je peux vérifier les parcours sur mobile.', 2),
+      human('Noor', '100000000000000003', 'Je m’occupe du compte rendu et du suivi.', 3));
+  }
   return events;
 }
 
@@ -118,14 +130,14 @@ export function createLogs(now = Date.now(), { empty = false } = {}) {
       const row = rows.find((r) => r.id === key);
       if (!row) return null;
       const events = transcript(key);
-      if (row.example) return conform(EXAMPLES.sessionVm.data, { ...row.example, title: titleOf(row, row.example), traceState: TRACE_STATE(), events: events.map((e) => ({ ...e })) });
+      if (row.example) return conform(EXAMPLES.sessionVm.data, { ...row.example, title: titleOf(row, row.example), traceState: TRACE_STATE(), participants: participantsOf(events), events: events.map((e) => ({ ...e })) });
       const running = row.live;
       const failed = !running && events.some((e) => e.kind === 'assistant' && e.stopReason === 'error');
       return conform(EXAMPLES.sessionVm.data, {
         key, label: row.label, title: titleOf(row), kind: row.kind, model: row.model, modelProvider: row.modelProvider, tokens: row.tokens, updatedAt: row.updatedAt,
         run: { status: running ? 'running' : failed ? 'failed' : row.kind === 'cron' ? 'succeeded' : 'idle', endReason: failed ? 'error' : null }   /* only a failed run has an end reason (api.md RunEnd) */,
         messageCount: events.filter((e) => e.kind !== 'tool').length + 40 * (row.kind === 'main'), window: { from: Math.max(0, events.length - 120), to: events.length },
-        toolCount: events.filter((e) => e.kind === 'tool').length, events: events.map((e) => ({ ...e })),
+        toolCount: events.filter((e) => e.kind === 'tool').length, participants: participantsOf(events), subagents: [], events: events.map((e) => ({ ...e })),
         // 2.4 (R16-07): ?trace=stale|unavailable previews the transcript read failing or unsupported.
         traceState: TRACE_STATE(),
         cwd: cwds.get(key) ?? (row.kind === 'acp' ? 'dev/project/portail-client' : null),

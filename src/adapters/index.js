@@ -11,4 +11,5 @@ function adapterById(id) {
 }
 const defaultAdapter = () => adapterById('openclaw');
 
-module.exports = { adapterById, defaultAdapter, ADAPTER_IDS: Object.keys(ADAPTERS) };
+const detectRuntimes = ctx => require('./detection').detectRuntimes(ctx);
+module.exports = { detectRuntimes, adapterById, defaultAdapter, ADAPTER_IDS: Object.keys(ADAPTERS) };

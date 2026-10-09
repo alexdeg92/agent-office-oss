@@ -1,0 +1,7 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "runtime": {
+    "adapter": "openclaw",
+    "gatewayUrl": "ws://127.0.0.1:39283"
+  }
+}

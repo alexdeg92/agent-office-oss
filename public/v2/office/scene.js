@@ -2,7 +2,7 @@
 // Plain DOM so it can be mounted from Preact (ref) or a bare page. It only animates what it is told:
 // occupants come from OfficeVM.occupants, cues from SSE 'cue' frames.
 import { project, imageBox, wallPoint, footprintFor, itemDepth, characterDepth, sortScene } from './geometry.js';
-import { buildGrid, findPath, nearestWalkable } from './pathfind.js';
+import { buildGrid, findPath, nearestWalkable, isWalkable } from './pathfind.js';
 import {
   STATE_LABELS, viewFor, CUES, WALK_TILES_PER_S, CROSSFADE_MS, LOUNGE_AFTER_MS,
   SEATED_VIEW, SEATED_CUES, SOFA_VIEW, SWIVEL_MS, SELECT_WAVE_MS, IDLE_SWIVEL_EVERY_MS, IDLE_SWIVEL_HOLD_MS,
@@ -15,6 +15,9 @@ import {
 } from './assets.js';
 import { markerHtml } from './markers.js';
 import { displayName } from './names.js';
+import { buildQuery } from '../config.js';
+import { SURPRISES, EGGS, EGG_KINDS, surprisesEnabled, acquireSurprise, releaseSurprise, eggEligible, pickEgg, surpriseHistory, rememberSurprise } from './surprises.js';
+import { LIFE, ACTIVITIES, REACTIONS, canIdle, pickActivity, reactionFor, SIGNALS, acquireWander, releaseWander, wanderCount, watchLife } from './life.js';
 
 const ZOOM_MAX = 1.5;
 const ANNOUNCE_BATCH_MS = 1500;
@@ -81,6 +84,10 @@ export class OfficeScene {
     this.opts = opts;
     this.assetBase = opts.assetBase;
     this.labels = { ...Object.fromEntries(Object.keys(STATE_LABELS).map((k) => [k, tr(`state.${k}`)])), ...(opts.labels ?? {}) };
+    this.lifeConfig = { ...LIFE, ...opts.life };
+    this.surpriseConfig = { ...SURPRISES, ...opts.surprises };
+    this._onSurpriseSetting = e => { if (!e.detail && !this.opts.surprisesEnabled) for (const c of this.chars.values()) this._cancelEgg(c); };
+    window.addEventListener('office-surprises-setting', this._onSurpriseSetting);
     this.now = opts.now ?? (() => Date.now());
     this.onSelect = opts.onSelect ?? null;
     this.index = indexManifest(opts.manifest);
@@ -98,6 +105,8 @@ export class OfficeScene {
     this._sortDirty = true;
     this._build();
     this.setLayout(opts.layout);
+    this._nextLifeCheck = this.now() + this.lifeConfig.intervalMs;
+    this._lifeTimer = watchLife(() => this._tickLife());
     this._themeTimer = setInterval(() => { this._applyTheme(); this._checkLounge(); }, 30_000);
     this._ro = new ResizeObserver(() => { if (!this.cam.user) this.fit(); else this._applyCamera(); });
     this._ro.observe(this.viewport);
@@ -173,6 +182,8 @@ export class OfficeScene {
 
   /** Warm a look's likely poses (+ accessory layers) when the browser is idle. */
   _prefetchLook(look) {
+    // Pack art loads on pose use; warming a whole pose/accessory set defeats lazy packs.
+    if (this.index.characters.get(look.character)?.packManifest) return;
     const key = JSON.stringify(look);
     if ((this._prefetched ??= new Set()).has(key)) return;
     this._prefetched.add(key);
@@ -191,6 +202,22 @@ export class OfficeScene {
     (globalThis.requestIdleCallback ?? ((fn) => setTimeout(fn, 200)))(run, { timeout: 2000 });
   }
 
+  _releaseUnusedPackImages() {
+    const active = [...this.chars.values()].map(c => c.occ?.look).filter(Boolean);
+    for (const c of this.index.characters.values()) {
+      if (!c.packLoaded) continue;
+      const used = new Set(active.filter(l => l.character === c.id).map(l => l.variant));
+      for (const v of c.variants) if (!used.has(v.id)) {
+        const paths = new Set();
+        for (const pose of Object.values(v.poses)) for (const file of pose.frames ?? [pose.image]) paths.add(resolveUrl(file, this.assetBase));
+        for (const a of this.index.accessories.values()) for (const pose of Object.values(a.layers?.[c.id + '/' + v.id] ?? {})) {
+          for (const pair of pose.frames ?? [pose]) for (const file of [pair.back, pair.front]) if (file) paths.add(resolveUrl(file, this.assetBase));
+        }
+        for (const url of paths) this._imgKeep?.delete(url);
+      }
+    }
+  }
+
   /** R27-02: freeze the scene while what it shows is not confirmed live (the stream is down): like a hidden tab. */
   setFrozen(on) {
     if (!!on === !!this._frozen) return;
@@ -203,6 +230,7 @@ export class OfficeScene {
 
   _syncHidden() {
     const h = this.hidden;
+    if (h) for (const c of this.chars.values()) { this._cancelEgg(c, { immediate:true }); this._cancelActivity(c); }
     this.stage.toggleAttribute('data-paused', h);
     for (const c of this.chars.values()) {
       if (h) {
@@ -314,6 +342,8 @@ export class OfficeScene {
 
   // ---------- layout & static furniture ----------
   setLayout(layout) {
+    for (const c of this.chars.values()) this._cancelEgg(c, { dispose:true });
+    for (const c of this.chars.values()) this._cancelActivity(c, false);
     this.layout = layout;
     this.layoutGen = (this.layoutGen ?? 0) + 1;   // invalidates every planned path (R4-15)
     this.room = this.index.rooms.get(layout.room) ?? this.index.manifest.rooms[0];
@@ -503,6 +533,25 @@ export class OfficeScene {
    *   look:{character:string, variant:string|null, accessories:string[]}}>} occupants  roster order
    */
   setOccupants(occupants) {
+    this._packOccupants = occupants;
+    const missing = [...new Set(occupants.map(o => o.look.character))].filter(id => {
+      const c = this.index.characters.get(id); return c?.packManifest && !c.packLoaded;
+    });
+    if (missing.length) {
+      const previousLoad = this._packLoad;
+      const controller = this._packLoad = new AbortController();
+      const revision = this._packRevision = (this._packRevision ?? 0) + 1;
+      return import('./character-pack-loader.js' + buildQuery)
+        .then(m => {
+          const loaded = m.ensureCharacterPacks(this.index, missing, this.assetBase, { signal: controller.signal });
+          previousLoad?.abort(); return loaded;
+        })
+        .then(() => { if (!this.destroyed && revision === this._packRevision) this.setOccupants(this._packOccupants); })
+        .catch(error => { if (!this.destroyed && revision === this._packRevision && error.name !== 'AbortError') { this.stage.dataset.packError = 'true'; this.opts.onAssetError?.(error); } });
+    }
+    this._packLoad?.abort(); this._packLoad = null;
+    this._packRevision = (this._packRevision ?? 0) + 1;
+    delete this.stage.dataset.packError;
     const ids = new Set(occupants.map((o) => o.id));
     const first = this.chars.size === 0 && !this._seeded;
     this._seeded = true;
@@ -512,10 +561,18 @@ export class OfficeScene {
       if (c && c.leaving) { this._destroyChar(c); c = null; }
       const isNew = !c;
       if (!c) c = this._spawn(o, !first);
+      const previous = c.occ;
       const prevState = c.occ?.state;
       const prevLook = JSON.stringify(c.occ?.look);
       const prevPresence = c.occ?.presence ?? null;
       c.occ = o;
+      if (prevState !== o.state) { c.signalState = null; c.signalBusy = false; }
+      if (!canIdle(o)) c.carryProp = null;
+      if (c.egg && !canIdle(o)) this._cancelEgg(c);
+      if (c.social && !canIdle(o)) this._cancelActivity(this.chars.get(c.social.owner));
+      if (c.activity && !canIdle(o)) this._cancelActivity(c);
+      const reaction = reactionFor(previous, o, this.now(), this.lifeConfig);
+      if (reaction && (reaction !== 'stretch' || this.now() - (c.lastStretch ?? -Infinity) > this.lifeConfig.longRunMs)) this.react(c.id, reaction);
       c.order = i;
       if (prevLook !== JSON.stringify(o.look)) this._prefetchLook(o.look);
       if (prevState !== o.state && c.cue) this._endCue(c, false);
@@ -526,6 +583,9 @@ export class OfficeScene {
       if (prevState !== o.state || prevLook !== JSON.stringify(o.look) || prevPresence !== (o.presence ?? null)) this._renderPose(c);
       this._renderPlate(c);
     });
+    for (const event of this._packSignals?.values() ?? []) if (ids.has(event.occupantId)) this.signal(event.occupantId, event);
+    this._packSignals?.clear();
+    this._releaseUnusedPackImages();
     // A delegation cue that arrived before its partner was on stage.
     const pm = this._pendingMeet;
     if (pm && this.now() <= pm.until && this.chars.get(pm.bId)) { this._pendingMeet = null; this._startMeeting(pm.aId, pm.bId, pm.interactionId); }
@@ -565,6 +625,10 @@ export class OfficeScene {
   }
 
   _leave(c) {
+    this._cancelEgg(c,{dispose:true});
+    if (c.social) this._cancelActivity(this.chars.get(c.social.owner));
+    this._cancelActivity(c, false);
+    releaseWander(c);
     if (c.meet) this._endMeeting(c.meet.meeting);
     if (c.occ) this._announce(c, 'leave');
     c.leaving = true;
@@ -583,6 +647,9 @@ export class OfficeScene {
   }
 
   _destroyChar(c) {
+    this._cancelEgg(c,{dispose:true});
+    this._cancelActivity(c, false);
+    releaseWander(c);
     if (c.meet) this._endMeeting(c.meet.meeting);
     c.dead = true;
     this._cancelAll(c);
@@ -593,12 +660,16 @@ export class OfficeScene {
       this.chars.delete(c.id);
       if (this.selected === c.id) this.selected = null;
     }
+    this._releaseUnusedPackImages();
     this._sortDirty = true;
   }
 
   /** Where this occupant should be: own station, or a free lounge after 10 min idle (README §4.2). */
   _targetFor(c) {
     const o = c.occ;
+    if (c.egg && !c.egg.returning) return c.egg.target ?? c.target ?? this._standingSpot(c);
+    if (c.activity) return c.activity.target;
+    if (c.social) return c.social.target;
     // Meeting scene (decorative, client-side; cue partnerId): stand at the assigned meeting spot.
     if (c.meet) return { x: c.meet.x, y: c.meet.y, uid: `meet:${c.meet.id}`, mode: 'stand' };
     // office-dev-22 visits: a person at the agent's desk, or everyone at the meeting table (setVisits).
@@ -608,7 +679,7 @@ export class OfficeScene {
     // while an exec-class tool runs. It wins over the decorative lounge rule; home again when it clears.
     const dest = o.destination?.stationUid;
     if (dest && this.itemNodes.get(dest)?.f.station) uid = dest;
-    else if (!c.deskTalk && o.state === 'idle' && this.now() - (o.stateSince ?? 0) > LOUNGE_AFTER_MS) {
+    else if (!c.deskTalk && !c.signalBusy && this.now() - (c.lifeFinished ?? -Infinity) >= this.lifeConfig.cooldownMs && o.state === 'idle' && this.now() - (o.stateSince ?? 0) > LOUNGE_AFTER_MS) {
       const taken = new Set([...this.chars.values()].filter((x) => x !== c && !x.leaving).map((x) => x.target?.uid));
       for (const [u, n] of this.itemNodes) if (n.f.station?.kind === 'lounge' && !taken.has(u)) { uid = u; break; }
     }
@@ -649,6 +720,7 @@ export class OfficeScene {
   }
 
   _retarget(c, instant) {
+    if (c.egg?.returning && c.egg.phase!=='return' && !instant) return;
     if (c.leaving) return;
     const t = this._targetFor(c);
     const sameGen = c.targetGen === this.layoutGen;
@@ -663,10 +735,29 @@ export class OfficeScene {
       if (had) this._flash(c);
       return;
     }
+    // The walking feet stop beside the chair. Only a seated body enters its footprint.
+    if (t.mode === 'desk') {
+      const from = { x: Math.floor(c.pos.x), y: Math.floor(c.pos.y) };
+      const grid = { ...this.grid, blocked: this.grid.blocked.slice() };
+      grid.blocked[Math.floor(t.y) * grid.cols + Math.floor(t.x)] = 1;
+      const options = [[2, 0], [-2, 0], [0, 2], [0, -2]].map(([dx, dy]) => ({ x: Math.floor(t.x) + dx, y: Math.floor(t.y) + dy }))
+        .filter(p => isWalkable(this.grid, p.x, p.y))
+        .map(p => ({ p, path: findPath(grid, from, p) })).filter(o => o.path)
+        .sort((a, b) => a.path.length - b.path.length);
+      const approach = options[0]?.p;
+      if (approach) {
+        this._walkTo(c, { x: approach.x + .5, y: approach.y + .5 }, () => {
+          c.pos = { x: t.x, y: t.y };
+          this._arrive(c);
+        }, grid);
+        return;
+      }
+      c.pos = { x: t.x, y: t.y }; this._arrive(c); this._flash(c); return;
+    }
     this._walkTo(c, t, () => this._arrive(c));
   }
 
-  _walkTo(c, t, done) {
+  _walkTo(c, t, done, grid = this.grid) {
     const prevSeat = c.seatUid;
     c.seatUid = null;
     c.seatMode = null;
@@ -674,7 +765,7 @@ export class OfficeScene {
     if (prevSeat) this._updateStation(prevSeat);
     const from = { x: Math.floor(c.pos.x), y: Math.floor(c.pos.y) };
     const to = { x: Math.floor(t.x), y: Math.floor(t.y) };
-    const tiles = findPath(this.grid, from, to);
+    const tiles = findPath(grid, from, to);
     if (!tiles) { c.pos = { x: t.x, y: t.y }; c.path = []; this._flash(c); done(); return; }
     c.path = tiles.slice(1).map((p) => ({ x: p.x + 0.5, y: p.y + 0.5 }));
     if (c.path.length) c.path[c.path.length - 1] = { x: t.x, y: t.y };
@@ -688,6 +779,22 @@ export class OfficeScene {
   _arrive(c) {
     c.walking = false;
     c.path = [];
+    if (c.target?.mode === 'desk') {
+      if (c.carryProp === 'cup') {
+        const node = this.itemNodes.get(c.target.uid);
+        if (node) node.coffeeReturned = true;
+      }
+      // A standing frame must never be repositioned using the incoming seated hip.
+      if (c.seatMode !== 'desk') {
+        for (const group of c.el.querySelectorAll('.ao-pose')) {
+          clearInterval(group._frameTimer); c.intervals.delete(group._frameTimer); group.remove();
+        }
+        c.displayed = null; c.poseEl = null; c.poseKey = null;
+      }
+    }
+    c.carryProp = null;
+    if (!c.activity && !c.social) releaseWander(c);
+    if (c.social) { c.social.phase = 'ready'; this.chars.get(c.social.owner)?.activity?.startSocial?.(); }
     if (c.meet && c.target?.uid === `meet:${c.meet.id}`) {
       c.seatUid = null;
       c.seatMode = null;
@@ -700,6 +807,7 @@ export class OfficeScene {
     }
     c.seatUid = c.target?.uid ?? null;
     c.seatMode = c.seatUid ? (c.target.mode ?? 'stand') : null;
+    if (c.egg?.returning) c.egg.controller?.finish();
     this._renderPose(c);
     this._scheduleIdleSwivel(c);
     this._sortDirty = true;
@@ -723,15 +831,31 @@ export class OfficeScene {
 
   _currentPose(c) {
     // Walking toward the camera shows the front walks; away from it the back walks (fallback: front).
-    if (c.walking) return { se: 'walking-se', sw: 'walking', ne: 'walking-ne', nw: 'walking-nw' }[c.facing] ?? 'walking';
+    if (c.walking) return c.carryProp === 'cup' ? `life-cupwalk-${c.facing}` : { se: 'walking-se', sw: 'walking', ne: 'walking-ne', nw: 'walking-nw' }[c.facing] ?? 'walking';
+    if (c.egg?.pose) return c.egg.pose;
+    if (c.activity?.phase === 'interact') {
+      if (c.activity.kind === 'sleep' && c.seatMode === 'desk') return 'life-sleep-ne';
+      if (c.activity.kind === 'highfive' || c.activity.kind === 'wave') return `life-highfive-${c.facing === 'se' ? 'se' : 'sw'}`;
+      const d = ACTIVITIES[c.activity.kind];
+      const held = c.activity.drinkRest ? d.restFrames : d.frames;
+      if (held) return held.replace('{facing}', c.facing);
+      if (c.facing === 'ne' || c.facing === 'nw') return `walking-${c.facing}`;
+      return c.facing === 'se' ? 'talking-se' : ACTIVITIES[c.activity.kind].pose;
+    }
+    if (c.social?.phase === 'interact') return c.social.kind === 'highfive' ? `life-highfive-${c.facing === 'se' ? 'se' : 'sw'}` : (c.facing === 'se' ? 'talking-se' : 'talking');
+    if (c.seatMode === 'desk') {
+      const reaction = c.reaction ?? (c.occ.state === 'error' ? 'error' : null);
+      const pose = REACTIONS[reaction]?.pose;
+      if (pose) return pose;
+    }
     if (c.visit && !c.meet) return c.visit.talk === false ? (c.visit.facing === 'se' ? 'idle-se' : 'idle') : c.visit.facing === 'se' ? 'talking-se' : 'talking';
     if (c.meet && c.meet.phase !== 'go') {
       const se = c.meet.facing === 'se';
       return c.meet.phase === 'talk' ? (se ? 'talking-se' : 'talking') : (se ? 'idle-se' : 'idle');
     }
-    const state = c.occ.state;
+    const state = c.signalState ?? c.occ.state;
     if (c.seatMode === 'desk') {
-      if (c.deskTalk) return 'seated-talking-sw';
+      if (c.deskTalk || c.social) return 'seated-talking-sw';
       if (c.cue) return SEATED_CUES[c.cue] ?? 'seated-turn-sw';
       const v = SEATED_VIEW[state] ?? SEATED_VIEW.idle;
       if (v.turn) return v.pose;
@@ -758,7 +882,7 @@ export class OfficeScene {
 
   _scheduleIdleSwivel(c) {
     this._clear(c, c.idleTimer);
-    if (c.seatMode !== 'desk' || c.occ?.state !== 'idle' || this.reducedMotion || this.hidden || c.leaving) { if (c.idleTurn) { c.idleTurn = false; this._renderPose(c); } return; }
+    if (c.egg || c.activity || c.seatMode !== 'desk' || c.occ?.state !== 'idle' || this.reducedMotion || this.hidden || c.leaving) { if (c.idleTurn) { c.idleTurn = false; this._renderPose(c); } return; }
     const [a, b] = IDLE_SWIVEL_EVERY_MS;
     c.idleTimer = this._later(c, () => {
       c.idleTurn = true;
@@ -771,6 +895,7 @@ export class OfficeScene {
     if (!c.occ) return;
     const ch = this.index.characters.get(c.occ.look.character) ?? c.ch;
     c.ch = ch;
+    c.el.dataset.locomotion = ch.locomotion?.type ?? 'walks';
     let want = this._currentPose(c);
     const resolve = c.seatMode === 'desk' ? deskPoseImage : poseImage;
     const via = c.swivelDone ? null : this._swivelVia(c, c.renderedPose, resolve(ch, c.occ.look.variant, want).pose);
@@ -787,6 +912,8 @@ export class OfficeScene {
     c.poseSeat = body.seatAnchor;
     c.poseAnchor = body.anchor;
     c.poseCanvas = body.canvas;
+    c.poseHand = body.handAnchor;
+    c.poseFx = body.fxAnchor;
     if (c.seatUid) this._updateStation(c.seatUid);
     const station = this.itemNodes.get(c.seatUid);
     const composition = station?.composition;
@@ -813,18 +940,24 @@ export class OfficeScene {
     const seatedMotion = c.seatMode === 'desk' ? (c.wave ? 'wave' : '') : c.cue ? (CUES[c.cue].motion ?? '') : (body.frames ? '' : null);
     c.el.dataset.motion = c.walking ? 'walk' : (seatedMotion ?? (c.cue ? (CUES[c.cue].motion ?? '') : (view.motion ?? '')));
     this._renderMarker(c);
+    this._renderLife(c);
     this._positionChar(c);
     if (c.poseKey === key) return;
     c.poseKey = key;
     const k = c.poseScale / this.proj.artScale;
     const group = el('div', 'ao-pose');
+    group.dataset.pose = body.pose;
     Object.assign(group.style, { width: `${body.canvas.w * k}px`, height: `${body.canvas.h * k}px` });
     if (c.seatMode === 'desk' && body.seatAnchor) group.style.transformOrigin = `${body.seatAnchor.x * k}px ${body.seatAnchor.y * k}px`;
     const imgs = layers.map((l) => {
       const img = el('img', '', { alt: '', draggable: 'false' });
       img.src = this._keep(resolveUrl(l.path, this.assetBase)).src;
       img.dataset.layer = l.role;
-      if (l.frame != null) { img.dataset.frame = String(l.frame); img.hidden = l.frame !== 0; }
+      if (l.frame != null) {
+        img.dataset.frame = String(l.frame); img.hidden = l.frame !== 0;
+        const hip = body.frameSeatAnchors?.[l.frame];
+        if (hip && body.seatAnchor) img.style.translate = `${(body.seatAnchor.x - hip.x) * k}px ${(body.seatAnchor.y - hip.y) * k}px`;
+      }
       return img;
     });
     group.append(...imgs);
@@ -880,6 +1013,295 @@ export class OfficeScene {
     c.el.classList.add('ao-shake');
   }
 
+  // ---------- office life: owned walk → interaction → return sequences ----------
+  _activityTarget(c, kind, partnerId = null) {
+    const d = ACTIVITIES[kind];
+    if (!d || !c.pos) return null;
+    if (d.home) {
+      const n = this.itemNodes.get(c.occ.stationUid);
+      const seat = n?.f.station?.seated?.seat;
+      return seat ? { x: n.it.x + seat.x, y: n.it.y + seat.y, uid: n.it.uid, mode: 'desk' } : null;
+    }
+    let landmark = null, partner = null;
+    if (d.partner || d.visitor) {
+      partner = [...this.chars.values()].find(x => x !== c && !x.leaving && !x.activity && !x.egg && !x.walking
+        && !x.social && (partnerId ? x.id === partnerId && canIdle(x.occ) : d.visitor ? /^(dm|direct|group|conversation)/.test(x.occ.role) : canIdle(x.occ)));
+      if (!partner) return null;
+      if (d.partner) {
+        // Two adjacent diagonal tiles share one screen row, giving one tile of social distance.
+        const spots = this._spotsNear(partner.pos.x, partner.pos.y, 30);
+        for (const at of spots) for (const side of [-1, 1]) {
+          const other = { x: at.x + side, y: at.y - side };
+          const tx = Math.floor(other.x), ty = Math.floor(other.y);
+          if (tx < 0 || ty < 0 || tx >= this.grid.cols || ty >= this.grid.rows || this.grid.blocked[ty * this.grid.cols + tx]) continue;
+          if ([...this.chars.values()].some(x => x !== c && x !== partner && !x.leaving && x.target && Math.floor(x.target.x) === tx && Math.floor(x.target.y) === ty)) continue;
+          const from = x => ({x:Math.floor(x.pos.x),y:Math.floor(x.pos.y)});
+          if (!findPath(this.grid, from(c), {x:Math.floor(at.x),y:Math.floor(at.y)}) || !findPath(this.grid, from(partner), {x:tx,y:ty}) || !this._socialVisible(at) || !this._socialVisible(other)) continue;
+          const facing = side > 0 ? 'se' : 'sw', partnerFacing = side > 0 ? 'sw' : 'se';
+          const own = { ...at }, peer = { ...other };
+          if (kind === 'highfive') {
+            // Keep both feet inside their reserved free tile. Align the actual authored palms
+            // across looks of different heights; the positive body silhouettes stay separated.
+            const hand = (who, dir) => {
+              const p = poseImage(who.ch, who.occ.look.variant, `life-highfive-${dir}`);
+              const k = renderScale(who.ch) / this.proj.artScale;
+              return p.handAnchor && { x:(p.handAnchor.x-p.anchor.x)*k, y:(p.handAnchor.y-p.anchor.y)*k };
+            };
+            const h = hand(c, facing), ph = hand(partner, partnerFacing);
+            if (h && ph) {
+              const dx = (side*this.proj.tileWidth - (h.x-ph.x))/2;
+              const dy = -(h.y-ph.y)/2;
+              const gx = dx/this.proj.tileWidth + dy/this.proj.tileHeight;
+              const gy = -dx/this.proj.tileWidth + dy/this.proj.tileHeight;
+              if (Math.abs(gx) < .45 && Math.abs(gy) < .45) {
+                own.x += gx; own.y += gy; peer.x -= gx; peer.y -= gy;
+              }
+            }
+          }
+          return { ...own, uid:`life:${kind}`, mode:'stand', partnerId:partner.id, facing,
+            partnerTarget:{...peer,uid:`social:${c.id}`,mode:'stand',facing:partnerFacing} };
+        }
+        return null;
+      }
+      landmark = { x: partner.pos.x, y: partner.pos.y };
+    } else {
+      const n = [...this.itemNodes.values()].find(n => d.asset.split('|').includes(n.f.id));
+      if (!n) return null;
+      landmark = n.f.placement === 'wall'
+        ? (n.it.wall === 'left' ? { x: 0, y: n.it.offset + (n.f.wall?.length ?? 1) / 2 } : { x: n.it.offset + (n.f.wall?.length ?? 1) / 2, y: 0 })
+        : { x: n.it.x, y: n.it.y };
+    }
+    const spots = this._spotsNear(landmark.x, landmark.y, 20);
+    const target = spots.find(t => findPath(this.grid, { x: Math.floor(c.pos.x), y: Math.floor(c.pos.y) }, { x: Math.floor(t.x), y: Math.floor(t.y) }));
+    return target ? { ...target, uid: `life:${kind}`, mode: 'stand', landmark, partnerId: partner?.id } : null;
+  }
+
+  /** A free foot tile can still put a torso behind a desk's monitor. Check the painted
+   * furniture in front of this tile, in world pixels; transparent image margins do not count. */
+  _socialVisible(at) {
+    const p = project(at.x, at.y, this.proj), depth = characterDepth(at.x, at.y);
+    const probes = [-100,-70,-40].flatMap(y => [-15,0,15].map(x => ({x:p.sx+x,y:p.sy+y})));
+    this._socialAlpha ??= new WeakMap();
+    for (const n of this.itemNodes.values()) {
+      if (n.f.placement !== 'floor' || n.depth <= depth) continue;
+      for (const img of Object.values(n.parts)) {
+        if (img.hidden || !img.naturalWidth) continue;
+        const left = parseFloat(img.style.left), top = parseFloat(img.style.top);
+        const w = parseFloat(img.style.width), h = parseFloat(img.style.height);
+        const inside = probes.filter(p => p.x >= left && p.x < left+w && p.y >= top && p.y < top+h);
+        if (!inside.length) continue;
+        let cached = this._socialAlpha.get(img);
+        if (cached?.src !== img.src) {
+          const canvas = document.createElement('canvas'); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d', {willReadFrequently:true});
+          try { ctx.drawImage(img,0,0); cached = {src:img.src, pixels:ctx.getImageData(0,0,canvas.width,canvas.height).data}; }
+          catch { continue; } // An external asset provider may disallow pixel reads.
+          this._socialAlpha.set(img,cached);
+        }
+        if (inside.some(p => cached.pixels[(Math.floor((p.y-top)*img.naturalHeight/h)*img.naturalWidth+Math.floor((p.x-left)*img.naturalWidth/w))*4+3] > 120)) return false;
+      }
+    }
+    return true;
+  }
+
+  // One life clock per scene; deadlines are data, never one timer per occupant.
+  _tickLife() {
+    if (this.hidden || this.editing || this.destroyed) return;
+    const now = this.now();
+    for (const c of this.chars.values()) {
+      c.egg?.controller?.tick(now);
+      if (c.reaction && now >= c.reactionUntil) { c.reaction = null; this._renderPose(c); }
+      const a = c.activity, d = a && ACTIVITIES[a.kind];
+      if (a?.phase === 'interact') {
+        if (now >= a.until) this._cancelActivity(c);
+        else if (d.sipMs && !this.reducedMotion && now >= a.nextSip) {
+          a.nextSip = now + d.sipMs; a.drinkRest = !a.drinkRest; this._renderPose(c);
+        }
+      }
+    }
+    if (now >= this._nextLifeCheck) { this._nextLifeCheck = now + this.lifeConfig.intervalMs; this._checkLife(); }
+  }
+
+  /** Neutral engine signal, with an opaque occupant id and canonical category. */
+  signal(id, signal) {
+    const c = this.chars.get(id), d = SIGNALS[signal?.kind];
+    if (!c || !d || c.leaving) return false;
+    if (signal.id) {
+      const signature = `${signal.at}/${signal.count ?? 1}`;
+      this._signalIds ??= new Map();
+      if (this._signalIds.get(signal.id) === signature) return false;
+      this._signalIds.set(signal.id, signature);
+      if (this._signalIds.size > 128) this._signalIds.delete(this._signalIds.keys().next().value);
+    }
+    if (d.preempt) { this._cancelEgg(c); this._cancelActivity(c); c.carryProp = null; }
+    c.signalBusy = signal.kind.startsWith('run.') ? signal.kind === 'run.started' : d.preempt || c.signalBusy;
+    const state = d.state ?? d.categories?.[signal.toolKind] ?? (d.stateField && signal[d.stateField]);
+    if (state && SEATED_VIEW[state]) c.signalState = state;
+    else if (signal.kind === 'run.started' || signal.kind.startsWith('run.')) c.signalState = null;
+    if (d.preempt) { c.lifeFinished = this.now(); c.target = null; this._retarget(c, false); }
+    if (d.reaction) this.react(id, d.reaction);
+    if (d.cue) this.cue(id, d.cue, signal);
+    this._renderPose(c); return true;
+  }
+
+  /** Seed history without replay; changed id/at/count signatures are processed once. */
+  setSignals(signals = []) {
+    const next = new Map(signals.map(e => [e.id, `${e.at}/${e.count ?? 1}`]));
+    if (this._signalsSeen) for (const e of [...signals].reverse()) {
+      if (next.get(e.id) !== this._signalsSeen.get(e.id) && e.occupantId) {
+        if (this._packLoad) (this._packSignals ??= new Map()).set(e.id, e);
+        else this.signal(e.occupantId, e);
+      }
+    }
+    this._signalsSeen = next;
+  }
+
+  _checkLife() {
+    if (this.hidden || this.editing || this.destroyed) return;
+    for (const c of this.chars.values()) {
+      if (c.egg || c.leaving || c.walking || c.activity || c.social || c.visit || c.meet || c.deskTalk) continue;
+      if (!canIdle(c.occ) || c.signalBusy) {
+        if (reactionFor(c.occ, c.occ, this.now(), this.lifeConfig) === 'stretch'
+          && this.now() - (c.lastStretch ?? -Infinity) > this.lifeConfig.longRunMs) this.react(c.id, 'stretch');
+        continue;
+      }
+      if (wanderCount() >= this.lifeConfig.maxWanderers || this.now() - (c.lifeFinished ?? -Infinity) < this.lifeConfig.cooldownMs) continue;
+      const random=this.opts.random ?? Math.random, past=surpriseHistory(c.id);
+      if((this.opts.surprisesEnabled ?? surprisesEnabled)() && !c.signalBusy && eggEligible(c.occ,this.now(),past?.at,this.surpriseConfig) && random()<this.surpriseConfig.chance) {
+        const egg=pickEgg(past?.kind,k=>!EGGS[k].landmark || [...this.itemNodes.values()].some(n=>EGGS[k].landmark.split('|').includes(n.f.id)),random);
+        if(egg && wanderCount()<this.lifeConfig.maxWanderers) {this.surprise(c.id,egg);continue;}
+      }
+      const kind = pickActivity({ now: this.now(), idleSince: c.occ.stateSince ?? this.now(), history: c.lifeHistory,
+        last: c.lastActivity, available: k => !!this._activityTarget(c, k), config: this.lifeConfig, random: this.opts.random });
+      if (kind) this.interact(c.id, kind);
+    }
+  }
+
+  /** QA entry point bypasses timing, never the idle/work or reachability guards. */
+  interact(id, kind, { durationMs, partnerId } = {}) {
+    const c = this.chars.get(id), def = ACTIVITIES[kind];
+    if (!c || !def || !canIdle(c.occ) || c.signalBusy || c.leaving || c.egg || c.activity || c.social || c.visit || c.meet || c.deskTalk || this.editing || this.hidden) return false;
+    const target = this._activityTarget(c, kind, partnerId);
+    if (!target) return false;
+    const peers = def.partner ? [this.chars.get(target.partnerId)] : [];
+    if (!acquireWander(c, peers, this.lifeConfig.maxWanderers)) return false;
+    const a = c.activity = { kind, target, phase: 'walk' };
+    c.lastActivity = kind; (c.lifeHistory ??= {})[kind] = this.now();
+    c.wave = false; c.idleTurn = false;
+    this._clear(c, c.idleTimer); this._clear(c, c.waveTimer);
+    c.target = target; c.targetGen = this.layoutGen;
+    const begin = () => {
+      if (c.activity !== a) return;
+      const partner = this.chars.get(target.partnerId);
+      if (def.partner && partner?.walking) { a.phase = 'ready'; return; }
+      a.phase = 'interact'; c.walking = false;
+      if (def.home) { c.seatUid = target.uid; c.seatMode = target.mode; }
+      if (def.partner) {
+        c.facing = target.facing;
+        partner.social.phase = 'interact'; partner.facing = target.partnerTarget.facing;
+        this._renderPose(partner); this._renderPlate(partner);
+      } else if (target.landmark) c.facing = this._facingToward(c.pos, target.landmark);
+      if (def.visitor && target.partnerId) this.react(target.partnerId, 'message');
+      this._renderPose(c); this._renderPlate(c); this._sortDirty = true; this._kick();
+      a.until = this.now() + (durationMs ?? def.ms);
+      if (def.sipMs) a.nextSip = this.now() + def.sipMs;
+    };
+    a.startSocial = () => { if (!c.walking && a.phase === 'ready') begin(); };
+    if (def.partner) {
+      const partner = this.chars.get(target.partnerId);
+      partner.social = { owner:c.id, kind, target:target.partnerTarget, phase:'walk' };
+      this._retarget(partner, false);
+    }
+    const arrived = begin;
+    if (this.reducedMotion) { const seat = c.seatUid; c.seatUid = null; c.seatMode = null; c.pos = { x: target.x, y: target.y }; c.path = []; if (seat) this._updateStation(seat); arrived(); }
+    else this._walkTo(c, target, arrived);
+    this._renderPlate(c);
+    return true;
+  }
+
+  /** QA bypasses rarity only: busy agents, settings and the shared lease still apply. */
+  async surprise(id, kind, config = {}) {
+    const c = this.chars.get(id);
+    if (!c || !EGG_KINDS.includes(kind) || !(this.opts.surprisesEnabled ?? surprisesEnabled)() || !canIdle(c.occ) || c.signalBusy || c.egg || c.walking || c.activity || c.social || c.visit || c.meet || c.deskTalk || c.leaving || this.editing || this.hidden || this.destroyed) return false;
+    if (EGGS[kind].landmark && ![...this.itemNodes.values()].some(n => EGGS[kind].landmark.split('|').includes(n.f.id))) return false;
+    if (!acquireSurprise(c)) return false;
+    if (!acquireWander(c,[],this.lifeConfig.maxWanderers)) {releaseSurprise(c);return false;}
+    const egg = c.egg = {kind, phase:'loading', target:c.target};
+    c.lastSurprise = this.now(); c.lastEgg = kind; rememberSurprise(c.id,c.lastSurprise,kind);
+    try {
+      const { EggController } = await import('./egg-controller.js' + buildQuery);
+      if (c.egg !== egg || !this._alive(c) || !canIdle(c.occ)) { if (c.egg === egg) this._cancelEgg(c, {dispose:true}); return false; }
+      egg.controller = new EggController(this,c,kind,{...this.surpriseConfig,...config});
+      egg.controller.start(); return true;
+    } catch { this._cancelEgg(c,{dispose:true}); return false; }
+  }
+
+  _cancelEgg(c, options = {}) {
+    if (!c?.egg) return;
+    if (c.egg.controller) c.egg.controller.cancel(options);
+    else { c.egg=null; releaseSurprise(c); releaseWander(c); }
+  }
+
+  _cancelActivity(c, returnHome = true) {
+    if (!c?.activity) return;
+    const partner = this.chars.get(c.activity.target.partnerId);
+    if (partner?.social?.owner === c.id) { partner.social = null; if (!returnHome) releaseWander(partner); partner.target = null; partner.onArrive = null; partner.walking = false; partner.path = []; this._retarget(partner, false); this._renderPose(partner); this._renderPlate(partner); }
+    c.carryProp = returnHome && canIdle(c.occ) && c.activity.phase === 'interact' ? ACTIVITIES[c.activity.kind].carry ?? null : null;
+    this._clear(c, c.activity.timer); this._clear(c, c.activity.sipTimer); c.activity = null; c.lifeFinished = this.now();
+    c.onArrive = null; c.path = []; c.walking = false;
+    c.target = null; this._renderLife(c);
+    if (!returnHome) releaseWander(c);
+    if (returnHome && c.occ && !c.dead && !c.leaving) { this._retarget(c, false); this._renderPose(c); this._renderPlate(c); }
+  }
+
+  react(id, kind, { durationMs } = {}) {
+    const c = this.chars.get(id), def = REACTIONS[kind];
+    if (!c || !def || c.leaving) return false;
+    this._clear(c, c.reactionTimer); c.reaction = kind;
+    if (kind === 'stretch') c.lastStretch = this.now();
+    this._renderPose(c); this._kick();
+    c.reactionUntil = this.now() + (durationMs ?? def.ms);
+    return true;
+  }
+
+  _facingToward(from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'se' : 'nw') : (dy > 0 ? 'sw' : 'ne');
+  }
+
+  _renderLife(c) {
+    const action = c.social?.phase === 'interact' ? c.social.kind : c.activity?.phase === 'interact' ? c.activity.kind : '';
+    c.el.dataset.activity = action; c.el.dataset.facing = c.facing; c.el.dataset.reaction = c.reaction ?? '';
+    // Objects and gripping fingers are one authored raster. Only environmental FX are overlays.
+    const fx = c.carryProp === 'cup' || action === 'coffee' && c.activity.drinkRest ? 'steam' : action === 'water' ? 'drops' : null;
+    if (fx !== c.lifeFxKind) {
+      c.lifeFx?.remove();c.lifeFx=null;c.lifeFxKind=fx;
+      if(fx){c.lifeFx=el('div',`ao-life-fx ao-life-fx--${fx}`,{'aria-hidden':'true'});for(let i=0;i<3;i++)c.lifeFx.append(el('i'));c.el.append(c.lifeFx);}
+    }
+    c.el.toggleAttribute('data-carry', !!c.carryProp);
+    let clap = c.el.querySelector('.ao-life-clap');
+    if (action === 'highfive' && c.activity && c.poseHand) {
+      if (!clap) { clap = el('span','ao-life-clap',{'aria-hidden':'true'}); clap.textContent = '✦'; c.el.append(clap); }
+      clap.style.left = `${c.poseHand.x / c.poseCanvas.w * 100}%`;
+      clap.style.top = `${c.poseHand.y / c.poseCanvas.h * 100}%`;
+    } else clap?.remove();
+    if (c.lifeFx) {
+      const hand = c.poseFx ?? c.poseHand ?? { x: c.poseCanvas.w * (c.facing === 'nw' || c.facing === 'sw' ? .29 : .7), y: c.poseCanvas.h * .68 };
+      c.lifeFx.style.left = `${hand.x / c.poseCanvas.w * 100}%`;
+      c.lifeFx.style.top = `${hand.y / c.poseCanvas.h * 100}%`;
+    }
+    // Screen-space bubbles remain readable when the mobile camera fits the whole office.
+    const glyph = action === 'sleep' ? 'Zzz' : c.reaction ? REACTIONS[c.reaction].symbol
+      : action === 'highfive' ? '✦' : action === 'chat' ? '…' : action === 'wave' ? '👋'
+      : ({ waiting:'…', thinking:'?', error:'!' }[c.occ?.state]);
+    let bubble = c.plate.querySelector('.ao-life-bubble');
+    if (glyph) {
+      if (!bubble) { bubble = el('span','ao-life-bubble',{'aria-hidden':'true'}); c.plate.append(bubble); }
+      bubble.textContent = glyph; bubble.dataset.kind = action || c.reaction || c.occ?.state;
+      c.bubbleHeight = 36;
+    } else { bubble?.remove(); c.bubbleHeight = 0; }
+  }
+
   // ---------- cues (SSE 'cue' frames) ----------
   /**
    * SSE cue frame (api.md 2.1 §4.4): cue(occupantId, cue, { partnerId, interactionId }).
@@ -900,6 +1322,8 @@ export class OfficeScene {
     const c = this.chars.get(occupantId);
     const def = CUES[cue];
     if (!c || !def || c.leaving) return;
+    this._cancelEgg(c);
+    if (cue === 'celebrating') this.react(occupantId, 'success');
     if (cue === 'celebrating' && this.reducedMotion) return;
     if (c.cue) this._endCue(c, false);
     c.cue = cue;
@@ -931,6 +1355,7 @@ export class OfficeScene {
       const meeting = plan.meeting?.length ? this._tableSpots(plan.meeting.length) : null;
       if (meeting) plan.meeting.forEach((id, i) => { if (id !== plan.hostId || talking) want.set(id, { ...meeting[i], key: `t${i}` }); });
       const deskVisitors = meeting ? [] : [...(plan.desk ?? []), ...(plan.meeting ?? []).filter((id) => id !== plan.hostId)];
+      if (host && (deskVisitors.length || meeting)) this._cancelActivity(host, false);
       const at = host ? this._homeOf(host) : null;
       if (deskVisitors.length && at) {
         // the host's talking spot in front of the desk; the visitor beside it on the same screen row, facing each other
@@ -958,6 +1383,7 @@ export class OfficeScene {
       const deskBubble = deskTalk && plan?.speaker === c.id;
       const moved = (c.visit?.key ?? null) !== (w?.key ?? null) || c.visit?.x !== w?.x || c.visit?.y !== w?.y;
       if (!moved && c.visit?.talk === w?.talk && c.visit?.bubble === w?.bubble && c.visit?.facing === w?.facing && !!c.deskTalk === deskTalk && !!c.deskBubble === deskBubble) continue;
+      if (w || deskTalk) { this._cancelEgg(c); this._cancelActivity(c, false); }
       c.visit = w;
       c.deskTalk = deskTalk;
       c.deskBubble = deskBubble;
@@ -1134,6 +1560,7 @@ export class OfficeScene {
       this._kick();
     }
     const seatPart = composition?.seatFrom;
+    if (node.parts['seated:mug']) node.parts['seated:mug'].hidden = !node.coffeeReturned;
     if (seatPart && base?.parts?.[seatPart]?.seatAnchor) {
       const part = base.parts[seatPart], img = node.parts[`seated:${seatPart}`];
       node.seatWorld = { sx: parseFloat(img.style.left) + part.seatAnchor.x / this.proj.artScale, sy: parseFloat(img.style.top) + part.seatAnchor.y / this.proj.artScale };
@@ -1163,7 +1590,7 @@ export class OfficeScene {
   _renderPlate(c) {
     const o = c.occ;
     // O8: a seen agent's plate says when it was last seen (« vu il y a 12 min »), as text, name and tooltip.
-    const label = o.presenceLabel ?? this.labels[o.state] ?? o.state;
+    const label = o.presenceLabel ?? (c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : this.labels[o.state] ?? o.state);
     const shown = this._name(o);
     c.plate.setAttribute('aria-label', `${shown}, ${label}`);
     c.plate.dataset.state = o.state;
@@ -1177,6 +1604,7 @@ export class OfficeScene {
     const small = el('small', 'ao-plate__state', { 'aria-hidden': 'true' });
     small.textContent = label;
     c.plate.append(dot, name, small);
+    this._renderLife(c);
     if (this.selected === c.id) c.plate.setAttribute('aria-current', 'true'); else c.plate.removeAttribute('aria-current');
   }
 
@@ -1254,7 +1682,7 @@ export class OfficeScene {
     for (const c of this.chars.values()) {
       if (!c.walking || !c.path.length) continue;
       moving = true;
-      let step = WALK_TILES_PER_S * dt;
+      let step = (this.opts.walkTilesPerS ?? WALK_TILES_PER_S) * dt;
       while (step > 0 && c.path.length) {
         const n = c.path[0];
         const dx = n.x - c.pos.x, dy = n.y - c.pos.y;
@@ -1330,7 +1758,7 @@ export class OfficeScene {
       if (!c.head || c.leaving) continue;
       c.plateSize ??= { w: c.plate.offsetWidth, h: c.plate.offsetHeight };   // reset when the plate changes
       // a speaker's « … » bubble sits above their plate: it counts as part of it
-      items.push({ c, vx: (c.head.sx + this.origin.x) * zoom + x, vy: (c.head.sy + this.origin.y) * zoom + y, ...c.plateSize, bh: c.plate.hasAttribute('data-talking') ? 22 : 0 });
+      items.push({ c, vx: (c.head.sx + this.origin.x) * zoom + x, vy: (c.head.sy + this.origin.y) * zoom + y, ...c.plateSize, bh: Math.max(c.bubbleHeight ?? 0, c.plate.hasAttribute('data-talking') ? 22 : 0) });
     }
     items.sort((a, b) => b.vy - a.vy);
     const placed = [];
@@ -1475,6 +1903,7 @@ export class OfficeScene {
 
   /** Editing: occupants teleport instead of walking; the stage gets [data-editing]. */
   setEditing(on) {
+    if (on) for (const c of this.chars.values()) { this._cancelEgg(c,{immediate:true}); this._cancelActivity(c); }
     this.editing = !!on;
     this.stage.toggleAttribute('data-editing', this.editing);
     if (!on) { this.hideGhost(); this.markItems({}); }
@@ -1693,11 +2122,15 @@ export class OfficeScene {
   }
 
   destroy() {
+    this._packLoad?.abort(); this._packSignals?.clear();
+    for(const c of this.chars.values()) this._cancelEgg(c,{dispose:true});
+    window.removeEventListener('office-surprises-setting',this._onSurpriseSetting);
     this.destroyed = true;
     clearTimeout(this._announceTimer);
     cancelAnimationFrame(this._raf);
     this._raf = 0;
     clearInterval(this._themeTimer);
+    this._lifeTimer();
     this._ro.disconnect();
     this._mq.removeEventListener('change', this._onMq);
     document.removeEventListener('visibilitychange', this._onVis);
@@ -1707,7 +2140,7 @@ export class OfficeScene {
     else if ((document.fullscreenElement ?? document.webkitFullscreenElement) === this.stage) this._fsApi()?.exit().catch?.(() => {});
     this._io?.disconnect();
     this._imgKeep?.clear();
-    for (const c of this._allChars ?? []) { c.dead = true; this._cancelAll(c); }
+    for (const c of this._allChars ?? []) { releaseWander(c); c.dead = true; this._cancelAll(c); }
     this._allChars?.clear();
     this.chars.clear();
     this._camListeners?.clear();

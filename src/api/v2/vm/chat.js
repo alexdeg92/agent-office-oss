@@ -1,6 +1,7 @@
 'use strict';
 // ChatVM (api.md §3.3). The conversation is the portal chat session's transcript (user and assistant events), plus
 // failed turns (role 'error', kept in memory) and, while a turn is pending, the message just sent.
+const { projectEvents, resolveSender, knownSender } = require('../../../engine/model/sender');
 const MAX = 50;
 
 /**
@@ -10,11 +11,11 @@ const MAX = 50;
  * @param {object|null} p.pending      { turnId, since, text }
  * @param {Array} p.errors             [{ id, at, text }]
  */
-function buildChatVM({ sessionKey, transcript, pending, errors = [], local = [] }) {
+function buildChatVM({ sessionKey, transcript, pending, errors = [], local = [], senderContext = {} }) {
   const msgs = [];
-  for (const e of transcript ? transcript.events : []) {
-    if (e.kind === 'user') msgs.push({ id: e.id, role: 'user', at: e.at, text: e.text, meta: null });
-    else if (e.kind === 'assistant') msgs.push({ id: e.id, role: 'assistant', at: e.at, text: e.text, meta: { model: e.model, tokens: e.outputTokens, durationMs: null } });
+  for (const e of projectEvents(transcript?.events, senderContext)) {
+    if (e.kind === 'user') msgs.push({ id: e.id, role: 'user', at: e.at, text: e.text, senderInfo: e.senderInfo, meta: null });
+    else if (e.kind === 'assistant') msgs.push({ id: e.id, role: 'assistant', at: e.at, text: e.text, senderInfo: e.senderInfo, meta: { model: e.model, tokens: e.outputTokens, durationMs: null } });
   }
   for (const x of errors) msgs.push({ id: x.id, role: 'error', at: x.at, text: x.text, meta: null });
   // R15-03: messages of finished turns (the sent text, the reply) until the transcript itself shows them
@@ -24,6 +25,7 @@ function buildChatVM({ sessionKey, transcript, pending, errors = [], local = [] 
   if (pending && !msgs.some((m) => m.role === 'user' && m.at >= pending.since - 1000 && m.text === pending.text)) {
     msgs.push({ id: 'pending_' + pending.turnId, role: 'user', at: pending.since, text: pending.text, meta: null });
   }
+  for (const m of msgs) m.senderInfo = knownSender(m.senderInfo || resolveSender({ role: m.role === 'error' ? 'system' : m.role }, senderContext), senderContext);
   msgs.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
   return { sessionKey, turnPending: pending ? { turnId: pending.turnId, since: pending.since } : null, messages: msgs.slice(-MAX) };
 }

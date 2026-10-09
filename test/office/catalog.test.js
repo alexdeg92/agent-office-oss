@@ -35,7 +35,7 @@ describe('Boutique catalog (office-dev-21)', () => {
     const looks = A.looksOf(layout, idx, rows);
     const scout = looks['subagent:scout'];
     const chars = C.characterItems(idx, scout, rows, looks);
-    assert.deepEqual(chars.map((c) => c.id), manifest.characters.map((c) => c.id));
+    assert.deepEqual(chars.map((c) => c.id), [...idx.characters.keys()]);
     assert.equal(chars.filter((c) => c.on).length, 1);
     assert.ok(chars.find((c) => c.id === scout.character).wornBy.includes('subagent:scout'));
     const colours = C.colourItems(idx, scout, rows, looks);
