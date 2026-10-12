@@ -74,11 +74,10 @@ describe('R21-03 · publication is recoverable and exclusive', () => {
   const pathsIn = (d) => ({ file: path.join(d, 'config.json'), secrets: path.join(d, 'secrets.json') });
   it('a crash after secrets.json, before the commit (config.json): setup stays open, and the next publication completes', () => {
     const d = tmpDir('ao-r21-crash-'), paths = pathsIn(d);
-    const link = fs.linkSync;
     try {
-      fs.linkSync = (a, b) => { if (b === paths.file) throw Object.assign(new Error('EIO'), { code: 'EIO' }); return link(a, b); };
-      assert.throws(() => IC.writeInstanceConfig(paths, CONFIG, SECRETS), /EIO/);
-      fs.linkSync = link;
+      const script = `const IC=require(${JSON.stringify(require.resolve('../../src/instance-config'))}); IC.writeInstanceConfig(${JSON.stringify(paths)},${JSON.stringify(CONFIG)},${JSON.stringify(SECRETS)},{hook:at=>{if(at==='secrets')process.exit(42)}});`;
+      const child = require('node:child_process').spawnSync(process.execPath, ['-e', script], { env: { ...process.env, NODE_TEST_CONTEXT: 'child-fixture' } });
+      assert.equal(child.status, 42, String(child.stderr));
       assert.ok(fs.existsSync(paths.secrets) && !fs.existsSync(paths.file), 'the half-published state of the review');
       const files = IC.readInstanceConfig({ AO_CONFIG: paths.file, HOME: d });
       assert.equal(files.secrets, null, 'secrets without their commit are not read');
@@ -86,8 +85,8 @@ describe('R21-03 · publication is recoverable and exclusive', () => {
       IC.writeInstanceConfig(paths, CONFIG, Object.assign({}, SECRETS, { runtimeToken: 'second' }));
       assert.equal(JSON.parse(fs.readFileSync(paths.secrets, 'utf8')).runtimeToken, 'second');
       assert.equal(IC.setupState({}, IC.readInstanceConfig({ AO_CONFIG: paths.file, HOME: d })), 'locked');
-      assert.deepEqual(fs.readdirSync(d).filter((f) => f.startsWith('.') && f !== '.publish-lock.sqlite'), [], 'no temporary file left (the lock database stays: R22-01)');
-    } finally { fs.linkSync = link; fs.rmSync(d, { recursive: true, force: true }); }
+      assert.deepEqual(fs.readdirSync(d).filter((f) => f.startsWith('.') && !['.publish-lock.sqlite', '.publish-backups'].includes(f)), [], 'no temporary file left (the lock database stays: R22-01)');
+    } finally { fs.rmSync(d, { recursive: true, force: true }); }
   });
   // the live / dead publisher cases are cross-process now (R22-01: an OS lock): test/api/review22.test.js
   it('a committed configuration is never overwritten', () => {

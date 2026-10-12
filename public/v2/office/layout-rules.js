@@ -192,7 +192,7 @@ export function checkPlacement(layout, index, cand) {
 // form: main ≡ primary, cron ≡ scheduled, dm ≡ direct, channel ≡ group; subagent is unchanged; conversation is new
 // in 3.0 (its default rule *conversation also styles direct and group occupants that have no rule of their own).
 const CANON = { main: 'primary', primary: 'primary', cron: 'scheduled', scheduled: 'scheduled', dm: 'direct', direct: 'direct',
-  channel: 'group', group: 'group', agent: 'agent', subagent: 'subagent', conversation: 'conversation' };
+  channel: 'group', group: 'group', agent: 'agent', subagent: 'subagent', conversation: 'conversation', session: 'conversation' };
 const LEGACY = { primary: 'main', agent: 'agent', scheduled: 'cron', direct: 'dm', group: 'channel', subagent: 'subagent' };   // 3.0 → 2.x (no 2.x name for conversation)
 const CONVERSATION_ROLES = ['direct', 'group', 'conversation'];
 /** A role in its canonical (3.0) form, or null when it isn't a role of either vocabulary. */
@@ -205,7 +205,8 @@ export function canonicalRuleId(id) {
   const i = id.indexOf(':');
   if (i < 1) return null;
   const r = CANON[id.slice(0, i)];
-  return r && r !== 'primary' && /^[^\s]{1,128}$/.test(id.slice(i + 1)) ? `${r}:${id.slice(i + 1)}` : null;
+  const subject=id.slice(i+1), scoped=/^rt:[a-z][a-z0-9-]{0,31}:(agent|session|flow):[A-Za-z0-9_-]{1,5462}$/.test(subject);
+  return r && r !== 'primary' && (/^[^\s]{1,128}$/.test(subject) || scoped) ? `${r}:${subject}` : null;
 }
 
 /** Agent rule kinds: 'main' (the primary agent, under either name), an exact OccupantId ('subagent:<id>',
@@ -359,17 +360,24 @@ export function defaultAccessoriesFor(index, characterId, variantId) {
   return v?.defaultAccessories ?? c?.defaultAccessories ?? [];
 }
 
-/**
- * Resolve name, labels, look and home station for the occupants on stage (api-proposal.md §2).
- * @param {{id:string, role:string, sourceName:string}[]} sources  roster order (main first)
- * @returns {{id, role, name, roleLabel: {key: string, params?: object}, ruleId: string|null, look:{character,variant,accessories}, stationUid: string|null}[]}
- *   roleLabel is a LabelRef (api.md §3.2): « occupantRole.<role> », or { key:'custom', params:{text} } for a layout role.
- *   stationUid null = no free home station (overflow): the scene places the occupant in the standing area.
- */
-export function resolveOccupants(layout, index, sources) {
+/** Untouched seeds use auto; owner edits use manual. */
+export function automaticAppearance(rule) {
+  if (!rule) return true;
+  if (rule.appearance != null) return rule.appearance === 'auto';
+  const id = canonicalRuleId(rule.agentId);
+  if (id === 'primary') return rule.character === 'timmy' && rule.variant == null && !rule.name && !rule.role
+    && rule.accessories?.length === 1 && rule.accessories[0] === 'headphones';
+  const seeded = { '*subagent': 'teal', '*scheduled': 'ochre', '*direct': 'sage', '*group': 'sage' };
+  return Object.hasOwn(seeded, id) && rule.character === 'subagent' && rule.variant === seeded[id] && rule.accessories == null;
+}
+
+/** Resolve names, LabelRefs, saved/manual looks and home stations in roster order; null station means overflow. */
+export function resolveOccupants(layout, index, sources, { assignLook } = {}) {
   const seq = new Map();
   const out = sources.map((o) => {
     const r = ruleFor(layout, o.id, o.role);
+    // Browsers reuse saved looks.
+    const automaticLook = assignLook ? assignLook(o.appearanceId ?? o.id, index, { primary: canonicalRole(o.role) === 'primary' }) : o.automaticLook;
     const isPrimary = canonicalRole(o.role) === 'primary';
     const fallbackChar = isPrimary ? index.manifest.characters.find((c) => c.role === 'main') : index.manifest.characters.find((c) => c.role === 'subagent');
     const ch = (r && index.characters.get(r.character)) ?? fallbackChar ?? index.manifest.characters[0];
@@ -393,7 +401,8 @@ export function resolveOccupants(layout, index, sources) {
       roleLabel: r?.role && !(CONVERSATION_ROLES.includes(canonicalRole(o.role)) && canonicalRuleId(r.agentId) === '*subagent')
         ? { key: 'custom', params: { text: r.role } } : { key: `occupantRole.${o.role}` },
       ruleId: r?.agentId ?? null,
-      look: { character: ch.id, variant, accessories },
+      look: automaticLook && automaticAppearance(r) ? automaticLook : { character: ch.id, variant, accessories },
+      ...(automaticLook && { automaticLook }),
       stationUid: null,
       _want: exact && r.station && r.station !== 'auto' ? r.station : null,
     };

@@ -1,7 +1,5 @@
 'use strict';
-// O9 in the Bureau (harness, scenario « foule »: 30 agents): the office fills its desks, the rest sit in annex rooms
-// below it; every character is framed by its own stage; the roster lists all 30 with a desk; a click (or a tap) on
-// an agent in an annex opens its card.
+// O9: the whole roster is represented across registered floors; only the selected floor is mounted in the scene.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { launch, findChrome } = require('./helpers/browser');
@@ -11,60 +9,29 @@ let browser;
 before(async () => { if (!skip) browser = await launch(); });
 after(async () => { await browser?.close(); });
 
-describe('30 agents in the Bureau (O9)', { skip, timeout: 120_000 }, () => {
-  it('office + annexes seat everyone, framed, listed with a desk; an annex agent opens its card', async () => {
+describe('30 agents across Bureau floors (O9)', { skip, timeout: 120_000 }, () => {
+  it('lists everyone once by home floor and opens an off-floor agent on that floor', async () => {
     const p = await browser.page('/public/v2/office/bureau-dev.html?tick=600000&nom=Orion&scenario=foule');
-    await p.waitFor(`document.querySelectorAll('.ao-char').length >= 30 && document.querySelectorAll('.ao-bureau__annex').length >= 1`);
-    await p.eval(`await new Promise((r) => setTimeout(r, 800));`);   // walks done, fit applied
-    const r = await p.eval(`
-      const stages = [...document.querySelectorAll('.bu-stage')].filter((s) => s.querySelector('.ao-viewport'));
-      const per = stages.map((s) => {
-        const b = s.getBoundingClientRect();
-        const chars = [...s.querySelectorAll('.ao-char')];
-        const out = chars.filter((c) => { const r = c.getBoundingClientRect(); return r.left < b.left - 1 || r.right > b.right + 1 || r.top < b.top - 1 || r.bottom > b.bottom + 1; });
-        return { n: chars.length, out: out.map((c) => c.dataset.occupant) };
-      });
-      const ids = [...document.querySelectorAll('.ao-char')].map((c) => c.dataset.occupant);
-      return { per, unique: new Set(ids).size, total: ids.length,
-        titles: [...document.querySelectorAll('.ao-bureau__annex h3')].map((h) => h.textContent),
-        roster: [...document.querySelectorAll('.ao-roster')].map((b) => b.innerText.replace(/\\n/g, ' | ')),
-        hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth };`);
-    assert.equal(r.total, 30); assert.equal(r.unique, 30, 'each agent in one room');
-    assert.ok(r.per.length >= 2, 'office and at least one annex');
-    assert.ok(r.per.slice(1).every((s) => s.n <= 12), 'an annex seats 12 at most');
-    for (const s of r.per) assert.deepEqual(s.out, [], 'every character inside its stage (fit)');
-    assert.match(r.titles[0], /^Annexe 1 · \d+ agents$/);
-    assert.equal(r.roster.length, 30);
-    assert.ok(r.roster.every((t) => !/sans poste/.test(t)), r.roster.find((t) => /sans poste/.test(t)));
-    assert.equal(r.hscroll, false, 'no horizontal overflow');
-    // a room below the fold is paused like a hidden tab (no frame loops, no CSS animation) and resumes in view
-    const paused = await p.eval(`const st = [...document.querySelectorAll('.ao-bureau__annex .ao-office')].pop();
-      window.scrollTo(0, 0); await new Promise((r) => setTimeout(r, 300)); const off = st.hasAttribute('data-paused');
-      st.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 300)); const on = st.hasAttribute('data-paused');
-      window.scrollTo(0, 0); await new Promise((r) => setTimeout(r, 300)); return { off, on, office: document.querySelector('.ao-office:not(.ao-bureau__annexstage)').hasAttribute('data-paused') };`);
-    assert.deepEqual(paused, { off: true, on: false, office: false });
-    // drawn small (a phone), a crowded room's plates shrink to their dot; a selected one shows its name; names stay whole
-    const compact = await p.eval(`const a = document.querySelector('.ao-bureau__annex'); const st = a.querySelector('.ao-office');
-      const wide = st.hasAttribute('data-plates-compact');
-      a.style.width = '340px'; await new Promise((r) => setTimeout(r, 300));
-      const plates = [...st.querySelectorAll('.ao-plate')];
-      const out = { wide, small: st.hasAttribute('data-plates-compact'), hiddenNames: plates.filter((pl) => getComputedStyle(pl.querySelector('.ao-plate__name')).display === 'none').length,
-        n: plates.length, labels: plates.every((pl) => /^Agent \\d+, /.test(pl.getAttribute('aria-label'))) };
-      plates[0].setAttribute('aria-current', 'true'); out.selectedName = getComputedStyle(plates[0].querySelector('.ao-plate__name')).display !== 'none';
-      plates[0].removeAttribute('aria-current'); a.style.width = ''; await new Promise((r) => setTimeout(r, 300));
-      out.back = st.hasAttribute('data-plates-compact'); return out;`);
-    assert.deepEqual(compact, { wide: false, small: true, hiddenNames: 12, n: 12, labels: true, selectedName: true, back: false });
-    // a click on an agent in the last annex opens its card
-    const who = await p.eval(`const a = [...document.querySelectorAll('.ao-bureau__annex')].pop();
-      a.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 200));
-      const c = a.querySelector('.ao-char'); const b = c.getBoundingClientRect();
-      const at = { clientX: b.left + b.width / 2, clientY: b.top + b.height * 0.6, pointerId: 7, pointerType: 'mouse', bubbles: true, button: 0 };
-      const vp = a.querySelector('.ao-viewport');
-      vp.dispatchEvent(new PointerEvent('pointerdown', at)); vp.dispatchEvent(new PointerEvent('pointerup', at));
-      return c.dataset.occupant;`);
+    await p.waitFor(`document.querySelectorAll('.ao-roster').length === 30 && document.querySelectorAll('.ao-floor-picker__floor').length >= 2`);
+    const initial = await p.eval(`const groups=[...document.querySelectorAll('.ao-floor-roster__group')];
+      const picker=[...document.querySelectorAll('.ao-floor-picker__floor')];
+      return { groups:groups.map(g=>({id:g.dataset.rosterFloor,n:g.querySelectorAll('.ao-roster').length})),
+        picker:picker.map(b=>({id:b.dataset.floor,n:Number.parseInt(b.querySelector('.ao-floor-picker__count').textContent,10)})),
+        total:document.querySelectorAll('.ao-roster').length, floor:document.querySelector('.ao-bureau__stage').dataset.floor,
+        hscroll:document.documentElement.scrollWidth>document.documentElement.clientWidth };`);
+    assert.equal(initial.total, 30);
+    assert.ok(initial.groups.length >= 2, 'occupants are grouped by floor');
+    assert.equal(initial.groups.reduce((n,g)=>n+g.n,0),30,'everyone appears in one roster group');
+    assert.equal(initial.picker.reduce((n,f)=>n+f.n,0),30,'floor picker counts every occupant');
+    assert.equal(initial.hscroll,false,'no horizontal overflow');
+
+    const target = await p.eval(`const cards=[...document.querySelectorAll('.ao-roster')]; const card=cards.at(-1);
+      const floor=card.closest('[data-roster-floor]').dataset.rosterFloor; const id=card.dataset.occupant; card.click(); return {floor,id};`);
+    await p.waitFor(`document.querySelector('.ao-bureau__stage')?.dataset.floor === ${JSON.stringify(target.floor)} && document.querySelector('.ao-char[data-occupant='+CSS.escape(${JSON.stringify(target.id)})+']')`);
     await p.waitFor(`document.querySelector('.bu-drawer #ao-drawer-title')`);
-    const card = await p.eval(`return document.querySelector('#ao-drawer-title').innerText;`);
-    assert.match(card, /^Agent \d+$/, `${who} → ${card}`);
+    assert.equal(await p.eval(`return new URLSearchParams(location.search).get('etage')`), target.floor === '1' ? null : target.floor);
+    assert.equal(await p.eval(`return document.querySelector('.ao-char[data-occupant='+CSS.escape(${JSON.stringify(target.id)})+']')?.dataset.occupant`), target.id);
+    assert.deepEqual(p.logs.filter(l=>/Unhandled|EXC/.test(l)),[]);
     await p.close();
   });
 });

@@ -28,8 +28,8 @@ export function createAccess(now = Date.now()) {
       const ordered = rows.slice().sort((a, b) => b.lastSeenAt - a.lastSeenAt);
       return {
         agents: [
-          { id: 'main', name: 'Timmy', model: 'claude-opus-5-5', isPrimary: true },
-          { id: 'claude-code', name: 'Agent de code', model: 'claude-opus-5-5', isPrimary: false },
+          { id: 'main', name: 'Timmy', model: 'claude-opus-5-5', modelSource: 'inherited', runtime: null, isPrimary: true },
+          { id: 'claude-code', name: 'Agent de code', model: 'claude-opus-5-5', modelSource: 'inherited', runtime: 'codex', isPrimary: false },
         ],
         interlocutors: ordered.map((r) => ({ id: r.id, kind: r.kind, name: r.name, avatarUrl: null, resolution: r.resolution, sessionCount: r.sessionCount,
           totalTokens: r.totalTokens, lastSeenAt: r.lastSeenAt, access: { ...r.access } })),

@@ -49,7 +49,7 @@ Set in the production env file (`~/.config/agent-office.env` today; the instance
    - the PM has committed the approved step on `redesign`, and `npm test` is green on that commit;
    - the rehearsal has been smoked (`scripts/deploy.sh --target rehearsal <sha>`, which runs `scripts/golive-smoke.sh`).
 2. **Units already follow the release symlink.** Do not point them at a SHA directory. Both stay **disabled** and **stopped** until the first prod deploy restarts them. Do not `enable` or `start` them in this step. Do not edit the running `agent-office` unit.
-   - `agent-office-api.service`: `WorkingDirectory` and `ExecStart` are `~/dev/project/agent-office-releases/current/server.js`, `EnvironmentFile` is the production env, `Restart=on-failure`.
+   - `agent-office-api.service`: `WorkingDirectory` and `ExecStart` are `~/dev/project/agent-office-releases/current/server.js`, `EnvironmentFile` is the production env, `Restart=on-failure`, `RestartForceExitStatus=75`, and `Environment=AO_RESTART_POLICY=on-failure`.
    - `agent-office-web.service`: the same directory, `ExecStart` is `…/current/scripts/serve-frontend.js` (UI at `/`, API base `/backend`).
    - `systemctl --user daemon-reload` only.
    - `current` must already be a symlink (a previous checkout is enough) so a failed first deploy can switch it back. The deploy does not touch `agent-office-portal`.

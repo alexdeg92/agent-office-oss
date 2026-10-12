@@ -32,7 +32,8 @@ describe('data-quality privacy · engine (every input path)', () => {
     e.ingest(env('gateway', 'gw.rpc.sessions.list', { kind: 'json', value: { sessions: [
       { key: `alice:private:${SF}`, updatedAt: 'Alice owes 90.35' },
       { key: `agent:main:discord:direct:${SF}`, status: 'rosebud' },
-      { key: 'agent:Alice:confidential' },
+      { key: 'agent:Alice:confidential' },              // T-0058: an operator-named session now (explicit), still a leak seed
+      { key: 'agent:Alice:confidential:rosebud' },      // no rule matches: session.unclassified, and its key must not leak
     ] } }));
     e.ingest(env('gateway', 'gw.event.health', { kind: 'json', value: { ok: SECRET_TEXT, [`${SF}`]: 'x' } }));
     // unknown events: payload with secret-shaped keys and values; event names themselves seeded

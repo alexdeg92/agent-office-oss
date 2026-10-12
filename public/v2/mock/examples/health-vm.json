@@ -228,6 +228,24 @@
         ]
       }
     ],
+    "healthChecks": [
+      {
+        "id": "core|generic:session-sync",
+        "adapter": "core",
+        "severity": "warn",
+        "causeCode": "source-stale",
+        "textKey": "healthCheck.source.stale",
+        "impactKey": "healthImpact.sessions",
+        "remedy": "guided",
+        "active": false,
+        "actionId": null,
+        "guidedPath": "/parametres?onglet=connexion",
+        "target": null,
+        "changedAt": 1791223190000,
+        "resolvedAt": 1791223190000
+      }
+    ],
+    "healthAudit": [],
     "dataQuality": {
       "open": {
         "error": 0,

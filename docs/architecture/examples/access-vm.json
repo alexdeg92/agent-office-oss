@@ -5,13 +5,17 @@
         "id": "main",
         "name": "Timmy",
         "model": "provider-a/model-a",
-        "isPrimary": true
+        "isPrimary": true,
+        "modelSource": "inherited",
+        "runtime": null
       },
       {
         "id": "scout",
         "name": "Scout",
         "model": "provider-b/model-b",
-        "isPrimary": false
+        "isPrimary": false,
+        "modelSource": "explicit",
+        "runtime": null
       }
     ],
     "interlocutors": [

@@ -83,7 +83,7 @@ function createQuarantine({ now = () => Date.now(), vocab = {} } = {}) {
   let version = 0;                // bumps on every state-visible change (open set, severities, states): R6-08 notifications
 
   // → true if the set of open issues or their states changed (not on a count/timestamp-only bump)
-  function record(raw) {
+  function record(raw, { increment = true } = {}) {
     let i = sanitize(raw);
     let fp = fingerprintOf(i);
     const at = now();
@@ -94,7 +94,7 @@ function createQuarantine({ now = () => Date.now(), vocab = {} } = {}) {
     const cur = issues.get(fp);
     let material = false;
     if (cur) {
-      cur.count++; cur.lastSeenAt = at;
+      if (increment) cur.count++; cur.lastSeenAt = at;
       if (cur.state === 'resolved') { cur.state = 'open'; material = true; }   // a mute survives recurrence
     } else {
       issues.set(fp, { fingerprint: fp, code: i.code, severity: i.severity, channel: i.channel, path: i.path,
@@ -136,8 +136,10 @@ function createQuarantine({ now = () => Date.now(), vocab = {} } = {}) {
       if (issues.size >= MAX_FINGERPRINTS && !issues.has(r.fingerprint)) break;
       const i = sanitize(r);
       if (typeof r.fingerprint !== 'string' || !/^[0-9a-f]{16}$|^overflow$/.test(r.fingerprint)) continue;
+      const count = i.code === 'session.unclassified' ? 1 : Math.max(1, Number(r.count) || 1);
       issues.set(r.fingerprint, { fingerprint: r.fingerprint, code: i.code, severity: i.severity, channel: i.channel, path: i.path,
-        count: Math.max(1, Number(r.count) || 1), firstSeenAt: r.firstSeenAt, lastSeenAt: r.lastSeenAt, state: STATES.has(r.state) ? r.state : 'open' });
+        count, firstSeenAt: r.firstSeenAt, lastSeenAt: r.lastSeenAt, state: STATES.has(r.state) ? r.state : 'open' });
+      if (count !== Math.max(1, Number(r.count) || 1)) dirty.add(r.fingerprint);
     }
     version++;
   }

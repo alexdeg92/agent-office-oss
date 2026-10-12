@@ -58,10 +58,10 @@ test('S01-02: actual loopback handshakes send only the selected destination cred
 
 test('S01-02: a configured gateway URL override cannot carry the stored token to a new destination', () => {
   const IC = require('../../src/instance-config');
-  const files = { config: { version: IC.VERSION, instance: { name: 'Synthetic', locale: 'en', timeZone: 'UTC' },
+  const files = { config: { version: 2, instance: { name: 'Synthetic', locale: 'en', timeZone: 'UTC' },
     owner: { displayName: 'Operator', email: 'owner@example.invalid', authSource: 'database' },
     runtime: { adapter: 'openclaw', openclaw: { gatewayUrl: 'ws://127.0.0.1:19991' } }, agents: { primary: null, looks: {} } },
-    secrets: { version: IC.VERSION, sessionSecret: 's'.repeat(48), runtimeToken: LOCAL } };
+    secrets: { version: 2, sessionSecret: 's'.repeat(48), runtimeToken: LOCAL } };
   assert.equal(IC.effectiveEnv({}, files).OC_GATEWAY_TOKEN, LOCAL);
   assert.equal(IC.effectiveEnv({ OC_GATEWAY_URL: 'ws://127.0.0.1:19991/' }, files).OC_GATEWAY_TOKEN, LOCAL);
   for (const url of ['wss://remote.example.invalid/api', 'ws://127.0.0.1:19992', 'ws://127.0.0.1:19991/other']) {

@@ -1,4 +1,5 @@
 'use strict';
+require('../helpers/scratch-home.cjs').requireScratchHome(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 // Builds a store with the go-live tree passed as argv[2] (commit 5a38aec). Not a test file.
 const fs = require('fs');
 const path = require('path');

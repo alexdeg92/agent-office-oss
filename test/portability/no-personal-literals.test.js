@@ -9,11 +9,12 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { spawnSync } = require('child_process');
-const { scan, check, TOKENS } = require('./personal-literals');
+const { scan, check, TOKENS, loadAllow } = require('./personal-literals');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const ALLOW = require('./personal-literals.allow.json');
-const TIMMY = TOKENS[2];
+const ALLOW = loadAllow();
+const TIMMY = TOKENS[3];
+const OWNER = ['al', 'ex'].join('');
 
 describe('portability · no personal literals (ADR-001 §12.8)', () => {
   it('every occurrence has an exact allowance with a reason; no allowance is stale', () => {
@@ -58,7 +59,7 @@ describe('portability · no personal literals (ADR-001 §12.8)', () => {
       const allowed = ALLOW.find((a) => a.file.startsWith('src/') && a.file.endsWith('.js') && a.line.endsWith(';'));
       assert.ok(allowed, 'an allowed src line to mutate');
       const f1 = path.join(copy, allowed.file);
-      fs.writeFileSync(f1, fs.readFileSync(f1, 'utf8').replace(allowed.line, `${allowed.line} const _m = '${TIMMY} au repos';`));
+      fs.writeFileSync(f1, fs.readFileSync(f1, 'utf8').replace(allowed.line, `${allowed.line} const _m = '${TIMMY} au repos'; const _a = '${OWNER}';`));
       // 2. in a VM builder: the office KPI says the home agent's name
       const f2 = path.join(copy, 'src', 'api', 'v2', 'vm', 'office.js');
       const office = fs.readFileSync(f2, 'utf8');

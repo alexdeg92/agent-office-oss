@@ -4,8 +4,7 @@
 // production defaults (UI at /, API behind /backend, api.md §1 paths below it).
 //   basePath: the UI's mount point, with leading and trailing slash ('/', '/v2/').
 //   apiBase:  prefix put before every API path ('/backend', or '' when the API shares the UI's origin root).
-//   apiVersion: 2 | 3, the API contract the whole client speaks (G5, migration-v3.md: one version for views, commands
-//             and the stream). Callers write api.md paths ('/api/v2/…'); apiUrl() alone puts the configured version in.
+//   apiVersion: 2 | 3, the view/stream contract. apiUrl() applies it, except explicitly pinned v3-only extensions.
 //   assetBase (derived): basePath + 'bureau/', where scripts/sync-design.js puts the design system and art.
 
 // THE API-version switch (migration-v3.md step 4, frontend-21): change apiVersion here to move every client whose
@@ -20,8 +19,12 @@ export function normalise(raw = {}) {
   if (!basePath.startsWith('/') || basePath.startsWith('//')) basePath = DEFAULTS.basePath;
   if (!basePath.endsWith('/')) basePath += '/';
   let apiBase = str(raw.apiBase) ?? DEFAULTS.apiBase;
-  // Same origin only (cookie auth, no CORS): a path prefix, never another host.
-  if (apiBase !== '' && (!apiBase.startsWith('/') || apiBase.startsWith('//'))) apiBase = DEFAULTS.apiBase;
+  if (apiBase.startsWith('//')) apiBase = DEFAULTS.apiBase;
+  else if (apiBase && !apiBase.startsWith('/')) try {
+    const u = new URL(apiBase);
+    apiBase = u.protocol === 'https:' && !u.username && !u.password && !u.search && !u.hash && !/%2f|%5c|\\/i.test(u.pathname)
+      ? u.origin + u.pathname.replace(/\/+$/, '') : DEFAULTS.apiBase;
+  } catch { apiBase = DEFAULTS.apiBase; }
   apiBase = apiBase.replace(/\/+$/, '');
   const apiVersion = API_VERSIONS.includes(raw.apiVersion) ? raw.apiVersion : DEFAULTS.apiVersion;
   return { basePath, apiBase, apiVersion };
@@ -37,6 +40,7 @@ export function readConfig(doc = globalThis.document) {
 const withDerived = (c) => ({ ...c, assetBase: c.basePath + 'bureau/' });
 /** The active config: { basePath, apiBase, assetBase } (assetBase = the synced Bureau design system and art). */
 export const config = withDerived(readConfig());
+export const splitOrigin = /^https:\/\//i.test(config.apiBase) && new URL(config.apiBase).origin !== globalThis.location?.origin;
 /** The release this document loaded; immutable for the lifetime of the tab. */
 export const buildId = globalThis.document?.querySelector('meta[name="ao-build"]')?.getAttribute('content') || '';
 export const buildQuery = buildId ? '?v=' + encodeURIComponent(buildId) : '';
@@ -46,10 +50,10 @@ export function configure(raw) { Object.assign(config, withDerived(normalise(raw
 
 /** The UI's mount point without its trailing slash: '' at the root, '/v2' under /v2. Route paths follow it. */
 export const routeBase = () => config.basePath.slice(0, -1);
-/** '/api/v2/…' or '/api/v3/…' → the same path on the configured version; any other path unchanged (v1 auth routes). */
-export const versioned = (path) => String(path).replace(/^\/api\/v[23](?=\/|$|\?)/, '/api/v' + config.apiVersion);
+/** Apply deployment version, or an explicit version for v3-only extensions. */
+export const versioned = (path, apiVersion = config.apiVersion) => String(path).replace(/^\/api\/v[23](?=\/|$|\?)/, '/api/v' + (API_VERSIONS.includes(apiVersion) ? apiVersion : config.apiVersion));
 /** An API URL: `path` is an api.md path ('/api/v2/views/health'); the version and the deployment prefix come from config. */
-export const apiUrl = (path) => config.apiBase + versioned(path);
+export const apiUrl = (path, apiVersion = config.apiVersion) => config.apiBase + versioned(path, apiVersion);
 /** A UI asset URL, from a path relative to the UI root ('bureau/assets/Logos/favicon.svg'). */
 export const assetUrl = (path) => {
   const url = config.basePath + path.replace(/^\/+/, '');

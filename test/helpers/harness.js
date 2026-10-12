@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * Boots the real server.js as a child process against a FakeGateway + fake CLI, with a frozen clock,
  * a throwaway HOME and test-only credentials. Nothing here can reach the live gateway, the real
@@ -22,6 +23,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const BIN = path.resolve(__dirname, '..', 'bin');
 const TEST_EMAIL = 'test@example.invalid';
 const TEST_PASSWORD = 'test-password';
+const STDERR_TAIL_BYTES = 8192, STDERR_TAIL_LINES = 16;
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -82,23 +84,40 @@ async function startServer(sc, opts = {}) {
   if (opts.setupMode || opts.loginEnv === false) for (const k of ['PORTAL_EMAIL', 'PORTAL_PASSWORD', 'PORTAL_SECRET', 'OC_GATEWAY_TOKEN']) delete env[k];
   if (opts.failCli) env.FAKE_OC_FAIL = opts.failCli;
   Object.assign(env, opts.env || {});
+  const simulateTrustedHttpsProxy=env.AO_SPLIT_AUTH_ENABLED==='1';
   if (opts.prepare) await opts.prepare(tmp, { env, gateway: gw });   // G4: e.g. a stored instance config under tmp/.config/agent-office
 
   // AO_SERVER_ENTRY (test-only): run another server file, e.g. the pre-S1 baseline when creating goldens.
   const entry = process.env.AO_SERVER_ENTRY ? path.resolve(ROOT, process.env.AO_SERVER_ENTRY) : path.join(ROOT, 'server.js');
   const child = spawn(process.execPath, ['--require', path.join(__dirname, 'freeze-env.js'), entry], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
+  let stderrTail = Buffer.alloc(0);
   child.stdout.on('data', (d) => { output += d; });
-  child.stderr.on('data', (d) => { output += d; });
+  child.stderr.on('data', (d) => {
+    output += d;
+    stderrTail = Buffer.from(Buffer.concat([stderrTail, d]).subarray(-STDERR_TAIL_BYTES));
+  });
   const exited = new Promise((r) => child.once('exit', (code) => r(code)));
+  const closed = new Promise((r) => child.once('close', r));
 
   const base = `http://127.0.0.1:${port}`;
   let cookie = '';
   const request = async (method, p, body) => {
     // like the UI's api.js: JSON bodies and the X-AO-Request marker (R15-01 CSRF guard)
-    const r = await fetch(base + p, { method, headers: Object.assign({ 'content-type': 'application/json', 'x-ao-request': '1' }, cookie ? { cookie } : {}), body: body === undefined ? undefined : JSON.stringify(body) });
-    const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (_) {}
-    return { status: r.status, json, text, headers: r.headers };
+    try {
+      const r = await fetch(base + p, { method, headers: Object.assign({ 'content-type': 'application/json', 'x-ao-request': '1' }, simulateTrustedHttpsProxy?{'x-forwarded-proto':'https'}:{}, cookie ? { cookie } : {}), body: body === undefined ? undefined : JSON.stringify(body) });
+      const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (_) {}
+      return { status: r.status, json, text, headers: r.headers };
+    } catch (cause) {
+      // A socket EOF can precede the child exit/stdio events. Give diagnostics a
+      // bounded chance to drain; never retry the request or change its outcome.
+      await Promise.race([closed, sleep(50)]);
+      const state = child.exitCode !== null ? 'exit code=' + child.exitCode
+        : child.signalCode !== null ? 'exit signal=' + child.signalCode : 'still running';
+      const tail = stderrTail.toString('utf8').trimEnd().split('\n').slice(-STDERR_TAIL_LINES).join('\n')
+        .split(ROOT).join('{{ROOT}}').split(tmp).join('{{TMP}}');
+      throw new Error(`test server ${method} ${p} failed (${state}, pid=${child.pid})\n--- last server stderr ---\n${tail || '(empty)'}`, { cause });
+    }
   };
   const h = {
     sc, gw, port, base, tmp, child,
@@ -128,7 +147,7 @@ async function startServer(sc, opts = {}) {
   // G4: the configured app's readiness (also after setup hands over in-process)
   h.waitReady = async ({ login = true } = {}) => {
     await waitFor(() => /^AO_READY \{"mode":"app"/m.test(output), { timeoutMs: 30000, what: 'the AO_READY app line' });
-    await waitFor(async () => (await fetch(base + '/api/me')).status === 401, { timeoutMs: 30000, what: 'the app answering' });   // 30 s like AO_READY (10 s flaked under full-suite load)
+    await waitFor(async () => (await fetch(base + '/api/me',{headers:simulateTrustedHttpsProxy?{'x-forwarded-proto':'https'}:{}})).status === 401, { timeoutMs: 30000, what: 'the app answering' });   // 30 s like AO_READY (10 s flaked under full-suite load)
     if (login) await h.login();
   };
   // A test that writes into the RUNNING server's store (e.g. an agent token) opens it like the server does: with a busy
@@ -150,7 +169,7 @@ async function startServer(sc, opts = {}) {
   try {
     // Boot can exceed 10 s while the whole suite runs in parallel (browser tests included): seen once in 10 runs.
     await waitFor(() => /^AO_READY \{"mode":"app"/m.test(output), { timeoutMs: 30000, what: 'the AO_READY app line' });
-    await waitFor(async () => (await fetch(base + '/api/me')).status === 401, { timeoutMs: 30000, what: 'the app answering' });   // 30 s like AO_READY (10 s flaked under full-suite load)
+    await waitFor(async () => (await fetch(base + '/api/me',{headers:simulateTrustedHttpsProxy?{'x-forwarded-proto':'https'}:{}})).status === 401, { timeoutMs: 30000, what: 'the app answering' });   // 30 s like AO_READY (10 s flaked under full-suite load)
     await h.login();
     // the first full refresh is done: its four reads are fresh in the engine (S16 prep: an engine fact, so it holds with
     // or without v1; v1's summary.updatedAt is set by the same refresh)

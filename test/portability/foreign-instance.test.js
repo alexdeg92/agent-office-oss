@@ -21,10 +21,20 @@ const PERSONAL = new RegExp(TOKENS.map((t) => t.replace(/[/.]/g, '\\$&')).join('
 // §12.6: 'main' may appear ONLY in the listed 2.x alias fields; these paths are where each alias is allowed
 // occupants[].ruleId: the shipped default layout names its primary rule 'main' until layout-rules takes both vocabularies
 // (office-dev, §12.6)
+// occupants[].parentId (T-0062) is an occupant id, so it carries the same 2.x alias as occupants[].id
+// T-0092 roster/visit references carry those same 2.x occupant aliases in their explicitly ID-valued fields.
 // LayoutVM: the layout's primary rule key and role ('main' ≡ 'primary'), the manifest's character roles and agentsSeen
 // carry the 2.x occupant vocabulary until layout-rules accepts both (office-dev, §12.6)
 const MAIN_ALIASES = [/^\$\.(layout|default)\.data\.agents\[\d+\]\.(agentId|match\.kind)$/, /^\$\.manifest\.characters\[\d+\]\.role$/, /^\$\.agentsSeen\[\d+\]\.(id|role)$/,
-  /^\$\.occupants\[\d+\]\.(id|role|ruleId)$/, /^\$\.items\[\d+\]\.kind$/, /^\$\.kind$/, /^\$\.journal\[\d+\]\.occupantId$/, /^\$\.(rows|occupants)\[\d+\]\.roleLabel\.key$/];
+  /^\$\.occupants\[\d+\]\.(id|role|ruleId|parentId|groupId)$/, /^\$\.items\[\d+\]\.kind$/, /^\$\.kind$/, /^\$\.journal\[\d+\]\.occupantId$/,
+  /^\$\.(rows|occupants)\[\d+\]\.roleLabel\.key$/, /^\$\.rosterGroups\[\d+\]\.(id|rootId|occupantIds\[\d+\]|childIds\[\d+\])$/,
+  /^\$\.(rosterItems|rosterPreviewItems)\[\d+\]\.(id|rootId|occupantIds\[\d+\]|childIds\[\d+\]|previewOccupantIds\[\d+\])$/,
+  /^\$\.conversationIds\[\d+\]$/, /^\$\.rosterFloors\[\d+\]\.occupantIds\[\d+\]$/,
+  // T-0104: the mobile shortlist carries the same legacy v2 occupant IDs as occupantIds.
+  /^\$\.rosterFloors\[\d+\]\.mobileLabelIds\[\d+\]$/,
+  // Floor item references are the same projected occupant ids as the floor's occupantIds list.
+  /^\$\.rosterFloors\[\d+\]\.items\[\d+\]\.occupantId$/,
+  /^\$\.visitIntent\.(hostId|speaker|desk\[\d+\]|meeting\[\d+\]|visitors\[\d+\]\.id)$/];
 function mainOutsideAliases(value, at = '$', out = []) {
   if (Array.isArray(value)) value.forEach((v, i) => mainOutsideAliases(v, `${at}[${i}]`, out));
   else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) mainOutsideAliases(v, `${at}.${k}`, out);
@@ -62,6 +72,10 @@ describe('portability · a foreign instance end to end (ADR-001 §12.8)', () => 
     const primary = office.occupants[0];
     assert.deepEqual([primary.id, primary.role], ['main', 'main'], 'the listed 2.x wire aliases (§12.6)');
     assert.equal(primary.name, 'Atlas');
+    const officeIds = new Set(office.occupants.map(row => row.id));
+    for (const item of office.rosterFloors.flatMap(floor => floor.items).filter(item => item.kind === 'occupant')) {
+      assert.ok(officeIds.has(item.occupantId), `floor item references the same projected OfficeVM id: ${item.occupantId}`);
+    }
     const keys = office.occupants.map((o) => o.sessionKey);
     assert.ok(keys.includes('agent:atlas:telegram:direct:foreign-user') && keys.includes('agent:scribe:slack:channel:C0ACME'), JSON.stringify(keys));
     const layout = await get('/api/v2/office/layout');

@@ -1,0 +1,91 @@
+{
+  "$comment": "Read-only plan output payload; all shape paths are relative to data.",
+  "nullable": [
+    "$.result.baseRevision",
+    "$.result.draft.apiPublicUrl",
+    "$.result.draft.domain",
+    "$.result.proxy.detected",
+    "$.result.domains[].records[].ttl",
+    "$.result.checks[].observedAt",
+    "$.result.checks[].expiresAt",
+    "$.result.checks[].reason",
+    "$.result.checks[].fix",
+    "$.result.checks[].evidence",
+    "$.result.checks[].retryAfterMs",
+    "$.result.writes[].current"
+  ],
+  "variants": {
+    "$.result.baseRevision": [
+      12
+    ],
+    "$.result.draft.apiPublicUrl": [
+      "https://api.example.org/backend"
+    ],
+    "$.result.draft.domain": [
+      "api.example.org"
+    ],
+    "$.result.proxy.detected": [
+      "caddy"
+    ],
+    "$.result.writes[].current": [
+      "local",
+      null,
+      []
+    ],
+    "$.result.writes[].proposed": [
+      "public-split-origin",
+      "https://api.example.org/backend",
+      "api.example.org",
+      [
+        "https://office.example.org"
+      ],
+      {
+        "accessTokenMinutes": 10,
+        "refreshIdleHours": 12,
+        "refreshAbsoluteDays": 7,
+        "partitionedCookie": false
+      }
+    ],
+    "$.result.domains[].records[].ttl": [
+      300
+    ],
+    "$.result.checks[].observedAt": [
+      1791288000000
+    ],
+    "$.result.checks[].expiresAt": [
+      1791288300000
+    ],
+    "$.result.checks[].reason": [
+      {
+        "key": "dns.timeout"
+      }
+    ],
+    "$.result.checks[].fix": [
+      {
+        "key": "access.fix.retryDns"
+      }
+    ],
+    "$.result.checks[].evidence": [
+      {
+        "resolver": "google",
+        "record": "A"
+      }
+    ],
+    "$.result.checks[].retryAfterMs": [
+      5000
+    ],
+    "$.result.environmentImposed": [
+      [
+        {
+          "field": "access.uiOrigins",
+          "source": "environment",
+          "reasonKey": "config.environment-override"
+        }
+      ]
+    ]
+  },
+  "types": {
+    "$.result.writes[].current": "any",
+    "$.result.writes[].proposed": "any"
+  }
+}

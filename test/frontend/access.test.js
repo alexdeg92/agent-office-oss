@@ -14,6 +14,16 @@ const say = (list) => list.map((s) => msg(s.key, s.params)).join(' ');
 const both = (fn) => { const fr = fn(); setLang('en'); const en = fn(); setLang('fr'); return { fr, en }; };
 const text = (x) => ('msg' in x ? msg(x.msg, x.params) : label(x));
 
+test('agents: inherited models are labelled; explicit and unknown models are plain; harness always wins (fr/en)', () => {
+  const execution = (a) => { const x = rules.agentExecution(a); return typeof x === 'string' ? x : msg(x.msg, x.params); };
+  assert.deepEqual(both(() => execution({ model: 'vendor/model', modelSource: 'inherited', runtime: null })),
+    { fr: 'vendor/model (par défaut)', en: 'vendor/model (default)' });
+  for (const modelSource of ['explicit', null]) assert.equal(execution({ model: 'vendor/model', modelSource }), 'vendor/model');
+  assert.equal(execution({ model: 'vendor/model', modelSource: 'inherited', runtime: 'unlisted-harness' }), 'unlisted-harness');
+  assert.equal(execution({ model: null, modelSource: 'inherited' }), 'Modèle par défaut');
+  assert.equal(execution({ model: null, modelSource: null }), 'Non renseigné');
+});
+
 test('lead: the direct-message rule as received; the caveat that presence is not authorization', () => {
   const l = rules.lead(EX);
   assert.deepEqual(both(() => say(l.head)), { fr: `Politique des messages directs${NB}: appairage.`, en: 'Direct-message policy: pairing.' });

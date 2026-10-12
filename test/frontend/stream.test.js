@@ -26,17 +26,18 @@ function harness(opts = {}) {
   const state = { postFails: opts.postFails || 0, auth: opts.auth || 'ok', getRev: opts.getRev ?? null };
   const stream = createStream({
     openSource: (url) => new FakeSource(url),
-    fetchVM: async (url) => { fetches.push(url); return { data: { from: 'get', url }, topic: state.getRev == null ? null : { id: opts.topicOf ? opts.topicOf(url) : 'health', rev: state.getRev }, meta: opts.meta }; },
+    fetchVM: opts.fetchVM || (async (url) => { fetches.push(url); return { data: { from: 'get', url }, topic: state.getRev == null ? null : { id: opts.topicOf ? opts.topicOf(url) : 'health', rev: state.getRev }, meta: opts.meta }; }),
     postTopics: async (id, body) => {
       posts.push({ id, body });
       if (state.postFails > 0) { state.postFails--; throw new Error('503'); }
       return null;
     },
-    postResync: async (id, topic) => { resyncs.push({ id, topic }); },
+    postResync: opts.postResync || (async (id, topic) => { resyncs.push({ id, topic }); }),
     checkAuth: opts.checkAuth || (async () => state.auth),
     onUnauthorized: () => { unauthorized++; },
     onReload: (why) => reloads.push(why),
     onBuild: opts.onBuild,
+    onSettings: opts.onSettings,
     modelVersion: 1,
     contractVersion: '2.0',
     timers: globalThis,
@@ -456,4 +457,144 @@ test('frontend-28: hello and heartbeat notify UI build checks without interrupti
   h.sources[0].emit('heartbeat', {buildId:'B'});
   h.sources[0].emit('heartbeat', {});
   assert.deepEqual(builds,['A','B']); assert.deepEqual(h.reloads,[]);
+});
+
+
+test('settings event signals revisions on v2 streams, ignores malformed events and strips non-signal fields', () => {
+  const signals=[];const h=harness({onSettings:e=>signals.push(e)});h.stream.start();h.hello(h.sources[0]);
+  h.sources[0].emit('settings',{revision:7,changed:['agents',123],restartRequired:true,token:'must not forward',vm:{secret:true}});
+  h.sources[0].emit('settings',{revision:-1});h.sources[0].raw('settings','null');
+  assert.deepEqual(signals,[{revision:7,changed:['agents'],restartRequired:true}]);
+  h.stream.stop();
+});
+
+
+const deferred = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+
+test('auth invalidation purges cached topic and system data, keeps listeners, and reloads on explicit start', async () => {
+  const h = harness({getRev: 4});
+  const seen = [];
+  const off = h.stream.subscribe('health', '/h', value => seen.push(value));
+  h.stream.start();
+  await flush();
+  const old = h.sources[0];
+  h.hello(old, {topics: ['health']});
+  old.emit('snapshot', {topic: 'health', rev: 5, data: {private: 'old authority'}, meta: {generatedAt: 1, stale: []}});
+  old.emit('system', {gateway: 'up', capabilities: {openclawWrites: true}});
+  h.stream.invalidateAuth();
+  assert.equal(old.readyState, 2);
+  assert.equal(h.stream.status.get().conn, 'idle');
+  assert.equal(h.stream.status.get().gateway, null);
+  assert.equal(h.stream.status.get().capabilities, null);
+  assert.equal(h.stream.status.get().lastFrameAt, null);
+  assert.deepEqual(seen.at(-1), {data: undefined, rev: null, meta: null, loading: false, error: null, resyncing: false});
+  assert.equal(h.stream._topics.size, 1, 'retain subscribed topic/listeners');
+  mock.timers.tick(120_000);
+  assert.equal(h.sources.length, 1, 'purge does not reconnect before fresh identity is published');
+  h.stream.start();
+  await flush();
+  assert.equal(h.sources.length, 2);
+  assert.equal(h.fetches.length, 2, 'retained topic gets a fresh HTTP read');
+  assert.equal(seen.at(-1).data.from, 'get');
+  h.hello(h.sources[1], {topics: ['health']});
+  h.sources[1].emit('snapshot', {topic: 'health', rev: 1, data: {public: 'new authority'}});
+  assert.deepEqual(seen.at(-1).data, {public: 'new authority'});
+  off();
+  assert.equal(h.stream._topics.size, 0, 'original unsubscribe still removes retained listener');
+});
+
+test('auth invalidation rejects late success and failure from old GETs without touching fresh state', async () => {
+  const reads = [];
+  const h = harness({fetchVM: () => {const read = deferred(); reads.push(read); return read.promise;}});
+  const seen = [];
+  h.stream.subscribe('health', '/h', value => seen.push(value));
+  h.stream.retry('health');
+  assert.equal(reads.length, 2);
+  h.stream.start();
+  h.stream.invalidateAuth();
+  h.stream.start();
+  assert.equal(reads.length, 3);
+  const count = seen.length;
+  reads[0].resolve({data: {private: 'stale'}, topic: {id: 'health', rev: 50}});
+  reads[1].reject(new Error('old denial'));
+  await flush();
+  assert.equal(seen.length, count, 'stale finally/catch cannot notify or end the new loading state');
+  assert.equal(seen.at(-1).loading, true);
+  assert.equal(seen.at(-1).data, undefined);
+  assert.equal(seen.at(-1).error, null);
+  reads[2].resolve({data: {allowed: true}, topic: {id: 'health', rev: 1}});
+  await flush();
+  assert.deepEqual(seen.at(-1).data, {allowed: true});
+  assert.equal(seen.at(-1).loading, false);
+});
+
+test('replaced source cannot publish stale snapshots, capabilities, settings, build or errors', async () => {
+  const builds = [], settings = [];
+  const h = harness({onBuild: value => builds.push(value), onSettings: value => settings.push(value)});
+  let last;
+  h.stream.subscribe('health', '/h', value => {last = value;});
+  h.stream.start();
+  await flush();
+  const old = h.sources[0];
+  h.stream.invalidateAuth();
+  h.stream.start();
+  await flush();
+  h.hello(h.sources[1], {topics: ['health']});
+  h.sources[1].emit('snapshot', {topic: 'health', rev: 1, data: {allowed: true}});
+  h.hello(old, {buildId: 'old-build', topics: ['health']});
+  old.emit('snapshot', {topic: 'health', rev: 99, data: {private: 'stale'}});
+  old.emit('system', {gateway: 'up', capabilities: {openclawWrites: true}, reload: 'model-version'});
+  old.emit('settings', {revision: 99, changed: ['agents']});
+  old.fail(2);
+  await flush();
+  assert.deepEqual(last.data, {allowed: true});
+  assert.deepEqual(builds, []);
+  assert.deepEqual(settings, []);
+  assert.deepEqual(h.reloads, []);
+  assert.equal(h.stream.status.get().capabilities, null);
+  assert.equal(h.stream.status.get().conn, 'open');
+  mock.timers.tick(BACKOFF_MS[0]);
+  assert.equal(h.sources.length, 2);
+});
+
+test('late resync refusal after auth purge cannot dispatch a replacement GET', async () => {
+  const pending = deferred();
+  const h = harness({postResync: () => pending.promise});
+  let last;
+  h.stream.subscribe('health', '/h', value => {last = value;});
+  h.stream.start();
+  await flush();
+  h.hello(h.sources[0], {topics: ['health'], resumed: true});
+  h.stream.resync('health');
+  h.stream.invalidateAuth();
+  pending.reject(new Error('old resync failed'));
+  await flush();
+  assert.equal(h.fetches.length, 1);
+  assert.equal(last.data, undefined);
+  assert.equal(last.error, null);
+});
+
+test('auth purge lets the new source verify immediately and ignores the old held auth answer', async () => {
+  const answers = [];
+  const h = harness({checkAuth: () => {const answer = deferred(); answers.push(answer); return answer.promise;}});
+  h.stream.start();
+  h.sources[0].fail(2);
+  assert.equal(answers.length, 1);
+  h.stream.invalidateAuth();
+  h.stream.start();
+  const fresh = h.sources[1];
+  fresh.fail(2);
+  assert.equal(answers.length, 2, 'old check and throttle do not suppress a fresh authority check');
+  answers[0].resolve('unauthorized');
+  await flush();
+  assert.equal(h.unauthorized(), 0);
+  answers[1].resolve('ok');
+  await flush();
+  mock.timers.tick(BACKOFF_MS[0]);
+  assert.equal(h.sources.length, 3, 'fresh check can schedule its own reconnect');
+  assert.equal(h.unauthorized(), 0);
 });

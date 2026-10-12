@@ -62,6 +62,27 @@ describe('topics (§4.1, §4.3)', () => {
     assert.equal(t.current('x').rev, 2);
     t.close();
   });
+
+  it('logs topic build/check failures with only the declared topic and fixed failure class', () => {
+    const run = issue => {
+      const diagnostics = [];
+      const failure = Object.assign(new Error('PRIVATE_PAYLOAD_CANARY'), { code: 'vm.invalid', issues: [issue] });
+      const t = createTopics({ 'office-scope': { params: 'path', build: () => ({ known: 'ok', sk_live_T0095_SENTINEL: 'SECRET_VALUE_CANARY' }) } }, {
+        check: () => { throw failure; }, onError: event => diagnostics.push(event),
+      });
+      try { assert.throws(() => t.current('office-scope:opaque'), error => error === failure); }
+      finally { t.close(); }
+      return diagnostics;
+    };
+    const declaredPath = run({ path: '$.occupants[0].role', parent: '$', detail: 'PRIVATE_PAYLOAD_CANARY' });
+    assert.deepEqual(declaredPath, [{ topic: 'office-scope', code: 'build_or_check_failed' }], 'even declared paths are omitted');
+    const dynamicKey = run({ path: '$.sk_live_T0095_SENTINEL', parent: '$', detail: 'SECRET_VALUE_CANARY' });
+    assert.deepEqual(dynamicKey, [{ topic: 'office-scope', code: 'build_or_check_failed' }], 'caller-controlled issue paths are omitted');
+    const serialized = JSON.stringify([declaredPath, dynamicKey]);
+    for (const secret of ['PRIVATE_PAYLOAD_CANARY', 'sk_live_T0095_SENTINEL', 'SECRET_VALUE_CANARY', '$.occupants']) {
+      assert.equal(serialized.includes(secret), false, secret);
+    }
+  });
 });
 
 describe('stream hub · R1-09 session expiry', () => {
@@ -78,6 +99,34 @@ describe('stream hub · R1-09 session expiry', () => {
     assert.ok(ended, 'closed at expiry');
     assert.match(out[out.length - 1], /event: system\ndata: .*"closing":"session-expired"/);
     topics.close();
+  });
+});
+
+describe('stream hub · reauthorize queued source snapshots', () => {
+  it('drops a source snapshot when grants are revoked before backpressure drains', () => {
+    const topics = createTopics({ teams: { build: () => ({ secret: 'PRIVATE_QUEUED_SOURCE_CANARY' }) } });
+    const engine = Object.assign(new EventEmitter(), { sources: () => [] });
+    let allowed = true;
+    const hub = createStreamHub({ topics, engine, authorizeTopic: () => allowed,
+      systemState: () => ({}), contractVersion: '3', modelVersion: 1 });
+    const req = Object.assign(new EventEmitter(), { headers: {}, query: { topics: 'teams' },
+      session: { email: 'reader@example.test', exp: Date.now() + 10_000, sid: '0123456789abcdef0123' } });
+    const res = Object.assign(new EventEmitter(), { frames: [], first: true, writeHead() {},
+      write(line) { this.frames.push(line); if (this.first) { this.first = false; return false; } return true; },
+      end() { this.ended = true; }, destroy() { this.destroyed = true; } });
+    try {
+      hub.open(req, res);
+      assert.ok(res.frames.some(line => line.startsWith('retry:')));
+      assert.equal(res.frames.some(line => line.includes('PRIVATE_QUEUED_SOURCE_CANARY')), false,
+        'the snapshot remains deferred while the transport is blocked');
+
+      allowed = false;
+      res.emit('drain');
+
+      assert.equal(res.frames.some(line => line.includes('PRIVATE_QUEUED_SOURCE_CANARY')), false,
+        'a queued protected snapshot is never flushed after grant revocation');
+      assert.ok(res.destroyed || res.ended, 'the unauthorized stream is terminated');
+    } finally { hub.closeAll(); topics.close(); }
   });
 });
 

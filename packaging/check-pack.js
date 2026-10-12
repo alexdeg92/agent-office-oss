@@ -19,7 +19,10 @@ const RULES = [
   { why: 'design/reports', re: /(^|\/)design\/reports(\/|$)/ },
   { why: 'design sources', re: /(^|\/)design\// },
   { why: 'worn art', re: /(^|\/)worn(\/|$)/ },
-  { why: 'debug art', re: /(^|\/)debug(\/|$)|diagnostic/i },
+  // These exact production modules implement boot errors and Settings severity/fixes;
+  // their diagnostic filenames are not debug art. Keep other diagnostic paths blocked.
+  { why: 'debug art', re: /(^|\/)debug(\/|$)|diagnostic/i,
+    allow: (p) => p === 'src/ops/startup-diagnostics.js' || p === 'src/settings/diagnostics.js' },
   { why: 'test fixtures', re: /(^|\/)test\/fixtures(\/|$)/ },
 ];
 

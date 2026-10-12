@@ -7,13 +7,12 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const path = require('path');
 const { createEngine } = require('../../src/engine');
 const { normaliseCronJobs } = require('../../src/adapters/openclaw/normalise/cron');
 const { normaliseSkills } = require('../../src/adapters/openclaw/normalise/skill');
 const { listScenarios, loadScenario, skipUnlessLocal } = require('../helpers/scenario');
 const { feed } = require('../helpers/feed');
-const { matchGolden, GOLDEN_DIR } = require('../helpers/golden');
+const { matchGolden, goldenFile } = require('../helpers/golden');
 
 function snapshot(e, sc) {
   const runs = Object.fromEntries(Object.keys((sc.rpc['cron.runs'] || {}).files || {}).map((id) => [id, (e.cronRuns(id) || { runs: null }).runs]));
@@ -61,8 +60,8 @@ function invariantViolations(x) {
   return out;
 }
 
-const goldenOf = (sc) => JSON.parse(fs.readFileSync(path.join(GOLDEN_DIR, 'engine-canonical', sc.name, 'canonical.json'), 'utf8'));
-const differs = (sc, x) => { try { assert.deepStrictEqual(x, goldenOf(sc)); return false; } catch (_) { return true; } };
+const goldenOf = (sc) => JSON.parse(fs.readFileSync(goldenFile('engine-canonical', sc.name, 'canonical'), 'utf8'));
+const differs = (sc, x) => { const expected = goldenOf(sc); try { assert.deepStrictEqual(x, expected); return false; } catch (_) { return true; } };
 
 for (const sc of listScenarios()) {
   describe(`canonical S4 types · ${sc.name}`, () => {

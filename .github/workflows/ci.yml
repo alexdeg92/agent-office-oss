@@ -41,7 +41,7 @@ jobs:
         run: node --test packaging/first-run.test.js
 
       - name: docker smoke
-        run: packaging/docker/smoke.sh
+        run: IMAGE=agent-office:ci packaging/docker/smoke.sh
 
       - name: compose example
         run: docker compose -f packaging/docker/docker-compose.example.yml config --quiet

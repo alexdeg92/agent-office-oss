@@ -61,8 +61,9 @@ describe('project comments · thread, mentions, delivery, summary', () => {
     assert.deepEqual(t.items.map((i) => i.body), ['Premier jet prêt.', '@scout peux-tu relire le calendrier ?', 'Réponse factice.']);
     // the turn: scout, its project session, never a channel; the prompt carries the project context and the comment
     const argv = turns(h)[0];
-    assert.deepEqual(argv.filter((a) => !a.startsWith('--message=')), ['agent', '--agent=scout', '--json', '--timeout=150', '--session-key=agent:scout:ao-projet-infolettre-ete']);
-    assert.ok(!argv.some((a) => /^--(deliver|channel|reply-to|to)\b/.test(a)));
+    assert.deepEqual(argv.filter((a) => !a.startsWith('--message=')), ['agent', '--agent=scout', '--json', '--timeout=150', '--channel=webchat', '--reply-channel=webchat', '--session-key=agent:scout:ao-projet-infolettre-ete']);
+    assert.ok(argv.includes('--channel=webchat')); assert.ok(argv.includes('--reply-channel=webchat'));
+    assert.ok(!argv.some((a) => /^--(deliver|reply-to|to)\b/.test(a)));
     const msg = argv.find((a) => a.startsWith('--message=')).slice(10);
     assert.match(msg, /projet « Infolettre Été » \(tag : infolettre-ete\)/);
     assert.match(msg, /Statut : En cours/);

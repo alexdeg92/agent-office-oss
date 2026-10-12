@@ -7,6 +7,15 @@ import { MESSAGES, duplicateKeys, registerMessages } from '../../public/v2/messa
 import * as onboardingMessages from '../../public/v2/messages/onboarding.js';
 // Audit lazy dictionaries too, without pulling them into the shipped core graph.
 registerMessages(onboardingMessages);
+import * as settingsMessages from '../../public/v2/messages/settings.js';
+registerMessages(settingsMessages);
+import * as externalAccessMessages from '../../public/v2/messages/external-access.js';
+registerMessages(externalAccessMessages);
+import * as healthMessages from '../../public/v2/messages/health.js';
+registerMessages(healthMessages);
+import * as releaseMessages from '../../public/v2/messages/releases.js';
+registerMessages(releaseMessages);
+import '../../public/v2/messages/workspace.js';
 import { LABELS_EN } from '../../public/v2/locales/labels.en.js';
 
 const NB = ' ';
@@ -50,6 +59,21 @@ const paramsOf = (str) => [...str.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort(
 test('no key is defined twice across messages.js and the page-owned parts (messages/*.js)', () => {
   assert.deepEqual(duplicateKeys('fr'), []);
   assert.deepEqual(duplicateKeys('en'), []);
+});
+
+test('Claude connection reasons have plain French and English copy without internal reason slugs', () => {
+  const keys = ['claudeUnsupported','claudeUnverified','claudeReasonNoRecords','claudeReasonFileLimit','claudeReasonByteLimit',
+    'claudeReasonDirectoryMissing','claudeReasonProbeFailed','claudeReasonGeneric'];
+  for (const suffix of keys) {
+    const key = 'settings.connection.' + suffix;
+    for (const lang of ['fr','en']) {
+      const message = settingsMessages[lang][key];
+      assert.ok(typeof message === 'string' || message && typeof message === 'object', key + ' ' + lang + ' copy');
+      const variants = typeof message === 'string' ? [message] : [message.one,message.other];
+      assert.ok(variants.every(value => typeof value === 'string'), key + ' ' + lang + ' variants');
+      assert.doesNotMatch(variants.join(' '), /no-recognizable-session-lines|probe-file-limit|probe-byte-limit/);
+    }
+  }
 });
 
 test('fr and en have the same keys, plural variants and (per variant) the same named params', () => {

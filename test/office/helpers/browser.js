@@ -1,4 +1,5 @@
 'use strict';
+require('../../helpers/scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 // Minimal headless-Chrome harness for office DOM tests (review R4-18): a static server for the
 // checkout plus a CDP client on Node's built-in WebSocket. No dependencies. Tests skip when no
 // Chrome binary is found (set CHROME_BIN to override, OFFICE_DOM_TESTS=0 to disable).
@@ -108,6 +109,7 @@ async function launch() {
       async viewport(width, height, deviceScaleFactor = 1) {
         await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile: width <= 480 }, sessionId);
       },
+      async cpu(rate) { await send('Emulation.setCPUThrottlingRate', { rate }, sessionId); },
       async screenshot(clip) {
         const r = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: !!clip, ...(clip && { clip: { ...clip, scale: 1 } }) }, sessionId);
         return Buffer.from(r.result.data, 'base64');

@@ -1,0 +1,56 @@
+/* The viewport belongs to the shell; page/card frames own their scrolling. */
+html, body { margin: 0; height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; overscroll-behavior: none; }
+#app { height: 100%; min-height: 0; overflow: hidden; }
+.ao-frame { position: relative; --ao-frame-gutter: 0px; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
+.ao-frame__head { grid-row: 1; }
+.ao-frame__bar { grid-row: 2; }
+.ao-frame__body { position: relative; grid-row: 3; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scroll-padding: var(--bu-space-2); contain: inline-size; }
+.ao-frame__foot { grid-row: 4; }
+.ao-frame__head, .ao-frame__bar, .ao-frame__foot { min-height: 0; min-width: 0; }
+.ao-frame__head:empty, .ao-frame__bar:empty, .ao-frame__foot:empty { display: none; }
+.ao-frame__body--framed { display: flex; flex-direction: column; overflow: hidden; scrollbar-gutter: auto; }
+.ao-frame__body--framed > .ao-frame { flex: 1; }
+.bu-shell { position: fixed; inset: 0; min-height: 0; overflow: hidden; padding-inline: env(safe-area-inset-left) env(safe-area-inset-right); }
+.bu-shell__main { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; min-height: 0; overflow: hidden; }
+.bu-sidebar { grid-template-columns: minmax(0, 1fr); position: static; height: 100%; min-height: 0; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding-top: max(var(--bu-space-4), env(safe-area-inset-top)); padding-bottom: max(var(--bu-space-4), env(safe-area-inset-bottom)); }
+.bu-nav { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.bu-topbar, .bu-mtopbar { position: static; grid-row: 1; }
+.ao-connbanner { grid-row: 2; }
+.ao-main { grid-row: 3; min-height: 0; min-width: 0; outline: none; }
+.bu-bottombar { position: static; grid-row: 4; }
+/* Independent panes and horizontal strips keep wheel/touch gestures within their region. */
+.ao-scroll-x, .ao-about__text, .ao-flow__msg, .bu-code, .ao-bureau__side,
+.ao-shop__tabs, .ao-shop__agents, .ao-setup__steps, .ao-mobile-board, .ao-board,
+.ao-skills__aside, .ao-mentions { overscroll-behavior: contain; }
+@media (max-width: 820px) {
+  .bu-sidebar, .bu-topbar { display: none; }
+}
+
+.ao-sidebar-foot { min-width: 0; }
+@media (max-width: 820px) { .bu-mtopbar { padding-top: max(var(--bu-space-2), env(safe-area-inset-top)); } }
+
+/* Content keeps its natural height; overflow belongs to the body rather than compressed controls. */
+.ao-frame__body:not(.ao-frame__body--framed) > * { flex-shrink: 0; }
+
+/* Gutters belong to rows, so the footer always reaches the frame edge. */
+.ao-frame.bu-page, .ao-frame.bu-card, .ao-frame.bu-login__form, .ao-frame.bu-login__art { padding: 0; gap: 0; }
+.ao-frame.bu-page { --ao-frame-gutter: var(--bu-space-6); }
+.ao-frame.bu-card { --ao-frame-gutter: var(--bu-space-4); }
+.ao-frame.bu-login__art { --ao-frame-gutter: var(--bu-space-12); }
+.ao-frame > .ao-frame__head:not(:empty) { padding: var(--ao-frame-gutter); padding-bottom: var(--bu-space-4); }
+.ao-frame > .ao-frame__body { padding: var(--ao-frame-gutter); }
+.ao-frame:has(> .ao-frame__head:not(:empty)) > .ao-frame__body { padding-top: 0; }
+.ao-frame > .ao-frame__body--framed { padding-bottom: 0; }
+.ao-frame > .ao-frame__foot:not(:empty) { padding: var(--bu-space-3) var(--ao-frame-gutter); background: var(--bu-surface); }
+@media (max-width: 820px) { .ao-frame.bu-page { --ao-frame-gutter: var(--bu-space-4); } }
+
+.ao-frame > .ao-frame__bar:not(:empty) { padding: 0 var(--ao-frame-gutter) var(--bu-space-3); }
+.ao-frame:has(> .ao-frame__bar:not(:empty)) > .ao-frame__body { padding-top: 0; }
+.ao-chat__card > .ao-frame__foot { padding: 0; }
+@media (max-width: 820px) { .ao-chat.ao-frame, .ao-chat__card.ao-frame { --ao-frame-gutter: 0px; } }
+
+/* Dialogs share the same fixed rows; only their body can overflow. */
+.bu-modal.ao-frame { height: auto; max-height: 100%; padding: 0; }
+.bu-modal.ao-frame > .ao-frame__head, .bu-modal.ao-frame > .ao-frame__foot { padding: 0; }
+.bu-modal.ao-frame > .ao-frame__body { padding: var(--bu-space-2) var(--bu-space-5) var(--bu-space-5); }
+.bu-modal.ao-frame .bu-modal__footer { padding-bottom: max(var(--bu-space-4), env(safe-area-inset-bottom)); }

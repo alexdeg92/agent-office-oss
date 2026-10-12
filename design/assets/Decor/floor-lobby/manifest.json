@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-decor-v1",
+  "id": "floor-lobby",
+  "names": {
+    "fr": "Accueil et ascenseur",
+    "en": "Lobby and elevator"
+  },
+  "artScale": 2,
+  "license": "MIT",
+  "provenance": {
+    "tool": "image_gen.imagegen",
+    "sources": "design/assets/tools/floor-sources",
+    "export": "crop, alpha endpoint cleanup, positive uniform scale, anchor registration, WebP encoding"
+  },
+  "items": [
+    {
+      "id": "elevator-door",
+      "names": {
+        "fr": "Porte d’ascenseur",
+        "en": "Elevator door"
+      },
+      "category": "equipement",
+      "placement": "wall",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "wall": {
+        "side": "right",
+        "length": 2,
+        "elevation": 0
+      },
+      "anchor": {
+        "x": 8,
+        "y": 259
+      },
+      "size": {
+        "w": 208,
+        "h": 365
+      },
+      "image": "elevator-door-day.webp",
+      "images": {
+        "sw@night": "elevator-door-night.webp"
+      },
+      "thumbnail": "thumbnails/elevator-door.webp",
+      "thumbnailSize": {
+        "w": 53,
+        "h": 96
+      }
+    },
+    {
+      "id": "reception-counter",
+      "names": {
+        "fr": "Comptoir d’accueil",
+        "en": "Reception counter"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 3,
+        "d": 1
+      },
+      "anchor": {
+        "x": 180,
+        "y": 175
+      },
+      "size": {
+        "w": 360,
+        "h": 286
+      },
+      "image": "reception-counter-day.webp",
+      "images": {
+        "sw@night": "reception-counter-night.webp"
+      },
+      "thumbnail": "thumbnails/reception-counter.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 75
+      }
+    },
+    {
+      "id": "pause-shelter",
+      "names": {
+        "fr": "Abri de pause",
+        "en": "Outdoor pause shelter"
+      },
+      "category": "assise",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 3,
+        "d": 2
+      },
+      "anchor": {
+        "x": 188,
+        "y": 236
+      },
+      "size": {
+        "w": 376,
+        "h": 367
+      },
+      "image": "pause-shelter-day.webp",
+      "images": {
+        "sw@night": "pause-shelter-night.webp"
+      },
+      "thumbnail": "thumbnails/pause-shelter.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 94
+      }
+    },
+    {
+      "id": "ash-receptacle",
+      "names": {
+        "fr": "Cendrier extérieur",
+        "en": "Outdoor ash receptacle"
+      },
+      "category": "deco",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 44,
+        "y": 171
+      },
+      "size": {
+        "w": 88,
+        "h": 193
+      },
+      "image": "ash-receptacle-day.webp",
+      "images": {
+        "sw@night": "ash-receptacle-night.webp"
+      },
+      "thumbnail": "thumbnails/ash-receptacle.webp",
+      "thumbnailSize": {
+        "w": 39,
+        "h": 96
+      }
+    }
+  ]
+}

@@ -41,7 +41,12 @@ describe('packed file list', () => {
       'test fixtures:test/fixtures/office.json',
       'worn art:public/v2/bureau/assets/Characters/badge/worn/idle.png',
     ]);
-    assert.equal(forbiddenIn(['.env.example', 'src/config.js']).length, 0);
+    assert.equal(forbiddenIn(['.env.example', 'src/config.js', 'src/ops/startup-diagnostics.js', 'src/settings/diagnostics.js']).length, 0);
+    assert.deepEqual(forbiddenIn(['src/ops/other-diagnostics.js']), [{ why: 'debug art', path: 'src/ops/other-diagnostics.js' }]);
+    assert.deepEqual(forbiddenIn(['src/settings/other-diagnostics.js', 'public/v2/bureau/assets/Characters/diagnostics.png']), [
+      { why: 'debug art', path: 'src/settings/other-diagnostics.js' },
+      { why: 'debug art', path: 'public/v2/bureau/assets/Characters/diagnostics.png' },
+    ]);
     assert.deepEqual(missingAssets(['public/v2/app.js']), ['public/v2/index.html', 'public/v2/bureau/bureau.css']);
     assert.deepEqual(missingAssets(['public/v2/index.html', 'public/v2/bureau/bureau.css']), []);
   });

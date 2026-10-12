@@ -23,8 +23,9 @@ describe('tests can only open stores under the temp dir', () => {
     const p = probe();
     assert.throws(() => openDatabase({ dir: p, instance: 'dev' }), (e) => e.code === 'ETESTDIR');
     assert.equal(fs.existsSync(p), false, 'nothing created');
-    assert.throws(() => openDatabase({ dir: path.join(os.homedir(), '.local', 'share', 'agent-office'), instance: 'production' }),
-      (e) => e.code === 'ETESTDIR' || !outside(os.homedir()));
+    // The real data dir only exists outside the temp dir; under a scratch HOME (inside it) the store is test-safe.
+    if (outside(os.homedir())) assert.throws(() => openDatabase({ dir: path.join(os.homedir(), '.local', 'share', 'agent-office'), instance: 'production' }),
+      (e) => e.code === 'ETESTDIR');
   });
   it('a symlink under the temp dir pointing outside it is refused too', { skip }, () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-guard-'));

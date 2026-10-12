@@ -16,6 +16,8 @@ Two user units, both stopped until the first deploy starts them:
 | API | `node <releases>/current/server.js` | `AO_API_ONLY=1`. `EnvironmentFile` is the mode-600 env file. |
 | Web | `node <releases>/current/scripts/serve-frontend.js` | UI at `/`, API base `/backend`. |
 
+For split-origin hosting, set the web service's `AO_API_BASE` to the API's HTTPS public base (including the same prefix as `AO_API_PUBLIC_URL`, such as `https://api.example.org/backend`). The web server writes that URL into the page config and includes its origin in `connect-src`. On the API, `AO_ALLOWED_ORIGINS` must list the exact HTTPS origin serving the UI, without a path or wildcard. Keep `AO_SPLIT_AUTH_ENABLED=1` off until both origins terminate HTTPS and the exact-origin browser acceptance passes.
+
 `WorkingDirectory` is the same `current` path. `ExecStart` uses that path too, including the trailing slash of the symlink (`…/current/server.js`), so a reload does not pin a single SHA. After editing the units, `systemctl --user daemon-reload`. Do not `enable` or `start` them in that step.
 
 The env file needs `OC_GATEWAY_TOKEN`, `PORTAL_EMAIL`, `PORTAL_SECRET`, and `PORTAL_PASSWORD_HASH` (`agent-office hash-password`). `agent-office check-config --env-file <file>` prints `ok` or `missing` and does not print values. If a key is missing, do not move `current`.
@@ -63,7 +65,7 @@ scripts/golive-smoke.sh https://example.invalid
 
 ## Security headers
 
-The web unit (`scripts/serve-frontend.js`) already sends these on every response, so a plain reverse proxy needs nothing more:
+The web unit (`scripts/serve-frontend.js`) sends these on its responses. The direct backend (`node server.js`) uses the same policy for `/v2/` shell aliases, client routes and static files, plus the retiring `/sw.js`. Both derive CSP hashes from the current rendered shell and refresh after a deployment. A plain reverse proxy needs nothing more:
 
 | Header | Value |
 | --- | --- |

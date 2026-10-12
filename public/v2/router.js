@@ -4,7 +4,7 @@
 import { routeBase, config } from './config.js';
 import { msg } from './i18n.js';
 
-/** True when `pathname` is inside the UI's mount point (and not under the API prefix when both share a root). */
+/** UI mount point, excluding API routes. */
 export function inApp(pathname) {
   const base = routeBase();
   if (!(pathname === base || pathname.startsWith(base + '/'))) return false;
@@ -14,27 +14,29 @@ export function inApp(pathname) {
 
 // Ordered as the sidebar (Nav README). `tab` = mobile bottom bar slot.
 export const ROUTES = [
-  { name: 'bureau-animations', path: '/bureau/test-animations', parent: 'bureau', tab: 'bureau' },
-  { name: 'bureau', path: '/bureau', label: true, icon: 'bureau', question: true, tab: 'bureau' },
-  { name: 'discuter', path: '/discuter', label: true, icon: 'discuter', question: true, tab: 'discuter', needs: 'chat' },
-  { name: 'flux', path: '/flux', label: true, icon: 'flux', question: true, tab: 'plus', needs: 'flows.read' },
-  { name: 'flux-detail', path: '/flux/:jobId', parent: 'flux', tab: 'plus' },
-  { name: 'projets', path: '/projets', label: true, icon: 'projets', question: true, tab: 'projets' },
-  { name: 'importer', path: '/projets/importer', parent: 'projets', tab: 'projets' },
+  { name: 'bureau-animations', path: '/bureau/test-animations', titleKey: 'animations.title', subtitleKey: 'animations.intro', parent: 'bureau', tab: 'bureau' },
+  { name: 'bureau', path: '/bureau', framed: true, label: true, icon: 'bureau', question: true, tab: 'bureau' },
+  { name: 'discuter', path: '/discuter', framed: true, label: true, icon: 'discuter', question: true, tab: 'discuter', needs: 'chat' },
+  { name: 'flux', path: '/flux', framed: true, label: true, icon: 'flux', question: true, tab: 'plus', needs: 'flows.read' },
+  { name: 'flux-detail', path: '/flux/:jobId', framed: true, parent: 'flux', tab: 'plus' },
+  { name: 'projets', path: '/projets', framed: true, label: true, icon: 'projets', question: true, tab: 'projets' },
+  { name: 'importer', path: '/projets/importer', titleKey: 'projects.import', subtitleKey: 'import.lede', framed: true, parent: 'projets', tab: 'projets' },
   { name: 'projet', path: '/projets/:projectId', parent: 'projets', tab: 'projets' },
   { name: 'habilitations', path: '/habilitations', label: true, icon: 'habilitations', question: true, tab: 'plus' },
   { name: 'interlocuteur', path: '/habilitations/:interlocutorId', parent: 'habilitations', tab: 'plus' },
-  { name: 'journaux', path: '/journaux', label: true, icon: 'journaux', question: true, tab: 'journaux', needs: 'sessions' },
+  { name: 'journaux', path: '/journaux', framed: true, label: true, icon: 'journaux', question: true, tab: 'journaux', needs: 'sessions' },
   { name: 'session', path: '/journaux/:sessionKey', parent: 'journaux', tab: 'journaux' },
   { name: 'competences', path: '/competences', label: true, icon: 'competences', question: true, tab: 'plus', needs: 'skills.read' },
   { name: 'competence', path: '/competences/:skillName', parent: 'competences', tab: 'plus' },
   { name: 'sante', path: '/sante', label: true, icon: 'sante', question: true, tab: 'plus' },
-  // Boutique (office-dev-21): customising the office, last in the sidebar and the Plus list (frontend: route and shell).
-  // State in the query: ?onglet=…&agent=<occupantId>&placer=<asset|uid>.
-  { name: 'boutique', path: '/boutique', label: true, icon: 'boutique', question: true, tab: 'plus' },
+  // Customisation and Settings are available in the sidebar and mobile Plus.
+  { name: 'boutique', path: '/boutique', framed: true, label: true, icon: 'boutique', question: true, tab: 'plus' },
+  { name: 'parametres', path: '/parametres', framed: true, label: true, icon: 'system', question: true, tab: 'plus' },
+  { name: 'ds', path: '/design-system', parent: 'bureau' },
   { name: 'plus', path: '/plus', label: true, icon: 'plus', question: true, tab: 'plus', mobileOnly: true },
   { name: 'a-propos', path: '/a-propos', label: true, question: true, tab: 'plus', menu: true },   // F13: from the user menu, not the sidebar
   { name: 'connexion', path: '/connexion', label: true, public: true },
+  { name: 'invitation', path: '/invitation', public: true },
 ];
 // Labels and page questions are UI messages (nav.<name>, nav.<name>.question), read in the current language.
 for (const r of ROUTES) {
@@ -57,7 +59,7 @@ function compile(path) {
 }
 const compiled = ROUTES.map((r) => ({ route: r, ...compile(r.path) }));
 
-/** Parses a location into a match: { name, params, query, route }. Unknown paths → name 'introuvable'. */
+/** Parse location; unknown paths become introuvable. */
 export function parse(pathname, search = '') {
   const base = routeBase();
   let p = pathname === base || pathname.startsWith(base + '/') ? pathname.slice(base.length) : pathname;
@@ -107,22 +109,34 @@ export function activeNav(match) {
   return match.route.parent || match.name;
 }
 
-/** Browser binding: intercepts same-origin in-app link clicks, keeps sticky params, notifies on change. */
+/** Guarded navigation with per-frame scroll restoration. */
 export function createRouter(win = window, { beforeNavigate = null } = {}) {
   const listeners = new Set();
   let current = parse(win.location.pathname, win.location.search);
-  const emit = () => { current = parse(win.location.pathname, win.location.search); for (const fn of listeners) fn(current); };
+  let currentUrl = win.location.pathname + win.location.search;
+  const positions = new Map();
+  const bodies = () => [...(win.document.querySelectorAll?.('.ao-frame__body') || [])];
+  const remember = () => positions.set(currentUrl,bodies().map(e => e.scrollTop));
+  function restore(url, back = false) {
+    const values = back ? positions.get(url) || [] : [];
+    const paint = () => { if (currentUrl === url) bodies().forEach((e,i) => { e.scrollTop=values[i] || 0; }); };
+    if (win.requestAnimationFrame) win.requestAnimationFrame(() => win.requestAnimationFrame(paint)); else paint();
+  }
+  const emit = () => { currentUrl = win.location.pathname + win.location.search; current = parse(win.location.pathname, win.location.search); for (const fn of listeners) fn(current); };
 
   let intent = 0;
+  const scrollKey = match => match.name + JSON.stringify(match.params) + ':' + (match.query.onglet || '');
   function navigate(url, { replace = false } = {}) {
     const next = withSticky(url, win.location.search);
     if (next === win.location.pathname + win.location.search) return;
     const token = ++intent;
     const apply = () => {
       if (token !== intent) return;
+      const previousFrame = scrollKey(current);
+      remember();
       win.history[replace ? 'replaceState' : 'pushState'](null, '', next);
       emit();
-      if (!replace) win.scrollTo(0, 0);
+      if (!replace || previousFrame !== scrollKey(current)) restore(next);
     };
     if (beforeNavigate) return Promise.resolve(beforeNavigate(next)).then((ok) => { if (ok) apply(); });
     apply();
@@ -137,8 +151,16 @@ export function createRouter(win = window, { beforeNavigate = null } = {}) {
 
   win.addEventListener('popstate', () => {
     const token = ++intent;
-    if (beforeNavigate) Promise.resolve(beforeNavigate(win.location.href)).then((ok) => { if (ok && token === intent) emit(); });
-    else emit();
+    const previous = currentUrl;
+    const next = win.location.pathname + win.location.search;
+    remember();
+    const apply = ok => {
+      if (token !== intent) return;
+      if (ok) { emit(); restore(next,true); }
+      else if (next !== previous) win.history.pushState(null,'',previous);
+    };
+    if (beforeNavigate) Promise.resolve(beforeNavigate(win.location.href)).then(apply);
+    else apply(true);
   });
   win.document.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -159,7 +181,7 @@ export function createRouter(win = window, { beforeNavigate = null } = {}) {
   };
 }
 
-/** The login return target: same origin, normalised (no dot segments), inside the app, never the login page itself. */
+/** Normalised in-app login return target. */
 export function safeReturn(suite, origin = globalThis.location ? location.origin : 'http://localhost') {
   if (!suite || !suite.startsWith('/')) return null;
   let u;

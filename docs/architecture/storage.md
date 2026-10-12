@@ -70,6 +70,8 @@ Creating them now would mean a corrective migration later. The DDL below remains
 - `workspace_snapshots (source_id, data_json)` is new;
 - session-group snapshots are **not** stored: they're session data, rebuilt from the engine after a boot.
 
+**Migration 016** adds nullable `projects.summary_turn`, internal pending summary identity. It restores active comment delivery identities already in `follow.summary.turnId`; legacy null retry identities are adopted transactionally on thread attach. Claim/release changes no public project revision, history or activity clock. Summary writes check the exact stored identity and revision in the repository transaction. Manual summary changes cancel that identity. Accepting a comment-driven summary inserts its delivery and claims the lock in one transaction; final settlement/release and delivery state commit together. The column is omitted from canonical project objects and public VMs.
+
 The repository (`src/store/repos/projects.js`) runs the projects module's own repository logic over SQL-backed collections, one transaction per public method, so the rules exist once (`plan.*`) and a refused command writes nothing. It passes `test/projects/repository-contract.test.js` unchanged.
 
 **S5 differences from the DDL below:**

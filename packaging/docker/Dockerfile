@@ -3,7 +3,8 @@
 # The runtime image contains the API, the v2 UI, and the CLI. It does not contain the legacy public/ UI.
 # No secrets belong in this file or in the image.
 
-FROM node:24-slim AS build
+# Reviewed multi-platform Node 24 base; update deliberately with both platform gates.
+FROM node:24-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
@@ -22,7 +23,7 @@ RUN node scripts/build-frontend.js \
   && mkdir /runtime && tar -xzf *.tgz --strip-components=1 -C /runtime
 
 
-FROM node:24-slim
+FROM node:24-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
 WORKDIR /app
 LABEL org.opencontainers.image.source="https://github.com/alexdeg92/agent-office-oss" \
       org.opencontainers.image.licenses="MIT"

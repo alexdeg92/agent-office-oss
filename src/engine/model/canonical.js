@@ -8,6 +8,7 @@ const { safeExternalUrl } = require('../../../public/v2/url-policy.js');
 const s = require('../../schema');
 const { Sender, Participant } = require('./sender');
 const { CHANNEL_REF } = require('./kinds');   // G3b
+const { Lineage } = require('./lineage');
 
 const ms = () => s.ms().nullable();
 const nn = () => s.int().min(0);
@@ -15,12 +16,45 @@ const str = () => s.string();
 const strN = () => s.string().nullable();
 const externalUrlN = () => s.string().refine((v) => safeExternalUrl(v) === v, 'canonical HTTP(S) URL').nullable();
 const R = { extra: 'reject' };
+const boundedId = (max = 256) => s.string().min(1).max(max);
+const sourceStatus = s.enumOf(['available', 'unavailable', 'unsupported', 'stale']);
+const hostStatus = s.enumOf(['working', 'blocked', 'done', 'idle', 'unknown']);
+const hostRole = s.enumOf(['primary', 'delegate', 'unknown']);
+const teamState = s.enumOf(['open', 'claimed', 'working', 'review', 'done', 'blocked']);
+const memberRoleKind = s.enumOf(['lead', 'member', 'unknown']);
 
 const Agent = s.object({
   id: s.string().min(1), name: str(), workspace: strN(),
+  displayName: strN().optional(), summary: strN().optional(),
+  spawnedBy: Lineage.nullable().optional(),   // T-0062: who created this agent (model/lineage.js)
   model: s.object({ primary: s.string().min(1), provider: strN() }, R).nullable(),
+  modelSource: s.enumOf(['explicit', 'inherited']).nullable().optional(),
+  runtime: s.string().min(1).max(256).nullable().optional(),
   fallbackModels: s.array(str()), isPrimary: s.boolean(), mainSessionKey: strN(),
+  hostObservations: s.array(s.object({ hostAgentId: boundedId(), hostId: boundedId(), runtimeKind: strN(),
+    role: hostRole, status: hostStatus }, R)),
 }, R);
+
+const Host = s.object({ id: boundedId(), label: strN(), platform: s.enumOf(['linux', 'macos', 'windows', 'container', 'unknown']),
+  sourceStatus, observedAt: ms() }, R);
+const Orchestrator = s.object({ id: boundedId(), hostId: boundedId(), kind: boundedId(80), label: strN(), sourceStatus, observedAt: ms() }, R);
+const HostAgent = s.object({ id: boundedId(), hostId: boundedId(), orchestratorId: boundedId(), name: strN(), runtimeKind: strN(),
+  role: hostRole, status: hostStatus, observedAt: s.ms(), staleAfter: s.ms(), spawnedBy: Lineage.nullable().optional() }, R).refine(x => x.staleAfter >= x.observedAt, 'staleAfter before observedAt');
+const IdentityLink = s.object({ hostAgentId: boundedId(), agentId: boundedId(),
+  evidence: s.enumOf(['shared-runtime-session-ref', 'explicit-runtime-identity']), confidence: s.literal('exact') }, R);
+const Team = s.object({ id: boundedId(), storeId: boundedId(), label: s.string().min(1).max(160), status: s.enumOf(['active', 'stale']), observedAt: s.ms() }, R);
+const TeamMember = s.object({ id: boundedId(), teamId: boundedId(), name: s.string().min(1).max(120), roleKind: memberRoleKind,
+  roleLabel: s.string().max(80).nullable(), roleEvidence: s.enumOf(['explicit', 'derived-from-structure', 'unknown']), sourceAgentName: strN(), runtimeKind: strN().optional(),
+  hostAgentId: boundedId().nullable(), parentMemberId: boundedId().nullable().optional(), sessionStatus: s.enumOf(['known', 'unknown']).nullable().optional(),
+  status: s.enumOf(['active', 'inactive', 'unknown']), spawnedBy: Lineage.nullable().optional() }, R);
+const ReportPresent = s.boolean();
+const Task = s.object({ id: boundedId(), teamId: boundedId(), title: s.string().max(2048), state: teamState,
+  priority: s.int().min(0).max(3).nullable(), ownerMemberId: boundedId().nullable(), reviewerMemberIds: s.array(boundedId()),
+  createdAt: ms(), updatedAt: ms(), commit: strN(), reportPresent: ReportPresent, briefPresent: s.boolean(), messageCount: s.int().min(0) }, R);
+const Review = s.object({ id: boundedId(), taskId: boundedId(), reviewerMemberId: boundedId().nullable(),
+  verdict: s.enumOf(['go', 'no-go', 'pending', 'unknown']), createdAt: ms(), reportPresent: ReportPresent }, R);
+const TeamMessage = s.object({ id: boundedId(), teamId: boundedId(), taskId: boundedId().nullable(),
+  fromMemberId: boundedId().nullable(), toMemberId: boundedId().nullable(), createdAt: ms(), bodyPresent: s.boolean() }, R);
 
 const Schedule = s.discriminated('kind', {
   cron: s.object({ kind: s.literal('cron'), expr: str(), tz: strN() }, R),
@@ -86,7 +120,7 @@ const Channel = s.object({
   policy: s.object({ dm: strN(), group: strN() }, R),
 }, R);
 
-const evId = () => s.string().refine((x) => /^ev:\d+:\d+$/.test(x), 'event id');   // S7b: 'ev:<message>:<part>' (TraceEventVM.id)
+const evId = () => s.string().refine((x) => /^(?:ev:\d+:\d+|msg:[a-f0-9]{64}:\d+)$/.test(x), 'event id');   // Stable native message identity or legacy positional identity.
 const tr = (kind, extra) => s.object(Object.assign({ id: evId(), kind: s.literal(kind), at: nn(), senderInfo: Sender.optional(), text: str(), truncated: s.boolean() }, extra), R);
 const TraceEvent = s.discriminated('kind', {
   system: tr('system'), thinking: tr('thinking'), observation: tr('observation'),
@@ -130,4 +164,5 @@ const LiveEvent = s.object({
 // `id` is the runtime's stable group id (opaque; OpenClaw: the name); Session.group holds that id.
 const SessionGroup = s.object({ id: s.string().min(1).max(200), name: s.string().min(1), position: nn() }, R);
 
-module.exports = { SessionGroup, LiveEvent, ActorRef, Agent, CronJob, CronRun, Skill, SkillInfo, Channel, Transcript, TraceEvent, Config };
+module.exports = { SessionGroup, LiveEvent, ActorRef, Agent, Host, Orchestrator, HostAgent, IdentityLink, Team, TeamMember, Task, Review, TeamMessage,
+  CronJob, CronRun, Skill, SkillInfo, Channel, Transcript, TraceEvent, Config };

@@ -11,6 +11,9 @@ import { Icon, ErrorState, Ago, Skeleton } from '../components/ui.js';
 import { matchesQuery } from '../board.js';
 import * as rules from './access-rules.js';
 import { isPerson, isRoom, channelOf } from '../vocab.js';
+import { loadAccessStyles } from './access-styles.js';
+
+export const loadStyles=loadAccessStyles;
 
 const TYPES = { personnes: isPerson, canaux: isRoom };   // D5: either contract's kinds
 const SORTS = { vu: (a, b) => (b.lastSeenAt ?? -1) - (a.lastSeenAt ?? -1), sessions: (a, b) => b.sessionCount - a.sessionCount,
@@ -30,7 +33,7 @@ export function AccessPage({ match }) {
   const type = TYPES[q.type] ? q.type : null;
   const sort = SORTS[q.tri] ? q.tri : 'vu';
   const search = q.q || '';
-  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-frame"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
+  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-page"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
   const d = vm.data;
   const all = d ? d.interlocutors : null;
   const shown = all ? all.filter((i) => (!type || TYPES[type](i)) && matchesQuery(displayName(i) + ' ' + i.id, search)).sort(SORTS[sort]) : [];
@@ -38,8 +41,8 @@ export function AccessPage({ match }) {
   const count = (k) => (all ? all.filter((i) => !k || TYPES[k](i)).length : 0);
   const kindTag = (i) => html`<span class="bu-tag"><${Icon} name=${isRoom(i) ? 'canal' : 'personne'} />${t('interlocutorKind.' + i.kind)}</span>`;
 
-  return html`<div class="bu-page ao-frame ao-access" aria-busy=${vm.resyncing || !d ? 'true' : undefined}>
-    <h2 class="bu-title ao-access__title">${msg('nav.habilitations')}</h2>
+  return html`<div class="bu-page ao-page ao-access" aria-busy=${vm.resyncing || !d ? 'true' : undefined}>
+
     ${vm.error && d ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('common.updateFailed', { error: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('common.retry')}</button></div>` : null}
     ${!d ? html`<div aria-busy="true" aria-label=${msg('access.loading')}><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div>` : html`
     <section class="bu-section" aria-labelledby="ac-pol">
@@ -56,7 +59,7 @@ export function AccessPage({ match }) {
       ${d.agents.length ? html`<ul class="ao-access__agents">${d.agents.map((a) => html`<li key=${a.id} class="bu-row">
         <span class="bu-avatar bu-avatar--agent bu-avatar--lg" aria-hidden="true"><${Icon} name="agent" /></span>
         <span class="bu-row__main"><span class="bu-row__title">${a.name}${a.isPrimary ? html` <span class="bu-chip bu-chip--sm bu-chip--accent">${msg('access.primary')}</span>` : null}</span>
-          <span class="bu-row__sub">${msg('access.agentLine', { id: a.id, model: a.model || msg('access.agent.defaultModel') })}</span></span></li>`)}</ul>` : html`<p class="bu-text-secondary">${msg('access.agents.none')}</p>`}
+          <span class="bu-row__sub">${msg('access.agentLine', { id: a.id, model: text(rules.agentExecution(a)) })}</span></span></li>`)}</ul>` : html`<p class="bu-text-secondary">${msg('access.agents.none')}</p>`}
     </section>
     <section class="bu-section" aria-labelledby="ac-people">
       <div class="bu-toolbar">

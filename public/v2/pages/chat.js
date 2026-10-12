@@ -1,3 +1,6 @@
+export { loadStyles } from './workspace-mobile.js';
+import { Button, TextArea } from '../components/bureau/index.js';
+import { useSmallWorkspace } from './workspace-mobile.js';
 import { SenderAvatar } from '../components/sender.js';
 import { senderName } from '../sender.js';
 // Discuter (frontend-22: the Bureau chat, design/components/Chat): ChatVM from
@@ -12,20 +15,18 @@ import { services } from '../services.js';
 import { msg, agentName } from '../i18n.js';
 import * as fmt from '../fmt.js';
 import { post } from '../api.js';
-import { Icon, Skeleton, ErrorState } from '../components/ui.js';
+import { Frame, Icon, Skeleton, ErrorState } from '../components/ui.js';
 import { Markdown } from '../components/markdown.js';
 
 const DRAFT_KEY = 'ao.chat.draft';
 const readDraft = () => { try { return localStorage.getItem(DRAFT_KEY) || ''; } catch { return ''; } };
 const saveDraft = (v) => { try { if (v) localStorage.setItem(DRAFT_KEY, v); else localStorage.removeItem(DRAFT_KEY); } catch { /* per-viewer convenience only */ } };
 
-/** Show the latest exchange: the thread scrolls to its end (phones, where only the thread scrolls), then the composer
- * comes into view (desktop, where the page scrolls). Each step is a no-op in the other layout. */
+/** Show the latest exchange in the bounded thread; its composer stays in the footer row. */
 function toLatest() {
   requestAnimationFrame(() => {
     const thread = document.querySelector('.ao-chat .bu-chat__thread');
     if (thread) thread.scrollTop = thread.scrollHeight;
-    document.getElementById('chat-fin')?.scrollIntoView({ block: 'end' });
   });
 }
 const PHONE = '(max-width: 820px)';
@@ -47,6 +48,7 @@ function linkState(status) {
 
 export function ChatPage() {
   const { router } = services;
+  const small = useSmallWorkspace();
   const vm = useTopic('chat', '/api/v2/views/chat');
   const status = useStore(services.stream.status);
   const caps = status.capabilities || (services.meta && services.meta.capabilities) || { openclawWrites: true };
@@ -106,24 +108,34 @@ export function ChatPage() {
 
   const hintKey = !writes ? 'chat.readonly' : link === 'interrupted' ? 'chat.hint.interrupted' : link === 'gateway-down' ? 'chat.hint.gatewayDown' : pending ? 'chat.hint.pending' : 'chat.hint';
   const hint = msg(hintKey);
-  const banner = (text, retry) => html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${text}</span>${retry ? html`<button class="bu-btn bu-btn--sm" onClick=${retry}>${msg('common.retry')}</button>` : null}</div>`;
+  const banner = (text, retry, settings = false) => html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${text}</span>${retry ? html`<button class="bu-btn bu-btn--sm" onClick=${retry}>${msg('common.retry')}</button>` : null}${settings ? html`<a class="bu-btn bu-btn--sm" href=${router.href('parametres',{}, {onglet:'connexion'})}>${msg('settings.openConnection')}</a>` : null}</div>`;
 
-  return html`<div class="bu-page ao-frame ao-frame--detail ao-chat" aria-busy=${vm.resyncing || (!c && !vm.error) ? 'true' : undefined}>
+  return html`<${Frame} class="bu-page ao-page ao-page--detail ao-chat" bodyClass=${c ? 'ao-frame__body--framed' : ''} aria-busy=${vm.resyncing || (!c && !vm.error) ? 'true' : undefined} head=${html`
     <div class="bu-toolbar">
-      <h2 class="bu-title" id="chat-titre">${msg('chat.title', { agent: agentName() })}</h2>
+      <h2 class="ao-chat__heading">${agentName()}</h2>
       ${c ? html`<span class="bu-count" title=${msg('chat.margin.window', { n: c.messages.length })}>${c.messages.length}</span>` : null}
       <span class="bu-spacer"></span>
-      ${c ? html`<a class="bu-btn bu-btn--sm ao-chat__trace" href=${router.href('session', { sessionKey: c.sessionKey })} title=${msg('chat.margin.openTrace')}><${Icon} name="journaux" /><span class="ao-chat__btnlabel">${msg('chat.margin.openTrace')}</span></a>` : null}
+      ${c ? html`<a class="bu-btn bu-btn--sm ao-chat__trace" href=${router.href('session', { sessionKey: c.sessionKey })} title=${msg('chat.margin.openTrace')}><${Icon} name="journaux" /><span class="ao-chat__btnlabel">${msg(small ? 'nav.journaux' : 'chat.margin.openTrace')}</span></a>` : null}
     </div>
-    <p class="bu-sr-only" aria-live="polite">${announce}</p>
+    <p class="bu-sr-only" aria-live="polite">${announce}</p>`}>
     ${vm.data === undefined && vm.error ? html`<${ErrorState} error=${vm.error} onRetry=${vm.retry} />`
       : !c ? html`<div class="bu-card" role="status" aria-label=${msg('editorial.loading')}><${Skeleton} /><${Skeleton} w="70" /><${Skeleton} w="50" /></div>`
       : html`
       ${vm.error ? banner(msg('common.updateFailed', { error: vm.error.message }), vm.retry) : null}
-      ${link === 'gateway-down' ? banner(msg('chat.hint.gatewayDown')) : null}
-      <section class="bu-card ao-chat__card" aria-labelledby="chat-titre">
-        <div class="bu-chat">
-          <div class="bu-chat__thread" role="region" tabindex="0" aria-label=${msg('chat.youAnd', { agent: agentName() })}>
+      ${link === 'gateway-down' ? banner(msg('chat.hint.gatewayDown'),null,true) : null}
+      <${Frame} tag="section" class="bu-card ao-chat__card" aria-label=${msg('chat.title', { agent: agentName() })} bodyClass="bu-chat__thread"
+        bodyLabel=${msg('chat.youAnd', { agent: agentName() })} foot=${html`          <form class="bu-composer ao-chat__composer" onSubmit=${send} onKeyDown=${(e) => { if (e.target.id === 'chat-texte' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(e); }} id="chat-fin" aria-label=${msg(pending ? 'chat.compose.next' : 'chat.compose')}>
+            <${TextArea} class="ao-chat__input" id="chat-texte" rows=${2} maxLength=${8000} value=${draft}
+              label=${msg('chat.compose.label', { agent: agentName() })} placeholder=${msg('chat.compose.placeholder', { agent: agentName() })} describedBy="chat-aide"
+              onInput=${(e) => { onDraft(e.currentTarget.value); autoGrow(e.currentTarget); }} />
+            <${Button} type="submit" class="ao-chat__send" label=${msg('chat.send')} icon=${html`<${Icon} name="arrow-right" />`}
+              iconOnly=${small} variant="primary" disabled=${!canSend} busy=${sending} />
+          </form>
+          <div class="ao-chat__foot">
+            <p class=${'bu-caption bu-text-tertiary' + (hintKey === 'chat.hint' ? ' ao-chat__hint--keys' : '')} id="chat-aide">${hint}</p>
+            ${sendError ? html`<p class="bu-field__error" role="alert"><${Icon} name="alert" />${sendError}</p>` : null}
+          </div>
+`}>
             ${c.messages.length ? html`<ol class="ao-chat__messages">${c.messages.map((m, i) => html`
               ${i === 0 || fmt.dayKey(m.at) !== fmt.dayKey(c.messages[i - 1].at) ? html`<li key=${'d' + m.id} class="bu-msg bu-msg--system ao-chat__day"><span class="bu-msg__bubble">${fmt.longDate(m.at, now)}</span></li>` : null}
               <li key=${m.id} class=${'ao-chat__msg ao-chat__msg--' + m.role}><${Message} m=${m} now=${now} onRetry=${m.role === 'error' && lastUserText && !pending ? () => onDraft(lastUserText) : null} /></li>`)}
@@ -131,22 +143,8 @@ export function ChatPage() {
             : html`<div class="bu-empty ao-chat__empty"><img class="ao-illus" src=${assetUrl('bureau/assets/Illustrations/new-chat-thread.webp')} alt="" width="400" height="300" />
                 <p class="bu-empty__title">${msg('chat.empty')}</p><p class="bu-empty__text">${msg('chat.empty.text', { agent: agentName() })}</p></div>`}
             ${pending ? html`<${Pending} pending=${pending} now=${now} link=${link} />` : null}
-          </div>
-          <form class="bu-composer ao-chat__composer" onSubmit=${send} id="chat-fin" aria-label=${msg(pending ? 'chat.compose.next' : 'chat.compose')}>
-            <label class="bu-sr-only" for="chat-texte">${msg('chat.compose.label', { agent: agentName() })}</label>
-            <textarea class="bu-textarea ao-chat__input" id="chat-texte" rows="2" maxlength="8000" value=${draft}
-              placeholder=${msg('chat.compose.placeholder', { agent: agentName() })} aria-describedby="chat-aide"
-              onInput=${(e) => { onDraft(e.currentTarget.value); autoGrow(e.currentTarget); }}
-              onKeyDown=${(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(e); }}></textarea>
-            <button type="submit" class="bu-btn bu-btn--primary ao-chat__send" title=${msg('chat.send')} disabled=${!canSend} aria-busy=${sending ? 'true' : undefined}><${Icon} name="arrow-right" /><span class="ao-chat__btnlabel">${msg('chat.send')}</span></button>
-          </form>
-          <div class="ao-chat__foot">
-            <p class=${'bu-caption bu-text-tertiary' + (hintKey === 'chat.hint' ? ' ao-chat__hint--keys' : '')} id="chat-aide">${hint}</p>
-            ${sendError ? html`<p class="bu-field__error" role="alert"><${Icon} name="alert" />${sendError}</p>` : null}
-          </div>
-        </div>
-      </section>`}
-  </div>`;
+      </${Frame}>`}
+  </${Frame}>`;
 }
 
 const Avatar = ({ state }) => html`<span class="bu-avatar bu-avatar--agent" data-agent-state=${state} aria-hidden="true"><${Icon} name="agent" /></span>`;

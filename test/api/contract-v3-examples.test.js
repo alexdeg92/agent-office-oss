@@ -12,11 +12,20 @@ const fs = require('fs');
 const path = require('path');
 const { compareShape } = require('../helpers/contract-shape');
 const { TOKENS } = require('../portability/personal-literals');
+const CONTRACT_PERSONAL_TOKENS = [...TOKENS, ['al', 'ex'].join('')];
 
 const EX = path.join(__dirname, '..', '..', 'docs', 'architecture', 'examples');
 const v2 = (n) => JSON.parse(fs.readFileSync(path.join(EX, n + '.json'), 'utf8'));
 const v3 = (n) => JSON.parse(fs.readFileSync(path.join(EX, 'v3', n + '.json'), 'utf8'));
 const V3 = fs.readdirSync(path.join(EX, 'v3')).filter((f) => f.endsWith('.json') && !f.endsWith('.types.json')).map((f) => f.slice(0, -5));
+// Contract-only request/error/job examples are validated by their own suite. They are
+// not v2→v3 VM migrations and must not silently enter the migration/schema inventory.
+const MIGRATION_V3 = ['meta-vm', 'office-vm', 'health-vm', 'layout-vm', 'logs-page', 'session-vm', 'access-vm', 'interlocutor-vm', 'flow-detail-vm', 'board-vm', 'orchestrators-vm', 'teams-vm'];
+const ACCESS_CONTRACT = [
+  'external-access-vm', 'external-access-setup-vm', 'external-access-plan-request', 'external-access-plan',
+  'external-access-checks-request', 'external-access-check-status-request', 'external-access-cancel-request',
+  'external-access-check-status', 'external-access-check-status-waiting', 'external-access-error',
+];
 
 // api-v3.md D1–D8: the structural differences from 2.x, per VM (value-only changes are checked in 2.)
 const SHAPE_DELTAS = {
@@ -31,13 +40,14 @@ const SHAPE_DELTAS = {
 };
 
 describe('G5 · contract 3.0 examples', () => {
-  it('every v3 example is listed here, has a sidecar, and is an Ok envelope with contract 3.0 where it says so', () => {
-    for (const n of V3) {
-      assert.ok(n === 'meta-vm' || Object.prototype.hasOwnProperty.call(SHAPE_DELTAS, n), `${n}: list its deltas`);
+  it('every migrated v3 VM is listed with its migration sidecar; access contracts have their own registry', () => {
+    for (const n of MIGRATION_V3) {
       assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.types.json')), `${n}: sidecar`);
       assert.ok(v3(n).data && v3(n).meta, n);
     }
-    assert.equal(v3('meta-vm').data.contractVersion, '3.2'); assert.equal(v3('meta-vm').data.apiVersion, 3);
+    assert.deepEqual([...V3].sort(), [...MIGRATION_V3, ...ACCESS_CONTRACT].sort(), 'every v3 JSON example belongs to an explicit category');
+    for (const n of ACCESS_CONTRACT) assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.json')), `${n}: registered access contract`);
+    assert.equal(v3('meta-vm').data.contractVersion, require('../../src/api/v2/envelope').CONTRACT_VERSION_V3); assert.equal(v3('meta-vm').data.apiVersion, 3);
   });
 
   it('1. each differs from its 2.x example in shape only by the documented deltas', () => {
@@ -68,8 +78,8 @@ describe('G5 · contract 3.0 examples', () => {
     const sch = require('../../src/schema');
     const { VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
     const NAME = { 'meta-vm': 'meta', 'office-vm': 'office', 'logs-page': 'logs', 'session-vm': 'session', 'access-vm': 'access', 'interlocutor-vm': 'interlocutor',
-      'health-vm': 'health', 'flow-detail-vm': 'flow', 'board-vm': 'projects', 'layout-vm': 'layout' };
-    for (const n of V3) {
+      'health-vm': 'health', 'flow-detail-vm': 'flow', 'board-vm': 'projects', 'layout-vm': 'layout', 'orchestrators-vm': 'orchestrators', 'teams-vm': 'teams' };
+    for (const n of MIGRATION_V3) {
       const r = sch.validate(VM_SCHEMAS_V3[NAME[n]], v3(n).data);
       assert.deepEqual(r.ok ? [] : r.issues.filter((i) => i.severity === 'error').map((i) => i.path + ' ' + i.detail), [], n);
     }
@@ -83,9 +93,9 @@ describe('G5 · contract 3.0 examples', () => {
       else if ((v === 'main' || v === 'with-timmy') && !MAIN_OK.some((re) => re.test(at))) out.push(at);
       return out;
     };
-    for (const n of V3) {
+    for (const n of MIGRATION_V3) {
       const text = JSON.stringify(v3(n));
-      for (const t of TOKENS) assert.ok(!text.includes(t), `${n}: ${t}`);
+      for (const t of CONTRACT_PERSONAL_TOKENS) assert.ok(!text.includes(t), `${n}: ${t}`);
       assert.deepEqual(walk(v3(n).data, '$', []), [], n);
     }
   });

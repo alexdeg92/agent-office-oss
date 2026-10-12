@@ -18,7 +18,7 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
   let wrongCodes = 0;
   let blockedUntil = 0;   // R22-10: the throttle is a time window; after its Retry-After the code is accepted again
   let spent = false;   // R20-03: the code is single-use; a successful save spends it and locks the instance
-  let tokenSet = false, plan = null, installed = new Set();
+  let tokenSet = false, plan = null, installed = new Set(hook === 'etiquette-deja' ? ['atelier-agent'] : []);
   const draft = { instance: { name: '', locale: 'fr', timeZone: null }, owner: { displayName: '', email: '', passwordSet: false },
     runtime: { adapter: 'openclaw', gatewayUrl: 'ws://127.0.0.1:18789', tokenSet: false } };
   const refuse = (status, code, message, details, extra) => ({ error: [status, code, message, details, extra] });

@@ -3,6 +3,7 @@
 // ?priorite=Pn (view-only: P0 to Pn, architect-55's P0–P9), ?tri=activite (view-only; the server's order is by priority).
 // Moves are optimistic (shown at once, reverted on 409) and have three paths: mouse drag and drop, keyboard
 // (Espace / ← → / Espace / Échap), touch long-press (400 ms), and a « Déplacer vers » select on every card (Q01-04).
+export { loadStyles } from '../components/bureau/index.js';
 import { MobileProjects, useSmallProjects } from './projects-mobile.js';
 import { assetUrl } from '../config.js';
 import { html, Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo } from '../lib.js';
@@ -12,7 +13,7 @@ import { t, msg, agentName } from '../i18n.js';
 import { post, toastError } from '../api.js';
 import { projectWrite } from '../project-api.js';
 import { toast } from '../toast.js';
-import { Icon, ErrorState, Ago, Skeleton, StateArt } from '../components/ui.js';
+import { Frame, Icon, ErrorState, Ago, Skeleton, StateArt } from '../components/ui.js';
 import { Modal } from '../components/modal.js';
 import { Thumb, Priority, priorityOptions, priorityText, FlagList, AvatarStack } from '../components/project.js';
 import { agentFilter, boardFilter } from '../vocab.js';
@@ -176,7 +177,7 @@ export function ProjectsPage({ match }) {
   }, [drag && drag.mode, drag && drag.id]);
 
   // ---- render ----
-  if (vm.data === undefined && vm.error) return html`<div class="bu-page"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
+  if (!small && vm.data === undefined && vm.error) return html`<${Frame} class="bu-page"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></${Frame}>`;
   const total = columns ? columns.reduce((n, c) => n + c.count, 0) : 0;
   const boardEmpty = columns && total === 0 && filter === 'all';
 
@@ -205,9 +206,9 @@ export function ProjectsPage({ match }) {
 
   if (small) return html`<${Fragment}><${MobileProjects} view=${view} total=${total} query=${match.query} filter=${filter} prioMax=${prioMax} byRecent=${byRecent} writes=${writes} onCreate=${setCreating} onMove=${move} vm=${vm} announce=${announce} />${creating ? html`<${CreateProject} status=${creating} onClose=${() => setCreating(null)} />` : null}</${Fragment}>`;
 
-  return html`<div class="bu-page ao-projects">
+  return html`<${Frame} class="bu-page ao-projects" bodyClass="ao-frame__body--framed" head=${html`
     <div class="bu-toolbar ao-projects__bar">
-      <h2 class="bu-title ao-projects__title">${msg('nav.projets')}</h2>${columns ? html`<span class="bu-count">${total}</span>` : null}
+      ${columns ? html`<span class="bu-count">${total}</span>` : null}
       <span class="bu-spacer"></span>
       ${boardEmpty ? null : html`<${Search} value=${q} onChange=${(v) => router.setQuery({ q: v || null })} />
       <div class="ao-scroll-x"><div class="bu-segmented" role="group" aria-label=${msg('projects.filterLabel')}>
@@ -228,6 +229,7 @@ export function ProjectsPage({ match }) {
     <p class="bu-sr-only" id="board-help">${msg('projects.a11y.help')}</p>
     <div class="bu-sr-only" aria-live="assertive" aria-atomic="true">${announce}</div>
     ${vm.error && columns ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('common.updateFailed', { error: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('common.retry')}</button></div>` : null}
+    `}>
     ${!columns ? html`<${BoardSkeleton} />` : boardEmpty ? html`<${EmptyBoard} writes=${writes} onCreate=${() => setCreating('idea')} importHref=${router.href('importer')} />` : html`
     <div class="bu-board ao-board" ref=${boardRef} aria-busy=${vm.resyncing ? 'true' : undefined}>
       ${view.map((col, ci) => html`<section key=${col.id} class=${'bu-column' + (drag && drag.over === col.id && drag.over !== drag.from ? ' is-drop-target' : '')}
@@ -237,7 +239,7 @@ export function ProjectsPage({ match }) {
           <span class="bu-count">${narrowed ? col.shown.length : col.count}</span><span class="bu-spacer"></span>
           ${!writes ? null : html`<button type="button" class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${msg('projects.addIn', { stage: statusLabel(col.id) })} title=${msg('projects.addIn', { stage: statusLabel(col.id) })} onClick=${() => setCreating(col.id)}><${Icon} name="add" /></button>`}
         </header>
-        <ul class="bu-column__list">
+        <ul class="bu-column__list" data-scroll-body tabindex="0" aria-label=${statusLabel(col.id)}>
           ${col.shown.map((card, i) => html`
             ${col.slot === i ? html`<li key="slot" class="bu-drop-slot" aria-hidden="true"></li>` : null}
             <li key=${card.id}><${Card} card=${card} status=${col.id} writes=${writes} drag=${drag} arrived=${arrived.has(card.id)}
@@ -253,7 +255,7 @@ export function ProjectsPage({ match }) {
       </section>`)}
     </div>`}
     ${creating ? html`<${CreateProject} status=${creating} onClose=${() => setCreating(null)} />` : null}
-  </div>`;
+  </${Frame}>`;
 }
 
 function Card({ card, status, drag, arrived, href, writes = true, ...on }) {

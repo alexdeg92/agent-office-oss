@@ -6,6 +6,7 @@ const { startServer } = require('../helpers/harness');
 const { engineRegistry } = require('../../src/api/v2/projects');
 const { normaliseTranscript } = require('../../src/adapters/openclaw/normalise/transcript');
 const { buildChatVM } = require('../../src/api/v2/vm/chat');
+const { CONTRACT_VERSION, CONTRACT_VERSION_V3 } = require('../../src/api/v2/envelope');
 const fixture = require('../fixtures/senders/group.json').body.value;
 const GROUP = 'agent:main:discord:channel:100000000000000099', DM = 'agent:main:telegram:direct:generic-peer', OP = 'agent:main:explicit:portal-chat';
 const DELEGATED_DM = 'agent:main:discord:direct:synthetic-peer';
@@ -47,8 +48,8 @@ describe('sender identities through the real server, v2 and v3', () => {
     assert.equal(response.json.data.messages[0].senderInfo.name, 'Camille');
   });
   it('the contract versions advertise the identity extension', async () => {
-    assert.equal((await h.get('/api/v2/meta')).json.data.contractVersion, '2.7');
-    assert.equal((await h.get('/api/v3/meta')).json.data.contractVersion, '3.2');
+    assert.equal((await h.get('/api/v2/meta')).json.data.contractVersion, CONTRACT_VERSION);
+    assert.equal((await h.get('/api/v3/meta')).json.data.contractVersion, CONTRACT_VERSION_V3);
   });
   it('a DM counts the human and primary agent separately from nine named delegated sessions on v2 and v3', async () => {
     const { compareExample } = require('../helpers/contract-shape');

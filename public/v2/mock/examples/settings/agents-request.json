@@ -1,0 +1,17 @@
+{
+  "expectedRevision": 1,
+  "runtime": "openclaw",
+  "primary": "atlas",
+  "agents": [
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "hidden": false
+    },
+    {
+      "id": "scribe",
+      "name": "Scribe",
+      "hidden": false
+    }
+  ]
+}

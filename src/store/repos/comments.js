@@ -2,6 +2,7 @@
 // architect-57 · project comments (migration 012). Plain SQL rows; the API layer (src/api/v2/comments.js) owns the rules.
 // Order is insertion order (rowid → `seq`): a frozen or skewed clock never reorders a thread.
 const crypto = require('crypto');
+const provenance = require('../../security/comment-provenance');
 
 const rowOf = (r) => r && {
   id: r.id, seq: r.seq, projectId: r.project_id, kind: r.kind, author: { kind: r.author_kind, id: r.author_id, name: r.author_name }, body: r.deleted_at ? '' : r.body,
@@ -15,7 +16,7 @@ function createCommentsRepo(db, { now = () => Date.now() } = {}) {
     active: db.prepare("SELECT rowid AS seq, * FROM project_comments WHERE delivery_json IS NOT NULL ORDER BY rowid"),
     get: db.prepare('SELECT rowid AS seq, * FROM project_comments WHERE id = ?'),
     count: db.prepare('SELECT count(*) AS n FROM project_comments WHERE project_id = ? AND deleted_at IS NULL'),
-    insert: db.prepare('INSERT INTO project_comments (id, project_id, kind, author_kind, author_id, author_name, body, mentions_json, reply_to, delivery_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    insert: db.prepare('INSERT INTO project_comments (id, project_id, kind, author_kind, author_id, author_name, body, mentions_json, reply_to, delivery_json, created_at, provenance_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     edit: db.prepare('UPDATE project_comments SET body = ?, mentions_json = ?, edited_at = ? WHERE id = ? AND deleted_at IS NULL'),
     del: db.prepare('UPDATE project_comments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL'),
     delivery: db.prepare('UPDATE project_comments SET delivery_json = ? WHERE id = ?'),
@@ -28,9 +29,10 @@ function createCommentsRepo(db, { now = () => Date.now() } = {}) {
     active() { return q.active.all().map(rowOf).filter((c) => c.delivery.some((d) => d.status === 'pending' || d.status === 'working' || d.follow?.phase === 'tracking')); },
     get: (id) => rowOf(q.get.get(id)),
     count: (projectId) => q.count.get(projectId).n,
-    create({ projectId, kind = 'comment', author, body, mentions = [], replyTo = null, delivery = [], at = now() }) {
+    provenance(id) { const row=q.get.get(id);return row?provenance.decode(row.provenance_json,{agent:row.author_kind==='agent'}):null; },
+    create({ projectId, kind = 'comment', author, body, mentions = [], replyTo = null, delivery = [], provenance: required = null, at = now() }) {
       const id = 'cmt_' + crypto.randomBytes(8).toString('hex');
-      q.insert.run(id, projectId, kind, author.kind, author.id || null, String(author.name).slice(0, 120), body, JSON.stringify(mentions), replyTo, delivery.length ? JSON.stringify(delivery) : null, at);
+      q.insert.run(id, projectId, kind, author.kind, author.id || null, String(author.name).slice(0, 120), body, JSON.stringify(mentions), replyTo, delivery.length ? JSON.stringify(delivery) : null, at, provenance.encode(required));
       return rowOf(q.get.get(id));
     },
     edit(id, body, mentions, at = now()) { q.edit.run(body, JSON.stringify(mentions), at, id); return rowOf(q.get.get(id)); },

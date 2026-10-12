@@ -20,7 +20,8 @@ const OUT = path.join(ROOT, 'public', 'v2', 'generated', 'vm-schemas.js');
 const MODULES = [   // [id, file, { requirePath: id }]
   ['schema', 'src/schema/index.js', {}],
   ['sender', 'src/engine/model/sender.js', { '../../schema': 'schema' }],
-  ['vm-schemas', 'src/api/v2/vm/schemas.js', { '../../../schema': 'schema', '../../../engine/model/sender': 'sender', '../../../../public/v2/url-policy.js': 'url-policy' }],
+  ['settings-schema', 'src/api/v2/vm/settings-schema.js', {}],
+  ['vm-schemas', 'src/api/v2/vm/schemas.js', { '../../../schema': 'schema', '../../../engine/model/sender': 'sender', '../../../../public/v2/url-policy.js': 'url-policy', './settings-schema': 'settings-schema' }],
 ];
 
 function build() {

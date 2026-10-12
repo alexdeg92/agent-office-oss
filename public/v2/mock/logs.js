@@ -1,11 +1,13 @@
 // Mock Journaux: LogRowVM pages and SessionVM transcripts (api.md 2.1 §3.6): invented French data plus the contract
 // example's session (session-vm.json); every SessionVM is conformed to that example.
 import { EXAMPLES, conform, exampleData } from './examples.js';
+import { PROPOSED_AGENT } from './meta.js';
 // One session is live: every tick it appends trace events, so the list and the open transcript update over SSE.
 const TRACE_STATE = () => { const v = globalThis.location && new URLSearchParams(location.search).get('trace'); return v === 'stale' || v === 'unavailable' ? v : 'fresh'; };
 /** LogRowVM.title / SessionVM.title (2.4, Q03-A01): a LabelRef the UI shows in its language; genuine names stay raw params. */
 function titleOf(row, example) {
   if (example && example.title) return example.title;
+  if (row.titleRef) return row.titleRef;
   const base = row.kind === 'main' ? { key: 'sessionTitle.main' } : row.kind === 'dashboard' ? { key: 'sessionTitle.dashboard' }
     : row.kind === 'cron' ? { key: 'sessionTitle.cronNamed', params: { name: row.label.replace(/^.*·\s*/, '') } }
     : row.kind === 'subagent' && row.label.startsWith('Sous-agent · ') ? { key: 'sessionTitle.subagent', params: { id: row.label.slice(13) } }
@@ -26,10 +28,30 @@ const TOPICS = [
   ['les sauvegardes', 'Écrire le script de copie chiffrée vers le second disque.'],
 ];
 
+// T-0058: two connectors with their adapter-declared marks; every row names its connector and agent.
+const OPENCLAW = { id: 'legacy', adapter: 'openclaw', name: 'OpenClaw', mark: { monogram: 'OC', color: '#b23a0b', providerName: 'OpenClaw', logo: 'assets/connectors/openclaw.svg' } };
+const CLAUDE = { id: 'claude-code', adapter: 'claude-code', name: 'Claude Code', mark: { monogram: 'CC', color: '#a34a2c', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' } };
+const CODEX = { id: 'codex', adapter: 'codex', name: 'Codex', mark: { monogram: 'CX', color: '#187b67', providerName: 'Codex', logo: 'assets/connectors/codex.svg', logoDark: 'assets/connectors/codex-dark.svg' } };
+const PRIMARY = { id: PROPOSED_AGENT.id, name: PROPOSED_AGENT.name };
 function rowsSeed(now) {
   const rows = [];
-  const add = (id, kind, channel, label, model, tokens, ago, extra = {}) =>
-    rows.push({ id, kind, channel, label, model, modelProvider: model.startsWith('claude') ? 'anthropic' : 'openai', tokens, updatedAt: ago == null ? null : now - ago, live: false, heartbeat: false, ...extra });
+  const add = (id, kind, channel, label, model, tokens, ago, extra = {}) => {
+    const updatedAt = ago == null ? null : now - ago;
+    rows.push({ id, kind, channel, label, model, modelProvider: model.startsWith('claude') ? 'anthropic' : 'openai', tokens, tokensKnown: true, updatedAt, live: false, heartbeat: false,
+      execution: { status: 'unknown', evidence: { level: 'unknown', observedAt: updatedAt, expiresAt: null } }, connector: OPENCLAW, agent: PRIMARY, ...extra });
+    const row = rows.at(-1);
+    if (row.live && !extra.execution) row.execution = { status: 'running', evidence: { level: 'verified', observedAt: updatedAt, expiresAt: null } };
+  };
+  const coding = (slug, agent, label, ago, extra = {}) => add('rt:claude-code:session:' + slug, 'conversation', null, label, 'claude-opus-5-5', 0, ago,
+    { tokensKnown: false, connector: CLAUDE, agent: { id: 'rt:claude-code:agent:' + agent, name: agent }, ...extra });
+  coding('bureau-mobile', 'agent-office', 'Corriger le bureau mobile', 20_000, { live: true,
+    execution: { status: 'unknown', evidence: { level: 'observed', observedAt: now - 20_000, expiresAt: now + 10_000 } } });
+  coding('menu-semaine', 'portail-client', 'Ajouter le menu de la semaine', 35 * MIN);
+  coding('sauvegardes', 'agent-office', 'Script de sauvegarde chiffrée', 6 * H);
+  add('rt:codex:session:agent-office', 'conversation', null, 'Trier les résultats des tests', 'gpt-5.5', 0, 24 * MIN,
+    { tokensKnown: false, connector: CODEX, agent: { id: 'rt:codex:agent:agent-office', name: 'Agent Office' } });
+  add('agent:main:discord:channel:sans-nom', 'chat-group', 'discord', 'Groupe sans nom · Discord', MODELS[0], 4_210, 2 * H,
+    { titleRef: { key: 'sessionTitle.groupUnnamed', params: { platform: { key: 'channel.discord' } } } });
   add('agent:main:main', 'main', null, 'Session principale de Timmy', MODELS[1], 412_380, 2 * MIN, { live: true });
   add('agent:main:main:heartbeat', 'main', null, 'Battement de la session principale', MODELS[2], 18_204, 9 * MIN, { heartbeat: true });
   add('agent:main:discord:direct:guest', 'chat-direct', 'discord', 'Guest Tremblay', MODELS[0], 58_930, 22 * MIN);
@@ -102,8 +124,8 @@ export function createLogs(now = Date.now(), { empty = false } = {}) {
   if (!empty) {
     // The contract example's session, as is (its events keep their ids).
     const ex = exampleData(EXAMPLES.sessionVm);
-    rows.push({ id: ex.key, kind: ex.kind, channel: null, label: ex.label, model: ex.model, modelProvider: ex.modelProvider, tokens: ex.tokens,
-      updatedAt: ex.updatedAt, live: false, heartbeat: false, example: ex });
+    rows.push({ id: ex.key, kind: ex.kind, channel: null, label: ex.label, model: ex.model, modelProvider: ex.modelProvider, tokens: ex.tokens, tokensKnown: true,
+      updatedAt: ex.updatedAt, live: false, heartbeat: false, execution: { status: ex.run.status, evidence: ex.run.evidence }, connector: OPENCLAW, agent: PRIMARY, example: ex });
     transcripts.set(ex.key, ex.events);
     cwds.set(ex.key, ex.cwd);
   }
@@ -119,11 +141,19 @@ export function createLogs(now = Date.now(), { empty = false } = {}) {
   order();
   return {
     /** Page<LogRowVM>: ?kind filters; cursor = opaque offset. Returns null for an invalid cursor. */
-    page(kind, cursor, limit = PAGE, { heartbeats = false } = {}) {
-      const list = rows.filter((r) => (!kind || r.kind === kind) && (heartbeats || !r.heartbeat));
+    page(kind, cursor, limit = PAGE, { heartbeats = false, connector = null, agent = null } = {}) {
+      const visible = rows.filter((r) => (!kind || r.kind === kind) && (heartbeats || !r.heartbeat));
+      const list = visible.filter((r) => (!connector || r.connector?.id === connector) && (!agent || r.agent?.id === agent));
+      const connectors = new Map(), agents = new Map();
+      for (const r of visible) {
+        if (r.connector) connectors.set(r.connector.id, { ...r.connector, count: (connectors.get(r.connector.id)?.count || 0) + 1 });
+        if (r.agent) agents.set(r.agent.id, { ...r.agent, connectorId: r.connector?.id || null, count: (agents.get(r.agent.id)?.count || 0) + 1 });
+      }
+      const byName = (x, y) => x.name.localeCompare(y.name) || x.id.localeCompare(y.id);
       let start = 0;
       if (cursor) { start = Number(atob(cursor)); if (!Number.isInteger(start) || start < 0) return null; }
-      return { items: list.slice(start, start + limit).map(({ example, ...r }) => ({ ...r, title: titleOf(r, example) })), nextCursor: start + limit < list.length ? btoa(String(start + limit)) : null };
+      return { items: list.slice(start, start + limit).map(({ example, titleRef, ...r }) => ({ ...r, title: titleOf({ ...r, titleRef }, example) })), nextCursor: start + limit < list.length ? btoa(String(start + limit)) : null,
+        facets: { connectors: [...connectors.values()].sort(byName), agents: [...agents.values()].sort(byName) } };
     },
     /** SessionVM, or null for an unknown key. */
     session(key) {
@@ -135,7 +165,8 @@ export function createLogs(now = Date.now(), { empty = false } = {}) {
       const failed = !running && events.some((e) => e.kind === 'assistant' && e.stopReason === 'error');
       return conform(EXAMPLES.sessionVm.data, {
         key, label: row.label, title: titleOf(row), kind: row.kind, model: row.model, modelProvider: row.modelProvider, tokens: row.tokens, updatedAt: row.updatedAt,
-        run: { status: running ? 'running' : failed ? 'failed' : row.kind === 'cron' ? 'succeeded' : 'idle', endReason: failed ? 'error' : null }   /* only a failed run has an end reason (api.md RunEnd) */,
+        run: { status: running ? 'running' : failed ? 'failed' : row.kind === 'cron' ? 'succeeded' : 'unknown', endReason: failed ? 'error' : null,
+          evidence: { level: running || failed || row.kind === 'cron' ? 'verified' : 'unknown', observedAt: row.updatedAt, expiresAt: null } },
         messageCount: events.filter((e) => e.kind !== 'tool').length + 40 * (row.kind === 'main'), window: { from: Math.max(0, events.length - 120), to: events.length },
         toolCount: events.filter((e) => e.kind === 'tool').length, participants: participantsOf(events), subagents: [], events: events.map((e) => ({ ...e })),
         // 2.4 (R16-07): ?trace=stale|unavailable previews the transcript read failing or unsupported.
@@ -145,7 +176,7 @@ export function createLogs(now = Date.now(), { empty = false } = {}) {
     },
     /** The live main session does one more step; returns the touched key. */
     tick(t = Date.now()) {
-      const row = rows.find((r) => r.live);
+      const row = rows.find((r) => r.live && r.kind === 'main') || rows.find((r) => r.live);   // newer live rows may sort first
       if (!row) return null;
       const events = transcript(row.id);
       const n = events.length;
@@ -154,8 +185,9 @@ export function createLogs(now = Date.now(), { empty = false } = {}) {
       if (step === 0) events.push({ id, kind: 'thinking', at: t, text: 'Je vérifie l’étape suivante avant de continuer.', truncated: false });
       else if (step === 1) events.push({ id, kind: 'tool', at: t, callId: 'c' + ++seq, name: 'web_fetch', toolKind: 'web', input: '{"url":"https://exemple.ca/page"}', output: 'Page récupérée (12 Ko).', isError: false, durationMs: 900 + (n % 5) * 200, truncated: false });
       else events.push({ id, kind: 'assistant', at: t, model: row.model, provider: null, outputTokens: 90, text: `Étape ${Math.floor(n / 3)} terminée ; je poursuis.`, truncated: false, stopReason: 'toolUse', error: null });
+      events.at(-1).senderInfo = identityOf(events.at(-1));
       if (events.length > 120) events.splice(0, events.length - 120);
-      row.tokens += 350; row.updatedAt = t;
+      row.tokens += 350; row.updatedAt = t; row.execution = { status: 'running', evidence: { level: 'verified', observedAt: t, expiresAt: null } };
       order();
       return row.id;
     },

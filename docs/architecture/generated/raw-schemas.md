@@ -752,11 +752,17 @@ Tested with OpenClaw 2026.9.8. Undeclared fields: `count`; 3 known fields kept u
 | `$.defaultId` | `string?` |  |
 | `$.mainKey` | `string?` |  |
 | `$.agents` | `array<object>` | per item: bad rows dropped |
-| `$.agents[]` | `object` | known: 6 more |
+| `$.agents[]` | `object` | known: 5 more |
 | `$.agents[].id` | `string` |  |
 | `$.agents[].name` | `string?` |  |
+| `$.agents[].displayName` | `string?` |  |
+| `$.agents[].role` | `string?` |  |
+| `$.agents[].description` | `string?` |  |
 | `$.agents[].workspace` | `string?` |  |
 | `$.agents[].model` | `union<string\|object>?` |  |
+| `$.agents[].modelSource` | `enum(explicit\|inherited)?` |  |
+| `$.agents[].agentRuntime` | `object?` | known: 6 more |
+| `$.agents[].agentRuntime.id` | `string` |  |
 
 ## `gw.rpc.channels.status` v1
 

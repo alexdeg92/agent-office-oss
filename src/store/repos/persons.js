@@ -9,7 +9,10 @@ function createPersonsRepo(db, { now = () => Date.now() } = {}) {
   // Repositories are constructed after migrations. Partial/legacy ladders before
   // 014 have no credential table; their owner still comes from persons.is_owner.
   const hasUsers = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
-  const owner = db.prepare(hasUsers
+  const hasRbac = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'authorization_state'").get();
+  const owner = db.prepare(hasRbac
+    ? 'SELECT * FROM persons WHERE id=coalesce((SELECT person_id FROM users WHERE id=(SELECT owner_user_id FROM authorization_state WHERE singleton=1)),(SELECT id FROM persons WHERE is_owner=1))'
+    : hasUsers
     ? "SELECT * FROM persons WHERE id = coalesce((SELECT person_id FROM users WHERE role = 'owner'), (SELECT id FROM persons WHERE is_owner = 1))"
     : 'SELECT * FROM persons WHERE is_owner = 1');
   const byAgent = db.prepare("SELECT * FROM persons WHERE agent_id = ? AND ifnull(subagent_id, '') = ''");
@@ -35,8 +38,8 @@ function createPersonsRepo(db, { now = () => Date.now() } = {}) {
       const t = now(); ins.run(mintId('per'), 'human', String(name || 'Propriétaire').slice(0, 80), 1, null, t, t);
       return toPerson(owner.get());
     },
-    ensureAgent(agentId, name) {
-      const r = byAgent.get(agentId); if (r) return { person: toPerson(r), created: false };
+    ensureAgent(agentId, name, { rename = false } = {}) {
+      const r = byAgent.get(agentId); if (r) { if (rename && name && name !== r.name) rename_.run(String(name).slice(0, 80), now(), r.id); return { person: toPerson(byAgent.get(agentId)), created: false }; }
       const t = now(); ins.run(mintId('per'), 'agent', String(name || agentId).slice(0, 80), 0, agentId, t, t);
       return { person: toPerson(byAgent.get(agentId)), created: true };
     },

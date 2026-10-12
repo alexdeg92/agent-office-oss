@@ -75,11 +75,11 @@ describe('release tooling', () => {
   });
 
   it('prints publish commands and does not include a secret', () => {
-    const text = tools.publishCommands('1.2.3');
+    const text = tools.publishCommands('1.2.3', 'sha256:' + 'f'.repeat(64));
     assert.match(text, /npm publish dist\/alexdeg92-agent-office-1\.2\.3\.tgz/);
     assert.match(text, /gh release create v1\.2\.3.*--repo alexdeg92\/agent-office-oss/);
     assert.match(text, /alexdeg92\/homebrew-tap/);
-    assert.match(text, /docker tag agent-office:1\.2\.3 ghcr\.io\/alexdeg92\/agent-office-oss:1\.2\.3/);
+    assert.match(text, /docker tag sha256:f{64} ghcr\.io\/alexdeg92\/agent-office-oss:1\.2\.3/);
     assert.match(text, /docker push ghcr\.io\/alexdeg92\/agent-office-oss:1\.2\.3/);
     assert.equal(text.includes('PORTAL_SECRET'), false);
   });

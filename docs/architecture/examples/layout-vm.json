@@ -150,7 +150,8 @@
             ],
             "name": null,
             "role": null,
-            "station": "st-timmy"
+            "station": "st-timmy",
+            "appearance": "auto"
           },
           {
             "agentId": "*subagent",
@@ -161,7 +162,8 @@
             "variant": "teal",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*cron",
@@ -172,7 +174,8 @@
             "variant": "ochre",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*dm",
@@ -183,7 +186,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*channel",
@@ -194,7 +198,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           }
         ]
       }
@@ -4494,7 +4499,8 @@
             ],
             "name": null,
             "role": null,
-            "station": "st-timmy"
+            "station": "st-timmy",
+            "appearance": "auto"
           },
           {
             "agentId": "*subagent",
@@ -4505,7 +4511,8 @@
             "variant": "teal",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*cron",
@@ -4516,7 +4523,8 @@
             "variant": "ochre",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*dm",
@@ -4527,7 +4535,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*channel",
@@ -4538,7 +4547,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           }
         ]
       }

@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * In-process fake of the OpenClaw gateway WebSocket (protocol v4 frames, as used by gateway.js).
  *

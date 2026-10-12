@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { configure } from '../../public/v2/config.js';
-import { safeReturn, inApp, parse, href, withSticky, activeTab, activeNav, NAV, BOTTOM_TABS, routeByName } from '../../public/v2/router.js';
+import { safeReturn, inApp, parse, href, withSticky, activeTab, activeNav, NAV, BOTTOM_TABS, routeByName, createRouter } from '../../public/v2/router.js';
 
 // The cases below run with the UI mounted at /v2/ (dev/staging); the F7 block at the end re-runs the essentials at /.
 configure({ basePath: '/v2/', apiBase: '' });
@@ -61,7 +61,7 @@ test('detail pages light their parent in the sidebar and bottom bar', () => {
 });
 
 test('navigation matches the decisions log', () => {
-  assert.deepEqual(NAV.map((r) => r.label), ['Bureau', 'Discuter', 'Flux de travail', 'Projets', 'Habilitations', 'Journaux', 'Compétences', 'Santé système', 'Boutique']);   // Boutique: office-dev-21 (PM, 2026-10-07)
+  assert.deepEqual(NAV.map((r) => r.label), ['Bureau', 'Discuter', 'Flux de travail', 'Projets', 'Habilitations', 'Journaux', 'Compétences', 'Santé système', 'Boutique', 'Paramètres']);
   assert.deepEqual(BOTTOM_TABS.map((n) => routeByName(n).label), ['Bureau', 'Discuter', 'Projets', 'Journaux', 'Plus']);
 });
 
@@ -120,4 +120,21 @@ test('27: animation sandbox route is authenticated, lazy and outside navigation 
     assert.ok(!NAV.some(r=>r.name==='bureau-animations'));
   }
   configure({basePath:'/v2/',apiBase:''});
+});
+
+
+test('router resets frame bodies, restores back positions and preserves the URL when leaving is cancelled', async () => {
+  configure({basePath:'/',apiBase:'/backend'});
+  const events={},frames=[{scrollTop:240}],paint=[];
+  const win={location:{pathname:'/parametres',search:'?onglet=agents',href:'http://example.test/parametres?onglet=agents'},document:{addEventListener(){},querySelectorAll:()=>frames},
+    addEventListener:(name,fn)=>events[name]=fn,requestAnimationFrame:fn=>paint.push(fn),scrollTo:()=>assert.fail('window must never scroll')};
+  const move=url=>{const u=new URL(url,'http://example.test');Object.assign(win.location,{pathname:u.pathname,search:u.search,href:u.href});};
+  win.history={pushState:(_,__,url)=>move(url),replaceState:(_,__,url)=>move(url)};
+  let allowed=true;const router=createRouter(win,{beforeNavigate:async()=>allowed});
+  const render=()=>{while(paint.length)paint.shift()();};
+  await router.navigate('/parametres?onglet=instance');render();assert.equal(frames[0].scrollTop,0);
+  frames[0].scrollTop=90;move('/parametres?onglet=agents');events.popstate();await new Promise(r=>setImmediate(r));render();
+  assert.equal(frames[0].scrollTop,240);
+  allowed=false;move('/sante');events.popstate();await new Promise(r=>setImmediate(r));
+  assert.equal(win.location.pathname,'/parametres');assert.equal(win.location.search,'?onglet=agents');assert.equal(router.current.name,'parametres');
 });

@@ -5,6 +5,11 @@ const fs = require('node:fs'), path = require('node:path'), crypto = require('no
 const { spawnSync } = require('node:child_process');
 const unsafe = (file, reason = 'file or directory identity changed') => Object.assign(new Error((file ? file + ': ' : '') + reason), { code: 'EUNSAFEPATH' });
 let identityFixture = null;
+let workerFault = null;
+function setWorkerFault(fault) {
+  if (!process.env.NODE_TEST_CONTEXT) throw new Error('worker faults are test-only');
+  workerFault = fault;
+}
 function setIdentityFixture(records) {
   if (!process.env.NODE_TEST_CONTEXT) throw new Error('identity fixtures are test-only');
   identityFixture = records;
@@ -62,6 +67,9 @@ function capture(parent, fsx = fs) {
 function mutate(file, operation, { fsx = fs } = {}) {
   file = canonicalPath(file);
   const job = { ...capture(path.dirname(file), fsx), file: path.basename(file), operation, identityFixture, testContext: !!process.env.NODE_TEST_CONTEXT };
+  if (workerFault && file === canonicalPath(workerFault.file) && operation.type === 'write') {
+    job.workerFault = workerFault; workerFault = null;
+  }
   if (operation.expectedParents) for (const p of operation.expectedParents) {
     const current = job.chain.find(x => x.path === p.path);
     if (current ? !same(current, p) : !operation.allowMissingParents?.includes(p.path)) throw unsafe();
@@ -70,10 +78,17 @@ function mutate(file, operation, { fsx = fs } = {}) {
     input: JSON.stringify(job), encoding: 'utf8', timeout: operation.timeoutMs || 10000, maxBuffer: operation.type === 'read' ? operation.maxBytes * 6 + 4096 : 1024 * 1024,
     // No inherited preload/module injection in this filesystem-only helper.
     env: { PATH: '', NODE_OPTIONS: '', TZ: 'UTC' } });
-  if (result.error) throw result.error;
-  let reply; try { reply = JSON.parse(result.stdout); } catch { throw unsafe(); }
-  if (result.status !== 0 || reply.error) throw Object.assign(new Error(reply.message || (file + ': safe file mutation refused')), { code: reply.error || 'EUNSAFEPATH' });
+  const unknown = () => {
+    if (['read', 'guard'].includes(operation.type)) return unsafe();
+    if (journal) journal.uncertain = true;
+    return Object.assign(new Error('filesystem worker outcome unknown; recovery required'), { code: 'EWORKERUNKNOWN' });
+  };
+  if (result.error) throw unknown();
+  let reply; try { reply = JSON.parse(result.stdout); } catch { throw unknown(); }
+  if (!reply || typeof reply !== 'object' || Array.isArray(reply)) throw unknown();
   if (journal && reply.changed && (journal.files.has(file) || operation.type === 'emptyDir' && [...journal.files].some(f => f.startsWith(file + path.sep)))) journal.receipts.push({ file, ...reply.receipt });
+  if (result.status !== 0 && !reply.error) throw unknown();
+  if (reply.error) throw Object.assign(new Error(reply.message || (file + ': safe file mutation refused')), { code: reply.error });
   return reply;
 }
 
@@ -91,6 +106,53 @@ function read(file, { roots, rootSnapshots = [], maxBytes, fsx = fs, encoding = 
   return mutate(file, { type: 'read', expectedParents: parents, identity: identity(before), version: { size: String(before.size), mtimeNs: String(before.mtimeNs), ctimeNs: String(before.ctimeNs) }, maxBytes, encoding }, { fsx });
 }
 
+// Read a bounded snapshot with one isolated worker process, reusing the same pinned-parent,
+// no-follow descriptor checks as read(). This avoids one process launch per file for stores
+// whose contract is an atomic, bounded multi-file snapshot.
+function readMany(files, { roots, rootSnapshots = [], maxBytesTotal, fsx = fs, encoding = 'utf8' } = {}) {
+  if (!Array.isArray(files) || files.length > 10_000 || !Number.isSafeInteger(maxBytesTotal) || maxBytesTotal < 0) throw unsafe();
+  if (!files.length) return [];
+  const jobs = []; let expectedBytes = 0;
+  for (const entry of files) {
+    const file = canonicalPath(entry?.file);
+    const maxBytes = entry?.maxBytes;
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || !roots.some(root => file.startsWith(canonicalPath(root) + path.sep))) throw unsafe();
+    const parents = capture(path.dirname(file), fsx).chain;
+    for (const root of rootSnapshots.filter(r => file.startsWith(r.root + path.sep))) {
+      for (const expected of root.parents) { const actual = parents.find(p => p.path === expected.path); if (!actual || !same(actual, expected)) throw unsafe(); }
+    }
+    const before = fsx.statSync(file, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(maxBytes)) throw unsafe();
+    expectedBytes += Number(before.size);
+    if (!Number.isSafeInteger(expectedBytes) || expectedBytes > maxBytesTotal) throw Object.assign(new Error('snapshot read limit exceeded'), { code: 'EFSBOUND' });
+    jobs.push({ chain: parents, missing: [], anchor: parents.at(-1).path, file: path.basename(file), testContext: !!process.env.NODE_TEST_CONTEXT,
+      identityFixture, operation: { type: 'read', identity: identity(before), version: { size: String(before.size), mtimeNs: String(before.mtimeNs), ctimeNs: String(before.ctimeNs) },
+        maxBytes, encoding } });
+  }
+  const job = { type: 'readMany', jobs, maxBytesTotal, identityFixture, testContext: !!process.env.NODE_TEST_CONTEXT };
+  const result = spawnSync(process.execPath, [__filename], { cwd: jobs[0].anchor, input: JSON.stringify(job), encoding: 'utf8',
+    timeout: 30_000, maxBuffer: maxBytesTotal * 6 + 4096, env: { PATH: '', NODE_OPTIONS: '', TZ: 'UTC' } });
+  const unknown = () => unsafe();
+  if (result.error) throw unknown();
+  let reply; try { reply = JSON.parse(result.stdout); } catch { throw unknown(); }
+  if (result.status !== 0 || !Array.isArray(reply) || reply.length !== jobs.length) throw Object.assign(new Error('safe snapshot read refused'), { code: reply?.error || 'EUNSAFEPATH' });
+  return reply;
+}
+
+function executeMany(job, fsx = fs) {
+  if (!Array.isArray(job.jobs) || !Number.isSafeInteger(job.maxBytesTotal) || job.maxBytesTotal < 0) throw unsafe();
+  let total = 0; const results = [];
+  for (const item of job.jobs) {
+    if (!item || typeof item.anchor !== 'string') throw unsafe();
+    process.chdir(item.anchor);
+    const result = execute(item, fsx);
+    total += result.bytes;
+    if (!Number.isSafeInteger(total) || total > job.maxBytesTotal) throw Object.assign(new Error('snapshot read limit exceeded'), { code: 'EFSBOUND' });
+    results.push(result);
+  }
+  return results;
+}
+
 // Preimages are staged privately before the first target changes. Undo only the
 // exact inodes this operation published; a concurrent change refuses rollback.
 function transaction(files, backupDir, fn) {
@@ -106,7 +168,10 @@ function transaction(files, backupDir, fn) {
   const previous = journal, active = { files: new Set(snapshots.keys()), receipts: [] }; journal = active;
   try {
     const result = fn(); journal = previous;
-    mutate(backup, { type: 'remove', identity: staged.receipt.after });
+    // The callback may already have committed its DB transaction. Cleanup cannot
+    // roll back committed files after that point; retain the private preimage if
+    // its guarded removal fails, without touching a concurrent replacement.
+    try { mutate(backup, { type: 'remove', identity: staged.receipt.after }); } catch { /* retained for recovery */ }
     return result;
   } catch (cause) {
     journal = previous;
@@ -129,6 +194,7 @@ function transaction(files, backupDir, fn) {
       for (const p of [...created.values()].sort((a, b) => b.path.length - a.path.length)) {
         if (!originalDirs.has(p.path)) mutate(p.path, { type: 'emptyDir', expectedIdentity: p });
       }
+      if (active.uncertain) throw new Error('worker publication outcome unknown');
     } catch { throw Object.assign(new Error('rollback refused; private preimages retained'), { code: 'EROLLBACK', backup }); }
     throw cause;
   } finally { journal = previous; }
@@ -165,7 +231,16 @@ function execute(job, fsx = fs) {
   const changed = after => ({ changed: true, receipt: { type: op.type, after, chain, createdDirs } });
   if (op.trusted) verifyTrusted(chain, fsx);
   if (op.type === 'mkdir') {
-    if (before) { if (!before.isDirectory() || before.isSymbolicLink()) throw unsafe(); return { changed: false, identity: identity(before) }; }
+    if (before) {
+      if (!before.isDirectory() || before.isSymbolicLink()) throw unsafe();
+      if (op.private) {
+        if (process.getuid && before.uid !== BigInt(process.getuid())) throw unsafe();
+        const fd = fsx.openSync(job.file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_DIRECTORY);
+        try { if (!same(fsx.fstatSync(fd, { bigint: true }), before)) throw unsafe(); revalidate(); fsx.fchmodSync(fd, 0o700); }
+        finally { fsx.closeSync(fd); }
+      }
+      return { changed: false, identity: identity(before) };
+    }
     revalidate(); fsx.mkdirSync(job.file, { mode: 0o700 });
     const s = fsx.lstatSync(job.file, { bigint: true });
     if (!s.isDirectory() || s.isSymbolicLink()) throw unsafe();
@@ -198,7 +273,7 @@ function execute(job, fsx = fs) {
       const after = fsx.fstatSync(fd, { bigint: true });
       revalidate();
       if (count > op.maxBytes || !same(after, opened) || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) throw unsafe();
-      return { text: bytes.subarray(0, count).toString(op.encoding || 'utf8'), identity: identity(opened), mode: Number(opened.mode) & 0o777 };
+      return { text: bytes.subarray(0, count).toString(op.encoding || 'utf8'), bytes: count, identity: identity(opened), mode: Number(opened.mode) & 0o777 };
     } finally { fsx.closeSync(fd); }
   }
   if (op.type === 'remove') {
@@ -215,28 +290,38 @@ function execute(job, fsx = fs) {
   }
   if (op.type !== 'write') throw unsafe();
   const tmp = '.' + job.file + '.agent-office-tmp-' + crypto.randomBytes(18).toString('hex');
-  let fd, created;
+  let fd, created, published;
   const isCreated = () => { const s = stat(tmp, fsx); return s?.isFile() && !s.isSymbolicLink() && same(s, created); };
   try {
-    revalidate();
-    fd = fsx.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
-    created = fsx.fstatSync(fd, { bigint: true });
-    revalidate();
-    fsx.writeFileSync(fd, op.encoding === 'base64' ? Buffer.from(op.text, 'base64') : op.text);
-    fsx.fchmodSync(fd, op.preserveMode && before ? Number(before.mode) & 0o777 : op.mode ?? 0o600);
-    fsx.fsyncSync(fd);
-    revalidate();
-    if (!isCreated()) throw unsafe();
-    const current = stat(job.file, fsx);
-    if (before ? !current || !same(current, before) : current) throw unsafe();
-    // Backups publish exclusively; replacement renames never follow destination links.
-    if (op.exclusive) { fsx.linkSync(tmp, job.file); fsx.unlinkSync(tmp); }
-    else fsx.renameSync(tmp, job.file);
-    return changed(identity(created));
-  } finally {
-    // Never clean up an attacker's replacement entry or a pre-existing collision.
-    try { if (created && isCreated()) fsx.unlinkSync(tmp); }
-    finally { if (fd !== undefined) fsx.closeSync(fd); }
+    try {
+      revalidate();
+      fd = fsx.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
+      created = fsx.fstatSync(fd, { bigint: true });
+      revalidate();
+      fsx.writeFileSync(fd, op.encoding === 'base64' ? Buffer.from(op.text, 'base64') : op.text);
+      fsx.fchmodSync(fd, op.preserveMode && before ? Number(before.mode) & 0o777 : op.mode ?? 0o600);
+      fsx.fsyncSync(fd);
+      revalidate();
+      if (!isCreated()) throw unsafe();
+      const current = stat(job.file, fsx);
+      if (before ? !current || !same(current, before) : current) throw unsafe();
+      // Backups publish exclusively; replacement renames never follow destination links.
+      if (op.exclusive) {
+        fsx.linkSync(tmp, job.file); published = changed(identity(created)); fsx.unlinkSync(tmp);
+      } else { fsx.renameSync(tmp, job.file); published = changed(identity(created)); }
+      const directoryFd = fsx.openSync('.', fs.constants.O_RDONLY);
+      try { fsx.fsyncSync(directoryFd); } finally { fsx.closeSync(directoryFd); }
+      return published;
+    } finally {
+      // Never clean up an attacker's replacement entry or a pre-existing collision.
+      try { if (created && isCreated()) fsx.unlinkSync(tmp); }
+      finally { if (fd !== undefined) fsx.closeSync(fd); }
+    }
+  } catch (e) {
+    // Publication is already complete. Preserve its exact inode/parent receipt
+    // even when durability or descriptor cleanup fails before acknowledgment.
+    if (published) e.mutation = published;
+    throw e;
   }
 }
 
@@ -282,11 +367,30 @@ function receipt(file, { missing = false, trusted = true } = {}) {
 function guarded(target, operation) {
   return mutate(target.file, { ...operation, trusted: true, expectedParents: target.parents, expectedIdentity: target.identity });
 }
-module.exports = { mutate, read, capture, execute, transaction, canonicalizer, canonicalPath, verifyTrusted, receipt, guarded, setIdentityFixture };
+module.exports = { mutate, read, readMany, capture, execute, executeMany, transaction, canonicalizer, canonicalPath, verifyTrusted, receipt, guarded, setIdentityFixture, setWorkerFault };
 
 if (require.main === module) {
   (async () => {
-    try { process.stdout.write(JSON.stringify(await execute(JSON.parse(fs.readFileSync(0, 'utf8'))))); }
-    catch (e) { process.stdout.write(JSON.stringify({ error: e.code || 'EUNSAFEPATH', message: e.message })); process.exitCode = 1; }
+    try {
+      const job = JSON.parse(fs.readFileSync(0, 'utf8'));
+      let fsx = fs;
+      if (job.testContext && job.workerFault) {
+        fsx = Object.create(fs); let fired = false;
+        fsx.fsyncSync = fd => {
+          if (!fired && fs.fstatSync(fd).isDirectory()) {
+            fired = true;
+            if (job.workerFault.terminate) process.exit(91);
+            if (job.workerFault.replacement !== undefined) {
+              const replacement = '.fixture-replacement-' + crypto.randomBytes(18).toString('hex');
+              fs.writeFileSync(replacement, job.workerFault.replacement, { mode: 0o600 }); fs.renameSync(replacement, job.file);
+            }
+            throw Object.assign(new Error('fixture directory fsync failure after publication'), { code: 'EIO' });
+          }
+          return fs.fsyncSync(fd);
+        };
+      }
+      process.stdout.write(JSON.stringify(job.type === 'readMany' ? executeMany(job, fsx) : await execute(job, fsx)));
+    }
+    catch (e) { process.stdout.write(JSON.stringify({ error: e.code || 'EUNSAFEPATH', message: e.message, ...e.mutation })); process.exitCode = 1; }
   })();
 }

@@ -84,7 +84,14 @@ describe('R13-04 · boot without a runtime token', () => {
 // A recording CLI: run(argv) → the scripted result
 const recordingCli = (result) => {
   const calls = [];
-  return { calls, run: async (argv) => { calls.push(argv); return typeof result === 'function' ? result(argv) : result; },
+  return { calls, run: async (argv) => {
+    calls.push(argv);
+    if (argv[0] === 'gateway' && !result?.refused) {
+      const p = JSON.parse(argv.find(a => a.startsWith('--params=')).slice(9));
+      return { ok: true, out: JSON.stringify({ ok: true, key: p.key, entry: { sendPolicy: 'deny' } }) };
+    }
+    return typeof result === 'function' ? result(argv) : result;
+  },
     parseJson: (out) => { const i = String(out || '').indexOf('{'); if (i < 0) return null; try { return JSON.parse(out.slice(i)); } catch (_) { return null; } } };
 };
 const okReply = { ok: true, code: 0, out: JSON.stringify({ result: { payloads: [{ text: 'Bonjour' }], meta: { durationMs: 9, agentMeta: { model: 'm', provider: 'p', usage: { total: 3 } } } } }), err: '' };
@@ -95,9 +102,9 @@ describe('R13-05 · agentTurn argv: every flag keeps its own value', () => {
     const c = bindCommands(cli);
     await c.agentTurn({ agentId: 'helper', text: '--danger', sessionRef: 'summary:test', timeoutMs: 150000 });
     await c.agentTurn({ agentId: 'helper', text: 'Salut', timeoutMs: 60000 });
-    assert.deepEqual(cli.calls, [
-      ['agent', '--message=--danger', '--agent=helper', '--json', '--timeout=150', '--session-key=summary:test'],
-      ['agent', '--message=Salut', '--agent=helper', '--json', '--timeout=60'],
+    assert.deepEqual(cli.calls.filter(a => a[0] === 'agent'), [
+      ['agent', '--message=--danger', '--agent=helper', '--json', '--timeout=150', '--channel=webchat', '--reply-channel=webchat', '--session-key=agent:helper:explicit:summary:test'],
+      ['agent', '--message=Salut', '--agent=helper', '--json', '--timeout=60', '--channel=webchat', '--reply-channel=webchat', '--session-key=agent:helper:ao-internal'],
     ]);
   });
 });

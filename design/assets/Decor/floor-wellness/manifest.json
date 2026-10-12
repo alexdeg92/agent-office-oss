@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-decor-v1",
+  "id": "floor-wellness",
+  "names": {
+    "fr": "Entraînement",
+    "en": "Exercise"
+  },
+  "artScale": 2,
+  "license": "MIT",
+  "provenance": {
+    "tool": "image_gen.imagegen",
+    "sources": "design/assets/tools/floor-sources",
+    "export": "crop, alpha endpoint cleanup, positive uniform scale, anchor registration, WebP encoding"
+  },
+  "items": [
+    {
+      "id": "treadmill",
+      "names": {
+        "fr": "Tapis roulant",
+        "en": "Treadmill"
+      },
+      "category": "equipement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 2
+      },
+      "anchor": {
+        "x": 181,
+        "y": 207
+      },
+      "size": {
+        "w": 304,
+        "h": 300
+      },
+      "image": "treadmill-day.webp",
+      "images": {
+        "sw@night": "treadmill-night.webp"
+      },
+      "thumbnail": "thumbnails/treadmill.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 95
+      }
+    },
+    {
+      "id": "weight-rack",
+      "names": {
+        "fr": "Support à haltères",
+        "en": "Weight rack"
+      },
+      "category": "rangement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 132,
+        "y": 167
+      },
+      "size": {
+        "w": 264,
+        "h": 222
+      },
+      "image": "weight-rack-day.webp",
+      "images": {
+        "sw@night": "weight-rack-night.webp"
+      },
+      "thumbnail": "thumbnails/weight-rack.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 80
+      }
+    },
+    {
+      "id": "exercise-bench",
+      "names": {
+        "fr": "Banc d’entraînement",
+        "en": "Exercise bench"
+      },
+      "category": "assise",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 2
+      },
+      "anchor": {
+        "x": 152,
+        "y": 159
+      },
+      "size": {
+        "w": 304,
+        "h": 229
+      },
+      "image": "exercise-bench-day.webp",
+      "images": {
+        "sw@night": "exercise-bench-night.webp"
+      },
+      "thumbnail": "thumbnails/exercise-bench.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 71
+      }
+    },
+    {
+      "id": "exercise-mat",
+      "names": {
+        "fr": "Tapis d’exercice",
+        "en": "Exercise mat"
+      },
+      "category": "sol",
+      "placement": "floor",
+      "layerBias": -1,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 2
+      },
+      "walkable": true,
+      "anchor": {
+        "x": 152,
+        "y": 83
+      },
+      "size": {
+        "w": 304,
+        "h": 167
+      },
+      "image": "exercise-mat-day.webp",
+      "images": {
+        "sw@night": "exercise-mat-night.webp"
+      },
+      "thumbnail": "thumbnails/exercise-mat.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 50
+      }
+    }
+  ]
+}

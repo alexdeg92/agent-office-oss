@@ -39,6 +39,7 @@
 /* ---------- characters ---------- */
 .ao-char { position: absolute; left: 0; top: 0; pointer-events: none; transition: opacity 120ms linear; }
 .ao-char.ao-enter, .ao-char.ao-exit { opacity: 0; }
+.ao-char.ao-char--elevator { opacity: 0; }
 .ao-char.ao-flash { animation: ao-flash 120ms linear; }
 @keyframes ao-flash { from { opacity: 0; } to { opacity: 1; } }
 .ao-pose { position: absolute; left: 0; top: 0; opacity: 0; transition: opacity 120ms linear; transform-origin: 50% 96%; }

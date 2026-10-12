@@ -114,7 +114,7 @@ function liveSources(cfg, engine, log = () => {}) {
     resolve: (host) => dns.promises.lookup(host, { all: true }).then((r) => r.map((x) => x.address)) };
 }
 
-function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null }) {
+function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false }) {
   const owner = store.owner;
   const primaryAgentId = () => { const agent = engine.primaryAgent(); return agent ? agent.id : null; };
   const repository = createProjectsRepository(store.db, { persons: [], ownerPersonId: owner.id, timmyPersonId: null, primaryAgentId,
@@ -131,9 +131,8 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
 
   const publicUrls = require('./urls').createPublicUrls({ publicUrl: cfg.publicUrl, publicApiBase: cfg.publicApiBase });
   covers = require('../../projects/covers/engine').createCoverEngine({
-    dataDir: cfg.dataDir, getProject: (id) => repository.getProject(id), runtime, writable: capabilitiesOf(cfg).storeWrites,
-    agentAllowed: () => capabilitiesOf(cfg).openclawWrites, log,
-    runTurn: thread ? (id, run) => thread.runProjectTurn(id, run) : undefined,
+    dataDir: cfg.dataDir, getProject: (id) => repository.getProject(id), writable: capabilitiesOf(cfg).storeWrites,
+    log,
     urlFor: (p) => publicUrls.forApi(p) || (cfg.publicApiBase || '') + p,
     onChange: (id) => { topics.invalidate('projects'); topics.invalidateIds(['project:' + id]); },
   });
@@ -184,15 +183,17 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   };
   const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (e) { next(toApiError(e)); } };
   // the cookie is the owner Person (an ActorRef; G3b: no personal shorthand); the agent token is { kind: 'agent', agentId } (G3a)
-  const ownerActor = () => ({ kind: 'human', personId: owner.id });
   const actorOf = (req) => {
-    if (req.principal && req.principal.kind === 'agent') return { kind: 'agent', agentId: req.principal.agentId };
-    return ownerActor();
+    return require('../../security/request-actor').requestActor(req,store);
   };
+  const coverAuthority=req=>({write:req.authorize,generate:req.authorize?()=>{
+    req.authorize();
+    if(!require('../../security/comment-provenance').PROJECT_CONTEXT_READS.every(r=>store.policy.can(req.user,r.resource,r.level)))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
+  }:null});
   const run = (name, fields, map) => wrap(async (req, res) => {
     const b = body(req, fields);
     const input = Object.assign({}, b, map ? map(req) : {}, { actor: actorOf(req), requestId: req.requestId });
-    const result = await service.commands[name](input);
+    const result = await covers.withAuthority(coverAuthority(req),()=>service.commands[name](input));
     ok(res, result);
   });
   const id = (req) => ({ id: req.params.id });
@@ -213,9 +214,21 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     ok(res, service.views.history({ id: req.params.id, cursor: req.query.cursor || undefined, limit }), null, 'history');
   }));
   r.get('/views/projects/:id', authed, wrap((req, res) => { const t = topics.current('project:' + req.params.id, req.apiVersion); ok(res, t.vm, { id: t.id, rev: t.rev }); }));
-  r.get('/views/project-candidates', authed, wrap(async (req, res) => ok(res, await service.views.candidates(), null, 'candidates')));
+  r.get('/views/project-candidates', authed, wrap(async (req, res) => {
+    req.authorize?.();
+    const requirements=require('../../security/comment-provenance').PROJECT_CONTEXT_READS;
+    if(req.authorize&&!requirements.every(r=>store.policy.can(req.user,r.resource,r.level)))return ok(res,{scannedAt:Date.now(),candidates:[]},null,'candidates');
+    const authorize=req.authorize?()=>{
+      req.authorize();
+      if(!requirements.every(r=>store.policy.can(req.user,r.resource,r.level)))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
+    }:null;
+    ok(res,await require('../../security/dispatch-context').runAuthorized(authorize,()=>service.views.candidates({...(authorize?{authorize}:{})})),null,'candidates');
+  }));
 
-  r.get('/project-covers/:file', authed, require('../../projects/covers/store').serveCover(covers.store));
+  r.get('/project-covers/:file', authed, require('../../projects/covers/store').serveCover(covers.store,{authorize:req=>{
+    req.authorize?.();
+    if(req.authorize&&!require('../../security/comment-provenance').PROJECT_CONTEXT_READS.every(r=>store.policy.can(req.user,r.resource,r.level))&&!covers.store.isUploadFile(req.params.file))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
+  }}));
 
   // ---- commands (store class) ----
   const store_ = guard('store');
@@ -229,7 +242,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   };
   r.post('/projects/:id/cover/regenerate', authed, store_, wrap((req, res) => {
     const b = body(req, ['expectedRevision']); const project = coverProject(req, b);
-    const queued = covers.regenerate(project.id);
+    const queued = covers.withAuthority(coverAuthority(req),()=>covers.regenerate(project.id));
     res.status(202); ok(res, { ok: true, result: { queued }, revision: project.revision, vm: service.views.project({ id: project.id }) });
   }));
   r.put('/projects/:id/cover', authed, store_, wrap(async (req, res) => {
@@ -237,7 +250,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     if (typeof b.image !== 'string' || b.image.length > 65536 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b.image)) throw invalid('image', 'invalid');
     const bytes = Buffer.from(b.image, 'base64');
     if (!require('../../projects/covers/raster').rasterKind(bytes)) throw invalid('image', 'invalid');
-    try { await covers.upload(project.id, bytes); } catch (_) { throw new ApiError('upstream_failed'); }
+    try { await covers.withAuthority(coverAuthority(req),()=>covers.upload(project.id, bytes)); } catch (e) { if(e instanceof ApiError)throw e;throw new ApiError('upstream_failed'); }
     ok(res, { ok: true, result: null, revision: repository.getProject(project.id).revision, vm: service.views.project({ id: project.id }) });
   }));
   r.post('/projects/import', authed, store_, run('importCandidates', ['keys', 'overrides']));
@@ -257,32 +270,28 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   }));
 
   // ---- « Régénérer le résumé »: an agent turn (OpenClaw class), 202 ----
-  r.post('/projects/:id/summary/regenerate', authed, guard('openclaw'), wrap(async (req, res) => {
+  r.post('/projects/:id/summary/regenerate', authed, guard('store'), guard('openclaw'), wrap(async (req, res) => {
     const b = body(req, ['expectedRevision']);
-    if (thread?.hasPendingSummary(req.params.id)) throw new ApiError('conflict', { details: [{ field: 'summary', issue: 'turn-pending' }] });
-    const accepted = service.commands.regenerateSummary({ id: req.params.id, expectedRevision: b.expectedRevision, requestId: req.requestId, actor: ownerActor() });
-    res.status(202).json(require('./envelope').okBody(accepted, { engine }));
+    const primary = engine.primaryAgent();
+    const input = { id: req.params.id, expectedRevision: b.expectedRevision, requestId: req.requestId, actor: actorOf(req) };
+    const useThread = thread && primary && capabilitiesOf(cfg).storeWrites;
+    req.authorize?.();
+    const accepted = useThread ? thread.startSummary(input, primary.id, actorOf(req),req) : service.commands.regenerateSummary(input);
+    res.status(202);ok(res,accepted);
     const vm = accepted.vm;
     // G3b: the turn asks in the INSTANCE language (AO_LOCALE), not a fixed French
     const L = labelsFor(resolveLocale({ instance: cfg && cfg.instanceLocale }), 'server');
     const prompt = L['prompt.projectSummary'].replace(/\{(\w+)\}/g, (_, k) => ({ name: vm.name, status: vm.status,
       sources: vm.sources.map((s) => s.label).join(', ') || L['prompt.noSources'] })[k]);
     // the runtime adapter runs the turn (G2) with the primary agent (G3a replaces this lookup with the resolver)
-    const primary = engine.primaryAgent();   // G3a: the one resolver
     const turnId = accepted.result && accepted.result.turnId;
     // R13-05: a failed or empty turn releases the pending regeneration (so it can be retried) when projects exposes it
     const release = () => { if (typeof service.commands.abandonSummary === 'function') { try { service.commands.abandonSummary({ id: vm.id, turnId }); } catch (_) { /* already settled */ } } };
     if (!primary) return release();
-    // architect-57 (C): in the project's own session, with its context, after any comment turn; the request and the
-    // reply show in the project thread
-    if (thread && capabilitiesOf(cfg).storeWrites) {
-      try { thread.requestSummary(vm.id, primary.id, actorOf(req), { turnId, expectedRevision: accepted.revision }); }
-      catch (e) { log('projects: summary request failed (' + (e?.code || 'error') + ')'); release(); }
-      return;
-    }
-    const runTurn = () => runtime.commands.agentTurn({ agentId: primary.id, text: prompt,
-      sessionRef: 'portal-summary-' + vm.id, timeoutMs: 150000 });
-    Promise.resolve(runTurn())
+    if (useThread) return;
+    const runTurn = () => require('../../security/dispatch-context').runAuthorized(req.authorize,()=>runtime.commands.agentTurn({ agentId: primary.id, text: prompt,
+      sessionRef: 'portal-summary-' + vm.id, timeoutMs: 150000 }));
+    Promise.resolve().then(runTurn)
       .then((out) => {
         const text = out && !out.failed && out.text ? out.text.trim() : '';
         if (!text) { if (out && out.failed) log('projects: summary turn failed (' + out.failed + ')'); return release(); }

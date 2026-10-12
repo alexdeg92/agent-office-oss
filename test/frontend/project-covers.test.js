@@ -2,7 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
@@ -63,11 +63,16 @@ test('desktop card/detail paint real backend covers, keep image dimensions and s
   assert.equal(await evaluate("document.querySelector('.ao-cover-actions input').accept"), 'image/png,image/jpeg,image/webp');
   assert.equal(await evaluate("document.querySelector('.ao-cover-actions button').disabled"), false);
 });
-test('mobile cards use only the 160×90 thumbnail URL; mobile detail paints its cover', { skip, timeout: 30000 }, async () => {
+test('mobile cards render compact covers using only the 160×90 thumbnail URL; mobile detail paints its cover', { skip, timeout: 30000 }, async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await go('/v2/projets'); await ready("!!document.querySelector('.ao-mobile-card img')?.naturalWidth");
-  const image = await evaluate("(() => {const i=document.querySelector('.ao-mobile-card img');return {src:i.getAttribute('src'),width:Number(i.getAttribute('width')),height:Number(i.getAttribute('height')),naturalWidth:i.naturalWidth,lazy:i.loading};})()");
-  assert.equal(image.src, new URL(project.cover.thumbUrl, h.base).href); assert.equal(image.width, 160); assert.equal(image.height, 90); assert.equal(image.lazy, 'lazy'); assert.equal(image.naturalWidth, 160);
+  const image = await evaluate("(() => {const i=document.querySelector('.ao-mobile-card img'),r=i.closest('.bu-thumb').getBoundingClientRect();return {src:i.getAttribute('src'),width:r.width,height:r.height,naturalWidth:i.naturalWidth,lazy:i.loading};})()");
+  assert.equal(image.src, new URL(project.cover.thumbUrl, h.base).href); assert.equal(image.width, 64); assert.equal(image.height, 48); assert.equal(image.lazy, 'lazy'); assert.equal(image.naturalWidth, 160);
+  if (process.env.PROJECTS_SCREENSHOTS) {
+    mkdirSync('design/reports/projects-mobile-1', { recursive: true });
+    const capture = await send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync('design/reports/projects-mobile-1/backend-cover-mobile-390.png', Buffer.from(capture.data, 'base64'));
+  }
   await go('/v2/projets/' + project.id); await ready("!!document.querySelector('.bu-project-header [data-cover=cover] img')?.naturalWidth");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.bu-project-header [data-cover=cover]')).display"), 'block');
   assert.deepEqual(errors, []);

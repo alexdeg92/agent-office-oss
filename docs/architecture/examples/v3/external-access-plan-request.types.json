@@ -1,0 +1,29 @@
+{
+  "$comment": "POST access/plan request; settingsRevision is the global Settings revision (null before initial setup publication).",
+  "nullable": [
+    "$.settingsRevision",
+    "$.draft.apiPublicUrl",
+    "$.draft.domain"
+  ],
+  "variants": {
+    "$.settingsRevision": [
+      12
+    ],
+    "$.draft.apiPublicUrl": [
+      "https://api.example.org/backend"
+    ],
+    "$.draft.domain": [
+      "api.example.org"
+    ],
+    "$.draft.uiOrigins": [
+      [
+        "https://office.example.org"
+      ]
+    ]
+  },
+  "types": {
+    "$.settingsRevision": "number",
+    "$.draft.apiPublicUrl": "string",
+    "$.draft.domain": "string"
+  }
+}

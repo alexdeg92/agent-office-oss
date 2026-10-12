@@ -61,6 +61,7 @@ export function headline(vm, o = {}) {
     return { kind: 'active', lead, deck: [...deck, ...activeDeck(rest)], tone: 'live' };
   }
 
+  if (occupants.some((x) => !['idle', 'offline'].includes(x.state))) return { kind: 'unknown', lead: S('office.unconfirmed'), deck, tone: 'warning' };
   const present = occupants.filter((x) => x.state !== 'offline').length;
   return { kind: 'idle', lead: S('office.noActiveRun'), deck: [...deck, present ? S('office.present', { n: present }) : S('office.empty')], tone: 'neutral' };
 

@@ -1,11 +1,12 @@
 #!/bin/sh
-# Container smoke test. Builds the local image and does not push it.
+# Container smoke test. Builds only when IMAGE is omitted; supplied artifacts are never rebuilt.
 #   packaging/docker/smoke.sh
 # Demo environment values are fake. The script checks they are not printed.
 set -eu
 cd "$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
 
-IMAGE="${IMAGE:-agent-office:local}"
+BUILD_LOCAL=0
+if [ -z "${IMAGE:-}" ]; then IMAGE=agent-office:local; BUILD_LOCAL=1; fi
 NAME="agent-office-smoke-$$"
 DEMO_TOKEN="demo-gateway-token"
 DEMO_EMAIL="demo@example.com"
@@ -17,7 +18,12 @@ fail() {
   exit 1
 }
 
-docker build --provenance=false -f packaging/docker/Dockerfile -t "$IMAGE" .
+if [ "$BUILD_LOCAL" = 1 ]; then
+  docker build --provenance=false -f packaging/docker/Dockerfile -t "$IMAGE" .
+fi
+# Resolve a mutable local tag once; every command below uses the same image ID.
+IMAGE=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+[ -n "$IMAGE" ] || fail "supplied image is missing"
 
 expected=$(node -e 'process.stdout.write(require("./package.json").version)')
 version=$(docker run --rm "$IMAGE" version | tr -d '\r')
@@ -38,7 +44,7 @@ case "$config" in
 esac
 
 cleanup() {
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  docker rm -fv "$NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 

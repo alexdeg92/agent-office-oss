@@ -57,7 +57,99 @@
         "destination": null,
         "sessionKey": "agent:atlas:main",
         "tokens": 52300,
-        "lastSeenAt": 1791223080000
+        "lastSeenAt": 1791223080000,
+        "execution": {
+          "status": "running",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223100000,
+            "expiresAt": null
+          }
+        },
+        "parentId": null,
+        "parentAmbiguous": false,
+        "parentName": null,
+        "rosterDepth": 0,
+        "teamId": null,
+        "groupId": "primary",
+        "rosterOrder": 0,
+        "floorId": "1",
+        "stateLabel": {
+          "key": "agentState.working"
+        },
+        "stateDetailLabel": {
+          "key": "agentState.working"
+        },
+        "stateLastLabel": {
+          "key": "office.lastState",
+          "params": {
+            "state": {
+              "key": "agentState.working"
+            }
+          }
+        },
+        "standingPoint": null,
+        "stateActive": true
+      },
+      {
+        "id": "agent:codex:worker",
+        "role": "agent",
+        "name": "Worker",
+        "title": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Worker"
+          }
+        },
+        "roleLabel": {
+          "key": "occupantRole.agent"
+        },
+        "state": "idle",
+        "stateSince": 1791223100000,
+        "stationUid": "st-2",
+        "look": {
+          "character": "timmy",
+          "variant": null,
+          "accessories": []
+        },
+        "ruleId": "*subagent",
+        "destination": null,
+        "sessionKey": "agent:codex:worker",
+        "tokens": 0,
+        "lastSeenAt": null,
+        "isNew": true,
+        "execution": {
+          "status": "idle",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223100000,
+            "expiresAt": null
+          }
+        },
+        "parentId": null,
+        "parentAmbiguous": false,
+        "parentName": null,
+        "rosterDepth": 0,
+        "teamId": null,
+        "groupId": "agent:codex:worker",
+        "rosterOrder": 1,
+        "floorId": "1",
+        "stateLabel": {
+          "key": "agentState.idle"
+        },
+        "stateDetailLabel": {
+          "key": "agentState.idle"
+        },
+        "stateLastLabel": {
+          "key": "office.lastState",
+          "params": {
+            "state": {
+              "key": "agentState.idle"
+            }
+          }
+        },
+        "standingPoint": null,
+        "stateActive": false
       },
       {
         "id": "subagent:ffffffff-0001-4000-8000-000000000001",
@@ -84,7 +176,39 @@
         "destination": null,
         "sessionKey": "agent:atlas:subagent:ffffffff-0001-4000-8000-000000000001",
         "tokens": 8100,
-        "lastSeenAt": 1791223170000
+        "lastSeenAt": 1791223170000,
+        "execution": {
+          "status": "running",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223150000,
+            "expiresAt": null
+          }
+        },
+        "parentId": "agent:codex:worker",
+        "parentAmbiguous": false,
+        "parentName": "Worker",
+        "rosterDepth": 1,
+        "teamId": null,
+        "groupId": "agent:codex:worker",
+        "rosterOrder": 2,
+        "floorId": "1",
+        "stateLabel": {
+          "key": "agentState.working"
+        },
+        "stateDetailLabel": {
+          "key": "agentState.working"
+        },
+        "stateLastLabel": {
+          "key": "office.lastState",
+          "params": {
+            "state": {
+              "key": "agentState.working"
+            }
+          }
+        },
+        "standingPoint": null,
+        "stateActive": true
       },
       {
         "id": "scheduled:ffffffff-0c01-4000-8000-000000000001",
@@ -111,7 +235,39 @@
         "destination": null,
         "sessionKey": "agent:atlas:cron:ffffffff-0c01-4000-8000-000000000001",
         "tokens": 1500,
-        "lastSeenAt": 1791223180000
+        "lastSeenAt": 1791223180000,
+        "execution": {
+          "status": "idle",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223000000,
+            "expiresAt": null
+          }
+        },
+        "parentId": null,
+        "parentAmbiguous": false,
+        "parentName": null,
+        "rosterDepth": 0,
+        "teamId": null,
+        "groupId": "scheduled:ffffffff-0c01-4000-8000-000000000001",
+        "rosterOrder": 3,
+        "floorId": "1",
+        "stateLabel": {
+          "key": "agentState.idle"
+        },
+        "stateDetailLabel": {
+          "key": "agentState.idle"
+        },
+        "stateLastLabel": {
+          "key": "office.lastState",
+          "params": {
+            "state": {
+              "key": "agentState.idle"
+            }
+          }
+        },
+        "standingPoint": null,
+        "stateActive": false
       }
     ],
     "journal": [
@@ -166,7 +322,481 @@
           }
         }
       }
-    ]
+    ],
+    "rosterGroups": [
+      {
+        "id": "agent:codex:worker",
+        "rootId": "agent:codex:worker",
+        "teamId": null,
+        "occupantIds": [
+          "agent:codex:worker",
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "childIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "order": 1,
+        "count": 1,
+        "activeCount": 1,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Worker"
+          }
+        }
+      }
+    ],
+    "rosterItems": [
+      {
+        "id": "primary",
+        "kind": "occupant",
+        "isGroup": false,
+        "rootId": "primary",
+        "occupantIds": [
+          "primary"
+        ],
+        "childIds": [],
+        "previewOccupantIds": [
+          "primary"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Atlas",
+            "n": 0
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 0
+          }
+        },
+        "overflowLabel": null,
+        "order": 0,
+        "count": 0,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Atlas"
+          }
+        }
+      },
+      {
+        "id": "agent:codex:worker",
+        "kind": "group",
+        "isGroup": true,
+        "rootId": "agent:codex:worker",
+        "occupantIds": [
+          "agent:codex:worker",
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "childIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "previewOccupantIds": [
+          "agent:codex:worker",
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Worker",
+            "n": 1
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 1
+          }
+        },
+        "overflowLabel": null,
+        "order": 1,
+        "count": 1,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Worker"
+          }
+        }
+      },
+      {
+        "id": "subagent:ffffffff-0001-4000-8000-000000000001",
+        "kind": "occupant",
+        "isGroup": false,
+        "rootId": "subagent:ffffffff-0001-4000-8000-000000000001",
+        "occupantIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "childIds": [],
+        "previewOccupantIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Sous-agent ffff",
+            "n": 0
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 0
+          }
+        },
+        "overflowLabel": null,
+        "order": 2,
+        "count": 0,
+        "label": {
+          "key": "sessionTitle.subagent",
+          "params": {
+            "id": "ffff"
+          }
+        }
+      },
+      {
+        "id": "scheduled:ffffffff-0c01-4000-8000-000000000001",
+        "kind": "occupant",
+        "isGroup": false,
+        "rootId": "scheduled:ffffffff-0c01-4000-8000-000000000001",
+        "occupantIds": [
+          "scheduled:ffffffff-0c01-4000-8000-000000000001"
+        ],
+        "childIds": [],
+        "previewOccupantIds": [
+          "scheduled:ffffffff-0c01-4000-8000-000000000001"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Veille hebdomadaire",
+            "n": 0
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 0
+          }
+        },
+        "overflowLabel": null,
+        "order": 3,
+        "count": 0,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Veille hebdomadaire"
+          }
+        }
+      }
+    ],
+    "rosterPreviewItems": [
+      {
+        "id": "primary",
+        "kind": "occupant",
+        "isGroup": false,
+        "rootId": "primary",
+        "occupantIds": [
+          "primary"
+        ],
+        "childIds": [],
+        "previewOccupantIds": [
+          "primary"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Atlas",
+            "n": 0
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 0
+          }
+        },
+        "overflowLabel": null,
+        "order": 0,
+        "count": 0,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Atlas"
+          }
+        }
+      },
+      {
+        "id": "agent:codex:worker",
+        "kind": "group",
+        "isGroup": true,
+        "rootId": "agent:codex:worker",
+        "occupantIds": [
+          "agent:codex:worker",
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "childIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "previewOccupantIds": [
+          "agent:codex:worker",
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Worker",
+            "n": 1
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 1
+          }
+        },
+        "overflowLabel": null,
+        "order": 1,
+        "count": 1,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Worker"
+          }
+        }
+      },
+      {
+        "id": "subagent:ffffffff-0001-4000-8000-000000000001",
+        "kind": "occupant",
+        "isGroup": false,
+        "rootId": "subagent:ffffffff-0001-4000-8000-000000000001",
+        "occupantIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "childIds": [],
+        "previewOccupantIds": [
+          "subagent:ffffffff-0001-4000-8000-000000000001"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Sous-agent ffff",
+            "n": 0
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 0
+          }
+        },
+        "overflowLabel": null,
+        "order": 2,
+        "count": 0,
+        "label": {
+          "key": "sessionTitle.subagent",
+          "params": {
+            "id": "ffff"
+          }
+        }
+      },
+      {
+        "id": "scheduled:ffffffff-0c01-4000-8000-000000000001",
+        "kind": "occupant",
+        "isGroup": false,
+        "rootId": "scheduled:ffffffff-0c01-4000-8000-000000000001",
+        "occupantIds": [
+          "scheduled:ffffffff-0c01-4000-8000-000000000001"
+        ],
+        "childIds": [],
+        "previewOccupantIds": [
+          "scheduled:ffffffff-0c01-4000-8000-000000000001"
+        ],
+        "overflowCount": 0,
+        "openLabel": {
+          "key": "office.mobile.openTeam",
+          "params": {
+            "name": "Veille hebdomadaire",
+            "n": 0
+          }
+        },
+        "delegatesLabel": {
+          "key": "office.mobile.delegates",
+          "params": {
+            "n": 0
+          }
+        },
+        "overflowLabel": null,
+        "order": 3,
+        "count": 0,
+        "label": {
+          "key": "sessionTitle.named",
+          "params": {
+            "name": "Veille hebdomadaire"
+          }
+        }
+      }
+    ],
+    "rosterOverflowCount": 0,
+    "rosterSummary": {
+      "count": 4,
+      "activeCount": 2
+    },
+    "rosterAllLabel": {
+      "key": "office.mobile.all",
+      "params": {
+        "n": 4
+      }
+    },
+    "rosterOverflowLabel": {
+      "key": "office.mobile.overflowCount",
+      "params": {
+        "n": 0
+      }
+    },
+    "conversationIds": [
+      "direct:example"
+    ],
+    "conversationCount": 1,
+    "conversationLabel": {
+      "key": "office.mobile.conversations",
+      "params": {
+        "n": 1
+      }
+    },
+    "stateLabels": {
+      "unknown": {
+        "key": "agentState.unknown"
+      },
+      "observed": {
+        "key": "agentState.observed"
+      },
+      "idle": {
+        "key": "agentState.idle"
+      },
+      "thinking": {
+        "key": "agentState.thinking"
+      },
+      "working": {
+        "key": "agentState.working"
+      },
+      "researching": {
+        "key": "agentState.researching"
+      },
+      "writing": {
+        "key": "agentState.writing"
+      },
+      "calling": {
+        "key": "agentState.calling"
+      },
+      "waiting": {
+        "key": "agentState.waiting"
+      },
+      "error": {
+        "key": "agentState.error"
+      },
+      "offline": {
+        "key": "agentState.offline"
+      }
+    },
+    "rosterFloors": [
+      {
+        "id": "1",
+        "order": 1,
+        "label": {
+          "key": "office.floor.first",
+          "params": {
+            "n": 1
+          }
+        },
+        "statusLabel": {
+          "key": "office.floor.status",
+          "params": {
+            "active": 2,
+            "idle": 2
+          }
+        },
+        "kind": "office",
+        "occupantIds": [
+          "primary",
+          "agent:codex:worker",
+          "subagent:ffffffff-0001-4000-8000-000000000001",
+          "scheduled:ffffffff-0c01-4000-8000-000000000001"
+        ],
+        "mobileLabelIds": [
+          "primary",
+          "subagent:ffffffff-0001-4000-8000-000000000001",
+          "agent:codex:worker"
+        ],
+        "count": 4,
+        "activeCount": 2,
+        "idleCount": 2,
+        "layout": null,
+        "capacity": 7,
+        "countLabel": {
+          "key": "office.floor.count",
+          "params": {
+            "n": 4
+          }
+        },
+        "items": [
+          {
+            "kind": "occupant",
+            "id": "occupant:primary",
+            "occupantId": "primary"
+          },
+          {
+            "kind": "occupant",
+            "id": "occupant:agent:codex:worker",
+            "occupantId": "agent:codex:worker"
+          },
+          {
+            "kind": "occupant",
+            "id": "occupant:subagent:ffffffff-0001-4000-8000-000000000001",
+            "occupantId": "subagent:ffffffff-0001-4000-8000-000000000001"
+          },
+          {
+            "kind": "occupant",
+            "id": "occupant:scheduled:ffffffff-0c01-4000-8000-000000000001",
+            "occupantId": "scheduled:ffffffff-0c01-4000-8000-000000000001"
+          }
+        ]
+      }
+    ],
+    "unseatedTeams": [],
+    "visitIntent": {
+      "hostId": "primary",
+      "desk": [
+        "direct:example"
+      ],
+      "meeting": [
+        "primary",
+        "direct:telegram-user:foreign-user",
+        "group:slack-room:C0ACME"
+      ],
+      "talking": true,
+      "speaker": "direct:example",
+      "until": null,
+      "visitors": [
+        {
+          "id": "direct:example",
+          "phase": "person",
+          "stateLabel": {
+            "key": "agentState.waiting"
+          },
+          "onStage": true
+        }
+      ]
+    }
   },
   "meta": {
     "modelVersion": 1,

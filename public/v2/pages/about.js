@@ -3,11 +3,17 @@
 // (third-party.json, checked by test/frontend/notices.test.js). Each licence text loads when its notice is opened.
 import { html, useEffect, useState } from '../lib.js';
 import { services } from '../services.js';
-import { msg } from '../i18n.js';
-import { config } from '../config.js';
+import { getLang, msg } from '../i18n.js';
+import { registerMessages } from '../messages.js';
+import * as releaseMessages from '../messages/releases.js';
+import { config, buildQuery } from '../config.js';
 import { getAsset, getAssetText } from '../api.js';
 import { ShortcutsList, openShortcuts } from '../components/shortcuts.js';
 import { Icon } from '../components/ui.js';
+import { CURRENT_RELEASE } from '../release-current.js';
+import { markCurrentReleaseSeen } from '../release-notes.js';
+
+registerMessages(releaseMessages);
 
 /** '1.0.0+dev' → { version: '1.0.0', build: 'dev' }; a version without '+' has no separate build. */
 export function splitVersion(v) {
@@ -33,10 +39,24 @@ export function AboutPage() {
   const meta = services.meta || {};
   const [notices, setNotices] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [releases, setReleases] = useState(null);
+  const [releasesFailed, setReleasesFailed] = useState(false);
   useEffect(() => { getAsset('third-party.json').then((j) => setNotices(j.entries), () => setFailed(true)); }, []);
+  useEffect(() => {
+    let alive = true;
+    getAsset('releases.json' + buildQuery).then((data) => {
+      if (!alive) return;
+      if (!Array.isArray(data.releases) || data.current?.tag !== CURRENT_RELEASE.tag || data.current?.sequence !== CURRENT_RELEASE.sequence) throw new Error('invalid release notes');
+      setReleases(data.releases);
+      markCurrentReleaseSeen(services.me?.email);
+    }).catch(() => { if (alive) setReleasesFailed(true); });
+    return () => { alive = false; };
+  }, []);
   const nd = msg('editorial.notProvided');
   const { version, build } = splitVersion(meta.serverVersion);
   const rt = meta.runtime || {};
+  const locale = getLang() === 'en' ? 'en-CA' : 'fr-CA';
+  const dateLabel = (iso) => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(iso + 'T12:00:00Z'));
   const rows = [
     [msg('about.version'), version || nd],
     [msg('about.build'), build || nd],
@@ -45,11 +65,18 @@ export function AboutPage() {
     [msg('about.runtimeVersion'), rt.version || nd],
     [msg('about.api'), msg('about.apiValue', { path: '/api/v' + config.apiVersion, contract: meta.contractVersion || nd, model: meta.modelVersion ?? nd })],
   ];
-  return html`<div class="bu-page ao-frame ao-frame--detail ao-about" aria-labelledby="about-titre">
-    <header class="ao-about__head">
-      <h2 class="bu-title" id="about-titre">${msg('about.title')}</h2>
-      <p class="bu-text-secondary">${msg('about.lead')}</p>
-    </header>
+  return html`<div class="bu-page ao-page ao-page--detail ao-about" aria-label=${msg('about.title')}>
+    <section class="bu-card ao-section ao-release-notes" aria-labelledby="about-releases">
+      <div class="ao-section__head"><h2 class="bu-card__title" id="about-releases">${msg('release.notes.title')}</h2></div>
+      <p class="bu-caption bu-text-secondary">${msg('release.notes.lead')}</p>
+      ${releasesFailed ? html`<p class="bu-text-secondary" role="status">${msg('release.notes.unavailable')}</p>` : !releases ? html`<p class="bu-text-secondary" role="status">${msg('editorial.loading')}</p>`
+        : html`<ol class="ao-release-notes__list">${releases.map((release) => html`<li key=${release.tag} class=${'ao-release-notes__item' + (release.sequence === CURRENT_RELEASE.sequence ? ' ao-release-notes__item--latest' : '')}>
+            <div class="ao-release-notes__head"><div class="ao-release-notes__title"><strong>${dateLabel(release.date)} · ${release.time} UTC — ${release.title[getLang()] || release.title.fr}</strong>
+                <span class="ao-release-notes__version">${msg('release.notes.version', { version: release.version })}</span></div>
+              ${release.sequence === CURRENT_RELEASE.sequence ? html`<span class="bu-tag ao-release-notes__latest">${msg('release.notes.latest')}</span>` : null}</div>
+            <ul>${(release[getLang()] || release.fr).map((bullet, index) => html`<li key=${index}>${bullet}</li>`)}</ul>
+          </li>`)}</ol>`}
+    </section>
     <div class="bu-grid--2 ao-about__pair">
       <section class="bu-card ao-section" aria-labelledby="about-install">
         <h3 class="bu-card__title" id="about-install">${msg('about.install')}</h3>

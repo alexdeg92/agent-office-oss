@@ -1,16 +1,14 @@
-// Illustrated office scene: layered DOM renderer (design/office/README.md).
-// Plain DOM so it can be mounted from Preact (ref) or a bare page. It only animates what it is told:
-// occupants come from OfficeVM.occupants, cues from SSE 'cue' frames.
-import { project, imageBox, wallPoint, footprintFor, itemDepth, characterDepth, sortScene } from './geometry.js';
+// Layered DOM scene (design/office/README.md), driven by OfficeVM occupants and SSE cues.
+import { project, unproject, imageBox, wallPoint, footprintFor, itemDepth, characterDepth, sortScene } from './geometry.js';
 import { buildGrid, findPath, nearestWalkable, isWalkable } from './pathfind.js';
 import {
-  STATE_LABELS, viewFor, CUES, WALK_TILES_PER_S, CROSSFADE_MS, LOUNGE_AFTER_MS,
+  viewFor, CUES, WALK_TILES_PER_S, CROSSFADE_MS, LOUNGE_AFTER_MS,
   SEATED_VIEW, SEATED_CUES, SOFA_VIEW, SWIVEL_MS, SELECT_WAVE_MS, IDLE_SWIVEL_EVERY_MS, IDLE_SWIVEL_HOLD_MS,
 } from './states.js';
 import { resolveTheme } from './theme.js';
 import { s as tr, labelOf, intlLocale } from './strings.js';
 import {
-  indexManifest, resolveUrl, furnitureImage, partImage, poseImage, accessoryLayers, landmarksFor, headTopY, renderScale, themeFor, roomImage,
+  indexManifest, resolveUrl, furnitureImage, partImage, poseImage, accessoryLayers, headTopY, renderScale, themeFor, roomImage,
   seatModeFor, isBackPose, deskPoseImage,
 } from './assets.js';
 import { markerHtml } from './markers.js';
@@ -42,39 +40,16 @@ const place = (node, box) => {
   node.style.height = `${box.height}px`;
 };
 
-/** SVG overlay of head landmarks on the pose canvas (image px). Missing landmarks draw a "no data" tag. */
-function landmarkSvg(ch, lm) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('class', 'ao-landmarks');
-  svg.setAttribute('viewBox', `0 0 ${ch.canvas.w} ${ch.canvas.h}`);
-  const add = (tag, attrs) => {
-    const n = document.createElementNS(ns, tag);
-    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-    svg.append(n);
-    return n;
-  };
-  add('circle', { cx: ch.anchor.x, cy: ch.anchor.y, r: 3, class: 'lm-anchor' });
-  if (!lm) {
-    add('text', { x: 4, y: 12, class: 'lm-none' }).textContent = tr('scene.noLandmarks');
-    return svg;
-  }
-  const pt = (p, cls) => p && add('circle', { cx: p.x, cy: p.y, r: 3.5, class: cls });
-  if (lm.headBox) add('rect', { x: lm.headBox.x, y: lm.headBox.y, width: lm.headBox.w, height: lm.headBox.h, class: 'lm-box', transform: lm.tilt && lm.headCentre ? `rotate(${lm.tilt} ${lm.headCentre.x} ${lm.headCentre.y})` : '' });
-  if (lm.eyeLine) add('line', { x1: lm.eyeLine.a.x, y1: lm.eyeLine.a.y, x2: lm.eyeLine.b.x, y2: lm.eyeLine.b.y, class: 'lm-eyes' });
-  pt(lm.headCentre, 'lm-centre'); pt(lm.earLeft, 'lm-ear'); pt(lm.earRight, 'lm-ear'); pt(lm.neck, 'lm-neck'); pt(lm.chest, 'lm-chest');
-  return svg;
-}
 
 export class OfficeScene {
   /**
-   * @param {HTMLElement} stage  container (gets class ao-office; give it a size)
+   * @param {HTMLElement} stage sized container
    * @param {object} opts
-   * @param {object} opts.manifest        manifest (design/office/manifest.schema.json)
-   * @param {object} opts.layout          layout data (layout.schema.json)
-   * @param {string} opts.assetBase       URL prefix for manifest paths (config.assetBase, e.g. "/bureau/")
-   * @param {string|(() => string)} [opts.timeZone]  instance IANA zone for « Automatique » (fmt.timeZone())
-   * @param {Record<string,string>} [opts.labels]  state labels (MetaVM.labels agentState.*), defaults to strings.js (UI language)
+   * @param {object} opts.manifest scene manifest
+   * @param {object} opts.layout room layout
+   * @param {string} opts.assetBase manifest asset URL prefix
+   * @param {string|(() => string)} [opts.timeZone] instance IANA zone
+   * @param {Record<string,string>} [opts.labels] localized state labels
    * @param {'auto'|'day'|'night'} [opts.theme]
    * @param {() => number} [opts.now]
    * @param {(id: string) => void} [opts.onSelect]
@@ -82,50 +57,67 @@ export class OfficeScene {
   constructor(stage, opts) {
     this.stage = stage;
     this.opts = opts;
-    this.assetBase = opts.assetBase;
-    this.labels = { ...Object.fromEntries(Object.keys(STATE_LABELS).map((k) => [k, tr(`state.${k}`)])), ...(opts.labels ?? {}) };
-    this.lifeConfig = { ...LIFE, ...opts.life };
-    this.surpriseConfig = { ...SURPRISES, ...opts.surprises };
-    this._onSurpriseSetting = e => { if (!e.detail && !this.opts.surprisesEnabled) for (const c of this.chars.values()) this._cancelEgg(c); };
-    window.addEventListener('office-surprises-setting', this._onSurpriseSetting);
-    this.now = opts.now ?? (() => Date.now());
-    this.onSelect = opts.onSelect ?? null;
-    this.index = indexManifest(opts.manifest);
-    this.proj = this.index.proj;
     this.chars = new Map();
-    this.selected = null;
-    this.cam = { zoom: 1, x: 0, y: 0, user: false };
-    this.themeMode = opts.theme ?? 'auto';
-    this.forcedReduced = null;
-    // v1 overlays are a fallback until Batch 5b is complete (manifest.accessoriesV2.complete), then off by default.
-    this.legacyAccessories = opts.legacyAccessories ?? !opts.manifest.accessoriesV2?.complete;
-    this._mq = matchMedia('(prefers-reduced-motion: reduce)');
-    this._raf = 0;
-    this._last = 0;
-    this._sortDirty = true;
-    this._build();
-    this.setLayout(opts.layout);
-    this._nextLifeCheck = this.now() + this.lifeConfig.intervalMs;
-    this._lifeTimer = watchLife(() => this._tickLife());
-    this._themeTimer = setInterval(() => { this._applyTheme(); this._checkLounge(); }, 30_000);
-    this._ro = new ResizeObserver(() => { if (!this.cam.user) this.fit(); else this._applyCamera(); });
-    this._ro.observe(this.viewport);
-    this._onMq = () => this._syncReduced();
-    this._mq.addEventListener('change', this._onMq);
-    // Hidden tab: no frame loops, idle swivels or CSS animations (O4); resume on return.
-    this._onVis = () => this._syncHidden();
-    document.addEventListener('visibilitychange', this._onVis);
-    this._onFsChange = () => this._syncFullscreen();
-    document.addEventListener('fullscreenchange', this._onFsChange);
-    document.addEventListener('webkitfullscreenchange', this._onFsChange);
-    // O9: a stage scrolled out of view (an annex below the fold) pauses the same way, so 30 agents cost what is seen.
-    this._offscreen = false;
-    this._io = typeof IntersectionObserver === 'function' ? new IntersectionObserver((es) => {
-      const off = !es[es.length - 1].isIntersecting;
-      if (off !== this._offscreen) { this._offscreen = off; this._syncHidden(); }
-    }, { rootMargin: '200px 0px' }) : null;
-    this._io?.observe(this.stage);
-    this._syncReduced();
+    this._events = new AbortController();
+    try {
+      this.assetBase = opts.assetBase;
+      this.lifeConfig = { ...LIFE, ...opts.life };
+      this.surpriseConfig = { ...SURPRISES, ...opts.surprises };
+      this._onSurpriseSetting = e => { if (!e.detail && !this.opts.surprisesEnabled) for (const c of this.chars.values()) this._cancelEgg(c); };
+      this._listen(window, 'office-surprises-setting', this._onSurpriseSetting);
+      this.now = opts.now ?? (() => Date.now());
+      this.onSelect = opts.onSelect ?? null;
+      this.index = indexManifest(opts.manifest);
+      this.proj = this.index.proj;
+      this.selected = null;
+      this.cam = { zoom: 1, x: 0, y: 0, user: false };
+      this.themeMode = opts.theme ?? 'auto';
+      this.forcedReduced = null;
+      // Legacy overlays remain until the v2 accessory manifest is complete.
+      this.legacyAccessories = opts.legacyAccessories ?? !opts.manifest.accessoriesV2?.complete;
+      this._mq = matchMedia('(prefers-reduced-motion: reduce)');
+      this._raf = 0;
+      this._last = 0;
+      this._sortDirty = true;
+      this._build();
+      this.setLayout(opts.layout);
+      this._nextLifeCheck = this.now() + this.lifeConfig.intervalMs;
+      this._lifeTimer = watchLife(() => this._tickLife());
+      this._themeTimer = setInterval(() => { this._applyTheme(); this._checkLounge(); }, 30_000);
+      this._ro = new ResizeObserver(() => { if (!this.cam.user) this.fit(); else this._applyCamera(); });
+      this._ro.observe(this.viewport);
+      this._onMq = () => this._syncReduced();
+      this._listen(this._mq, 'change', this._onMq);
+      // Hidden tab: no frame loops, idle swivels or CSS animations (O4); resume on return.
+      this._onVis = () => this._syncHidden();
+      this._listen(document, 'visibilitychange', this._onVis);
+      this._onPageHide = () => { this._pageHidden = true; this._syncHidden(); };
+      this._onPageShow = () => { this._pageHidden = false; this._syncHidden(); };
+      this._onFreeze = () => { this._lifecycleFrozen = true; this._syncHidden(); };
+      this._onResume = () => { this._lifecycleFrozen = false; this._syncHidden(); };
+      this._listen(window, 'pagehide', this._onPageHide);
+      this._listen(window, 'pageshow', this._onPageShow);
+      this._listen(document, 'freeze', this._onFreeze);
+      this._listen(document, 'resume', this._onResume);
+      this._onFsChange = () => this._syncFullscreen();
+      this._listen(document, 'fullscreenchange', this._onFsChange);
+      this._listen(document, 'webkitfullscreenchange', this._onFsChange);
+      // Offscreen stages pause like hidden tabs.
+      this._offscreen = false;
+      this._io = typeof IntersectionObserver === 'function' ? new IntersectionObserver((es) => {
+        const off = !es[es.length - 1].isIntersecting;
+        if (off !== this._offscreen) { this._offscreen = off; this._syncHidden(); }
+      }, { rootMargin: '200px 0px' }) : null;
+      this._io?.observe(this.stage);
+      this._syncReduced();
+    } catch (error) {
+      this.destroy();
+      throw error;
+    }
+  }
+
+  _listen(target, type, callback, options = {}) {
+    target.addEventListener(type, callback, { ...options, signal: this._events.signal });
   }
 
   // ---------- per-character async work: every timer/frame is owned and cancelled with its character (R4-13) ----------
@@ -151,23 +143,45 @@ export class OfficeScene {
   }
 
   _nextFrame(c, fn) {
-    const id = requestAnimationFrame(() => { c.rafs.delete(id); if (this._alive(c)) fn(); });
+    if (!this._alive(c)) return;
+    if (this.hidden) { fn(); return; }
+    const tasks = (c.frameTasks ??= new Map());
+    const id = requestAnimationFrame(() => { c.rafs.delete(id); tasks.delete(id); if (this._alive(c)) fn(); });
+    tasks.set(id, fn);
     c.rafs.add(id);
+    return id;
+  }
+
+  _stopPoseLoop(c, group) {
+    if (!group) return;
+    clearInterval(group._frameTimer); c.intervals.delete(group._frameTimer); group._frameTimer = null;
+  }
+
+  _dropPose(c, group) {
+    if (!group || group._disposed) return;
+    group._disposed = true;
+    this._stopPoseLoop(c, group);
+    group._cancelDecode?.(); group._cancelDecode = null;
+    this._clear(c, group._fadeTimer);
+    cancelAnimationFrame(group._swapFrame); c.rafs.delete(group._swapFrame); c.frameTasks?.delete(group._swapFrame);
+    group.remove();
+    for (const img of group.querySelectorAll('img')) img.removeAttribute('src');
+    c.poseGroups?.delete(group);
+    if (c.poseEl === group) c.poseEl = null;
+    if (c.displayed === group) c.displayed = null;
   }
 
   _cancelAll(c) {
+    for (const group of c.poseGroups ?? []) this._dropPose(c, group);
     for (const id of c.timers) clearTimeout(id);
     for (const id of c.intervals) clearInterval(id);
     for (const id of c.rafs) cancelAnimationFrame(id);
+    c.frameTasks?.clear();
     c.timers.clear(); c.intervals.clear(); c.rafs.clear();
   }
 
   // ---------- image keep-alive and prefetch (O4) ----------
-  /**
-   * Keep one decoded Image per URL the scene has used (bounded LRU). While referenced, the URL stays in
-   * the document's list of available images, so a new <img> with it is served without a network
-   * revalidation (Express serves images with max-age=0).
-   */
+  /** Bounded decoded-image LRU avoids revalidation when poses reuse a URL. */
   _keep(url) {
     const m = (this._imgKeep ??= new Map());
     const hit = m.get(url);
@@ -226,18 +240,20 @@ export class OfficeScene {
     this._syncHidden();
   }
 
-  get hidden() { return this._frozen || this._offscreen || (typeof document !== 'undefined' && document.visibilityState === 'hidden'); }
+  get hidden() { return this._frozen || this._offscreen || this._pageHidden || this._lifecycleFrozen || (typeof document !== 'undefined' && document.visibilityState === 'hidden'); }
 
   _syncHidden() {
+    if (this.destroyed) return;
     const h = this.hidden;
+    if (h) { cancelAnimationFrame(this._raf); this._raf = 0; this._last = 0; }
     if (h) for (const c of this.chars.values()) { this._cancelEgg(c, { immediate:true }); this._cancelActivity(c); }
     this.stage.toggleAttribute('data-paused', h);
     for (const c of this.chars.values()) {
       if (h) {
-        for (const g of new Set([c.displayed, c.poseEl])) {
-          if (!g?._frameTimer) continue;
-          clearInterval(g._frameTimer); c.intervals.delete(g._frameTimer); g._frameTimer = null;
-        }
+        // Finish enter/crossfade DOM changes immediately; leave no decorative rAF queued.
+        for (const [id, finish] of c.frameTasks ?? []) { cancelAnimationFrame(id); c.rafs.delete(id); finish(); }
+        c.frameTasks?.clear();
+        for (const g of c.poseGroups ?? []) this._stopPoseLoop(c, g);
         this._clear(c, c.idleTimer);
       } else if (c.occ && !c.leaving) {
         c.poseKey = null;          // restart frame loops
@@ -262,16 +278,11 @@ export class OfficeScene {
     const on = this.reducedMotion;
     this.stage.toggleAttribute('data-reduced-motion', on);
     if (!on || !this.chars) return;
-    // README §4.3, live: walkers snap to their destination, motion cues end, idle swivels stop,
-    // frame loops fall back to their first frame.
+    // Reduced motion snaps walkers, ends cues and holds frame 0.
     for (const c of this.chars.values()) {
-      // R7-09 / R4-14: stop every typing loop now (mounted and pending groups) and hold frame 0,
-      // independently of any image still decoding.
-      for (const g of new Set([c.displayed, c.poseEl])) {
-        if (!g) continue;
-        clearInterval(g._frameTimer);
-        c.intervals.delete(g._frameTimer);
-        g._frameTimer = null;
+      // Stop all pose loops immediately, including pending decodes.
+      for (const g of c.poseGroups ?? []) {
+        this._stopPoseLoop(c, g);
         for (const img of g.querySelectorAll('img[data-frame]')) img.hidden = img.dataset.frame !== '0';
       }
       if (c.walking) {
@@ -314,7 +325,7 @@ export class OfficeScene {
     const btn = (label, icon, fn) => {
       const b = el('button', 'bu-btn bu-btn--sm bu-btn--icon', { type: 'button', 'aria-label': label, title: label });
       b.innerHTML = icon;
-      b.addEventListener('click', fn);
+      this._listen(b, 'click', fn);
       controls.append(b);
       return b;
     };
@@ -323,8 +334,7 @@ export class OfficeScene {
     btn(tr('scene.zoomOut'), svg('<path d="M5 12h14"/>'), () => this.zoomBy(1 / 1.2));
     // Fit (recentre after a pan or zoom; also the 0 key): a crosshair, so it isn't mistaken for full screen.
     btn(tr('scene.fit'), svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/>'), () => { this.cam.user = false; this.fit(); }).dataset.ctl = 'fit';
-    // office-dev-20: real full screen for this stage (the ⛶ icon promised it). Native Fullscreen API where it exists,
-    // else (iOS Safari) a fixed overlay over the whole viewport. The same button, Esc and Back leave it.
+    // Native fullscreen where supported; overlay fallback otherwise. Esc and Back leave it.
     this.fsButton = btn(tr('scene.fullscreen'), '', () => this.toggleFullscreen());
     this.fsButton.dataset.ctl = 'fullscreen';
     this._fsIcon = { enter: svg('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'), exit: svg('<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>') };
@@ -389,6 +399,29 @@ export class OfficeScene {
     this._sortDirty = true;
     this._kick();
     if (!this.cam.user) this.fit();
+    this._loadDecor();
+  }
+
+  _loadDecor() {
+    const ids = [...new Set(this.layout.items.map(it => it.asset))].filter(id => {
+      const f = this.index.furniture.get(id); return f?.packManifest && !f.packLoaded;
+    });
+    const revision = this._decorRevision = (this._decorRevision ?? 0) + 1;
+    const previous = this._decorLoad;
+    if (!ids.length) { previous?.abort(); this._decorLoad = null; delete this.stage.dataset.decorError; return; }
+    const controller = this._decorLoad = new AbortController();
+    this._decorReady = import('./decor-pack-loader.js' + buildQuery).then(m => {
+      if (this.destroyed || controller.signal.aborted) { previous?.abort(); return; }
+      const ready = m.ensureDecorPacks(this.index, ids, this.assetBase, { signal: controller.signal });
+      // Admit replacement consumers before releasing previous consumers of shared requests.
+      previous?.abort(); return ready;
+    }).then(() => {
+      if (!this.destroyed && revision === this._decorRevision && !controller.signal.aborted) this.setLayout(this.layout);
+    }).catch(error => {
+      if (!this.destroyed && revision === this._decorRevision && error.name !== 'AbortError') {
+        this.stage.dataset.decorError = 'true'; this.opts.onAssetError?.(error);
+      }
+    });
   }
 
   _img(path, box, title) {
@@ -440,6 +473,10 @@ export class OfficeScene {
       } else if (seated?.seatPoint) {
         node.seatWorld = { sx: parseFloat(main.style.left) + seated.seatPoint.x / this.proj.artScale, sy: parseFloat(main.style.top) + seated.seatPoint.y / this.proj.artScale };
       }
+      if (seated?.seats?.length) node.seatWorlds = seated.seats.map(seat => ({
+        sx: parseFloat(main.style.left) + seat.seatPoint.x / this.proj.artScale,
+        sy: parseFloat(main.style.top) + seat.seatPoint.y / this.proj.artScale,
+      }));
       for (const [name, img] of Object.entries(node.parts)) img.dataset.baseLeft = img.style.left, img.dataset.baseTop = img.style.top, void name;
       if (f.station.screen) {
         const box = imageBox(p.sx, p.sy, f.anchor, f.size, this.proj);
@@ -483,8 +520,7 @@ export class OfficeScene {
       this.lightImg.style.opacity = String(theme.light.opacity ?? 1);
       this.lightImg.hidden = false;
     } else this.lightImg.hidden = true;
-    // Season (layout.theme.season, O4 scaffold): layered on the resolved day/night theme. Its furniture
-    // variants are tried first; its extras are decor drawn on top of the layout (no collision).
+    // Season variants override theme art; decorative extras have no collision.
     const season = this.layout.theme?.season ? this.index.themes.get(this.layout.theme.season) : null;
     const seasonOk = season?.kind === 'season' ? season : null;
     this.stage.dataset.officeSeason = seasonOk?.id ?? '';
@@ -494,7 +530,10 @@ export class OfficeScene {
       const img = node.parts[node.f.id];
       setSrc(img, resolveUrl(furnitureImage(node.f, node.it.orientation ?? 'sw', variants), this.assetBase));
     }
-    if (changed) for (const uid of this.itemNodes.keys()) this._updateStation(uid);
+    if (changed) {
+      for (const uid of this.itemNodes.keys()) this._updateStation(uid);
+      for (const c of this.chars.values()) this._renderPose(c);
+    }
   }
 
   _applySeasonExtras(season) {
@@ -609,9 +648,9 @@ export class OfficeScene {
     };
     (this._allChars ??= new Set()).add(c);
     c.el.dataset.occupant = o.id;
-    c.plate.addEventListener('click', () => this.select(c.id, true));
-    c.plate.addEventListener('focus', () => this._plateFocus(c, true));
-    c.plate.addEventListener('blur', () => this._plateFocus(c, false));
+    this._listen(c.plate, 'click', () => this.select(c.id, true));
+    this._listen(c.plate, 'focus', () => this._plateFocus(c, true));
+    this._listen(c.plate, 'blur', () => this._plateFocus(c, false));
     this.layers.scene.append(c.el);
     this.layers.fx.append(c.ring, c.marker);
     this.chars.set(o.id, c);
@@ -667,6 +706,7 @@ export class OfficeScene {
   /** Where this occupant should be: own station, or a free lounge after 10 min idle (README §4.2). */
   _targetFor(c) {
     const o = c.occ;
+    if (o.floorTravel?.point) return { x: o.floorTravel.point.x + 0.5, y: o.floorTravel.point.y + 0.5, uid: `floor-trip:${o.floorTravel.phase}`, mode: 'stand' };
     if (c.egg && !c.egg.returning) return c.egg.target ?? c.target ?? this._standingSpot(c);
     if (c.activity) return c.activity.target;
     if (c.social) return c.social.target;
@@ -675,25 +715,44 @@ export class OfficeScene {
     // office-dev-22 visits: a person at the agent's desk, or everyone at the meeting table (setVisits).
     if (c.visit) return { x: c.visit.x, y: c.visit.y, uid: `visit:${c.visit.key}`, mode: 'stand' };
     let uid = o.stationUid;
-    // Server-authoritative destination (OccupantVM.destination, api.md 2.1 §3.2): e.g. the server rack
-    // while an exec-class tool runs. It wins over the decorative lounge rule; home again when it clears.
+    // Canonical destinations override decorative lounging; return home when they clear.
     const dest = o.destination?.stationUid;
     if (dest && this.itemNodes.get(dest)?.f.station) uid = dest;
     else if (!c.deskTalk && !c.signalBusy && this.now() - (c.lifeFinished ?? -Infinity) >= this.lifeConfig.cooldownMs && o.state === 'idle' && this.now() - (o.stateSince ?? 0) > LOUNGE_AFTER_MS) {
-      const taken = new Set([...this.chars.values()].filter((x) => x !== c && !x.leaving).map((x) => x.target?.uid));
-      for (const [u, n] of this.itemNodes) if (n.f.station?.kind === 'lounge' && !taken.has(u)) { uid = u; break; }
+      for (const [u, n] of this.itemNodes) {
+        if (n.f.station?.kind !== 'lounge') continue;
+        const capacity = n.f.station.seated?.seats?.length || 1;
+        const occupied = [...this.chars.values()].filter(x => x !== c && !x.leaving && x.target?.uid === u).length;
+        if (occupied < capacity) { uid = u; break; }
+      }
     }
     const node = this.itemNodes.get(uid);
-    if (!node?.f.station) return this._standingSpot(c);
+    if (!node?.f.station) {
+      const point = o.standingPoint;
+      return point && Number.isFinite(point.x) && Number.isFinite(point.y)
+        ? { x: point.x + 0.5, y: point.y + 0.5, uid: `standing:${o.floorId || '1'}`, mode: 'stand' }
+        : this._standingSpot(c);
+    }
     const mode = seatModeFor(c.ch, o.look.variant, node.f.station);
-    const seat = mode === 'stand' ? node.f.station.seat : node.f.station.seated.seat;
-    return { x: node.it.x + seat.x, y: node.it.y + seat.y, uid, mode };
+    const seatRows = mode === 'sofa' && node.f.station.seated?.seats?.length ? node.f.station.seated.seats : null;
+    let seatIndex = null, seat;
+    if (seatRows) {
+      const prior = c.target?.uid === uid ? c.target.seatIndex : null;
+      const occupied = new Set([...this.chars.values()].filter(x => x !== c && !x.leaving && x.target?.uid === uid)
+        .map(x => Number.isInteger(x.target.seatIndex) ? x.target.seatIndex : 0));
+      seatIndex = Number.isInteger(prior) && !occupied.has(prior) ? prior : seatRows.findIndex((_, i) => !occupied.has(i));
+      seatIndex = Math.max(0, seatIndex);
+      seat = seatRows[seatIndex].seat;
+      if (!seat) {
+        // Convert the absolute projected contact back to a furniture-relative grid offset.
+        seat = unproject(node.seatWorlds[seatIndex].sx, node.seatWorlds[seatIndex].sy, this.proj);
+        seat = { x: seat.x - node.it.x, y: seat.y - node.it.y };
+      }
+    } else seat = mode === 'stand' ? node.f.station.seat : node.f.station.seated.seat;
+    return { x: node.it.x + seat.x, y: node.it.y + seat.y, uid, mode, ...(seatIndex == null ? {} : { seatIndex }) };
   }
 
-  /**
-   * Overflow (stationUid null, contract 2.0): stand on a free walkable tile near the entrance, one per
-   * occupant, in roster order. Decorative placement, never an assignment.
-   */
+  /** Unassigned occupants stand on separate free entrance tiles, in roster order. */
   _standingSpot(c) {
     const e = this.room.entrance ?? { x: 0, y: this.room.rows - 1 };
     const taken = new Set();
@@ -786,9 +845,7 @@ export class OfficeScene {
       }
       // A standing frame must never be repositioned using the incoming seated hip.
       if (c.seatMode !== 'desk') {
-        for (const group of c.el.querySelectorAll('.ao-pose')) {
-          clearInterval(group._frameTimer); c.intervals.delete(group._frameTimer); group.remove();
-        }
+        for (const group of c.poseGroups ?? []) this._dropPose(c, group);
         c.displayed = null; c.poseEl = null; c.poseKey = null;
       }
     }
@@ -896,6 +953,7 @@ export class OfficeScene {
     const ch = this.index.characters.get(c.occ.look.character) ?? c.ch;
     c.ch = ch;
     c.el.dataset.locomotion = ch.locomotion?.type ?? 'walks';
+    c.el.classList.toggle('ao-char--elevator', ['ride', 'ride-home'].includes(c.occ.floorTravel?.phase));
     let want = this._currentPose(c);
     const resolve = c.seatMode === 'desk' ? deskPoseImage : poseImage;
     const via = c.swivelDone ? null : this._swivelVia(c, c.renderedPose, resolve(ch, c.occ.look.variant, want).pose);
@@ -918,9 +976,11 @@ export class OfficeScene {
     const station = this.itemNodes.get(c.seatUid);
     const composition = station?.composition;
     c.poseScale = renderScale(ch) * (c.seatMode === 'desk' ? (composition?.scaleByCharacter?.[ch.id] ?? 1) : 1);
-    const acc = accessoryLayers(this.index, ch.id, c.occ.look.accessories, body.pose, c.occ.look.variant, { legacy: this.legacyAccessories });
-    // Contract v2 draw order: accessory back layers → character → accessory front layers (slot order each).
-    // Layers: [{path, frame}] — frame null = always shown; i = shown on body frame i (typing loop).
+    const accessoryMode = this.stage.dataset.officeTheme === 'night' ? 'night' : 'day';
+    if (c.occ.look.accessories?.some(id => this.index.accessories.get(id)?.packManifest))
+      import('./accessory-pack-loader.js' + buildQuery).then(m => m.prepareSceneAccessories(this,c,body.pose,accessoryMode)).catch(() => {});
+    const acc = accessoryLayers(this.index, ch.id, c.occ.look.accessories, body.pose, c.occ.look.variant, { legacy: this.legacyAccessories, mode: accessoryMode });
+    // Back accessories → body → front accessories. A null frame is always shown.
     const nFrames = body.frames ? body.frames.length : 0;
     const expand = (a, role) => (nFrames && a.frames?.length === nFrames
       ? a.frames.map((p, i) => ({ path: p ?? a.path, frame: i, role }))
@@ -944,8 +1004,11 @@ export class OfficeScene {
     this._positionChar(c);
     if (c.poseKey === key) return;
     c.poseKey = key;
+    if (c.poseEl && c.poseEl !== c.displayed) this._dropPose(c, c.poseEl);
+    for (const g of c.poseGroups ?? []) this._stopPoseLoop(c, g);
     const k = c.poseScale / this.proj.artScale;
     const group = el('div', 'ao-pose');
+    (c.poseGroups ??= new Set()).add(group);
     group.dataset.pose = body.pose;
     Object.assign(group.style, { width: `${body.canvas.w * k}px`, height: `${body.canvas.h * k}px` });
     if (c.seatMode === 'desk' && body.seatAnchor) group.style.transformOrigin = `${body.seatAnchor.x * k}px ${body.seatAnchor.y * k}px`;
@@ -961,36 +1024,43 @@ export class OfficeScene {
       return img;
     });
     group.append(...imgs);
-    // Frame loops (working-ne typing): body and per-frame accessory layers swap together, in place, no
-    // crossfade; frame 0 only under reduced motion.
-    if (nFrames) {
-      if (!this.reducedMotion && !this.hidden) {
-        let i = 0;
-        group._frameTimer = this._every(c, () => {
-          i = (i + 1) % nFrames;
-          for (const img of imgs) if (img.dataset.frame != null) img.hidden = Number(img.dataset.frame) !== i;
-        }, body.frameMs);
-      }
+    if (this.debugLandmarks) {
+      const variant = c.occ.look.variant;
+      import('./scene-landmarks.js' + buildQuery).then(m => {
+        if (this._alive(c) && c.poseEl === group && this.debugLandmarks) group.append(m.landmarkSvg(ch,variant,body.pose));
+      }).catch(() => {});
     }
-    if (this.debugLandmarks) group.append(landmarkSvg(ch, landmarksFor(ch, c.occ.look.variant, body.pose)));
-    // c.poseEl = the latest request; c.displayed = the group actually mounted (R4-12). A request that
-    // is superseded before its images decode is dropped; the swap always fades out what is on screen.
+    // Drop superseded pose requests; crossfade from the currently mounted group.
     c.poseEl = group;
-    const drop = (g) => { clearInterval(g._frameTimer); c.intervals.delete(g._frameTimer); g.remove(); };
+    const drop = (g) => this._dropPose(c, g);
     const swap = () => {
       if (!this._alive(c) || c.poseEl !== group) { drop(group); return; }
       const old = c.displayed;
       c.displayed = group;
       for (const n of [...c.el.children]) if (n !== old && n !== group && n.classList.contains('ao-pose')) drop(n);
       c.el.append(group);
+      // Only the decoded, mounted winner may animate; outgoing art stays still during the fade.
+      this._stopPoseLoop(c, old);
+      if (nFrames && !this.reducedMotion && !this.hidden) {
+        let i = 0;
+        group._frameTimer = this._every(c, () => {
+          i = (i + 1) % nFrames;
+          for (const img of imgs) if (img.dataset.frame != null) img.hidden = Number(img.dataset.frame) !== i;
+        }, body.frameMs);
+      }
       if (!old) { group.classList.add('is-in'); return; }
-      this._nextFrame(c, () => {
+      group._swapFrame = this._nextFrame(c, () => {
         group.classList.add('is-in');
         old.classList.remove('is-in');
-        this._later(c, () => { if (c.displayed !== old) drop(old); }, CROSSFADE_MS);
+        old._fadeTimer = this._later(c, () => { if (c.displayed !== old) drop(old); }, CROSSFADE_MS);
       });
     };
-    Promise.all(imgs.map((i) => i.decode().catch(() => {}))).then(swap);
+    // Native decode has no abort signal. Race cancellation releases the swap closure immediately;
+    // dropping a pending group also clears its image sources so the browser can abandon decoding.
+    const cancelled = new Promise(resolve => { group._cancelDecode = resolve; });
+    Promise.race([Promise.all(imgs.map(i => i.decode().catch(() => {}))), cancelled]).then(() => {
+      group._cancelDecode = null; swap();
+    });
     this._positionChar(c);
   }
 
@@ -1040,8 +1110,7 @@ export class OfficeScene {
           const facing = side > 0 ? 'se' : 'sw', partnerFacing = side > 0 ? 'sw' : 'se';
           const own = { ...at }, peer = { ...other };
           if (kind === 'highfive') {
-            // Keep both feet inside their reserved free tile. Align the actual authored palms
-            // across looks of different heights; the positive body silhouettes stay separated.
+            // Reserve separate foot tiles; align authored palms across different heights.
             const hand = (who, dir) => {
               const p = poseImage(who.ch, who.occ.look.variant, `life-highfive-${dir}`);
               const k = renderScale(who.ch) / this.proj.artScale;
@@ -1076,8 +1145,7 @@ export class OfficeScene {
     return target ? { ...target, uid: `life:${kind}`, mode: 'stand', landmark, partnerId: partner?.id } : null;
   }
 
-  /** A free foot tile can still put a torso behind a desk's monitor. Check the painted
-   * furniture in front of this tile, in world pixels; transparent image margins do not count. */
+  /** Check painted foreground furniture, excluding transparent margins, for torso occlusion. */
   _socialVisible(at) {
     const p = project(at.x, at.y, this.proj), depth = characterDepth(at.x, at.y);
     const probes = [-100,-70,-40].flatMap(y => [-15,0,15].map(x => ({x:p.sx+x,y:p.sy+y})));
@@ -1159,7 +1227,7 @@ export class OfficeScene {
   _checkLife() {
     if (this.hidden || this.editing || this.destroyed) return;
     for (const c of this.chars.values()) {
-      if (c.egg || c.leaving || c.walking || c.activity || c.social || c.visit || c.meet || c.deskTalk) continue;
+      if (c.occ?.floorTravel || c.egg || c.leaving || c.walking || c.activity || c.social || c.visit || c.meet || c.deskTalk) continue;
       if (!canIdle(c.occ) || c.signalBusy) {
         if (reactionFor(c.occ, c.occ, this.now(), this.lifeConfig) === 'stretch'
           && this.now() - (c.lastStretch ?? -Infinity) > this.lifeConfig.longRunMs) this.react(c.id, 'stretch');
@@ -1303,10 +1371,7 @@ export class OfficeScene {
   }
 
   // ---------- cues (SSE 'cue' frames) ----------
-  /**
-   * SSE cue frame (api.md 2.1 §4.4): cue(occupantId, cue, { partnerId, interactionId }).
-   * A repeated interactionId is ignored. `delegating` with a partner plays the meeting scene.
-   */
+  /** Deduplicate interactionId; delegating with a partner plays a meeting. */
   cue(occupantId, cue, { partnerId = null, interactionId = null } = {}) {
     if (interactionId) {
       this._interactions ??= new Set();
@@ -1332,14 +1397,7 @@ export class OfficeScene {
   }
 
   // ---------- visits (office-dev-22): the people the agent talks with come to him ----------
-  /**
-   * plan = { hostId, desk: [visitorId…], meeting: [id…], talking, speaker } (visits.js). Desk: the visitor stands in
-   * front of the host's desk. A seated host swivels to talk from the chair; a look without seated art stands beside them.
-   * Meeting: everyone around the meeting table (falls back to the desk
-   * when the room has none). Only `speaker` shows the « … » bubble. When the exchange is over the host goes back to his
-   * desk and the visitor stands idle where they are until the page drops them (they walk out).
-   * Reduced motion: people snap to their spot (as every walk does).
-   */
+  /** Visits: {hostId, desk, meeting, talking, speaker}. Meeting falls back to desk; only the speaker gets a bubble. */
   setVisits(plan) {
     this._visitPlan = plan ?? null;
     this._applyVisits();
@@ -1358,8 +1416,7 @@ export class OfficeScene {
       if (host && (deskVisitors.length || meeting)) this._cancelActivity(host, false);
       const at = host ? this._homeOf(host) : null;
       if (deskVisitors.length && at) {
-        // the host's talking spot in front of the desk; the visitor beside it on the same screen row, facing each other
-        // (among the nearest free spots, the first with a free tile on its screen-left, else on its right)
+        // Keep host and visitor on the same screen row, facing each other.
         const near = this._spotsNear(at.x, at.y, 6);
         const pick = (side) => near.find((c) => this._besides(c, 1, [side]).length);
         const h = pick(-1) ?? pick(1) ?? near[0];
@@ -1402,17 +1459,13 @@ export class OfficeScene {
     try { return this._targetFor(c); } finally { c.visit = v; }
   }
 
-  /**
-   * n free spots beside a standing spot on the same screen row ((x+k, y−k): same depth, side by side), nearest first,
-   * each facing the spot; nearest free tiles when the row is blocked.
-   */
+  /** Nearest free spots on the same screen row (x+k, y−k), facing the host. */
   _besides(h, n, sides = null) {
     const hx = Math.floor(h.x), hy = Math.floor(h.y);
     const taken = new Set([...this.chars.values()].filter((c) => !c.leaving && c.target && !c.visit).map((c) => `${Math.floor(c.target.x)},${Math.floor(c.target.y)}`));
     taken.add(`${hx},${hy}`);
     const out = [];
-    // screen-left first: the visitor faces SE, the host SW, the side with the drawn talking pose (talking-se is not
-    // delivered yet; its fallback is the still SE walk, and sprites are never mirrored, README §4)
+    // Prefer screen-left: visitor SE, host SW. Never mirror sprites.
     for (const k of sides ?? [-1, 1, -2, 2]) {
       const tx = hx + k, ty = hy - k;
       if (tx < 0 || ty < 0 || tx >= this.grid.cols || ty >= this.grid.rows || this.grid.blocked[ty * this.grid.cols + tx] || taken.has(`${tx},${ty}`)) continue;
@@ -1429,8 +1482,7 @@ export class OfficeScene {
     const cx = Math.floor(x), cy = Math.floor(y);
     const taken = new Set([...this.chars.values()].filter((c) => !c.leaving && c.target && !c.visit).map((c) => `${Math.floor(c.target.x)},${Math.floor(c.target.y)}`));
     taken.add(`${cx},${cy}`);
-    // Candidates up to 3 tiles away; nearest first, and in front of the point (toward the camera, larger x + y) before
-    // behind it, so a visitor stands where they can be seen rather than behind a desk.
+    // Prefer visible tiles in front of the host; search within three tiles.
     const cand = [];
     for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) {
       if (!dx && !dy) continue;
@@ -1532,8 +1584,7 @@ export class OfficeScene {
     if (!node?.f.station) return;
     const seated = [...this.chars.values()].find((c) => !c.leaving && c.occ && c.target?.uid === uid && !c.walking);
     const occ = seated?.occ;
-    // Seated (Batch 6) or standing (v1) composition: chair part and stack follow the occupant's look;
-    // an empty station shows the seated chair as soon as the manifest has seated art.
+    // Empty stations use seated chairs when the look supports seated art.
     const mode = seated ? (seated.seatMode === 'stand' || !seated.seatMode ? 'stand' : 'seated') : (node.f.station.seated && this._seatedArt() ? 'seated' : 'stand');
     const base = node.f.station.seated;
     const turned = mode === 'seated' && seated?.seatMode === 'desk' && seated.renderedPose && !isBackPose(seated.renderedPose);
@@ -1590,17 +1641,22 @@ export class OfficeScene {
   _renderPlate(c) {
     const o = c.occ;
     // O8: a seen agent's plate says when it was last seen (« vu il y a 12 min »), as text, name and tooltip.
-    const label = o.presenceLabel ?? (c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : this.labels[o.state] ?? o.state);
+    const label = o.sourceStale ? o.stateLastLabelText
+      : o.presenceLabel ?? (c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : o.stateLabelText);
     const shown = this._name(o);
     c.plate.setAttribute('aria-label', `${shown}, ${label}`);
     c.plate.dataset.state = o.state;
+    c.plate.toggleAttribute('data-source-stale', !!o.sourceStale);
+    c.plate.dataset.role = o.role;
     c.plate.toggleAttribute('data-talking', !!c.visit?.bubble || !!c.deskBubble);
-    if (o.presence) { c.plate.dataset.presence = o.presence; c.plate.title = label; } else { delete c.plate.dataset.presence; c.plate.removeAttribute('title'); }
+    if (o.presence) c.plate.dataset.presence = o.presence; else delete c.plate.dataset.presence;
+    c.plate.title = `${shown}, ${label}`;
     c.plate.innerHTML = '';
     c.plateSize = null;
     const dot = el('span', 'ao-dot', { 'aria-hidden': 'true' });
     const name = el('span', 'ao-plate__name');
-    name.textContent = shown;
+    c.plateName = name; c.plateNameText = shown;
+    name.textContent = c.plate.hidden ? '' : shown;
     const small = el('small', 'ao-plate__state', { 'aria-hidden': 'true' });
     small.textContent = label;
     c.plate.append(dot, name, small);
@@ -1610,15 +1666,20 @@ export class OfficeScene {
 
   _plateFocus(c, on) {
     c.el.classList.toggle('is-focus', on);
+    if(this.stage.hasAttribute('data-plates-primary')) {c.plateSize=null;this._positionLabels();}
   }
 
-  /**
-   * Polite live-region announcements (O4), throttled: changes are collected for 1.5 s and spoken as one
-   * sentence, at most one announcement every 4 s; nothing while the tab is hidden. Latest change per agent wins.
-   */
+  _showPlate(c, show) {
+    c.plate.hidden = !show;
+    // Only displayed names have a text node; accessible identity stays on the button.
+    const text = show ? c.plateNameText : '';
+    if (c.plateName && c.plateName.textContent !== text) c.plateName.textContent = text;
+  }
+
+  /** Batch announcements for 1.5s, at least 4s apart; latest change wins, silent while hidden. */
   _announce(c, kind = 'state') {
     if (!this.live || document.visibilityState === 'hidden') return;   // scrolled out of view still speaks (O9)
-    (this._pending ??= new Map()).set(c.id, { kind, name: this._name(c.occ), state: c.occ.state });
+    (this._pending ??= new Map()).set(c.id, { kind, name: this._name(c.occ), stateLabelText: c.occ.stateLabelText });
     if (this._announceTimer) return;
     const wait = Math.max(ANNOUNCE_BATCH_MS, (this._lastAnnounce ?? 0) + ANNOUNCE_MIN_GAP_MS - Date.now());
     this._announceTimer = setTimeout(() => this._flushAnnounce(), wait);
@@ -1632,7 +1693,7 @@ export class OfficeScene {
     // Whole sentences, joined by spaces (guide §2: no fragment concatenation), in the UI language.
     const phrase = (x) => (x.kind === 'enter' ? tr('scene.enter', { name: x.name })
       : x.kind === 'leave' ? tr('scene.leave', { name: x.name })
-      : tr('scene.state', { name: x.name, state: (this.labels[x.state] ?? x.state).toLocaleLowerCase(intlLocale()) }));
+      : tr('scene.state', { name: x.name, state: (x.stateLabelText || '').toLocaleLowerCase(intlLocale()) }));
     const shown = items.slice(0, 3).map(phrase);
     const more = items.length - shown.length;
     this.live.textContent = [items.length > 1 ? tr('scene.changes', { n: items.length }) : null, ...shown, more > 0 ? tr('scene.andMore', { n: more }) : null].filter(Boolean).join(' ');
@@ -1648,6 +1709,14 @@ export class OfficeScene {
   /** Test/QA hook: what the live region last said. */
   get announcement() { return this.live?.textContent ?? ''; }
 
+  /** Compact presentation consumes the backend's ordered floor shortlist. */
+  setPrimaryLabels(on, mobileLabelIds = []) {
+    this.stage.toggleAttribute('data-plates-primary',!!on);
+    this.mobileLabelIds = mobileLabelIds;
+    for(const c of this.chars.values()) { c.plateSize=null; this._showPlate(c,true); }
+    this._positionLabels();
+  }
+
   /** Select an occupant (ring + aria-current). fromUser fires onSelect (opens the drawer). */
   select(id, fromUser = false) {
     this.selected = id;
@@ -1656,6 +1725,7 @@ export class OfficeScene {
       c.ring.classList.toggle('is-on', on);
       if (on) c.plate.setAttribute('aria-current', 'true'); else c.plate.removeAttribute('aria-current');
     }
+    if(this.stage.hasAttribute('data-plates-primary')) {for(const c of this.chars.values())c.plateSize=null;this._positionLabels();}
     const c = this.chars.get(id);
     if (fromUser && c && c.seatMode === 'desk') {
       this._clear(c, c.waveTimer);
@@ -1671,11 +1741,12 @@ export class OfficeScene {
 
   // ---------- frame loop ----------
   _kick() {
-    if (!this._raf && !this.destroyed) this._raf = requestAnimationFrame((t) => this._frame(t));
+    if (!this._raf && !this.destroyed && !this.hidden) this._raf = requestAnimationFrame((t) => this._frame(t));
   }
 
   _frame(t) {
     this._raf = 0;
+    if (this.destroyed || this.hidden) { this._last = 0; return; }
     const dt = this._last ? Math.min(0.1, (t - this._last) / 1000) : 0;
     this._last = t;
     let moving = false;
@@ -1708,7 +1779,7 @@ export class OfficeScene {
     const p = project(c.pos.x, c.pos.y, this.proj);
     // Seated (desk/sofa, Batch 6): the pose's hip contact lands on the seat contact; else feet on the floor.
     const seatNode = !c.walking && (c.seatMode === 'desk' || c.seatMode === 'sofa') && c.seatUid ? this.itemNodes.get(c.seatUid) : null;
-    const seatAt = seatNode?.seatWorld && c.poseSeat ? seatNode.seatWorld : null;
+    const seatAt = seatNode?.seatWorld && c.poseSeat ? (seatNode.seatWorlds?.[c.target?.seatIndex] ?? seatNode.seatWorld) : null;
     const box = seatAt
       ? imageBox(seatAt.sx, seatAt.sy, c.poseSeat, c.poseCanvas ?? ch.canvas, this.proj, c.poseScale ?? renderScale(ch))
       : imageBox(p.sx, p.sy, c.poseAnchor ?? ch.anchor, c.poseCanvas ?? ch.canvas, this.proj, c.poseScale ?? renderScale(ch));
@@ -1742,7 +1813,8 @@ export class OfficeScene {
       const seat = !c.walking && c.seatUid ? this.itemNodes.get(c.seatUid) : null;
       if (seat && seat.f.placement === 'floor') {
         const i = seat.stack.indexOf('character');
-        entries.push({ id: `${c.seatUid}:character:${c.id}`, depth: seat.depth, sub: i < 0 ? seat.stack.length : i, x: seat.it.x, node: c.el });
+        const seatOrder = Number.isInteger(c.target?.seatIndex) ? c.target.seatIndex / 10 : 0;
+        entries.push({ id: `${c.seatUid}:character:${c.id}`, depth: seat.depth, sub: (i < 0 ? seat.stack.length : i) + seatOrder, x: seat.it.x + (c.target?.x ?? 0), node: c.el });
       } else entries.push({ id: `~${c.id}`, depth: characterDepth(c.pos.x, c.pos.y), sub: 5, x: c.pos.x, node: c.el });
     }
     sortScene(entries).forEach((e, i) => { zOf.set(e.node, i + 1); });
@@ -1751,27 +1823,89 @@ export class OfficeScene {
 
   _positionLabels() {
     const { zoom, x, y } = this.cam;
-    // office-dev-24: plates never cover each other (two people side by side on a small stage, a visit): the one nearer
-    // the camera keeps its place, one it would overlap moves up above it. Sizes are read first, then written.
+    const width = this.viewport.clientWidth, height = this.viewport.clientHeight;
+    if (this.stage.hasAttribute('data-plates-primary')) {
+      const viewport = this.viewport.getBoundingClientRect();
+      const placed = [...(this.stage.parentElement?.querySelectorAll('.bu-stage__controls, .ao-mobile-options') ?? [])]
+        .map(node => node.getBoundingClientRect()).filter(r => r.width && r.height)
+        .map(r => ({ left: r.left - viewport.left, right: r.right - viewport.left, top: r.top - viewport.top, bottom: r.bottom - viewport.top }));
+      const labelIds = this.selected ? [this.selected, ...(this.mobileLabelIds ?? []).filter(id => id !== this.selected)] : this.mobileLabelIds ?? [];
+      for (const c of this.chars.values()) if (!labelIds.includes(c.id) || !c.head || c.leaving) this._showPlate(c,false);
+      // Geometry may suppress a supplied label, but never substitutes another occupant.
+      for (const id of labelIds) {
+        const c = this.chars.get(id);
+        if (!c?.head || c.leaving) continue;
+        if (!c.plateSize) this._showPlate(c,true);
+        c.plateSize ??= { w: c.plate.offsetWidth, h: c.plate.offsetHeight };
+        const w = Math.max(44, c.plateSize.w), h = Math.max(44, c.plateSize.h), inset = (h - c.plateSize.h) / 2;
+        let vx = (c.head.sx + this.origin.x) * zoom + x;
+        const vy = (c.head.sy + this.origin.y) * zoom + y;
+        const bubble = c.plate.matches(':focus-visible, [aria-current="true"]') ? c.bubbleHeight ?? 0 : 0;
+        const bh = Math.max(0, bubble - inset, c.plate.hasAttribute('data-talking') ? 22 - inset : 0);
+        if (id === this.selected) vx = Math.max(w / 2 + 2, Math.min(width - w / 2 - 2, vx));
+        const left = vx - w / 2, right = vx + w / 2;
+        // Shortlist names stay near the head; selected feedback may fit inside the viewport.
+        const candidates = [vy - 6 - h + inset, vy + 6 + inset + bh];
+        if (id === this.selected) candidates.push(...candidates.map(top => Math.max(bh + 2, Math.min(height - h - 2, top))), ...placed.map(p => p.bottom + bh + 2));
+        const top = candidates.find(top =>
+          left >= 2 && right <= width - 2 && top - bh >= 2 && top + h <= height - 2 &&
+          !placed.some(p => left < p.right + 2 && right > p.left - 2 && top - bh < p.bottom + 2 && top + h > p.top - 2))
+          ?? (id === this.selected ? Math.max(2, Math.min(height - h - 2, vy - 6 - h + inset)) : undefined);
+        if (top === undefined) { this._showPlate(c,false); continue; }
+        this._showPlate(c,true);
+        placed.push({ left, right, top: top - bh, bottom: top + h });
+        c.plate.style.transform = `translate(${Math.round(vx)}px, ${Math.round(top + inset)}px) translateX(-50%)`;
+      }
+      return;
+    }
+    // Resolve label overlaps toward the camera first; read sizes before writing positions.
     const items = [];
     for (const c of this.chars.values()) {
       if (!c.head || c.leaving) continue;
       c.plateSize ??= { w: c.plate.offsetWidth, h: c.plate.offsetHeight };   // reset when the plate changes
       // a speaker's « … » bubble sits above their plate: it counts as part of it
-      items.push({ c, vx: (c.head.sx + this.origin.x) * zoom + x, vy: (c.head.sy + this.origin.y) * zoom + y, ...c.plateSize, bh: Math.max(c.bubbleHeight ?? 0, c.plate.hasAttribute('data-talking') ? 22 : 0) });
+      // Reserve the nameplate's 44px pseudo-element hit area as well as its visible pill.
+      const h = Math.max(44, c.plateSize.h), inset = (h - c.plateSize.h) / 2;
+      const bubble = !this.stage.hasAttribute('data-plates-primary') || c.plate.matches(':focus-visible, [aria-current="true"]') ? c.bubbleHeight ?? 0 : 0;
+      items.push({ c, vx: (c.head.sx + this.origin.x) * zoom + x, vy: (c.head.sy + this.origin.y) * zoom + y,
+        w: Math.max(44, c.plateSize.w), h, inset, bh: Math.max(0, bubble - inset, c.plate.hasAttribute('data-talking') ? 22 - inset : 0) });
     }
     items.sort((a, b) => b.vy - a.vy);
-    const placed = [];
+    const viewport = this.viewport.getBoundingClientRect();
+    const placed = [...(this.stage.parentElement?.querySelectorAll('.bu-stage__controls, .ao-mobile-options') ?? [])]
+      .map(node => node.getBoundingClientRect()).filter(rect => rect.width && rect.height)
+      .map(rect => ({ vx: rect.left - viewport.left + rect.width / 2, top: rect.top - viewport.top, w: rect.width, h: rect.height, bh: 0 }));
     for (const it of items) {
-      let top = it.vy - 6 - it.h;
-      for (let moved = true, n = 0; moved && n < 8; n++) {
-        moved = false;
-        for (const p of placed) {
-          if (Math.abs(it.vx - p.vx) < (it.w + p.w) / 2 + 2 && top - it.bh < p.top + p.h + 2 && top + it.h + 2 > p.top - p.bh) { top = p.top - p.bh - it.h - 2; moved = true; }
+      it.vx = Math.max(it.w / 2 + 2, Math.min(width - it.w / 2 - 2, it.vx));
+      const min = it.bh + 2, max = Math.max(min, height - it.h - 2);
+      const preferred = Math.max(min, Math.min(max, it.vy - 6 - it.h + it.inset));
+      const edges = [it.w / 2 + 2, width - it.w / 2 - 2];
+      const columns = [it.vx, ...edges];
+      const positions = columns.flatMap(vx => {
+        const intervals = placed.filter(p => Math.abs(vx - p.vx) < (it.w + p.w) / 2 + 2)
+          .map(p => ({ lo: p.top - p.bh - it.h - 2, hi: p.top + p.h + it.bh + 2 })).sort((a,b) => a.lo - b.lo);
+        const gaps = [];
+        let low = min;
+        const gap = high => {
+          if (low > high) return;
+          const top = Math.max(low, Math.min(high, preferred));
+          gaps.push({ vx, top, score: Math.abs(vx - it.vx) + Math.abs(top - preferred) });
+        };
+        for (const interval of intervals) {
+          if (interval.hi <= low) continue;
+          if (interval.lo > max) break;
+          gap(Math.min(max, interval.lo));
+          low = Math.max(low, interval.hi);
+          if (low > max) break;
         }
-      }
+        gap(max);
+        return gaps;
+      }).sort((a, b) => a.score - b.score || a.top - b.top);
+      const chosen = positions[0] ?? { vx: it.vx, top: preferred };
+      it.vx = chosen.vx;
+      const top = chosen.top;
       placed.push({ vx: it.vx, top, w: it.w, h: it.h, bh: it.bh });
-      it.c.plate.style.transform = `translate(${Math.round(it.vx)}px, ${Math.round(top)}px) translateX(-50%)`;
+      it.c.plate.style.transform = `translate(${Math.round(it.vx)}px, ${Math.round(top + it.inset)}px) translateX(-50%)`;
     }
   }
 
@@ -1812,8 +1946,7 @@ export class OfficeScene {
     this.cam.x = Math.min(vw - mx, Math.max(mx - w, this.cam.x));
     this.cam.y = Math.min(vh - my, Math.max(my - h, this.cam.y));
     this.world.style.transform = `translate(${this.cam.x}px, ${this.cam.y}px) scale(${this.cam.zoom})`;
-    // O9: a crowded room drawn small (a phone, an annex) would be all nameplates: plates shrink to their state dot,
-    // and the name shows on hover, focus and selection. Their accessible names stay whole.
+    // Crowded rooms keep full accessible names; focus and selection reveal them.
     const crowded = this.chars.size > 8 && w < 600;
     if (crowded !== this.stage.hasAttribute('data-plates-compact')) {
       this.stage.toggleAttribute('data-plates-compact', crowded);
@@ -1839,19 +1972,18 @@ export class OfficeScene {
   _bindCamera() {
     const vp = this.viewport;
     // O9, no scroll trap: the wheel scrolls the page; Ctrl/⌘ + wheel (and a trackpad pinch, which sends ctrlKey) zooms.
-    vp.addEventListener('wheel', (e) => {
+    this._listen(vp, 'wheel', (e) => {
       if (!e.ctrlKey && !e.metaKey && !this.editing) return;
       e.preventDefault();
       const r = vp.getBoundingClientRect();
       this.zoomBy(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
-    // O9 touch: one finger scrolls the page (CSS touch-action: pan-x pan-y) and a tap selects an agent; two fingers pan
-    // and pinch the office (the page doesn't scroll while two fingers are down). A mouse drags the office as before.
-    vp.addEventListener('touchmove', (e) => { if (e.touches.length >= 2 || this.editing) e.preventDefault(); }, { passive: false });
+    // One finger scrolls, two pan/pinch; mouse drags the camera.
+    this._listen(vp, 'touchmove', (e) => { if (e.touches.length >= 2 || this.editing) e.preventDefault(); }, { passive: false });
     const pts = new Map();
     let pinch = null, mid = null, tap = null;
     const midOf = () => { const [a, b] = [...pts.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) }; };
-    vp.addEventListener('pointerdown', (e) => {
+    this._listen(vp, 'pointerdown', (e) => {
       if (e.target.closest('button')) return;
       if (this.pointerHandler && this.pointerHandler(e)) return;
       tap = pts.size === 0 ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
@@ -1864,7 +1996,7 @@ export class OfficeScene {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       vp.classList.add('is-panning');
     });
-    vp.addEventListener('pointermove', (e) => {
+    this._listen(vp, 'pointermove', (e) => {
       const prev = pts.get(e.pointerId);
       if (!prev) return;
       const cur = { x: e.clientX, y: e.clientY };
@@ -1886,9 +2018,9 @@ export class OfficeScene {
       if (wasTap && !this.editing) { const id = this._occupantAt(e.clientX, e.clientY); if (id) this.select(id, true); }
       tap = null;
     };
-    vp.addEventListener('pointerup', end);
-    vp.addEventListener('pointercancel', end);
-    vp.addEventListener('keydown', (e) => {
+    this._listen(vp, 'pointerup', end);
+    this._listen(vp, 'pointercancel', end);
+    this._listen(vp, 'keydown', (e) => {
       if (e.target !== vp) return;
       const s = e.shiftKey ? 120 : 40;
       const k = { ArrowLeft: [s, 0], ArrowRight: [-s, 0], ArrowUp: [0, s], ArrowDown: [0, -s] }[e.key];
@@ -1984,10 +2116,7 @@ export class OfficeScene {
     return svg;
   }
 
-  /**
-   * Ghost of an item being placed: footprint diamonds (valid: accent fill; invalid: danger hatch) and a
-   * translucent sprite. ghost = { asset, x, y, orientation } | { asset, wall, offset }, ok, tiles.
-   */
+  /** Placement preview: ghost={asset,x,y,orientation} or {asset,wall,offset}; footprint reflects validity. */
   showGhost(ghost, ok, tiles) {
     const svg = this._overlaySvg('_ghostSvg');
     // Invalid = danger fill + diagonal hatch + dashed edge: never colour alone (editor.md §6).
@@ -2065,8 +2194,8 @@ export class OfficeScene {
       try { history.pushState({ aoFullscreen: true }, ''); this._fsHistory = true; } catch { this._fsHistory = false; }
       this._onFsPop = () => { this._fsHistory = false; this._fakeFullscreen(false); };
       this._onFsKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); this._fakeFullscreen(false); } };
-      addEventListener('popstate', this._onFsPop);
-      document.addEventListener('keydown', this._onFsKey);
+      this._listen(window, 'popstate', this._onFsPop);
+      this._listen(document, 'keydown', this._onFsKey);
     } else {
       if (!this.stage.hasAttribute('data-fake-fullscreen')) return;
       this.stage.removeAttribute('data-fake-fullscreen');
@@ -2103,7 +2232,7 @@ export class OfficeScene {
     b.innerHTML = `<svg class="bu-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
     if (text) { const span = document.createElement('span'); span.className = 'ao-ctl-text'; span.textContent = label; b.append(span); }
     // a page action (the editor) renders outside the stage: leave full screen first, then act
-    b.addEventListener('click', async (e) => { if (this.fullscreen) await this.toggleFullscreen(false); onClick(e); });
+    this._listen(b, 'click', async (e) => { if (this.fullscreen) await this.toggleFullscreen(false); onClick(e); });
     b.dataset.pageControl = '';   // page actions hide while the editor is open (office.css)
     this.controls.append(b);
     return b;
@@ -2122,27 +2251,35 @@ export class OfficeScene {
   }
 
   destroy() {
+    if (this.destroyed) return;
+    this._events.abort();
+    this._decorLoad?.abort();
     this._packLoad?.abort(); this._packSignals?.clear();
-    for(const c of this.chars.values()) this._cancelEgg(c,{dispose:true});
+    for(const c of this.chars?.values() ?? []) this._cancelEgg(c,{dispose:true});
     window.removeEventListener('office-surprises-setting',this._onSurpriseSetting);
     this.destroyed = true;
+    if (this.stage.aoScene === this) delete this.stage.aoScene;
     clearTimeout(this._announceTimer);
     cancelAnimationFrame(this._raf);
     this._raf = 0;
     clearInterval(this._themeTimer);
-    this._lifeTimer();
-    this._ro.disconnect();
-    this._mq.removeEventListener('change', this._onMq);
+    this._lifeTimer?.();
+    this._ro?.disconnect();
+    if (this._onMq) this._mq?.removeEventListener('change', this._onMq);
     document.removeEventListener('visibilitychange', this._onVis);
     document.removeEventListener('fullscreenchange', this._onFsChange);
     document.removeEventListener('webkitfullscreenchange', this._onFsChange);
+    window.removeEventListener('pagehide', this._onPageHide);
+    window.removeEventListener('pageshow', this._onPageShow);
+    document.removeEventListener('freeze', this._onFreeze);
+    document.removeEventListener('resume', this._onResume);
     if (this.stage.hasAttribute('data-fake-fullscreen')) this._fakeFullscreen(false);
     else if ((document.fullscreenElement ?? document.webkitFullscreenElement) === this.stage) this._fsApi()?.exit().catch?.(() => {});
     this._io?.disconnect();
     this._imgKeep?.clear();
     for (const c of this._allChars ?? []) { releaseWander(c); c.dead = true; this._cancelAll(c); }
     this._allChars?.clear();
-    this.chars.clear();
+    this.chars?.clear();
     this._camListeners?.clear();
     this.pointerHandler = null;
     this.stage.replaceChildren();

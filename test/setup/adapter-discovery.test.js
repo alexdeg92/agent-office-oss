@@ -41,12 +41,13 @@ test('critic P1: an empty detected runtime config never fabricates a primary age
   } finally { await h.stop(); }
 });
 test('critic P1: multiple connectable detections require operator choice; presence flags cannot select transport', async () => {
-  const rows = ['openclaw', 'demo', 'codex'].map(runtime => ({ runtime, name: runtime, found: true, supported: true, confidence: 'presence', agents: [], connection: null }));
+  // Codex has a real connector since T-0053; hermes is still detected without one, so it keeps the unsupported case
+  const rows = ['openclaw', 'demo', 'hermes'].map(runtime => ({ runtime, name: runtime, found: true, supported: true, confidence: 'presence', agents: [], connection: null }));
   const h = await fixture(async () => rows);
   try {
     const r = await h.post('detect'); assert.equal(r.status, 200); assert.equal(r.json.data.result.selected, null);
-    assert.equal(r.json.data.result.runtimes.find(d => d.runtime === 'codex').supported, false);
-    assert.equal((await h.post('check', { runtime: { adapter: 'codex' } })).status, 400);
+    assert.equal(r.json.data.result.runtimes.find(d => d.runtime === 'hermes').supported, false);
+    assert.equal((await h.post('check', { runtime: { adapter: 'hermes' } })).status, 400);
   } finally { await h.stop(); }
 });
 test('critic P1: configured agent labels belong only to the selected runtime', () => {

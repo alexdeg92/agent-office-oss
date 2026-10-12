@@ -34,8 +34,8 @@ test('S01-05: default DB-owner backups are classified sensitive; default/opt-in 
     const hash = await hashPassword('synthetic-backup-owner-password');
     const store = openStore({ dir: dataDir, instance: 'test', ownerName: 'Synthetic Operator' });
     store.users.createOwner({ email: 'synthetic-owner@example.invalid', passwordHash: hash, personId: store.owner.id }); store.close();
-    const paths = IC.configPaths(env), config = { version: IC.VERSION, instance: { name: 'Synthetic backup', locale: 'fr', timeZone: 'UTC' }, owner: { displayName: 'Synthetic Operator', email: 'synthetic-owner@example.invalid', authSource: 'database' }, runtime: { adapter: 'demo', demo: { seed: 1 } }, agents: { primary: null, looks: {} } };
-    const secrets = { version: IC.VERSION, sessionSecret: 's'.repeat(48), runtimeToken: null }; IC.writeInstanceConfig(paths, config, secrets);
+    const paths = IC.configPaths(env), config = { version: 2, instance: { name: 'Synthetic backup', locale: 'fr', timeZone: 'UTC' }, owner: { displayName: 'Synthetic Operator', email: 'synthetic-owner@example.invalid', authSource: 'database' }, runtime: { adapter: 'demo', demo: { seed: 1 } }, agents: { primary: null, looks: {} } };
+    const secrets = { version: 2, sessionSecret: 's'.repeat(48), runtimeToken: null }; IC.writeInstanceConfig(paths, config, secrets);
     for (const includeSecrets of [false, true]) {
       const file = path.join(tmp, includeSecrets ? 'with-secrets.sqlite' : 'default.sqlite');
       const info = await backup({ dataDir, paths, out: file, includeSecrets });

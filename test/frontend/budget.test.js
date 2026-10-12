@@ -12,10 +12,10 @@ const { firstLoad, preloadBlock, routePreloadScript, routePaths, MARK, ROOT } = 
 export const BUDGET = {
   // F11: the core (what every page needs: shell, sign-in, i18n, API, stream) and each page's own chunk.
   requests: 40,                       // index.html + 3 stylesheets + 2 boot scripts + the core module graph
-  jsBytes: 300 * 1024, jsGzip: 95 * 1024,
-  cssBytes: 160 * 1024, cssGzip: 30 * 1024,
-  routeGzip: 100 * 1024,              // any one page's own modules (the office is the largest, ~88 KB gz)
-  landingGzip: 190 * 1024,            // core + the Bureau chunk: the signed-in landing page
+  jsBytes: 300 * 1024, jsGzip: 95.5 * 1024, // identity-theme bootstrap is 0.15 KB gzipped; see identity-themes-1.md
+  cssBytes: 160.5 * 1024, cssGzip: 30.5 * 1024, // +0.5 KB 2026-10-11: real provider logos (owner P0)
+  routeGzip: 102 * 1024,              // the Bureau floor registry adds 4.5 KB gz; see design/reports/floors-04.md
+  landingGzip: 195 * 1024,            // core + Bureau floor registry; see design/reports/floors-04.md
   criticalDepth: 1,                   // every module is preloaded: no import waterfall (1 round trip per level on 4G)
   loginArt: 120 * 1024,               // the sign-in illustration (the largest paint of a first visit)
 };
@@ -44,6 +44,21 @@ test('setup owns its onboarding dictionary and styles; signed-in pages do not lo
   assert.doesNotMatch(readFileSync(ROOT + '/index.html', 'utf8'), /rel="stylesheet"[^>]*setup\.css/);
 });
 
+test('Santé owns its UI dictionary; only the Santé route loads it', () => {
+  const dictionary = 'messages/health.js';
+  assert.ok(!r.files.some((f) => f.rel === dictionary), 'health copy is absent from the landing/core graph');
+  assert.ok(r.routes.sante.modules.includes(dictionary), 'Santé loads its dictionary with the route');
+  for (const [name, route] of Object.entries(r.routes)) if (name !== 'sante') assert.ok(!route.modules.includes(dictionary), name);
+});
+
+test('release notes data and copy stay on the À propos route', () => {
+  const core = new Set(r.files.map((f) => f.rel));
+  assert.ok(!core.has('release-notes.js'));
+  assert.ok(!core.has('messages/releases.js'));
+  assert.ok(r.routes['a-propos'].modules.includes('release-notes.js'));
+  assert.ok(r.routes['a-propos'].modules.includes('messages/releases.js'));
+});
+
 test('F11: pages are lazy chunks; each route\'s modules are in route-preload.js (no waterfall on arrival or navigation)', () => {
   assert.equal(readFileSync(ROOT + '/route-preload.js', 'utf8'), routePreloadScript(), 'run: node scripts/first-load.js --write');
   const paths = routePaths();
@@ -65,14 +80,13 @@ test('no import waterfall: index.html preloads exactly the static module graph',
   assert.ok(firstLoad().criticalDepth <= BUDGET.criticalDepth, `critical depth ${r.criticalDepth}`);
 });
 
-test('the sign-in art is a WebP derivative within budget (it is the largest paint of a first visit)', () => {
+test('the public login uses the office scene instead of the former boxed illustration assets', () => {
   const css = readFileSync(ROOT + '/app.css', 'utf8');
-  const names = [...css.matchAll(/Illustrations\/(login-[\w-]+\.\w+)/g)].map((m) => m[1]);
-  assert.ok(names.length >= 4 && names.every((n) => n.endsWith('.webp')), names.join());
-  for (const n of new Set(names)) {
-    const size = statSync(new URL('../../design/derived/Illustrations/' + n, import.meta.url)).size;
-    assert.ok(size <= BUDGET.loginArt, `${n} ${kb(size)} > ${kb(BUDGET.loginArt)}`);
-  }
+  const page = readFileSync(ROOT + '/pages/login.js', 'utf8');
+  assert.match(css, /\.bu-login__scene/);
+  assert.doesNotMatch(css, /Illustrations\/login-/);
+  assert.match(page, /office\/scene\.js/);
+  assert.match(page, /manifest\.example\.json/);
 });
 
 test('the static server compresses text and answers revalidations with 304 (serve-frontend)', () => {

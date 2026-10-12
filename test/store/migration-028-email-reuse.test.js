@@ -1,0 +1,30 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {openDatabase,MIGRATIONS_DIR}=require('../../src/store/db');
+
+test('migration 028 retains deleted identity references and permits a fresh case-insensitive email owner',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'ao-m028-'));
+  const migrations=path.join(root,'migrations'),data=path.join(root,'data');fs.mkdirSync(migrations);
+  const source=fs.readdirSync(MIGRATIONS_DIR);
+  for(const file of source)if(Number(file.slice(0,3))<=27)fs.copyFileSync(path.join(MIGRATIONS_DIR,file),path.join(migrations,file));
+  let handle=openDatabase({dir:data,instance:'test',migrationsDir:migrations,log:()=>{}});
+  const {db}=handle,now=Date.now();
+  db.prepare("INSERT INTO persons(id,kind,name,is_owner,created_at,updated_at) VALUES ('per_old_reinvite','human','Old reader',0,?,?)").run(now,now);
+  db.prepare("INSERT INTO users(id,person_id,email,role_id,status,credential_source,auth_generation,permission_revision,deleted_at,created_at,updated_at) VALUES ('usr_old_reinvite','per_old_reinvite','Reuse@example.invalid','rol_reader','deleted','database',7,3,?,?,?)").run(now-1000,now-2000,now);
+  db.prepare("INSERT INTO invitations(id,user_id,purpose,token_hash,created_by,created_at,expires_at,revoked_at,target_generation,target_revision) VALUES ('inv_old_reinvite','usr_old_reinvite','invite',? ,'usr_old_reinvite',?,?,?,7,3)").run('a'.repeat(64),now-2000,now+100000,now-1000);
+  handle.close();
+  for(const file of source)if(Number(file.slice(0,3))>27)fs.copyFileSync(path.join(MIGRATIONS_DIR,file),path.join(migrations,file));
+  t.after(()=>{handle?.close();fs.rmSync(root,{recursive:true,force:true});});
+  handle=openDatabase({dir:data,instance:'test',migrationsDir:migrations,log:()=>{}});
+  const old=handle.db.prepare("SELECT * FROM users WHERE id='usr_old_reinvite'").get();
+  assert.equal(old.email,'Reuse@example.invalid');assert.equal(old.auth_generation,7);assert.equal(old.status,'deleted');
+  assert.equal(handle.db.prepare("SELECT user_id FROM invitations WHERE id='inv_old_reinvite'").get().user_id,'usr_old_reinvite');
+  handle.db.prepare("INSERT INTO persons(id,kind,name,is_owner,created_at,updated_at) VALUES ('per_new_reinvite','human','New reader',0,?,?)").run(now,now);
+  handle.db.prepare("INSERT INTO users(id,person_id,email,role_id,status,credential_source,created_at,updated_at) VALUES ('usr_new_reinvite','per_new_reinvite','rEuSe@example.invalid','rol_reader','invited','database',?,?)").run(now,now);
+  assert.equal(handle.db.prepare("SELECT count(*) AS n FROM users WHERE email='REUSE@example.invalid'").get().n,2);
+  assert.deepEqual(handle.db.prepare('PRAGMA foreign_key_check').all(),[]);
+  handle.db.prepare("INSERT INTO persons(id,kind,name,is_owner,created_at,updated_at) VALUES ('per_dup_reinvite','human','Duplicate',0,?,?)").run(now,now);
+  assert.throws(()=>handle.db.prepare("INSERT INTO users(id,person_id,email,role_id,status,credential_source,created_at,updated_at) VALUES ('usr_dup_reinvite','per_dup_reinvite','REUSE@example.invalid','rol_reader','invited','database',?,?)").run(now,now));
+});

@@ -5,6 +5,8 @@ import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { normalizeLandmarks } from '../../public/v2/office/landmarks.js';
 import packRegistry from '../../packaging/character-pack-registry.js';
+import decorRegistry from '../../packaging/decor-pack-registry.js';
+import accessoryRegistry from '../../packaging/accessory-pack-registry.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const ANCHORS = JSON.parse(readFileSync(root + 'assets/anchors.json', 'utf8'));
 const A = ANCHORS.assets;
@@ -76,8 +78,8 @@ const layerSet = (dir) => {
 };
 const missing = (dir) => POSES.filter((p) => !has(`${dir}/${p}.png`)).map((p) => P(`${dir}/${p}.png`));
 
-const F = (id, label, category, placement, extra = {}) => {
-  const rel = `Office/furniture/${id}.png`;
+const F = (id, label, category, placement, extra = {}, ext = 'png') => {
+  const rel = `Office/furniture/${id}.${ext}`;
   const a = A[rel];
   const o = { id, label, category, placement };
   if (a.footprint) o.footprint = a.footprint;
@@ -178,9 +180,11 @@ function deskSeated() {
 // Sofa seats (image px on sofa.png): the first is the lounge seat.
 function sofaSeated() {
   const seats = A['Office/furniture/sofa.png']?.seatAnchors;
-  const first = seats && Object.values(seats)[0];
+  const entries = seats && Object.entries(seats);
+  const first = entries?.[0]?.[1];
   if (!first) return { seat: { x: 1.4, y: 0.55 }, facing: 'sw', stack: ['sofa', 'character'] };
-  return { seat: { x: 1.4, y: 0.55 }, facing: 'sw', stack: ['sofa', 'character'], seatPoint: { x: first[0], y: first[1] } };
+  return { seat: { x: 1.4, y: 0.55 }, facing: 'sw', stack: ['sofa', 'character'], seatPoint: { x: first[0], y: first[1] },
+    seats: entries.map(([id, point]) => ({ id, seatPoint: { x: point[0], y: point[1] } })) };
 }
 
 const furniture = [
@@ -227,6 +231,8 @@ const furniture = [
     pending: ['talking-se (standing, facing SE) for the meeting scene: walking-se stands in until then'],
   }),
   F('lamp', 'Lampadaire', 'deco', 'floor', { layerBias: 0.1, images: { 'sw@on': P('Office/furniture/lamp@on.png') } }),
+  F('winter-garland', 'Guirlande d’hiver', 'mur', 'wall', { wall: { side: 'left', length: 5, elevation: 110 } }, 'svg'),
+  F('autumn-garland', 'Guirlande d’automne', 'mur', 'wall', { wall: { side: 'left', length: 5, elevation: 110 } }, 'svg'),
   F('whiteboard', 'Tableau blanc', 'mur', 'wall', { wall: { side: 'right', length: 2, elevation: 48 } }),
   F('window', 'Fenêtre', 'mur', 'wall', {
     wall: { side: 'left', length: 2, elevation: 40 },
@@ -249,6 +255,10 @@ const ACC = [
 ];
 const enabledPacks = JSON.parse(readFileSync(root + 'office/character-packs.enabled.json', 'utf8'));
 const characterPacks = packRegistry.requireEnabledCharacterRegistry(root + 'assets/Characters', enabledPacks);
+const enabledDecor = JSON.parse(readFileSync(root + 'office/decor-packs.enabled.json', 'utf8'));
+const enabledAccessories = JSON.parse(readFileSync(root + 'office/accessory-packs.enabled.json', 'utf8'));
+const packedAccessories = accessoryRegistry.requireAccessoryRegistry(root + 'assets/Accessories', enabledAccessories, ACC_IDS);
+furniture.push(...decorRegistry.requireDecorRegistry(root + 'assets/Decor', enabledDecor, furniture.map(f => f.id)).items);
 
 const manifest = {
   version: 2,
@@ -256,7 +266,7 @@ const manifest = {
   projection: { kind: 'dimetric-2:1', tileWidth: 96, tileHeight: 48, artScale: 2, wallHeight: 144 },
   pending: [
     'Batch 5b (accessory contract v2): back/front accessory layers per pose and per character/variant, and head landmarks per pose in anchors.json',
-    'Seasons hiver / automne: furniture variants (sw@hiver, sw@automne) and decor props (themes[].extras)',
+    'Seasons hiver / automne: additional furniture variants (sw@hiver, sw@automne)',
     'Seated idle/sleep poses at the desk (seated-ne, sleeping-ne): idle and offline hold the first typing frame until then',
     'Batch 3: sub-agent portraits (characters.subagent.variants[].portrait)',
     'Night variants beyond window@night and lamp@on (e.g. shelf/plant night tints) if the artist adds them: add images["sw@night"] on the item; the renderer picks them up with no code change',
@@ -268,7 +278,15 @@ const manifest = {
     size: size('Office/room/day.png'),
     entrance: { x: 6, y: 9 },
     images: { day: P('Office/room/day.png'), night: P('Office/room/night.png') },
-  }],
+    activitySpots: [{ id: 'lobby-waiting', kind: 'idle', capacity: 4, points: [{ x: 2.5, y: 5.5 }, { x: 3.5, y: 5.5 }, { x: 4.5, y: 5.5 }, { x: 5.5, y: 5.5 }] }],
+  }, ...(has('Office/floors/gym/day.webp') && has('Office/floors/gym/night.webp') ? [{
+    id: 'gym', label: 'Gym', cols: 12, rows: 10,
+    anchor: anchor('Office/floors/gym/day.webp'),
+    size: size('Office/floors/gym/day.webp'),
+    entrance: { x: 6, y: 9 },
+    images: { day: P('Office/floors/gym/day.webp'), night: P('Office/floors/gym/night.webp') },
+    activitySpots: [{ id: 'gym-recovery', kind: 'gym', capacity: 4, points: [{ x: 8.5, y: 8.5 }, { x: 9.5, y: 8.5 }, { x: 7.5, y: 8.5 }, { x: 10.5, y: 8.5 }] }],
+  }] : [])],
   furniture,
   characters: [
     {
@@ -302,7 +320,7 @@ const manifest = {
   ],
   // Delivery coverage of each batched character family (in flux; diagnostics only).
   families: FAMILY_STATUS,
-  accessories: ACC.map(([id, lbl, slot]) => ({
+  accessories: [...ACC.map(([id, lbl, slot]) => ({
     id, label: lbl, slot,
     // v1 single-layer overlays: fallback until Batch 5b (contract v2) delivers back/front layers.
     images: Object.fromEntries(['timmy', 'subagent'].map((k) => [k, poseSet(`Characters/accessories/${id}/${k}`)]).filter(([, v]) => Object.keys(v).length)),
@@ -310,7 +328,7 @@ const manifest = {
     layers: Object.fromEntries(['timmy', 'subagent', ...subDirs.map((v) => `subagent/${v}`), ...READY_FAMILIES.flatMap((f) => f.variants.map(([v]) => `${f.id}/${v}`))]
       .map((k) => [k, layerSet(`Characters/accessories/${id}/${k}`)]).filter(([, v]) => v)),
     pending: [`Batch 5b: assets/Characters/accessories/${id}/{timmy,subagent/<variant>}/<pose>.{back,front}.png`],
-  })),
+  })), ...packedAccessories],
   themes: [
     { id: 'day', label: 'Jour', kind: 'day' },
     {
@@ -320,13 +338,18 @@ const manifest = {
       furnitureVariants: ['night', 'on'],
       monitors: 'on',
     },
-    // Seasons (scaffold, O4): layered on top of the resolved day/night theme. Art pending: add
-    // furniture images keyed "sw@hiver" / "sw@automne" and decor props in `extras` ({asset, x, y} or
-    // {asset, wall, offset}); renderers need no change.
-    { id: 'hiver', label: 'Hiver', kind: 'season', furnitureVariants: ['hiver'], extras: [] },
-    { id: 'automne', label: 'Automne', kind: 'season', furnitureVariants: ['automne'], extras: [] },
+    // Seasons layer native SVG wall garlands over the resolved day/night scene.
+    { id: 'hiver', label: 'Hiver', kind: 'season', furnitureVariants: ['hiver'], thumbnail: P('Office/seasons/winter.svg'), extras: [{ asset: 'winter-garland', wall: 'left', offset: 0 }] },
+    { id: 'automne', label: 'Automne', kind: 'season', furnitureVariants: ['automne'], thumbnail: P('Office/seasons/autumn.svg'), extras: [{ asset: 'autumn-garland', wall: 'left', offset: 0 }] },
   ],
 };
+// Declare capabilities in canonical descriptors; full body packs retain their
+// own art contracts and may be installed independently of shared gear packs.
+for (const c of [...manifest.characters, ...characterPacks.packs]) {
+  const native = Object.fromEntries(manifest.accessories.filter(a => !a.packManifest && Object.keys(a.layers ?? {}).some(k => k === c.id || k.startsWith(c.id + '/'))).map(a => [a.id, { supported: true }]));
+  const extras = Object.fromEntries(packedAccessories.filter(a => a.supportedModels.includes(c.id)).map(a => [a.id, { supported: true }]));
+  c.accessorySupport = { ...native, ...c.accessorySupport, ...extras };
+}
 // Batch 5b coverage: every look × delivered pose × accessory must have a v2 layer pair. When complete,
 // renderers stop drawing the deprecated v1 overlays by default (scene.legacyAccessories).
 {
@@ -338,7 +361,7 @@ const manifest = {
       for (const pose of Object.keys(poses)) {
         for (const a of manifest.accessories) {
           total++;
-          const has2 = a.layers?.[key]?.[pose] ?? a.layers?.[c.id]?.[pose];
+          const has2 = a.supportedModels?.includes(c.id) || (a.layers?.[key]?.[pose] ?? a.layers?.[c.id]?.[pose]);
           if (!has2) missingV2.push(`${a.id}:${key}:${pose}`);
         }
       }

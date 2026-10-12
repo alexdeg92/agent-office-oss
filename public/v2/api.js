@@ -1,15 +1,12 @@
-// HTTP client for /api and /api/v2 (api.md §2). One error format: ApiError, shown as a bu-toast.
-// Callers pass api.md paths; the deployment prefix (config.apiBase, e.g. /backend) is added here and only here.
-// Mock mode (mock/): the URL has ?mock=… or GET /api/v2/meta answers 404 (API v2 not deployed yet).
-// In mock mode only /api/v2 calls are mocked; with a real backend, login and /api/me stay real.
+// Shared HTTP client: deployment prefixes, ApiError and explicit or legacy mock mode.
 import { toast } from './toast.js';
-import { apiUrl, assetUrl, versioned, buildQuery } from './config.js';
+import { apiUrl, assetUrl, versioned, buildQuery, splitOrigin } from './config.js';
 import * as vmcheck from './vmcheck.js';
 import { getLang, msg, messageKeys } from './i18n.js';
 
 /** The deployed static UI release, independently of the API version and mock mode. */
 export async function getUIBuildId() {
-  const r = await fetch(assetUrl('build.json'), { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(4000) });
+  const r = await fetch(assetUrl('build.json'), { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(750) });
   if (!r.ok) return null;
   return (await r.json()).buildId;
 }
@@ -25,8 +22,6 @@ export class ApiError extends Error {
 }
 
 const CODE_BY_STATUS = { 400: 'validation_failed', 401: 'unauthorized', 403: 'readonly', 404: 'not_found', 409: 'conflict', 415: 'unsupported_media_type', 429: 'rate_limited', 502: 'upstream_failed', 503: 'upstream_unavailable' };
-// Server error messages stay French until G5 (api.md 2.3): in another language the UI says the code's own sentence
-// (messages `apiError.<code>`); the server's text is kept as `serverMessage`.
 const known = (code) => messageKeys(getLang()).includes('apiError.' + code);
 const localMessage = (code, message) => (known(code) && (getLang() !== 'fr' || !message) ? msg('apiError.' + code) : message);
 
@@ -46,6 +41,8 @@ let mockScenario = null;  // mock/ scenario name
 let mockModule = null;
 let serverHasV2 = false; // GET /api/v2/meta answered (not 404): auth goes through /api/v2/me
 const authListeners = new Set();
+let splitAuthModule = null;
+const loadSplitAuth = () => splitAuthModule || (splitAuthModule = import('./split-auth.js' + buildQuery).then(auth => (auth.configure(ApiError,toApiError),auth)));
 
 export const onUnauthorized = (fn) => { authListeners.add(fn); return () => authListeners.delete(fn); };
 /** Session expired outside an HTTP call (e.g. the SSE stream, R4-10): same handling as a 401. */
@@ -54,19 +51,10 @@ export const isMock = () => mode === 'mock';
 export const getMockScenario = () => mockScenario;
 export async function mock() { return mockModule || (mockModule = await import('./mock/server.js' + buildQuery)); }
 
-/**
- * Where a missing API v2 (meta 404) may fall back to mocks: loopback hosts only (a developer's machine). No instance
- * hostname is written in code (platform direction); a deployed instance with meta answering decides with meta.env.
- */
+// Loopback-only mock fallback.
 export const isLoopbackHost = (h) => h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || /\.localhost$/.test(h);
 
-/**
- * Decides live vs mock once, at boot, from the server's real meta response (R4-01). Returns the MetaVM.
- * - meta answers: live, unless `?mock=…` is set AND meta.env !== 'production' → mock view models, real auth.
- * - meta is 404 (API v2 not deployed) on a loopback host → mock view models; with `?mock=…` also mock auth
- *   (standalone: a static server has no /api/login).
- * - network error, other errors, or 404 on any other host → an error. Never a silent fallback to mock.
- */
+/** Selects live APIs or loopback-only mock mode at boot. */
 export async function init({ search = location.search, hostname = location.hostname } = {}) {
   const q = new URLSearchParams(search);
   const wanted = q.has('mock') ? q.get('mock') || '1' : null;
@@ -97,33 +85,27 @@ async function useMock(scenario, { standalone }) {
   return (await m.handle('GET', versioned('/api/v2/meta'))).body.data;
 }
 
-/**
- * request(method, path, body?, {quiet}) → parsed JSON body. Throws ApiError.
- * Errors are toasted unless `quiet` (pages that render their own error state pass quiet: true).
- */
-export async function request(method, path, body, { quiet = false } = {}) {
+/** Sends a JSON API request with optional cancellation and explicit API version. */
+export async function request(method, path, body, { quiet = false, apiVersion, notifyUnauthorized: notifyAuth = true, signal, cache, live = false } = {}) {
   try {
-    if (mode === 'mock' && /^\/api\/v[23]\//.test(path)) return checked(method, path, unwrapMock(await (await mock()).handle(method, versioned(path), body)));
+    signal?.throwIfAborted();
+    if (!live && mode === 'mock' && /^\/api\/v[23]\//.test(path)) return checked(method, path, unwrapMock(await (await mock()).handle(method, versioned(path, apiVersion), body)));
+    const url = apiUrl(path, apiVersion);
+    const options = { method, signal, cache, credentials:'same-origin',
+      headers: { accept: 'application/json', 'accept-language': getLang(), ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(method === 'GET' || method === 'HEAD' ? {} : { 'x-ao-request': '1' }) },
+      body: body === undefined ? undefined : JSON.stringify(body) };
     let res;
-    try {
-      res = await fetch(apiUrl(path), {
-        method,
-        credentials: 'same-origin',
-        // R15-01 (architect-21): every non-GET carries X-AO-Request, a header no cross-site form can send (defence in depth).
-        headers: { accept: 'application/json', 'accept-language': getLang(), ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(method === 'GET' || method === 'HEAD' ? {} : { 'x-ao-request': '1' }) },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    } catch {
-      throw new ApiError({ code: 'network' });
-    }
+    try { res = splitOrigin ? await (await loadSplitAuth()).request(url,options,apiUrl('/api/auth/refresh')) : await fetch(url,options); }
+    catch (error) { if (signal?.aborted) throw signal.reason || error; if(error instanceof ApiError)throw error; throw new ApiError({ code:'network' }); }
     const rid = res.headers.get('x-request-id');
     let json = null;
     try { json = await res.json(); } catch { /* empty or non-JSON body */ }
+    signal?.throwIfAborted();
     if (!res.ok) throw withRetryAfter(toApiError(res.status, json, rid), res, json);
     return checked(method, path, json);
   } catch (err) {
     if (err instanceof ApiError) {
-      if (err.code === 'unauthorized') for (const fn of authListeners) fn(err);
+      if (err.code === 'unauthorized' && (typeof notifyAuth === 'function' ? notifyAuth(err) : notifyAuth)) for (const fn of authListeners) fn(err);
       else if (!quiet) toastError(err);
     }
     throw err;
@@ -139,7 +121,7 @@ function unwrapMock({ status, body }) {
   return body;
 }
 
-/** Login throttling (architect-20): a 429 says how long to wait, in the body (retryAfterSec) or the Retry-After header. */
+/** Reads a 429 login delay from the body or Retry-After header. */
 function withRetryAfter(err, res, body) {
   if (res.status !== 429) return err;
   const fromBody = body && Number.isFinite(body.retryAfterSec) ? body.retryAfterSec : null;
@@ -160,9 +142,12 @@ export const del = (path, opts) => request('DELETE', path, undefined, opts);
 
 // ---- auth (unchanged v1 routes; /api/v2/me when it exists) ----
 
-/** Returns { email, gwConnected } or null when not logged in. */
+/** Returns the current user or null when signed out. */
 export async function me() {
   if (mode === 'mock' && (await mock()).isStandalone()) return (await mock()).me();
+  if (splitOrigin) {
+    return (await loadSplitAuth()).me(apiUrl('/api/auth/refresh'),()=>get('/api/v3/me', {quiet:true,notifyUnauthorized:false,apiVersion:3}));
+  }
   const tryGet = async (path) => {
     const res = await fetch(apiUrl(path), { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (res.status === 401) return null;
@@ -183,12 +168,24 @@ export async function me() {
 
 export async function login(email, password) {
   if (mode === 'mock' && (await mock()).isStandalone()) return (await mock()).login(email, password);
+  if (splitOrigin) {
+    return (await loadSplitAuth()).login(apiUrl('/api/auth/refresh'),email,password);
+  }
   return request('POST', '/api/login', { email, password }, { quiet: true });
 }
 
 export async function logout() {
   if (mode === 'mock' && (await mock()).isStandalone()) return (await mock()).logout();
+  if (splitOrigin) {
+    return (await loadSplitAuth()).logout(apiUrl('/api/auth/refresh'));
+  }
   return request('POST', '/api/logout', {}, { quiet: true });
+}
+
+/** Reload recovery and 401 refresh share one in-tab rotation. Bearer tokens stay volatile. */
+export async function refreshHumanAccess() {
+  if (!splitOrigin) return false;
+  return (await loadSplitAuth()).refresh(apiUrl('/api/auth/refresh'));
 }
 
 /** A static JSON asset of the UI (e.g. the office manifest under bureau/), by path relative to the UI root.

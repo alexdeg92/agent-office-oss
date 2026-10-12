@@ -1,0 +1,4 @@
+
+.scrim{background:color-mix(in srgb,var(--bu-scrim) 64%,transparent)}
+[data-theme=light] .scrim{background:color-mix(in srgb,var(--bu-scrim) 40%,transparent)}
+.menu-panel>hr{width:100%;min-width:100%;justify-self:stretch;margin:0;border:0;border-top:1px solid var(--bu-border-default);height:0}

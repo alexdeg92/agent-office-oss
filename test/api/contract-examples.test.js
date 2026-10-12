@@ -47,6 +47,14 @@ describe('contract-shape checker (strict, S6.2: R8-08/09)', () => {
     assert.ok(compareShape({ text: { key: 'k' } }, { text: { key: 'k', params: { bad: [1] } } }).length > 0);
     assert.deepEqual(compareShape({ manifest: { version: 2 } }, { manifest: { anything: [] } }, { opaque: ['$.manifest'] }), []);
   });
+  it('opaque semantic subtrees accept their sidecar metadata; undelegated missing paths still fail', () => {
+    const example = { layout: { agents: [{ appearance: 'auto' }] }, id: 'layout' };
+    const sidecar = { opaque: ['$.layout'], optional: ['$.layout.agents[].appearance'],
+      additional: { '$.layout.agents[].name': 'Nova' }, nullable: ['$.layout.agents[].name'], variants: { '$.layout.agents[]': [{ appearance: 'manual' }] } };
+    assert.deepEqual(compareShape(example, { layout: { custom: true }, id: 'layout' }, sidecar), []);
+    assert.deepEqual(compareShape(example, { layout: {}, id: 42 }, sidecar), ['$.id: expected string, got number']);
+    assert.throws(() => compareShape(example, example, { additional: { '$.absent.name': 'Nova' } }), /sidecar path not in the example/);
+  });
 });
 
 describe('contract examples (docs/architecture/examples)', () => {

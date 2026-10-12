@@ -1,6 +1,6 @@
 'use strict';
 
-const { ProjectError, validation, conflict, projectConflictBody } = require('./errors');
+const { ProjectError, validation, projectConflictBody } = require('./errors');
 const { PROJECT_STATUSES, HISTORY_PAGE } = require('./constants');
 const { proposeCandidates, collectGithubRepos, collectWorkspaceFolders } = require('./discovery');
 const { linkProjectActivity, projectsForSlug } = require('./activity');
@@ -26,7 +26,6 @@ function createProjectService(deps = {}) {
   const primarySource = deps.primaryAgentId != null ? deps.primaryAgentId : repository.primaryAgentId;
   const sources = deps.sources || {};
   const publish = typeof deps.publish === 'function' ? deps.publish : () => {};
-  const pendingSummary = new Map();
   let latestCandidates = [];
 
   const github = githubAdapter(sources);
@@ -185,7 +184,6 @@ function createProjectService(deps = {}) {
     }
     const afterId = id || (returned && returned.id);
     const after = afterId ? repository.getProject(afterId) : null;
-    if (before && after && before.summary !== after.summary) pendingSummary.delete(after.id);
     if (beforeSig !== signature(after)) publishPairs([{ before, after }], at);
     return {
       ok: true,
@@ -374,52 +372,36 @@ function createProjectService(deps = {}) {
     },
 
     regenerateSummary(input = {}) {
-      const project = repository.getProject(input.id);
-      if (!Number.isInteger(input.expectedRevision)) {
-        throw validation('La révision est requise.', 'expectedRevision');
+      let claimed;
+      try { claimed = repository.claimSummary({ id: input.id, expectedRevision: input.expectedRevision, mintTurn: () => mint('trn') }); }
+      catch (err) {
+        if (err.details?.some(d => d.issue === 'turn-pending')) throw err;
+        throw withConflict(err, input.id, input.requestId);
       }
-      if (input.expectedRevision !== project.revision) {
-        throw withConflict(conflict(project.revision), input.id, input.requestId);
-      }
-      if (pendingSummary.has(input.id)) {
-        throw new ProjectError('conflict', 'Une régénération est déjà en cours.', {
-          revision: project.revision,
-          details: [{ field: 'summary', issue: 'turn-pending' }],
-        });
-      }
-      const turnId = mint('trn');
-      pendingSummary.set(input.id, turnId);
-      return { ok: true, result: { turnId }, revision: project.revision, vm: projectVm(input.id) };
+      return { ok: true, result: { turnId: claimed.turnId }, revision: claimed.project.revision, vm: projectVm(input.id) };
     },
 
-    // The agent turn that started at expectedRevision. A newer turn, or a revision that moved, is dropped:
-    // no write, and a different pending turn is left in place.
+    // Exact durable identity and revision. Progress from a delegated child may keep the same lock.
     completeSummary(input = {}) {
-      const project = repository.getProject(input.id);
-      if (pendingSummary.get(input.id) !== input.turnId || project.revision !== input.expectedRevision) {
-        return { ok: true, result: { applied: false }, revision: project.revision, vm: projectVm(input.id) };
-      }
-      const at = atOf(input);
+      let completion;
       const written = runCommand({
-        id: input.id,
-        requestId: input.requestId,
-        at,
-        call: () => repository.edit({
-          id: input.id,
-          expectedRevision: input.expectedRevision,
-          summary: input.summary,
-          actor: actorOf(input),
-          at,
-        }),
+        id: input.id, requestId: input.requestId, at: atOf(input),
+        call: () => {
+          completion = repository.completeSummary({
+            id: input.id, turnId: input.turnId, expectedRevision: input.expectedRevision,
+            summary: input.summary, actor: actorOf(input), at: atOf(input), keepPending: input.keepPending === true,
+          });
+          return completion.project;
+        },
       });
-      if (pendingSummary.get(input.id) === input.turnId) pendingSummary.delete(input.id);
+      if (!completion.applied) written.result = { applied: false };
       return written;
     },
 
-    // A failed or empty agent turn. Clears that turn only. No write, no revision bump, no history.
+    // Clears only this turn; no public revision/history change.
     abandonSummary(input = {}) {
+      repository.abandonSummary({ id: input.id, turnId: input.turnId });
       const project = repository.getProject(input.id);
-      if (pendingSummary.get(input.id) === input.turnId) pendingSummary.delete(input.id);
       return { ok: true, result: null, revision: project.revision, vm: projectVm(input.id) };
     },
 
@@ -483,12 +465,17 @@ function createProjectService(deps = {}) {
       return projectVm(id);
     },
 
-    async candidates() {
+    async candidates({authorize=()=>{}}={}) {
+      authorize();
       const now = clock();
-      const githubRepos = await loadGithub(sources, now);
-      const workspaceFolders = await loadWorkspaces(sources, repository.workspaceRootIds === true);
+      const guardedSources={...sources,...(sources.exec?{exec:(...args)=>{authorize();return sources.exec(...args);}}:{})};
+      const githubRepos = await loadGithub(guardedSources,authorize);
+      authorize();
+      const workspaceFolders = await loadWorkspaces(guardedSources, repository.workspaceRootIds === true,authorize);
+      authorize();
       const groupsOff = sources.capabilities && sources.capabilities.sessionGroups === false;
       const sessionGroups = groupsOff || typeof sources.sessionGroups !== 'function' ? [] : await sources.sessionGroups();
+      authorize();
       latestCandidates = proposeCandidates({
         now,
         github: githubRepos,
@@ -666,32 +653,39 @@ function githubAdapter(sources) {
 
 // architect-54: every owner (not only the first), and one owner's failure (gh missing, logged out, rate-limited) costs
 // only that owner's repos: logged (value-free), never a failed candidates list
-async function loadGithub(sources) {
+async function loadGithub(sources,authorize=()=>{}) {
+  authorize();
   if (typeof sources.githubRepos === 'function') return sources.githubRepos();
   const owners = Array.isArray(sources.owners) && sources.owners.length ? sources.owners : sources.owner ? [sources.owner] : [];
   if (typeof sources.exec !== 'function' || !owners.length) return [];
   const repos = [];
   for (const [i, owner] of owners.entries()) {
+    authorize();
     try { repos.push(...await collectGithubRepos({ exec: sources.exec, owner })); } catch (e) {
+      if(e instanceof require('../api/v2/errors').ApiError)throw e;
       if (typeof sources.log === 'function') sources.log(`projects: discovery skipped code-host owner #${i + 1} (${(e && e.code) || 'error'})`);
     }
+    authorize();
   }
   return repos;
 }
 
-async function loadWorkspaces(sources, workspaceRootIds) {
+async function loadWorkspaces(sources, workspaceRootIds,authorize=()=>{}) {
+  authorize();
   if (typeof sources.workspaceFolders === 'function') return sources.workspaceFolders();
   if (workspaceRootIds && Array.isArray(sources.roots) && typeof sources.exec === 'function') {
     const folders = [];
     for (const root of sources.roots) {
+      authorize();
       folders.push(...await collectWorkspaceFolders({
-        exec: sources.exec, root: root.path, rootId: root.id,
+        exec: sources.exec, root: root.path, rootId: root.id,authorize,
       }));
     }
     return folders;
   }
   if (typeof sources.exec === 'function' && sources.root) {
-    try { return await collectWorkspaceFolders({ exec: sources.exec, root: sources.root }); } catch (e) {
+    try { return await collectWorkspaceFolders({ exec: sources.exec, root: sources.root,authorize }); } catch (e) {
+      authorize();
       if (typeof sources.log === 'function') sources.log(`projects: discovery skipped the workspace root (${(e && e.code) || 'error'})`);
       return [];
     }

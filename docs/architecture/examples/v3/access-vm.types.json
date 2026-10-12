@@ -10,9 +10,12 @@
     "$.interlocutors[].name",
     "$.policy.dm",
     "$.policy.execSecurity",
-    "$.policy.group"
+    "$.policy.group",
+    "$.agents[].modelSource",
+    "$.agents[].runtime"
   ],
   "types": {
-    "$.interlocutors[].avatarUrl": "string"
+    "$.interlocutors[].avatarUrl": "string",
+    "$.agents[].runtime": "string"
   }
 }

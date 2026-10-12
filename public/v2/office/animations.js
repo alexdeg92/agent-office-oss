@@ -33,7 +33,7 @@ export function AnimationsPage({match}) {
   useEffect(()=>onLang(setLang),[]);
   useEffect(()=>{for(const href of styles){if(document.querySelector(`link[data-animations="${href}"]`))continue;const l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.animations=href;document.head.append(l);}},[]);
   useEffect(()=>{let alive=true;setLoaded({});readLayout().then(lay=>alive&&setLoaded({lay}),error=>alive&&setLoaded({error}));return()=>{alive=false;};},[attempt]);
-  if(!loaded.lay)return html`<div class="bu-page"><h1>${msg('animations.title')}</h1><p role="status">${msg(loaded.error?'animations.failed':'animations.loading')}</p>${loaded.error?html`<button class="bu-btn" onClick=${()=>retry(n=>n+1)}>${msg('animations.retry')}</button>`:null}</div>`;
+  if(!loaded.lay)return html`<div class="bu-page"><p role="status">${msg(loaded.error?'animations.failed':'animations.loading')}</p>${loaded.error?html`<button class="bu-btn" onClick=${()=>retry(n=>n+1)}>${msg('animations.retry')}</button>`:null}</div>`;
   return html`<${Sandbox} lay=${loaded.lay} match=${match} lang=${lang}/>`;
 }
 function Sandbox({lay,match,lang}) {
@@ -90,7 +90,7 @@ function Sandbox({lay,match,lang}) {
   const statusText=msg('animations.'+status.phase,{name:status.entry?entryName(status.entry):''});
   const heads=headChoices(index,(choices.find(c=>c.key===row.look)??choices[0]).look);
   return html`<div class="bu-page ao-animations" lang=${lang}>
-    <header class="ao-animations-head"><div><p class="bu-text-secondary">${msg('nav.bureau')}</p><h1>${msg('animations.title')}</h1><p class="bu-text-secondary">${msg('animations.intro')}</p></div></header>
+
     <div class="ao-animations-grid">
       <div class="ao-animations-scenes">
         <${SandboxStage} key=${'office:'+reset} layout=${lay.layout.data} manifest=${lay.manifest} occupants=${plan.office} cfg=${cfg} selectedId=${selectedId} register=${scene=>register('office',scene)} onSelect=${id=>update({selected:Number(id.split('-').pop())-1})}/>

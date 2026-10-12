@@ -35,6 +35,13 @@ describe('engine taps', () => {
     assert.ok(engine.quarantine.list().some((i) => i.code === 'rpc.failed' && i.channel === 'gw.rpc.cron.list'));
   });
 
+  it('does not ingest a superseded snapshot response after its walk is fenced', async () => {
+    const before = engine.latest('gw.rpc.sessions.list');
+    const result = await gw.call('sessions.list', { limit: 300 }, { shouldIngest: () => false });
+    assert.ok(Array.isArray(result.sessions), 'RPC result still passes through');
+    assert.equal(engine.latest('gw.rpc.sessions.list'), before);
+  });
+
   it('does not ingest non-ingestion RPCs', async () => {
     await gw.call('gateway.restart.request', {});
     assert.ok(!engine.registryKeys().some((k) => k.includes('restart')));

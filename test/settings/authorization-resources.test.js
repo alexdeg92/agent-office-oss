@@ -1,0 +1,28 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {settingsFixture}=require('../helpers/settings-fixture');
+const demo=require('../../src/adapters/demo');
+test('actual guarded Settings publication validates public adapter resources before writes and binds them after accepted runtime changes',async t=>{
+  const previous=demo.permissionResources;
+  t.after(()=>{if(previous===undefined)delete demo.permissionResources;else demo.permissionResources=previous;});
+  demo.permissionResources=[{key:'adapter.demo.synthetic',parent:null,labelKey:'permissions.demo.synthetic',privileged:false}];
+  const h=await settingsFixture({enforceAuthorization:true});t.after(()=>h.close());
+  const routes=[{id:'legacy',adapter:'openclaw',enabled:true,gatewayUrl:h.gw.url},{id:'synthetic-demo',adapter:'demo',enabled:true}];
+  await h.reauth();const revision=h.store.rbac.state().registry_revision;
+  const first=await h.put('/api/v3/settings/runtimes',{expectedRevision:1,runtimes:routes});assert.equal(first.status,200,first.text);
+  assert.equal(h.store.registry.has('adapter.demo.synthetic'),true);assert.equal(h.store.policy.can(h.store.users.owner(),'adapter.demo.synthetic','write'),true);
+  assert.equal(h.store.rbac.state().registry_revision,revision+1);
+  const resources=await h.get('/api/v3/permissions/resources');assert.equal(resources.status,200);assert.equal(resources.json.data.items.find(r=>r.key==='adapter.demo.synthetic').available,true);
+  const configBefore=fs.readFileSync(h.paths.file),secretsBefore=fs.readFileSync(h.paths.secrets),registryBefore=h.store.rbac.state().registry_revision;
+  demo.permissionResources=[{key:'adapter.demo.bad',parent:'adapter.demo.missing',labelKey:'permissions.demo.bad',privileged:false}];
+  await h.reauth();const invalid=await h.put('/api/v3/settings/runtimes',{expectedRevision:2,runtimes:routes});assert.equal(invalid.status,500);
+  assert.deepEqual(fs.readFileSync(h.paths.file),configBefore);assert.deepEqual(fs.readFileSync(h.paths.secrets),secretsBefore);assert.equal(h.store.rbac.state().registry_revision,registryBefore);
+  assert.equal(h.store.db.prepare("SELECT value FROM settings_state WHERE key='revision'").get().value,2);
+  assert.equal(h.store.registry.has('adapter.demo.synthetic'),true);assert.equal(h.store.registry.has('adapter.demo.bad'),false);
+  demo.permissionResources=[{key:'adapter.demo.synthetic',parent:null,labelKey:'permissions.demo.synthetic',privileged:false}];
+  const disabled=routes.map(r=>r.adapter==='demo'?{...r,enabled:false}:r);
+  const result=await h.put('/api/v3/settings/runtimes',{expectedRevision:2,runtimes:disabled});assert.equal(result.status,200,result.text);
+  assert.equal(h.store.registry.has('adapter.demo.synthetic'),false);assert.equal(h.store.policy.can(h.store.users.owner(),'adapter.demo.synthetic','read'),false);
+  const inactive=(await h.get('/api/v3/permissions/resources')).json.data.items.find(r=>r.key==='adapter.demo.synthetic');assert.equal(inactive.available,false);
+  assert.equal(h.store.db.prepare("SELECT COUNT(*) AS n FROM role_permissions WHERE resource='adapter.demo.synthetic'").get().n,0);
+});

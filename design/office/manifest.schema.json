@@ -124,6 +124,22 @@
           "size": {
             "$ref": "#/$defs/size",
             "description": "Image canvas in image px (from design/assets/anchors.json); lets the renderer lay out before the image loads."
+          },
+          "activitySpots": {
+            "type": "array",
+            "maxItems": 32,
+            "description": "Declared ambient destinations available to idle occupants on a floor using this room. Capacity must equal the number of unique reachable target points.",
+            "items": {
+              "type": "object",
+              "required": ["id", "kind", "capacity", "points"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "kind": { "enum": ["idle", "gym", "smoke", "coffee"] },
+                "capacity": { "type": "integer", "minimum": 1, "maximum": 24 },
+                "points": { "type": "array", "minItems": 1, "maxItems": 24, "items": { "$ref": "#/$defs/point" } }
+              }
+            }
           }
         }
       }
@@ -143,6 +159,33 @@
         ],
         "additionalProperties": false,
         "properties": {
+          "names": {
+            "type": "object",
+            "required": [
+              "fr",
+              "en"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fr": {
+                "type": "string",
+                "minLength": 1
+              },
+              "en": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "packId": {
+            "$ref": "#/$defs/id"
+          },
+          "packManifest": {
+            "$ref": "#/$defs/path"
+          },
+          "thumbnail": {
+            "$ref": "#/$defs/path"
+          },
           "id": {
             "$ref": "#/$defs/id"
           },
@@ -431,6 +474,28 @@
                     "$ref": "#/$defs/point",
                     "description": "Seat contact on the item image itself (image px), e.g. the sofa’s first seat."
                   },
+                  "seats": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "seatPoint"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "seatPoint": {
+                          "$ref": "#/$defs/point",
+                          "description": "Registered hip contact on the item image, in image px."
+                        }
+                      }
+                    },
+                    "description": "Distinct registered seat contacts for multi-seat furniture; ordered back to front for deterministic layering."
+                  },
                   "scaleByCharacter": {
                     "type": "object",
                     "additionalProperties": {
@@ -709,6 +774,21 @@
           },
           "landmarks": {
             "$ref": "#/$defs/landmarkSet"
+          },
+          "accessorySupport": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "supported"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "supported": {
+                  "type": "boolean"
+                }
+              }
+            }
           }
         }
       }
@@ -773,6 +853,40 @@
             "type": "boolean",
             "default": false,
             "description": "images are the deprecated v1 single-layer overlays (runtime:false in anchors.json): renderers may draw them only as a fallback where no v2 layers exist, and may hide them."
+          },
+          "names": {
+            "type": "object",
+            "required": [
+              "fr",
+              "en"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fr": {
+                "type": "string",
+                "minLength": 1
+              },
+              "en": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "thumbnail": {
+            "$ref": "#/$defs/path"
+          },
+          "packId": {
+            "$ref": "#/$defs/id"
+          },
+          "packManifest": {
+            "$ref": "#/$defs/path"
+          },
+          "supportedModels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            },
+            "uniqueItems": true
           }
         }
       }
@@ -879,6 +993,10 @@
             ],
             "default": "state",
             "description": "state = monitors light up only for active agent states; on = every occupied monitor is on (night), except offline."
+          },
+          "thumbnail": {
+            "$ref": "#/$defs/path",
+            "description": "Optional catalogue icon or illustration; the scene uses variants and extras."
           }
         }
       }

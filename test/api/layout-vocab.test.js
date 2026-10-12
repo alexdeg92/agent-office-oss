@@ -50,4 +50,41 @@ describe('G5 · layouts are stored in 3.0 names and served per version', () => {
     assert.equal(r.status, 200, r.text);
     assert.ok(ids((await h.get('/api/v2/office/layout')).json.data.layout.data).some(([id]) => id === '*conversation'));
   });
+
+  it('old durable 3.x/session and team-role seen rows are projected safely in both LayoutVM versions', async () => {
+    const at = Date.now();
+    h.withStore(db => {
+      // Simulate rows written by older deployments before the current role
+      // CHECK constraint; those durable rows must remain readable on rollback.
+      db.exec('PRAGMA ignore_check_constraints=ON');
+      const put = db.prepare(`INSERT OR REPLACE INTO office_agents_seen (occupant_id, role, name, last_seen_at, automatic_look_json)
+        VALUES (?, ?, ?, ?, NULL)`);
+      for (const [id, role, name] of [
+        ['session:legacy-coding', 'session', 'Coding session'],
+        ['conversation:legacy-chat', 'conversation', 'Conversation'],
+        ['direct:legacy-peer', 'direct', 'discord-user:123456789012345678'],
+        ['team-host:legacy-pm', 'team-host', 'Project lead'],
+        ['team-member:legacy-builder', 'team-member', 'Builder'],
+      ]) put.run(id, role, name, at);
+    });
+    const cached = await h.get('/api/v2/office/layout');
+    const invalidated = await h.request('PUT', '/api/v2/office/layout', {
+      expectedRevision: cached.json.data.layout.revision, data: cached.json.data.layout.data,
+    });
+    assert.equal(invalidated.status, 200, invalidated.text);
+    const v2 = await h.get('/api/v2/office/layout');
+    const v3 = await h.get('/api/v3/office/layout');
+    assert.equal(v2.status, 200, v2.text);
+    assert.equal(v3.status, 200, v3.text);
+    const seen2 = v2.json.data.agentsSeen;
+    const seen3 = v3.json.data.agentsSeen;
+    assert.equal(seen2.find(row => row.name === 'Coding session')?.role, 'channel', JSON.stringify({ v2: seen2, v3: seen3 }));
+    assert.equal(seen2.find(row => row.name === 'Conversation').role, 'channel');
+    assert.equal(seen2.find(row => row.id === 'dm:legacy-peer').name, 'Conversation');
+    assert.equal(seen3.find(row => row.id === 'direct:legacy-peer').name, 'Conversation');
+    assert.equal(seen2.find(row => row.name === 'Project lead').role, 'agent');
+    assert.equal(seen2.find(row => row.name === 'Builder').role, 'subagent');
+    assert.equal(seen3.find(row => row.name === 'Project lead').role, 'agent');
+    assert.equal(seen3.find(row => row.name === 'Builder').role, 'subagent');
+  });
 });

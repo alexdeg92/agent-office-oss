@@ -8,9 +8,7 @@ const { classify, fingerprint } = require('../../src/projects/covers/classify');
 const { generateCode, LIMITS } = require('../../src/projects/covers/code');
 const { createCoverEngine } = require('../../src/projects/covers/engine');
 const { createCoverStore } = require('../../src/projects/covers/store');
-const { createAgentGenerator } = require('../../src/projects/covers/agent');
 const { createRasterizer, rasterKind } = require('../../src/projects/covers/raster');
-const { bindImageCapabilities, generatesImage } = require('../../src/adapters/openclaw/image-capabilities');
 const { bind: commands } = require('../../src/adapters/openclaw/commands');
 const { tapCli } = require('../../src/adapters/openclaw/taps');
 const { buildBoardVM, buildProjectVM } = require('../../src/projects/vm');
@@ -109,52 +107,21 @@ test('VM: cover fields on board/detail obey both runtime schemas and example sid
   }
   assert.deepEqual(compareExample('project-vm', detail), []); assert.deepEqual(compareExample('board-vm', board), []);
 });
-test('capability discovery is read-only/per agent; distinguishes image understanding, disabled skills and explicit model capability', async () => {
-  const calls = [], skills = [];
-  const discover = bindImageCapabilities({ gw: { async call(method, args) { calls.push([method, args]);
-    if (method === 'agents.list') return { agents: [{ id: 'writer', model: 'gpt-vision' }, { id: 'artist' }, { id: 'disabled' }, { id: 'model', model: { primary: 'image', capabilities: { imageGeneration: true } } }] };
-    return { groups: [{ tools: args.agentId === 'artist' ? [{ id: 'image_generate' }] : [{ id: 'image', description: 'Analyze images' }, { id: 'exec' }] }] };
-  } }, cli: { async run(args, ms, options) { skills.push(args); assert.equal(options.background, true); return { ok: true, out: JSON.stringify({ skills: [{ name: 'imagegen', disabled: args[3] !== 'artist', eligible: true }] }) }; }, parseJson: JSON.parse } });
-  const agents = await discover({ sessionSlug: 'bureau' }); assert.deepEqual(agents.map((a) => a.agentId), ['artist', 'model']);
-  assert.equal(skills.length, 4); assert.ok(skills.every((a) => a[2] === '--agent'));
-  await discover({ sessionSlug: 'bureau' }); assert.equal(skills.length, 4, 'reuse per-agent skill reads while still querying effective tools');
-  assert.ok(calls.filter(([m]) => m === 'tools.effective').every(([, a]) => a.sessionKey === `agent:${a.agentId}:ao-projet-bureau`));
-  assert.equal(generatesImage({ id: 'image', description: 'Image understanding' }), false);
-  assert.equal(generatesImage({ id: 'image_generate', deniedBySession: true }), false);
-});
-test('adapter supports older tools.catalog and generation skill only with execution capability', async () => {
-  const discover = bindImageCapabilities({ gw: { async call(method) {
-    if (method === 'agents.list') return { agents: [{ id: 'artist' }] };
-    if (method === 'tools.effective') throw new Error('unsupported');
-    return { groups: [{ tools: [{ id: 'exec' }] }] };
-  } }, cli: { run: async () => ({ ok: true, out: 'header\n{"skills":[{"name":"imagegen","eligible":true}]}' }), parseJson: () => null } });
-  assert.deepEqual((await discover({ sessionSlug: 'test' }))[0].evidence, ['skill:imagegen']);
-});
-test('agent request uses project tag session and a confined returned file, never URL fetching or a channel', async (t) => {
-  const { dataDir } = setup(t); const outputDir = path.join(dataDir, 'output'); fs.mkdirSync(outputDir);
-  let sent;
-  const runtime = { imageGenerators: async () => [{ agentId: 'artist' }], commands: { async agentTurn(input) { sent = input;
-    const file = path.join(outputDir, 'cover.png'); fs.writeFileSync(file, 'raster fixture!!!'); return { text: 'COVER_FILE: ' + file }; } } };
-  const agent = createAgentGenerator({ runtime, rasterize: async (bytes) => { assert.equal(bytes.toString(), 'raster fixture!!!'); return generateCode(project()); } });
-  const p = project('prj_cover', { sources: [{ kind: 'sessionGroup', ref: { groupId: 'projet:cover-tag', name: 'cover-tag' } }] });
-  const signal = new AbortController().signal, capability = await agent.supports({ project: p, signal });
-  assert.equal((await agent.generate({ project: p, capability, outputDir, signal })).ext, 'svg');
-  assert.equal(sent.sessionRef, 'agent:artist:ao-projet-cover-tag'); assert.match(sent.text, /480×270/);
-  assert.ok(!Object.keys(sent).some((k) => ['deliver', 'channel', 'to'].includes(k)));
-  runtime.commands.agentTurn = async () => ({ files: ['https://host/image.png', path.join(dataDir, 'outside.png')] });
-  fs.writeFileSync(path.join(dataDir, 'outside.png'), 'raster fixture!!!');
-  await assert.rejects(agent.generate({ project: p, capability, outputDir, signal }), /agent-no-file/);
-  fs.symlinkSync(path.join(dataDir, 'outside.png'), path.join(outputDir, 'link.png'));
-  runtime.commands.agentTurn = async () => ({ files: [path.join(outputDir, 'link.png')] });
-  await assert.rejects(agent.generate({ project: p, capability, outputDir, signal }), /agent-no-file/);
-});
 test('agentTurn returns media files and tap preserves abort options without polluting primary skills', async () => {
-  const calls = []; const cli = { async run(args, ms, options) { calls.push({ args, options }); return { ok: true, out: '{"result":{"payloads":[{"text":"Done","mediaUrl":"/tmp/image.webp"}]}}' }; }, parseJson: JSON.parse };
+  const calls = []; const cli = { async run(args, ms, options) {
+    calls.push({ args, options });
+    if (args[0] === 'gateway') {
+      const p = JSON.parse(args.find(a => a.startsWith('--params=')).slice(9));
+      return { ok: true, out: JSON.stringify({ ok: true, key: p.key, entry: { sendPolicy: 'deny' } }) };
+    }
+    return { ok: true, out: '{"result":{"payloads":[{"text":"Done","mediaUrl":"/tmp/image.webp"}]}}' };
+  }, parseJson: JSON.parse };
   let ingested = 0; tapCli(cli, { ingest: () => ingested++ });
   const signal = new AbortController().signal;
   const out = await commands(cli).agentTurn({ agentId: 'artist', text: 'Image', sessionRef: 'agent:artist:ao-projet-bureau', timeoutMs: 1234, signal });
-  assert.deepEqual(out.files, ['/tmp/image.webp']); assert.equal(calls[0].options.signal, signal);
-  assert.ok(!calls[0].args.some((a) => /^--(?:deliver|channel|to|reply-to)/.test(a)));
+  assert.deepEqual(out.files, ['/tmp/image.webp']); assert.equal(calls[1].options.signal, signal);
+  assert.ok(calls[1].args.includes('--channel=webchat')); assert.ok(calls[1].args.includes('--reply-channel=webchat'));
+  assert.ok(!calls[1].args.some((a) => /^--(?:deliver|to|reply-to)=?/.test(a)));
   await cli.run(['skills', 'list', '--agent', 'artist', '--json'], 1000, { signal, background: true }); assert.equal(ingested, 0);
 });
 test('local raster normalization produces bounded WebP cover/thumbnail and rejects SVG/network input', async (t) => {
@@ -165,23 +132,20 @@ test('local raster normalization produces bounded WebP cover/thumbnail and rejec
   assert.ok(result.cover.length <= LIMITS.cover); assert.ok(result.thumb.length <= LIMITS.thumb);
   await assert.rejects(rasterize(Buffer.from('<svg><image href="https://host"/></svg>')), /invalid-raster/);
 });
-test('engine agent path: capability selection, project turn serialization and returned raster reaches the persisted VM', async (t) => {
-  const order = [];
-  const runtime = { imageGenerators: async () => [{ agentId: 'artist' }], commands: { async agentTurn({ text, sessionRef }) {
-    order.push('turn'); assert.equal(sessionRef, 'agent:artist:ao-projet-site-bureau');
-    const outputDir = text.match(/dans (\/[^\n]+?)\. Réponds COVER_FILE:/)[1], file = path.join(outputDir, 'cover.png');
-    fs.writeFileSync(file, 'raster fixture!!!'); return { files: [file] };
-  } } };
-  const { engine } = setup(t, { runtime, rasterize: async () => generateCode(project()), runTurn: async (id, run) => { order.push('wait:' + id); await wait(10); return run(); } });
+test('cover generation is silent: no image, agent, delivery or message tool is invoked', async (t) => {
+  const calls = [];
+  const runtime = {
+    async imageGenerators() { calls.push('imageGenerators'); throw new Error('must not run'); },
+    commands: {
+      async agentTurn() { calls.push('agentTurn'); throw new Error('must not run'); },
+      async message() { calls.push('message'); throw new Error('must not run'); },
+      async sendMessage() { calls.push('sendMessage'); throw new Error('must not run'); },
+    },
+  };
+  const { engine } = setup(t, { runtime });
   engine.observe(project()); await until(() => engine.pending === 0);
-  assert.equal(engine.vm('prj_cover').source, 'agent'); assert.deepEqual(order, ['wait:prj_cover', 'turn']);
-});
-test('an agent waiting behind a project turn cannot start after its generation timeout', async (t) => {
-  let lateTurn, called = false;
-  const runtime = { imageGenerators: async () => [{ agentId: 'artist' }], commands: { agentTurn() { called = true; throw new Error('must not run'); } } };
-  const { engine } = setup(t, { runtime, timeoutMs: 25, rasterize: async () => generateCode(project()), runTurn: async (_id, run) => { lateTurn = run; return new Promise(() => {}); } });
-  engine.observe(project()); await until(() => engine.pending === 0);
-  assert.equal(engine.vm('prj_cover').source, 'code'); assert.throws(lateTurn, /aborted/); assert.equal(called, false);
+  assert.deepEqual(calls, []);
+  assert.equal(engine.vm('prj_cover').source, 'code');
 });
 test('failed manual upload during first generation releases priority and restores the automatic cover', async (t) => {
   const { engine } = setup(t, { rasterize: async () => { throw new Error('invalid'); }, generators: [{ id: 'code', supports: () => true, async generate({ project: p }) { await wait(40); return generateCode(p); } }] });

@@ -29,7 +29,7 @@ const FILES = [
 // Authoritative contract examples (api.md 2.1, docs/architecture/examples/): the /v2 mocks are built from them.
 const EXAMPLES = ['project-vm', 'board-vm', 'candidates-vm', 'import-result', 'history-page', 'session-vm', 'error-409-project', 'health-vm', 'comment-thread-vm'];
 const EXAMPLES_DEST = path.join(ROOT, 'public', 'v2', 'mock', 'examples');
-const ASSET_GROUPS = ['Logos', 'Office', 'Characters', 'ProjectCovers', 'Illustrations'];
+const ASSET_GROUPS = ['Logos', 'Office', 'Characters', 'Decor', 'Accessories', 'ProjectCovers', 'Illustrations'];
 const DERIVED = path.join(ROOT, 'design', 'derived', 'Illustrations');
 // Working files that the app never loads: alignment guides, unrectified renders, font sources, tools.
 const SKIP = [/(^|\/)guides\//, /(^|\/)tools\//, /-raw\.png$/, /^Logos\/fonts\//];
@@ -76,6 +76,18 @@ function shippedAssetKeys() {
     };
     readPack(JSON.parse(fs.readFileSync(file, 'utf8')));
   }
+  for (const manifestPath of new Set([...manifest.furniture, ...manifest.accessories].filter(f => f.packManifest).map(f => f.packManifest))) {
+    const rel = manifestPath.replace(/^assets\//, '');
+    const pack = JSON.parse(fs.readFileSync(path.join(ROOT, 'design/assets', rel), 'utf8'));
+    const prefix = path.posix.dirname(rel) + '/';
+    keys.add(rel);
+    const images = value => {
+      if (typeof value === 'string' && value.endsWith('.webp')) keys.add(prefix + value);
+      else if (Array.isArray(value)) value.forEach(images);
+      else if (value && typeof value === 'object') Object.values(value).forEach(images);
+    };
+    images(pack.items);
+  }
   // The generated import map names the previous build's files. It cannot keep a disabled pack alive.
   const text = walkText(path.join(ROOT, 'public', 'v2')).map((file) => fs.readFileSync(file, 'utf8')
     .replace(/<script\b[^>]*type=["']importmap["'][^>]*>[\s\S]*?<\/script>/gi, '')).join('\n');
@@ -118,7 +130,7 @@ function plan() {
     for (const rel of walk(srcDir)) {
       const key = g + '/' + rel;
       if (SKIP.some((re) => re.test(key)) || SKIP_SHIP.some((re) => re.test(key))) continue;
-      if (!KEEP_EXT.has(path.extname(rel).toLowerCase()) && !/^Characters\/[a-z][a-z0-9-]*\/manifest\.json$/.test(key)) continue;
+      if (!KEEP_EXT.has(path.extname(rel).toLowerCase()) && !/^(Characters|Decor|Accessories)\/[a-z][a-z0-9-]*\/manifest\.json$/.test(key)) continue;
       if (!shipped.has(key)) continue;
       pairs.push([path.join(srcDir, rel), path.join(DEST, 'assets', g, rel)]);
     }
@@ -135,8 +147,12 @@ function plan() {
   return pairs;
 }
 
+const OFFICE_MANIFEST = path.join(ROOT, 'design', 'office', 'manifest.example.json');
+// Keep authored data readable; serve its canonical JSON without formatting bytes.
+const runtimeManifest = file => JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8'))) + '\n';
 function same(a, b) {
   if (!fs.existsSync(b)) return false;
+  if (a === OFFICE_MANIFEST) return runtimeManifest(a) === fs.readFileSync(b, 'utf8');
   const sa = fs.statSync(a), sb = fs.statSync(b);
   return sa.size === sb.size && fs.readFileSync(a).equals(fs.readFileSync(b));
 }
@@ -156,7 +172,11 @@ function main() {
     console.log(`public/v2/bureau is in sync (${pairs.length} files).`);
     return;
   }
-  for (const [s, d] of changed) { fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(s, d); }
+  for (const [s, d] of changed) {
+    fs.mkdirSync(path.dirname(d), { recursive: true });
+    if (s === OFFICE_MANIFEST) fs.writeFileSync(d, runtimeManifest(s));
+    else fs.copyFileSync(s, d);
+  }
   for (const d of stale) fs.rmSync(d);
   // Remove folders left empty by deletions.
   const prune = (dir) => { if (!fs.existsSync(dir)) return; for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) prune(path.join(dir, e.name)); if (dir !== DEST && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir); };

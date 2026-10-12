@@ -18,10 +18,10 @@ fail() {
   exit 1
 }
 
-docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "image ${IMAGE} is not built"
+IMAGE=$(docker image inspect --format '{{.Id}}' "$IMAGE") || fail "supplied image is missing"
 
 cleanup() {
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  docker rm -fv "$NAME" >/dev/null 2>&1 || true
   if [ -n "${TMP:-}" ]; then rm -rf "$TMP"; fi
 }
 trap cleanup EXIT INT TERM

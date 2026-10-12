@@ -80,9 +80,11 @@ interface RawEnvelope {
 }
 ```
 
-### 3.1 Gateway (`gateway.js`, kept as is)
+### 3.1 Gateway (`src/adapters/openclaw/transport.js`)
 - The device-signed handshake, protocol v4 and `operator.read` scope don't change. The connect response (hello) is captured to learn the **OpenClaw version** and protocol; it falls back to `health.server.version`.
 - **RPC refresh** every 10 s while connected: `agents.list`, `sessions.list` (**every page**: `{limit:300, offset}` until `hasMore` is false, at most 20 pages; snapshot rules in data-model §2), `cron.list`, `channels.status`. `sessions.usage` is dropped (nothing reads it).
+- **Reconnect:** transport failures use 1 second ×1.7, capped at 30 seconds. An explicit `connect` response with `ok:false` uses 30 seconds, doubling up to 10 minutes, and one value-free rejection log per unsuccessful streak. It keeps trying so a transient refusal during runtime restart self-heals. Socket close/timeouts are transport failures, not authentication refusals. A successful handshake resets both schedules and re-runs the full snapshot/subscription refresh.
+- **Connection changes:** `runtime.updateConnection({url, gatewayToken})` requires an explicit URL/token pair, cancels the old retry, resolves pending calls as closed, invalidates old socket callbacks and reconnects immediately when started. An unchanged pair keeps its existing schedule. The transport never implicitly carries the old token to a changed URL. File/environment configuration is still loaded at dashboard boot; this hook does not add configuration watching or a public credential endpoint. `runtime.close()` cancels gateway retries too.
 - **On-demand RPCs:** `sessions.get`, `sessions.describe`, `cron.runs`.
 - **Events:** subscribe on open (`sessions.subscribe`, `sessions.messages.subscribe`).
   - **Seen on 2026.9.8** (capture-20261005-active), each with a v1 schema: `sessions.changed` (the full session row keyed `sessionKey` + `reason` + `activitySummary`; it upserts the session), `chat.metadata.changed` (`{agentId, usageUpdatedAt, modelCatalogChanged, authChanged}`), `health` and `tick`; plus `cron` (legacy). **Not sent:** `session.tool`, `session.message`, `session.operation`, `agent`; the legacy path that listens for them is dead in production and is removed with the v1 runtime (S7/S16).

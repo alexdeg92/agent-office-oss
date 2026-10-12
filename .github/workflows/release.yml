@@ -2,6 +2,7 @@
 # Configure PORTAL_EMAIL/PORTAL_DISPLAY_NAME/PUBLIC_PRIVATE_NAMES privacy inputs,
 # NPM_TOKEN for npm, and TAP_TOKEN with write access to the separate tap repository.
 name: release
+# Release platforms: linux/amd64,linux/arm64 (each verified by digest below).
 on:
   push:
     tags: ['v*']
@@ -28,9 +29,6 @@ jobs:
           PORTAL_DISPLAY_NAME: ${{ secrets.PORTAL_DISPLAY_NAME }}
           PUBLIC_PRIVATE_NAMES: ${{ secrets.PUBLIC_PRIVATE_NAMES }}
         run: packaging/export-public.sh dist/public
-      - run: docker build -f packaging/docker/Dockerfile -t agent-office:ci .
-      - run: node --test packaging/first-run.test.js
-      - run: IMAGE=agent-office:ci packaging/docker/smoke.sh
       - name: pack and prepare tap
         run: |
           npm pack --json --pack-destination dist > dist/pack.json
@@ -50,7 +48,7 @@ jobs:
             dist/*.tgz
             dist/homebrew-tap/Formula/agent-office.rb
   npm:
-    needs: verify
+    needs: [verify, image-verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -67,14 +65,27 @@ jobs:
       - run: npm publish dist/*.tgz --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-  image:
+  image-verify:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            artifact: linux-amd64
+          - platform: linux/arm64
+            artifact: linux-arm64
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -82,18 +93,64 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: version
-        id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      # One produced platform manifest, unnamed until all its checks succeed.
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           file: packaging/docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/alexdeg92/agent-office-oss:${{ steps.version.outputs.value }}
-            ghcr.io/alexdeg92/agent-office-oss:latest
+          platforms: ${{ matrix.platform }}
+          provenance: false
+          sbom: false
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          outputs: type=image,name=ghcr.io/alexdeg92/agent-office-oss,push-by-digest=true,name-canonical=true,push=true
+      - name: verify produced platform digest
+        env:
+          IMAGE: ghcr.io/alexdeg92/agent-office-oss@${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          docker pull --platform "$PLATFORM" "$IMAGE"
+          docker run --rm --entrypoint node "$IMAGE" -e 'const fs=require("fs");for(const p of ["server.js","src/store/db.js","public/v2/index.html","public/v2/bureau/bureau.css"]){if(!fs.existsSync(p))process.exit(1)}'
+          node --test packaging/first-run.test.js
+          packaging/docker/smoke.sh
+          packaging/docker/demo-smoke.sh
+          node packaging/docker/promote-images.js record evidence
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.artifact }}
+          path: evidence/*.json
+          if-no-files-found: error
+
+  image:
+    needs: [verify, image-verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-linux-*
+          merge-multiple: true
+          path: evidence
+      - name: promote exact verified platform manifests
+        run: node packaging/docker/promote-images.js promote evidence
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-release-evidence
+          path: evidence/*.json
+          if-no-files-found: error
+
   tap:
     needs: [npm, image]
     runs-on: ubuntu-latest

@@ -166,11 +166,13 @@ describe('server · boots without an identity (foreign HOME, §12.1)', () => {
         if (!meta) { if (child.exitCode !== null) break; await new Promise((r) => setTimeout(r, 100)); }
       }
       assert.ok(meta, 'server up\n' + output);
-      assert.deepEqual(meta.data.runtime, { id: 'openclaw', name: 'OpenClaw', gatewayLabel: 'Passerelle OpenClaw' });
+      assert.equal(meta.data.runtime, null, 'anonymous bootstrap omits private runtime metadata');
 
       const login = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'owner@example.invalid', password: 'pw' }) });
       assert.equal(login.status, 200);
       const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
+      const ownerMeta = await (await fetch(base + '/api/v2/meta', { headers: { cookie } })).json();
+      assert.deepEqual(ownerMeta.data.runtime, { id: 'openclaw', name: 'OpenClaw', gatewayLabel: 'Passerelle OpenClaw' }, 'owner retains runtime metadata without a gateway identity');
       const health = await (await fetch(base + '/api/v2/views/health', { headers: { cookie } })).json();
       const gw = health.data.sources.find((s) => s.id === 'gateway');
       assert.deepEqual([gw.state, gw.lastError], ['down', 'not-configured']);

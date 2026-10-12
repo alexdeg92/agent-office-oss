@@ -1,16 +1,19 @@
 // Flux de travail (S12; frontend-22: the original Bureau cards, as in 75895f4): FlowListVM from GET /api/v2/views/flows,
 // kept fresh by the `flows` topic. URL: ?etat=actives|echec|desactivees (display filter), ?q=… (search).
 // « Nouvelle tâche » → POST /api/v2/flows, shown only when the runtime can write flows (api-v3 D1).
-import { html, useState } from '../lib.js';
+import { html, useState, useRef, useLayoutEffect } from '../lib.js';
 import { useTopic, useStore, runtimeCan } from '../hooks.js';
 import { services } from '../services.js';
 import { t, label, msg, agentName } from '../i18n.js';
 import * as fmt from '../fmt.js';
-import { Icon, Skeleton, StateArt, ErrorState, Ago } from '../components/ui.js';
+import { Frame, Icon, Skeleton, StateArt, ErrorState, Ago } from '../components/ui.js';
 import { Modal } from '../components/modal.js';
 import { openclawWrite, fieldErrors } from '../openclaw-api.js';
 import { matchesQuery } from '../board.js';
 import * as rules from './flows-rules.js';
+import { Button, TextInput, ListRow } from '../components/bureau/index.js';
+import { useSmallWorkspace } from './workspace-mobile.js';
+export { loadStyles } from './workspace-mobile.js';
 
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
@@ -37,6 +40,8 @@ const EnabledChip = ({ enabled }) => html`<span class=${'bu-chip bu-chip--sm' + 
 
 export function FlowsPage({ match }) {
   const { router } = services;
+  const small = useSmallWorkspace();
+  const rail = useRef(null);
   const vm = useTopic('flows', '/api/v2/views/flows');
   const filter = rules.keep[match.query.etat] ? match.query.etat : '';
   const q = match.query.q || '';
@@ -44,36 +49,47 @@ export function FlowsPage({ match }) {
   const writes = useOpenclawWrites();
   const canWrite = runtimeCan('flows.write');
 
-  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-frame"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
+  // Reveal a selected filter in the strip without moving the page or content scroll position.
+  useLayoutEffect(() => {
+    const selected = rail.current?.querySelector('[aria-pressed=true]');
+    if (!selected) return;
+    const r = rail.current.getBoundingClientRect(), b = selected.getBoundingClientRect();
+    rail.current.scrollLeft += b.left < r.left ? b.left - r.left : b.right > r.right ? b.right - r.right : 0;
+  }, [filter, small, vm.data]);
   const all = vm.data ? vm.data.flows : null;
   const shown = all ? all.filter((f) => rules.keep[filter](f) && matchesQuery(f.name + ' ' + (f.description || ''), q)) : [];
   const count = (v) => (all ? all.filter(rules.keep[v]).length : 0);
   // The write action sits in a [data-write-actions] container (api-v3 D1 gating test: test/pages/register-gating.dom.test.js).
-  const createBtn = (cls) => (canWrite ? html`<span class="ao-flows__actions" data-write-actions><button type="button" class=${'bu-btn bu-btn--primary ' + cls} onClick=${() => setCreating(true)} aria-describedby=${writes ? undefined : 'flows-ro'}><${Icon} name="add" />${msg('flows.create')}</button></span>` : null);
+  const createBtn = (compact = false) => (canWrite ? html`<span class="ao-flows__actions" data-write-actions><${Button}
+    variant="primary" label=${msg('flows.create')} icon=${html`<${Icon} name="add" />`} iconOnly=${compact}
+    onPress=${() => setCreating(true)} describedBy=${writes ? undefined : 'flows-ro'} /></span>` : null);
 
-  return html`<div class="bu-page ao-frame ao-frame--wide ao-flows" aria-busy=${vm.resyncing || !all ? 'true' : undefined}>
-    <div class="bu-toolbar">
-      <h2 class="bu-title ao-flows__title">${msg('flows.title')}</h2>
-      ${vm.data ? html`<span class="bu-caption bu-text-tertiary">${msg('flows.count', { n: vm.data.counts.enabled, total: fmt.number(vm.data.counts.total) })}</span>` : null}
-      <span class="bu-spacer"></span>
-      <div class="bu-input-group ao-flows__search"><${Icon} name="search" />
-        <input class="bu-input bu-input--sm" type="search" placeholder=${msg('flows.search.cards')} aria-label=${msg('flows.search.aria')} value=${q} onInput=${(e) => router.setQuery({ q: e.currentTarget.value.trim() || null })} /></div>
-      <div class="ao-scroll-x"><div class="bu-segmented" role="radiogroup" aria-label=${msg('flows.filter.aria')}>
-        ${rules.FILTERS.map((v) => html`<button key=${v || 'all'} type="button" role="radio" class="bu-segmented__opt" aria-checked=${filter === v ? 'true' : 'false'} onClick=${() => router.setQuery({ etat: v || null })}>${msg('flows.filter.' + (v || 'all'))}<span class="bu-count">${count(v)}</span></button>`)}
-      </div></div>
-      ${createBtn('bu-btn--sm')}
-    </div>
+  return html`<${Frame} class="bu-page ao-page ao-page--wide ao-flows ao-workspace" aria-busy=${vm.resyncing || (!all && !vm.error) ? 'true' : undefined}
+    bodyLabel=${msg('nav.flux')} head=${html`<div class="ao-workspace__toolbar">
+      <${TextInput} class="ao-flows__search ao-workspace__search" type="search" placeholder=${msg('flows.search.cards')}
+        label=${msg('flows.search.aria')} value=${q} onValueChange=${value => router.setQuery({ q: value.trim() || null })} />
+      ${createBtn(small)}
+    </div>`} bar=${html`<div class="ao-flows__rail" ref=${rail} role="group" aria-label=${msg('flows.filter.aria')}>
+      ${rules.FILTERS.map(v => html`<${Button} key=${v || 'all'} label=${msg('flows.filter.' + (v || 'all')) + (all ? ' ' + fmt.number(count(v)) : '')}
+        pressed=${filter === v} variant="ghost" onPress=${() => router.setQuery({ etat: v || null })} />`)}
+    </div>`}>
+    ${vm.data === undefined && vm.error ? html`<${ErrorState} error=${vm.error} onRetry=${vm.retry} />` : null}
     ${!canWrite ? html`<${CapabilityNote} id="flows-ro" />` : writes ? null : html`<${ReadonlyNote} id="flows-ro" />`}
     ${vm.error && all ? html`<${CachedBanner} error=${vm.error} onRetry=${vm.retry} />` : null}
-    ${!all ? html`<ul class="ao-flows__grid" aria-label=${msg('flows.loading')}>${[0, 1, 2, 3, 4, 5].map((k) => html`<li key=${k} class="bu-card"><${Skeleton} kind="title" /><${Skeleton} /><${Skeleton} w="50" /></li>`)}</ul>`
+    ${!all ? vm.error ? null : html`<ul class="ao-flows__grid ao-flows__loading" aria-label=${msg('flows.loading')}>${[0, 1, 2, 3, 4, 5].map((k) => html`<li key=${k} class="bu-card"><${Skeleton} kind="title" /><${Skeleton} /><${Skeleton} w="50" /></li>`)}</ul>`
       : !all.length ? html`<div class="bu-empty">
           <${StateArt} slug="no-flows" />
           <p class="bu-empty__title">${msg('flows.empty.head')}</p>
           <p class="bu-empty__text">${msg('flows.empty.text')}</p>
-          ${createBtn('')}</div>`
+          ${createBtn()}</div>`
       : !shown.length ? html`<div class="bu-card bu-card--sunken"><div class="bu-empty bu-empty--compact"><p class="bu-empty__title">${msg('flows.noMatch')}</p>
           <button type="button" class="bu-btn bu-btn--sm" onClick=${() => router.setQuery({ etat: null, q: null })}>${msg('flows.showAll')}</button></div></div>`
-      : html`<ul class="ao-flows__grid">${shown.map((f) => html`<li key=${f.id}><a class=${'bu-card bu-card--interactive ao-flow-card' + (f.enabled ? '' : ' bu-card--muted')} href=${router.href('flux-detail', { jobId: f.id })}>
+      : html`<ul class="ao-flows__mobile ao-workspace__list">${shown.map(f => html`<${ListRow} key=${f.id} muted=${!f.enabled}
+          icon=${html`<${Icon} name="clock" />`} title=${html`<a class="ao-workspace__link" href=${router.href('flux-detail', { jobId: f.id })}>${f.name}</a>`}
+          badges=${!f.enabled ? html`<${EnabledChip} enabled=${false} />` : null}
+          meta=${html`<div>${label(f.schedule.sentence)}</div><div class="ao-workspace__meta"><${HealthChip} health=${f.health} />
+            ${f.nextRunAt ? html`<span>${msg('flows.card.next')} <${Ago} at=${f.nextRunAt} /></span>` : f.lastRunAt ? html`<span>${msg('flows.card.last')} <${Ago} at=${f.lastRunAt} /></span>` : null}</div>`} />`)}</ul>
+        <ul class="ao-flows__grid">${shown.map((f) => html`<li key=${f.id}><a class=${'bu-card bu-card--interactive ao-flow-card' + (f.enabled ? '' : ' bu-card--muted')} href=${router.href('flux-detail', { jobId: f.id })}>
           <div class="bu-card__header"><span class="bu-icon-tile" aria-hidden="true"><${Icon} name="flux" /></span><h3 class="bu-card__title bu-truncate" title=${f.name}>${f.name}</h3><span class="bu-spacer"></span><${EnabledChip} enabled=${f.enabled} /></div>
           ${f.description ? html`<p class="bu-card__desc">${f.description}</p>` : null}
           <p class="ao-flow-card__when"><${Icon} name="clock" />${label(f.schedule.sentence)}</p>
@@ -81,7 +97,7 @@ export function FlowsPage({ match }) {
             <span>${f.nextRunAt ? html`${msg('flows.card.next')} <${Ago} at=${f.nextRunAt} />` : f.lastRunAt ? html`${msg('flows.card.last')} <${Ago} at=${f.lastRunAt} />` : '—'}</span></div>
         </a></li>`)}</ul>`}
     ${creating ? html`<${FlowFormModal} onClose=${() => setCreating(false)} />` : null}
-  </div>`;
+  </${Frame}>`;
 }
 
 const tzList = (() => { try { return Intl.supportedValuesOf('timeZone'); } catch { return [fmt.timeZone(), 'UTC']; } })();
@@ -127,7 +143,7 @@ function FlowFormModal({ onClose }) {
     if (id) router.navigate(router.href('flux-detail', { jobId: id }));
   }
   return html`<${Modal} size="md" title=${msg('flows.form.title')} desc=${msg('flows.form.desc', { agent: cap(agentName()) })} onClose=${onClose}
-    footer=${html`<button type="button" class="bu-btn" onClick=${onClose}>${msg('flows.form.cancel')}</button><button type="submit" form="flow-new" class="bu-btn bu-btn--primary" disabled=${busy} aria-busy=${busy ? 'true' : undefined}>${msg('flows.form.submit')}</button>`}>
+    footer=${html`<${Button} label=${msg('flows.form.cancel')} onPress=${onClose} /><${Button} type="submit" form="flow-new" variant="primary" busy=${busy} label=${msg('flows.form.submit')} />`}>
     <form id="flow-new" class="ao-form" onSubmit=${submit} novalidate>
       <${FlowFields} values=${values} errors=${errors} idPrefix="nf" onInput=${(k, v) => setValues((x) => ({ ...x, [k]: v }))} />
     </form>

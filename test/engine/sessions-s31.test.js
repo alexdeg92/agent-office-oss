@@ -86,8 +86,8 @@ describe('R2-03 enum lookups', () => {
   const PROTO = ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf'];
   it('prototype-named statuses are unmapped (reported), never inherited', () => {
     for (const p of PROTO) {
-      const r = runStateOf({ status: p });
-      assert.equal(r.unmappedStatus, p); assert.ok(['idle', 'running'].includes(r.run.status), p);
+      const r = runStateOf({ status: p }, { observedAt: NOW });
+      assert.equal(r.unmappedStatus, p); assert.equal(r.run.status, 'unknown', p);
     }
   });
   it('an unknown status is reported even when an active flag decides the state', () => {
@@ -171,7 +171,7 @@ describe('R2-08 occupants', () => {
   const states = (o) => o.map((x) => `${x.id.split(':')[0]}/${x.state}`);
 
   it('a recently failed sub-agent stays on stage in error, with or without prior activity', () => {
-    const rows = [row('agent:main:main', { isMain: true }), row('agent:main:subagent:x', { status: 'failed', endedAt: NOW - 1000 })];
+    const rows = [row('agent:main:main', { isMain: true, status: 'idle' }), row('agent:main:subagent:x', { status: 'failed', endedAt: NOW - 1000 })];
     assert.deepEqual(states(deriveOccupants({ sessions: mk(rows), gwConnected: true, now: NOW })), ['primary/idle', 'subagent/error']);
     assert.deepEqual(states(deriveOccupants({ sessions: mk(rows), activityFor: (k) => (k.includes('subagent') ? 'calling' : null), gwConnected: true, now: NOW })), ['primary/idle', 'subagent/error']);
     assert.deepEqual(states(deriveOccupants({ sessions: mk(rows), gwConnected: true, now: NOW + 120000 })), ['primary/idle'], 'gone after the window');

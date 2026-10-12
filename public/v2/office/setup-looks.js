@@ -93,6 +93,7 @@ export function withAccessory(index, look, id) {
 /** Is the accessory drawn for this look yet (v2 layers for its idle pose)? Undrawn gear is still saved. */
 export function accessoryDrawn(index, look, id) {
   const character = index.characters.get(look.character);
+  if (index.accessories.get(id)?.packManifest) return character?.accessorySupport?.[id]?.supported === true;
   if (character?.packManifest && !character.packLoaded) return character.accessorySupport?.[id]?.supported === true;
   const layers = accessoryLayers(index, look.character, [id], 'idle', look.variant, { legacy: false });
   return layers.back.length + layers.front.length > 0;

@@ -10,9 +10,12 @@
     "$.interlocutors[].access.requireMention",
     "$.policy.dm",
     "$.policy.group",
-    "$.policy.execSecurity"
+    "$.policy.execSecurity",
+    "$.agents[].modelSource",
+    "$.agents[].runtime"
   ],
   "types": {
-    "$.interlocutors[].avatarUrl": "string"
+    "$.interlocutors[].avatarUrl": "string",
+    "$.agents[].runtime": "string"
   }
 }

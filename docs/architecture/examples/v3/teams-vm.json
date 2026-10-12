@@ -1,0 +1,19 @@
+{
+  "data": {
+    "team": { "id": "team_619a", "label": "Agent Office team", "status": "active" },
+    "members": [
+      { "id": "member_3a5c", "name": "pm", "roleKind": "lead", "roleLabel": "pm", "status": "active", "runtimeKind": "claude-code", "brand": { "mark": "CC", "color": "#6655aa", "foreground": "#ffffff", "providerName": "Claude Code", "logo": "assets/connectors/claude-code.svg" }, "hostAgentId": null, "parentMemberId": null, "sessionStatus": "known", "spawnedBy": null },
+      { "id": "member_4b6d", "name": "chars-b", "roleKind": "member", "roleLabel": "builder", "status": "active", "runtimeKind": "codex", "brand": { "mark": "CX", "color": "#187b67", "foreground": "#ffffff", "providerName": "Codex", "logo": "assets/connectors/codex.svg" }, "hostAgentId": null, "parentMemberId": "member_3a5c", "spawnedBy": { "agentId": null, "sessionKey": "rt:claude-code:session:pm", "via": "orchestrator", "label": null } },
+      { "id": "member_5c7e", "name": "critic", "roleKind": "member", "roleLabel": "reviewer", "status": "active", "runtimeKind": "cursor", "hostAgentId": null, "parentMemberId": "member_3a5c" }
+    ],
+    "tasks": [{
+      "id": "task_17ce", "title": "Wire team projections", "state": "review", "priority": 1,
+      "ownerMemberId": "member_4b6d", "reviewerMemberIds": ["member_5c7e"], "createdAt": 1791662400000,
+      "updatedAt": 1791662400000, "reportPresent": true, "briefPresent": true, "messageCount": 2,
+      "reviews": [{ "id": "review_928a", "reviewerMemberId": "member_5c7e", "verdict": "go", "createdAt": 1791662400000, "reportPresent": true }]
+    }],
+    "diagnostics": { "skippedTaskCount": 0, "skippedMemberCount": 0, "skippedCount": 0, "partialLabel": null, "quality": "complete" },
+    "revision": 5
+  },
+  "meta": { "apiVersion": 3, "contractVersion": "3.3", "topic": { "id": "teams", "rev": 1 } }
+}

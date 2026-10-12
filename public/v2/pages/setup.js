@@ -12,11 +12,12 @@ import * as fmt from '../fmt.js';
 import { get, post, put } from '../api.js';
 import { services } from '../services.js';
 import { chooseLang } from '../lang.js';
-import { Icon, Skeleton, StateArt } from '../components/ui.js';
+import { Frame, Icon, Skeleton, StateArt } from '../components/ui.js';
 import { ThemeSwitch, LangSwitch, Logo } from '../components/shell.js';
 import { Say } from '../components/editorial.js';
 import { IdentitiesStep } from './setup-identities.js';
-import { DetectionStep, SkillsStep, NetworkStep } from './setup-onboarding.js';
+import { DetectionStep, SkillsStep } from './setup-onboarding.js';
+import { ExternalAccessFlow, loadStyles as loadExternalAccessStyles } from './external-access.js';
 import * as R from './setup-rules.js';
 
 // The setup route owns its dictionary and stylesheet; other pages never load them.
@@ -31,7 +32,7 @@ export function loadStyles() {
     l.onload = resolve;
     l.onerror = () => { l.remove(); styles = null; reject(new Error('Setup stylesheet unavailable')); };
     document.head.append(l);
-  });
+  }).then(() => loadExternalAccessStyles()).catch(error => { styles=null; throw error; });
   return styles;
 }
 
@@ -43,7 +44,7 @@ export function SetupPage() {
   const [vm, setVm] = useState(undefined);
   const [loadError, setLoadError] = useState(null);
   const [s, setS] = useState(() => ({ code: '', adapter: '', fields: null, gatewayUrl: '', token: '', check: null, agents: null, primary: null, looks: {},
-    detections: null, catalog: null, skillPlan: null, skillSelection: [], skillResults: null, network: { mode: 'local', port: 18789, publicUrl: '' }, domain: '', networkGuide: null, networkDetected: null, accessResult: null, ownerSaved: false, resumePending: false, name: '', owner: '', email: '', password: '', password2: '', passwordSet: false, locale: getLang(), timeZone: '', projet: true, projetResult: null }));
+    detections: null, catalog: null, skillPlan: null, skillSelection: [], skillResults: null, accessStaged: false, accessDraft: null, accessLegacyFallback: false, ownerSaved: false, resumePending: false, name: '', owner: '', email: '', password: '', password2: '', passwordSet: false, locale: getLang(), timeZone: '', projet: true, projetResult: null }));
   const [busy, setBusy] = useState(null);
   const [saved, setSaved] = useState(false);
   const [, setTick] = useState(0);
@@ -74,8 +75,7 @@ export function SetupPage() {
   // A step the answers don't reach yet is never shown (no skipping); the URL follows the step really shown.
   useEffect(() => { if (vm && max !== asked) router.setQuery({ etape: max || null }); }, [max, asked, !!vm]);
   const go = (i) => { setError(null); router.setQuery({ etape: i || null }, { replace: false }); };
-  const networkGeneration = useRef(0);
-  const set = (patch) => { if ('network' in patch || 'domain' in patch) { networkGeneration.current++; setBusy(null); } setError(null); setS((x) => ({ ...x, ...patch })); };
+  const set = (patch) => { setError(null); setS((x) => ({ ...x, ...patch })); };
   // R20-02: every connection edit starts a new generation; a check or discovery answered for an older one is dropped
   // (result, error and busy state alike), so a late answer can never validate or fill in a different connection.
   const conn = useRef(0);
@@ -149,24 +149,11 @@ export function SetupPage() {
       if (g === conn.current) set({ skillResults: r.data.result.agents });
     } catch (e) { if (g === conn.current) fail(e); } finally { if (g === conn.current) setBusy(null); }
   }
-  async function inspect(publicIp = false) {
-    const g = ++networkGeneration.current;
-    setBusy('network'); setError(null);
-    try { const r = await post('/api/v2/setup/network', { setupCode: s.code.trim(), domain: s.domain.trim(), port: s.network.port, publicIp }, { quiet: true }); if (g === networkGeneration.current) set({ networkGuide: r.data.result, networkDetected: r.data.result }); }
-    catch (e) { if (g === networkGeneration.current) fail(e); } finally { if (g === networkGeneration.current) setBusy(null); }
-  }
-  async function probeAccess() {
-    const g = ++networkGeneration.current;
-    setBusy('network'); setError(null);
-    try { const r = await post('/api/v2/setup/network', { setupCode: s.code.trim(), action: 'probe', url: s.network.mode === 'local' ? location.origin : s.network.publicUrl }, { quiet: true }); if (g === networkGeneration.current) set({ accessResult: r.data.result }); }
-    catch (e) { if (g === networkGeneration.current) fail(e); } finally { if (g === networkGeneration.current) setBusy(null); }
-  }
   useEffect(() => {
     if (vm?.state !== 'open') return;
     if (step === 'detection' && s.detections === null) detect();
     if (step === 'gateway' && !s.check && s.detections?.some(d => d.runtime === s.adapter && d.connection?.gatewayUrl === s.gatewayUrl && d.connection?.tokenSet)) check();
     if (step === 'skills' && !s.skillPlan) plan();
-    if (step === 'network' && !s.networkGuide) inspect();
     if (step === 'identities' && !s.catalog) get('/api/v2/setup/catalog', { quiet: true }).then(r => set({ catalog: r.data }), fail);
   }, [step, vm?.state]);
 
@@ -188,13 +175,19 @@ export function SetupPage() {
     go(max + 1);
   }
 
+  const [accessFooter,setAccessFooter]=useState(null);
   const closed = vm && vm.state !== 'open' && !saved;
-  return html`<div class="ao-setup-page"><main class="ao-setup" aria-labelledby="setup-titre">
+  return html`<div class="ao-setup-page"><${Frame} tag="main" class="bu-page ao-setup" aria-labelledby="setup-titre"
+    foot=${vm && !closed && step === 'network' ? html`<div class="ao-setup__footer">${accessFooter}</div>` : vm && !closed ? html`<div class="ao-setup__footer">${step === 'done' ? html`<a class="bu-btn bu-btn--primary bu-btn--lg" href=${router.href('bureau')} onClick=${(e) => { e.preventDefault(); location.assign(router.href('bureau')); }}>${msg('setup.open')}</a>`
+            : html`<div class="ao-setup__nav">
+              ${max > 0 ? html`<button type="button" class="bu-btn" onClick=${() => go(max - 1)}>${msg('setup.back')}</button>` : null}
+              <button type="submit" form="setup-form" class="bu-btn bu-btn--primary" disabled=${!!busy} aria-busy=${busy === 'save' ? 'true' : undefined} aria-describedby=${error ? 'setup-erreur' : undefined}>
+                ${msg(step === 'welcome' ? 'setup.start' : step === 'review' ? 'setup.save' : 'setup.next')}</button></div>`}</div>` : null} head=${html`
     <header class="ao-setup__top">
       <${Logo} kind="wordmark" class="ao-setup__logo" />
       <div class="ao-setup__prefs"><${LangSwitch} /><${ThemeSwitch} /></div>
     </header>
-    <header class="ao-setup__head"><p class="bu-eyebrow">${msg('setup.eyebrow')}</p><h1 class="bu-title-lg" id="setup-titre">${msg('setup.title')}</h1></header>
+    <header class="ao-setup__head"><p class="bu-eyebrow">${msg('setup.eyebrow')}</p><h1 class="bu-title-lg" id="setup-titre">${msg('setup.title')}</h1></header>`}>
     ${loadError ? html`<div class="bu-card"><div class="bu-empty bu-empty--error"><p class="bu-empty__title">${msg('editorial.unavailable')}</p>
         <p class="bu-empty__text">${loadError.message}</p><button type="button" class="bu-btn" onClick=${load}><${Icon} name="refresh" />${msg('common.retry')}</button></div></div>`
       : !vm ? html`<div class="bu-card"><p class="bu-text-secondary" role="status">${msg('editorial.loading')}</p><${Skeleton} kind="title" /></div>`
@@ -212,17 +205,13 @@ export function SetupPage() {
                 : html`<span aria-current=${i === max ? 'step' : undefined}><span class="ao-setup__num">${String(i).padStart(2, '0')}</span>${msg('setup.step.' + name)}${i < max ? html`<span class="bu-sr-only"> ${msg('setup.step.done')}</span>` : null}</span>`}</li>`;
           })}</ol>
         </nav>
-        <form class="bu-card ao-setup__body" onSubmit=${next} novalidate aria-labelledby="setup-etape">
+        <form id="setup-form" class="bu-card ao-setup__body" onSubmit=${next} novalidate aria-labelledby="setup-etape">
           ${step !== 'welcome' && step !== 'done' ? html`<p class="bu-eyebrow">${msg('setup.stepOf', { n: max, total: R.NUMBERED.length })}</p>` : null}
           ${step === 'welcome' ? html`<${StateArt} slug="first-run" class="ao-setup__art" />`
-            : html`<img class="ao-setup__art" src=${assetUrl('bureau/assets/Illustrations/' + ART[step] + '.webp')} alt="" width="400" height="300" />`}
-          <${Step} step=${step} s=${s} vm=${vm} set=${set} setConn=${setConn} busy=${busy} check=${check} discover=${discover} detect=${detect} plan=${plan} apply=${apply} inspect=${inspect} probeAccess=${probeAccess} />
+            : step==='network' ? null : html`<img class="ao-setup__art" src=${assetUrl('bureau/assets/Illustrations/' + ART[step] + '.webp')} alt="" width="400" height="300" />`}
+          <${Step} onAccessFooter=${setAccessFooter} step=${step} s=${s} vm=${vm} set=${set} setConn=${setConn} busy=${busy} check=${check} discover=${discover} detect=${detect} plan=${plan} apply=${apply} go=${go} max=${max}
+            onUnavailableContinue=${()=>{set({accessStaged:true,accessDraft:{mode:'local'},accessLegacyFallback:true});go(R.STEPS.indexOf('review'));}} />
           ${error ? html`<p class="bu-field__error" role="alert" id="setup-erreur"><${Icon} name="alert" />${error}</p>` : null}
-          ${step === 'done' ? html`<a class="bu-btn bu-btn--primary bu-btn--lg" href=${router.href('bureau')} onClick=${(e) => { e.preventDefault(); location.assign(router.href('bureau')); }}>${msg('setup.open')}</a>`
-            : html`<div class="ao-setup__nav">
-              ${max > 0 ? html`<button type="button" class="bu-btn" onClick=${() => go(max - 1)}>${msg('setup.back')}</button>` : null}
-              <button type="submit" class="bu-btn bu-btn--primary" disabled=${!!busy} aria-busy=${busy === 'save' ? 'true' : undefined} aria-describedby=${error ? 'setup-erreur' : undefined}>
-                ${msg(step === 'welcome' ? 'setup.start' : step === 'review' ? 'setup.save' : 'setup.next')}</button></div>`}
         </form>
         <aside class="bu-card bu-card--sunken ao-setup__note" aria-label=${msg('setup.margin')}>
           <p class="bu-card__title"><${Icon} name="info" />${msg('setup.margin')}</p>
@@ -230,14 +219,14 @@ export function SetupPage() {
           <p class="bu-caption bu-text-secondary">${msg('setup.margin.secret')}</p>
         </aside>
       </div>`}
-  </main></div>`;
+  </${Frame}></div>`;
 }
 
 function Field({ id, label, hint, children }) {
   return html`<div class="bu-field ao-setup__field"><label class="bu-field__label" for=${id}>${label}</label>${children}${hint ? html`<p class="bu-field__hint" id=${id + '-aide'}>${hint}</p>` : null}</div>`;
 }
 
-function Step({ step, s, vm, set, setConn, busy, check, discover, detect, plan, apply, inspect, probeAccess }) {
+function Step({ step, s, vm, set, setConn, busy, check, discover, detect, plan, apply, go, max, onUnavailableContinue, onAccessFooter }) {
   switch (step) {
     case 'welcome': return html`<h2 class="bu-title ao-setup__h" id="setup-etape">${msg('onboarding.owner.head')}</h2>
       <p class="bu-text-secondary ao-setup__lede">${msg('onboarding.owner.text')}</p>
@@ -256,14 +245,14 @@ function Step({ step, s, vm, set, setConn, busy, check, discover, detect, plan, 
           aria-describedby="setup-code-aide" onInput=${(e) => set({ code: e.currentTarget.value })} /></${Field}>`;
     case 'detection': return html`<${DetectionStep} s=${s} busy=${busy} detect=${detect} />`;
     case 'skills': return html`<${SkillsStep} s=${s} set=${set} busy=${busy} plan=${plan} apply=${apply} />`;
-    case 'network': return html`<${NetworkStep} s=${s} set=${set} busy=${busy} inspect=${inspect} probe=${probeAccess} />`;
+    case 'network': return html`<${ExternalAccessFlow} context="setup" onFooterChange=${onAccessFooter} setupCode=${s.code.trim()} onStaged=${draft => set({accessStaged:true,accessDraft:draft,accessLegacyFallback:false})} onUnavailableContinue=${onUnavailableContinue} onDone=${()=>go(max+1)} />`;
     case 'runtime': return html`<h2 class="bu-title ao-setup__h" id="setup-etape">${msg('setup.runtime.head')}</h2>
       <p class="bu-text-secondary ao-setup__lede">${msg('setup.runtime.text')}</p>
       <${Field} id="setup-adapter" label=${msg('setup.adapter')}>
         <select class="bu-select" id="setup-adapter" onChange=${(e) => { const a = vm.adapters.find((x) => x.id === e.currentTarget.value) || {};
           const detected = s.detections?.find(d => d.runtime === a.id);
           setConn({ adapter: a.id, fields: a.fields || [], gatewayUrl: detected?.connection?.gatewayUrl || a.defaultGatewayUrl || '', token: '' }); }}>
-          ${!s.adapter ? html`<option value="" disabled>${msg('setup.err.adapter')}</option>` : null}
+          ${!s.adapter ? html`<option value="" disabled selected>${msg('setup.err.adapter')}</option>` : null}
           ${vm.adapters.filter(a => a.connect !== false).map((a) => html`<option key=${a.id} value=${a.id} selected=${s.adapter === a.id}>${a.name}</option>`)}</select></${Field}>
       ${!R.takes(s, 'gatewayUrl') ? html`<p class="bu-text-secondary" id="setup-sans-passerelle">${msg('setup.adapter.noGateway')}</p>` : null}
       ${R.takes(s, 'gatewayUrl') ? html`<${Field} id="setup-url" label=${msg('setup.url')} hint=${msg('setup.url.hint')}>
@@ -323,7 +312,7 @@ function Step({ step, s, vm, set, setConn, busy, check, discover, detect, plan, 
         ['setup.name', s.name.trim()], ['setup.owner', s.owner.trim() || msg('editorial.notProvided')], ['setup.email', s.email.trim()],
         ['setup.password', msg(s.password || s.passwordSet ? 'setup.review.tokenSet' : 'setup.review.tokenNone')],
         ['onboarding.review.names', (s.agents || []).map(a => a.name).join(', ')],
-        ['setup.step.network', msg('onboarding.network.' + s.network.mode) + ' · ' + (s.network.publicUrl || '127.0.0.1:' + s.network.port)],
+        ['setup.step.network', msg(s.accessLegacyFallback?'access.localOnlyFallback':s.accessStaged ? 'access.staged' : 'access.title')],
         ['setup.locale', msg('lang.' + s.locale)], ['setup.zone', s.timeZone],
       ];
       return html`<h2 class="bu-title ao-setup__h" id="setup-etape">${msg('setup.review.head')}</h2>

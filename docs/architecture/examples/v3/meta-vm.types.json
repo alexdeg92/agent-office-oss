@@ -12,6 +12,7 @@
     "$.instance.name": "string"
   },
   "opaque": [
-    "$.runtime.capabilities"
+    "$.runtime.capabilities",
+    "$.runtimes[].capabilities"
   ]
 }

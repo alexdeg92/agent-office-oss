@@ -68,6 +68,21 @@ describe('API-only mode behind a stripped /backend prefix', () => {
     } finally { S.close(); }
   });
 
+  it('URL discovery distinguishes translated label dictionaries from actual URL fields', () => {
+    const body = { data: {
+      labels: { 'settings.field.gatewayUrl': 'Adresse de la passerelle', 'portrait.avatarUrl': 'Portrait' },
+      avatarUrl: '/relative-avatar.png',
+      nested: { gatewayUrl: 'ws://127.0.0.1:18789', labels: [{ url: '/relative-label-icon.png' }] },
+      media: [{ imageUrl: '/relative-image.png' }],
+    } };
+    assert.deepEqual(urlFields(body), [
+      ['$.data.avatarUrl', '/relative-avatar.png'],
+      ['$.data.nested.gatewayUrl', 'ws://127.0.0.1:18789'],
+      ['$.data.nested.labels[].url', '/relative-label-icon.png'],
+      ['$.data.media[].imageUrl', '/relative-image.png'],
+    ], 'label copy is excluded; every actual URL, including relative ones, is still returned');
+  });
+
   it('live v2 responses carry no relative URL (frontend-07)', async () => {
     const created = await call('POST', '/backend/api/v2/projects', { name: 'URL check', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });
     assert.equal(created.status, 200);

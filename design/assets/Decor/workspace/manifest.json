@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-decor-v1",
+  "id": "workspace",
+  "names": {
+    "fr": "Espace de travail",
+    "en": "Workspace"
+  },
+  "artScale": 2,
+  "license": "MIT",
+  "provenance": {
+    "tool": "image_gen.imagegen",
+    "sources": "design/assets/tools/decor-catalog-sources",
+    "export": "crop, alpha endpoint cleanup, positive uniform scale, anchor registration, WebP encoding"
+  },
+  "items": [
+    {
+      "id": "l-desk",
+      "names": {
+        "fr": "Bureau en L",
+        "en": "L-shaped desk"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 3,
+        "d": 2
+      },
+      "anchor": {
+        "x": 166,
+        "y": 148
+      },
+      "size": {
+        "w": 456,
+        "h": 286
+      },
+      "image": "l-desk-day.webp",
+      "images": {
+        "sw@night": "l-desk-night.webp"
+      },
+      "thumbnail": "thumbnails/l-desk.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 59
+      }
+    },
+    {
+      "id": "dual-monitor-desk",
+      "names": {
+        "fr": "Bureau à deux écrans",
+        "en": "Dual-monitor desk"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 101,
+        "y": 209
+      },
+      "size": {
+        "w": 307,
+        "h": 308
+      },
+      "image": "dual-monitor-desk-day.webp",
+      "images": {
+        "sw@night": "dual-monitor-desk-night.webp"
+      },
+      "thumbnail": "thumbnails/dual-monitor-desk.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 96
+      }
+    },
+    {
+      "id": "laptop-table",
+      "names": {
+        "fr": "Table pour portable",
+        "en": "Laptop table"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 68,
+        "y": 122
+      },
+      "size": {
+        "w": 192,
+        "h": 194
+      },
+      "image": "laptop-table-day.webp",
+      "images": {
+        "sw@night": "laptop-table-night.webp"
+      },
+      "thumbnail": "thumbnails/laptop-table.webp",
+      "thumbnailSize": {
+        "w": 95,
+        "h": 96
+      }
+    },
+    {
+      "id": "beanbag",
+      "names": {
+        "fr": "Pouf",
+        "en": "Beanbag"
+      },
+      "category": "assise",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 96,
+        "y": 126
+      },
+      "size": {
+        "w": 192,
+        "h": 192
+      },
+      "image": "beanbag-day.webp",
+      "images": {
+        "sw@night": "beanbag-night.webp"
+      },
+      "thumbnail": "thumbnails/beanbag.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 96
+      }
+    },
+    {
+      "id": "bench",
+      "names": {
+        "fr": "Banc",
+        "en": "Bench"
+      },
+      "category": "assise",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 92,
+        "y": 181
+      },
+      "size": {
+        "w": 296,
+        "h": 260
+      },
+      "image": "bench-day.webp",
+      "images": {
+        "sw@night": "bench-night.webp"
+      },
+      "thumbnail": "thumbnails/bench.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 84
+      }
+    },
+    {
+      "id": "bar-stool",
+      "names": {
+        "fr": "Tabouret haut",
+        "en": "Bar stool"
+      },
+      "category": "assise",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 68,
+        "y": 149
+      },
+      "size": {
+        "w": 136,
+        "h": 206
+      },
+      "image": "bar-stool-day.webp",
+      "images": {
+        "sw@night": "bar-stool-night.webp"
+      },
+      "thumbnail": "thumbnails/bar-stool.webp",
+      "thumbnailSize": {
+        "w": 61,
+        "h": 96
+      }
+    },
+    {
+      "id": "cafe-table",
+      "names": {
+        "fr": "Table de café",
+        "en": "Cafe table"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 96,
+        "y": 161
+      },
+      "size": {
+        "w": 192,
+        "h": 226
+      },
+      "image": "cafe-table-day.webp",
+      "images": {
+        "sw@night": "cafe-table-night.webp"
+      },
+      "thumbnail": "thumbnails/cafe-table.webp",
+      "thumbnailSize": {
+        "w": 80,
+        "h": 96
+      }
+    },
+    {
+      "id": "coffee-table",
+      "names": {
+        "fr": "Table basse",
+        "en": "Coffee table"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 103,
+        "y": 125
+      },
+      "size": {
+        "w": 296,
+        "h": 232
+      },
+      "image": "coffee-table-day.webp",
+      "images": {
+        "sw@night": "coffee-table-night.webp"
+      },
+      "thumbnail": "thumbnails/coffee-table.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 74
+      }
+    }
+  ]
+}

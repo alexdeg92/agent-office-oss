@@ -7,7 +7,7 @@
 import { reduceFrame } from './delta.js';
 import { createStore } from './store.js';
 
-const FRAME_TYPES = ['hello', 'snapshot', 'delta', 'cue', 'toast', 'system', 'heartbeat'];
+const FRAME_TYPES = ['hello', 'snapshot', 'delta', 'cue', 'toast', 'system', 'heartbeat', 'settings'];
 export const WATCHDOG_MS = 60_000;          // heartbeats come every 25 s; two missed → reconnect
 /** R27-02: what's on screen is not confirmed live (reconnecting, or offline): pages show it as stale/frozen. */
 export const streamUnconfirmed = (status) => !!status && (status.conn === 'retrying' || status.conn === 'offline');
@@ -35,7 +35,7 @@ const AUTH_CHECK_EVERY_MS = 5000;
  * once. status.nextRetryAt is when the next attempt starts (null when none is scheduled), for the reconnection banner.
  */
 export function createStream({ openSource, fetchVM, postTopics, postResync, checkAuth = async () => 'unknown', onUnauthorized = () => {}, check = () => {},
-  onToast = () => {}, onCue = () => {}, onBuild = () => {}, onReload = () => location.reload(), modelVersion = null, contractVersion = null, timers = globalThis,
+  onToast = () => {}, onCue = () => {}, onSettings = () => {}, onBuild = () => {}, onReload = () => location.reload(), modelVersion = null, contractVersion = null, timers = globalThis,
   now = () => Date.now(), network = globalThis.window || null, random = Math.random }) {
   // conn: 'idle' | 'connecting' | 'open' | 'retrying'; topicsOk: false while a subscription change is failing
   const status = createStore({ conn: 'idle', gateway: null, capabilities: null, lastFrameAt: null, topicsOk: true, nextRetryAt: null });
@@ -46,7 +46,8 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
   // Topic reconciliation is scoped to a connection generation (review-07 R7-06): a POST still in flight for an older
   // stream never blocks the current one, and its completion never changes the current state.
   let generation = 0, syncingGen = -1, syncAttempt = 0, syncTimer = null;
-  let lastAuthCheck = -Infinity, authChecking = false;
+  let lastAuthCheck = -Infinity, authChecking = false, authCheckId = 0;
+  let authEpoch = 0, reloadAfterAuthReset = false;
 
   const notify = (entry) => { for (const fn of entry.listeners) fn(view(entry)); };
   const view = (e) => ({ data: e.state.data, rev: e.state.rev, meta: e.meta, loading: e.loading, error: e.error, resyncing: e.resyncing });
@@ -54,13 +55,15 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
   async function load(topic, { resync = false } = {}) {
     const entry = topics.get(topic);
     if (!entry) return;
+    const acceptedEpoch = authEpoch;
+    const current = () => acceptedEpoch === authEpoch && topics.get(topic) === entry;
     entry.loading = entry.state.data === undefined;
     entry.resyncing = resync;
     entry.error = null;
     notify(entry);
     try {
       const { data, topic: meta, meta: envelope } = await fetchVM(entry.url);
-      if (topics.get(topic) !== entry) return;
+      if (!current()) return;
       // A GET backing this topic counts as its revision (§4.3); a snapshot that arrived meanwhile wins.
       if (entry.state.rev == null) {
         entry.state = { rev: meta && meta.id === topic ? meta.rev : null, data };
@@ -69,11 +72,13 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
       }
       entry.error = null;
     } catch (err) {
-      entry.error = err;
+      if (current()) entry.error = err;
     } finally {
-      entry.loading = false;
-      entry.resyncing = false;
-      notify(entry);
+      if (current()) {
+        entry.loading = false;
+        entry.resyncing = false;
+        notify(entry);
+      }
     }
   }
 
@@ -85,7 +90,10 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
     if (streamId && postResync && serverTopics.has(topic)) {
       entry.resyncing = true;
       notify(entry);
-      postResync(streamId, topic).catch(() => load(topic, { resync: true }));
+      const acceptedEpoch = authEpoch;
+      postResync(streamId, topic).catch(() => {
+        if (acceptedEpoch === authEpoch && topics.get(topic) === entry) load(topic, { resync: true });
+      });
     } else {
       load(topic, { resync: true });
     }
@@ -168,6 +176,10 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
         break;
       case 'toast': onToast(frame); break;
       case 'cue': onCue(frame); break;
+      case 'settings':
+        if (Number.isInteger(frame.revision) && frame.revision >= 0) onSettings({revision:frame.revision,
+          changed:Array.isArray(frame.changed) ? frame.changed.filter(x => typeof x === 'string') : [], restartRequired:frame.restartRequired === true});
+        break;
       default: break; // heartbeat and unknown frame types
     }
   }
@@ -187,9 +199,11 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
     const wasClosed = source && source.readyState === 2;
     if (!authChecking && now() - lastAuthCheck >= AUTH_CHECK_EVERY_MS) {
       authChecking = true;
+      const checkId = ++authCheckId;
       lastAuthCheck = now();
       let result = 'unknown';
       try { result = await checkAuth(); } catch { result = 'unknown'; }
+      if (checkId !== authCheckId) return;
       authChecking = false;
       if (closed || gen !== generation) return;
       if (result === 'unauthorized') { stop(); onUnauthorized(); return; }
@@ -211,8 +225,10 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
     streamId = null;
     serverTopics = new Set();
     source = openSource(url);
-    for (const type of FRAME_TYPES) source.addEventListener(type, (ev) => handleFrame(type, ev.data));
-    source.addEventListener('error', onError);
+    const openedGeneration = generation;
+    const current = () => !closed && generation === openedGeneration;
+    for (const type of FRAME_TYPES) source.addEventListener(type, (ev) => { if (current()) handleFrame(type, ev.data); });
+    source.addEventListener('error', () => { if (current()) void onError(); });
     armWatchdog();
   }
   function scheduleReopen() {
@@ -257,11 +273,36 @@ export function createStream({ openSource, fetchVM, postTopics, postResync, chec
     start() {
       if (!closed) return;
       attempt = 0;
+      if (reloadAfterAuthReset) {
+        reloadAfterAuthReset = false;
+        for (const topic of topics.keys()) load(topic);
+      }
       if (network && network.addEventListener) { network.addEventListener('online', onOnline); network.addEventListener('offline', onOffline); }
       if (isOffline()) { closed = false; status.set({ conn: 'offline' }); return; }
       open();
     },
     stop,
+    /** Stop and discard private state when identity or permission authority changes.
+     * Keep subscriptions; the caller publishes fresh Me before explicitly starting again.
+     */
+    invalidateAuth() {
+      stop();
+      authEpoch++;
+      authCheckId++;
+      authChecking = false;
+      lastAuthCheck = -Infinity;
+      epoch = null;
+      reloadAfterAuthReset = true;
+      for (const entry of topics.values()) {
+        entry.state = { rev: null, data: undefined };
+        entry.meta = null;
+        entry.loading = false;
+        entry.error = null;
+        entry.resyncing = false;
+        notify(entry);
+      }
+      status.set({ gateway: null, capabilities: null, lastFrameAt: null });
+    },
     /** Forces a reconnect now (the « Reconnecter » action). */
     reconnect() { attempt = 0; reopen(); },
     /**

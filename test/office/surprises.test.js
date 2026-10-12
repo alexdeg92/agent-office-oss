@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const {assertLazyAccessoryFrame,nativeFrameAnchors}=require('./helpers/accessory-registration');
 test('26b: neutral idle eligibility, weighted registries, persistent cooldown and a shared lease',async()=>{
  const m=await import('../../public/v2/office/surprises.js');
  const o={state:'idle',stateSince:0};
@@ -13,7 +14,7 @@ test('26b: neutral idle eligibility, weighted registries, persistent cooldown an
  for(let i=0;i<1025;i++)m.rememberSurprise('agent-'+i,i,'hide');assert.equal(m.surpriseHistory('agent'),undefined);
  for(const file of ['egg-controller.js','break-room.js','surprises.js'])assert.doesNotMatch(fs.readFileSync('public/v2/office/'+file,'utf8'),/setTimeout|setInterval/,'shared-clock deadlines: '+file);
 });
-test('26b: all eight looks have all ten registered egg frames, real held art, bench contact, and five accessory pairs',()=>{
+test('26b: all eight native looks have ten registered egg frames, held art, bench contact, and all fifteen accessories',()=>{
  const manifest=JSON.parse(fs.readFileSync('design/office/manifest.example.json')),anchors=JSON.parse(fs.readFileSync('design/assets/anchors.json')).assets;
  const poses=['curl-low','curl-high','bench-low','bench-high','wipe','light','smoke','crush','hide','shake'];let count=0;
  for(const ch of manifest.characters)for(const v of ch.variants?.length?ch.variants:[ch])for(const p of poses){
@@ -21,7 +22,13 @@ test('26b: all eight looks have all ten registered egg frames, real held art, be
   const meta=anchors[body.image.replace(/^assets\//,'')];assert.ok(meta.source.includes('office26b-sources'));assert.equal(meta.registration.mirrored,false);assert.ok(meta.handAnchor.every(Number.isFinite));
   if(p.startsWith('bench'))assert.ok(body.seatAnchor&&Number.isFinite(body.seatAnchor.x));
   if(['light','smoke','crush'].includes(p))assert.ok(body.fxAnchor&&Number.isFinite(body.fxAnchor.x));
-  for(const gear of manifest.accessories)assert.ok(gear.layers[(v===ch?ch.id:ch.id+'/'+v.id)][name]);count++;
+  assert.ok(manifest.accessories.length>=15);
+  const key=v===ch?ch.id:ch.id+'/'+v.id;
+  for(const gear of manifest.accessories) {
+   if(gear.packManifest)assertLazyAccessoryFrame(gear,key,name,0,1,nativeFrameAnchors(meta));
+   else assert.ok(gear.layers[key][name]);
+  }
+  count++;
  }
  assert.equal(count,80);
  for(const room of ['gym','outdoor'])assert.ok(fs.statSync('public/v2/bureau/assets/Office/breaks/'+room+'.webp').size<200000,'lazy room bundle ships');

@@ -15,11 +15,12 @@ test('defaults are the production topology: UI at /, API behind /backend', () =>
   assert.deepEqual(readConfig(fakeDoc('pas du json')), DEFAULTS);
 });
 
-test('normalise: slashes, same-origin only, hostile values fall back', () => {
+test('normalise: slashes, HTTPS split-origin API and hostile values fail closed', () => {
   assert.deepEqual(normalise({ basePath: '/v2', apiBase: '/backend/' }), { basePath: '/v2/', apiBase: '/backend', apiVersion: DEFAULTS.apiVersion });
   assert.deepEqual(normalise({ basePath: '/v2/', apiBase: '', apiVersion: 3 }), { basePath: '/v2/', apiBase: '', apiVersion: 3 });
   for (const bad of [4, '3', null, 2.5]) assert.equal(normalise({ apiVersion: bad }).apiVersion, DEFAULTS.apiVersion, 'G5: only 2 or 3, as a number; else the default');
-  assert.equal(normalise({ apiBase: 'https://ailleurs.example' }).apiBase, '/backend');
+  assert.equal(normalise({ apiBase: 'https://api.example/backend/' }).apiBase, 'https://api.example/backend');
+  assert.equal(normalise({ apiBase: 'http://api.example/backend' }).apiBase, '/backend');
   assert.equal(normalise({ apiBase: '//ailleurs.example' }).apiBase, '/backend');
   assert.equal(normalise({ basePath: '//evil' }).basePath, '/');
   assert.equal(normalise({ basePath: '/a" onload="x' }).basePath, '/');
@@ -49,7 +50,9 @@ test('renderIndex writes <base> and the config meta that config.js reads back; o
   const out = serve.renderIndex(INDEX, { basePath: '/' }, { publicUrl: 'https://agent.exemple.ca/ignored' });
   assert.match(out, /<meta property="og:image" content="https:\/\/agent\.exemple\.ca\/bureau\/assets\/Logos\/og-agent-office\.png">/);
   assert.throws(() => serve.renderIndex('<html></html>', {}), /no <base href>/);
-  assert.throws(() => serve.normaliseConfig({ apiBase: 'https://x.example' }), /invalid API base/);
+  assert.equal(serve.normaliseConfig({ apiBase: 'https://api.example/backend/' }).apiBase, 'https://api.example/backend');
+  for (const apiBase of ['http://api.example/backend','https://user@api.example/backend','https://api.example/a%2fb','https://api.example/backend?x=1'])
+    assert.throws(() => serve.normaliseConfig({ apiBase }), /invalid API base/);
   assert.throws(() => serve.normaliseConfig({ apiVersion: 4 }), /invalid API version/);
   assert.equal(serve.normaliseConfig({ apiVersion: '3' }).apiVersion, 3, 'AO_API_VERSION=3 from the environment');
 });
@@ -77,7 +80,7 @@ test('index.html, manifest and CSS carry no mount point: every URL is relative t
   assert.doesNotMatch(css, /url\(['"]?\//, 'app.css url()s are relative');
 });
 
-test('no UI module hard-codes the mount point or calls the network around api.js', async () => {
+test('UI modules keep transport in the API client and split-origin adapters', async () => {
   const { readdirSync } = await import('node:fs');
   const root = new URL('../../public/v2/', import.meta.url);
   const files = [];
@@ -90,8 +93,9 @@ test('no UI module hard-codes the mount point or calls the network around api.js
   for (const f of files) {
     const code = readFileSync(new URL(f, root), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
     if (/['"`(]\/v2[/'"`]/.test(code)) bad.push(f + ': /v2 literal');
-    if (f !== 'api.js' && f !== 'mock/server.js' && /\bfetch\(/.test(code)) bad.push(f + ': fetch outside api.js');
-    if (f !== 'app.js' && /new EventSource\(/.test(code)) bad.push(f + ': EventSource outside app.js');
+    // Connector marks read only their packaged public provenance catalog, never API data.
+    if (!['api.js', 'split-auth.js', 'mock/server.js', 'pages/connector-brand.js'].includes(f) && /\bfetch\(/.test(code)) bad.push(f + ': fetch outside transport modules');
+    if (!['app.js', 'split-stream.js'].includes(f) && /new EventSource\(/.test(code)) bad.push(f + ': EventSource outside stream modules');
   }
   assert.deepEqual(bad, []);
 });

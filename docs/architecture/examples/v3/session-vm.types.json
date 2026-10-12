@@ -28,7 +28,9 @@
     "$.events[].senderInfo.delegation.label",
     "$.events[].senderInfo.delegation",
     "$.participants[].delegation",
-    "$.participants[].delegation.label"
+    "$.participants[].delegation.label",
+    "$.run.evidence.observedAt",
+    "$.run.evidence.expiresAt"
   ],
   "types": {
     "$.events[].error": "string",

@@ -1,0 +1,13 @@
+{
+  "fonts": {
+    "display": "Sora",
+    "sans": "Inter",
+    "mono": "JetBrains Mono"
+  },
+  "radius": [
+    8,
+    12,
+    16
+  ],
+  "colors": {}
+}

@@ -30,6 +30,15 @@ test('public gate scans arbitrary paths, extensions and binary metadata without 
     const file = path.join(dir, 'unexpected', 'blob.unknown');
     fs.writeFileSync(file, 'owner@example.invalid 100000000000000000');
     assert.deepEqual(scan(dir, env).findings, []);
+    fs.writeFileSync(file, 'a@example.test b@ci.agents.test c@host.invalid d@site.example');
+    assert.deepEqual(scan(dir, env).findings, [], 'RFC 2606/6761 reserved TLDs are synthetic');
+    fs.writeFileSync(file, 'a@b.test a@sub.example.test o@example.com o@x.example.org o@example.net');
+    assert.deepEqual(scan(dir, env).findings, [], 'whole reserved domains pass');
+    // critic-427: each look-alike is assembled at runtime so this source never holds it; each must stay a finding
+    for (const lookAlike of [['person@fixture.test', 'é.com'], ['a@b.test', '.com'], ['a@b.test', 'ing'], ['a@b.t', 'ést'], ['a@b.test', '1'], ['a@b.test', '-x.com'], ['owner@example', '.ca'], ['owner@sub.example', '.ca'], ['owner@example.com', 'é'], ['owner@example', '.co']]) {
+      fs.writeFileSync(file, lookAlike.join(''));
+      assert.ok(scan(dir, env).findings.some(h => h.rule === 'email'), `look-alike #${lookAlike[1]} is still an email finding`);
+    }
     for (const [seed, rule] of seeds) {
       fs.writeFileSync(file, Buffer.concat([Buffer.from([0]), Buffer.from(seed)]));
       const findings = scan(dir, env).findings;
@@ -40,13 +49,15 @@ test('public gate scans arbitrary paths, extensions and binary metadata without 
     const constantsDir = path.join(dir, 'src/projects');
     fs.mkdirSync(constantsDir, { recursive: true });
     const constantsFile = path.join(constantsDir, 'constants.js');
-    const declaration = "const OWNER_ACTOR_SHORT = Object.freeze(['owner', '" + ['al', 'ex'].join('') + "']);";
+    const personal = ['al', 'ex'].join('');
+    const declaration = "const OWNER_ACTOR_SHORT = Object.freeze(['owner', '" + personal + "']);";
     fs.writeFileSync(constantsFile, declaration + '\n');
-    assert.deepEqual(scan(dir, env).findings, [], 'historical protocol alias is allowed only at its declaration');
-    fs.appendFileSync(constantsFile, '// ' + ['Al', 'ex'].join('') + '\n');
+    fs.writeFileSync(constantsFile, "const OWNER_ACTOR_SHORT = Object.freeze(['owner']);\n");
+    assert.deepEqual(scan(dir, env).findings, [], 'the owner alias is generic and resolves through configured owner identity');
+    fs.appendFileSync(constantsFile, '// ' + personal + '\n');
     assert.ok(scan(dir, env).findings.some((hit) => hit.rule === 'private person name'), 'other names in the same file fail');
     fs.writeFileSync(file, declaration);
-    assert.ok(scan(dir, env).findings.some((hit) => hit.file === 'unexpected/blob.unknown' && hit.rule === 'private person name'), 'the declaration in another file fails');
+    assert.ok(scan(dir, env).findings.some((hit) => hit.file === 'unexpected/blob.unknown' && hit.rule === 'private person name'), 'the personal alias fails outside the removed legacy declaration');
     fs.rmSync(path.join(dir, 'src'), { recursive: true });
     fs.unlinkSync(file);
     fs.writeFileSync(path.join(dir, env.OC_GATEWAY_TOKEN + '.txt'), '');
@@ -70,6 +81,9 @@ test('export excludes history and captures, preserves runtime integration, and r
       assert.equal(fs.existsSync(path.join(dir, file)), false, file);
     }
     assert.ok(fs.existsSync(path.join(dir, 'integrations/openclaw/projet/projet.js')));
+    for (const file of ['public/v2/assets/connectors/openclaw.svg', 'public/v2/assets/connectors/claude-code.svg', 'public/v2/assets/connectors/codex.svg', 'public/v2/assets/connectors/codex-dark.svg', 'public/v2/assets/connectors/provenance.json']) {
+      assert.ok(fs.existsSync(path.join(dir, file)), `${file} is present in the public export`);
+    }
     const before = fs.readFileSync(path.join(dir, 'public/v2/index.html'), 'utf8');
     const build = spawnSync(process.execPath, ['scripts/build-frontend.js'], { cwd: dir, encoding: 'utf8' });
     assert.equal(build.status, 0, build.stderr);

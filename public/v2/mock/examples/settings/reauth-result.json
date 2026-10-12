@@ -1,0 +1,15 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "expiresAt": 1791587100000
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791586800000,
+    "stale": []
+  }
+}

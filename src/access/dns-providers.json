@@ -1,0 +1,74 @@
+[
+  {
+    "id": "cloudflare",
+    "labelKey": "access.dns.provider.cloudflare",
+    "consoleUrl": "https://dash.cloudflare.com/",
+    "nsSuffixes": ["ns.cloudflare.com"],
+    "nsPatterns": [],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "route53",
+    "labelKey": "access.dns.provider.route53",
+    "consoleUrl": "https://console.aws.amazon.com/route53/",
+    "nsSuffixes": [],
+    "nsPatterns": ["^ns-[0-9]+\\.awsdns-[0-9]+\\.(?:com|net|org|co\\.uk)$"],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "google-cloud-dns",
+    "labelKey": "access.dns.provider.googleCloud",
+    "consoleUrl": "https://console.cloud.google.com/net-services/dns/zones",
+    "nsSuffixes": ["googledomains.com"],
+    "nsPatterns": ["^ns-cloud-[a-d][0-9]+\\.googledomains\\.com$"],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "namecheap",
+    "labelKey": "access.dns.provider.namecheap",
+    "consoleUrl": "https://ap.www.namecheap.com/Domains/DomainControlPanel",
+    "nsSuffixes": ["registrar-servers.com"],
+    "nsPatterns": [],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "godaddy",
+    "labelKey": "access.dns.provider.godaddy",
+    "consoleUrl": "https://dcc.godaddy.com/manage/dns",
+    "nsSuffixes": ["domaincontrol.com"],
+    "nsPatterns": [],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "ovh",
+    "labelKey": "access.dns.provider.ovh",
+    "consoleUrl": "https://www.ovh.com/manager/",
+    "nsSuffixes": ["ovh.net"],
+    "nsPatterns": [],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "gandi",
+    "labelKey": "access.dns.provider.gandi",
+    "consoleUrl": "https://account.gandi.net/",
+    "nsSuffixes": ["gandi.net"],
+    "nsPatterns": [],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  },
+  {
+    "id": "unknown",
+    "labelKey": "access.dns.provider.unknown",
+    "consoleUrl": null,
+    "nsSuffixes": [],
+    "nsPatterns": [],
+    "records": ["A", "AAAA", "CNAME"],
+    "api": "none"
+  }
+]

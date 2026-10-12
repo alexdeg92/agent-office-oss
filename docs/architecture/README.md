@@ -6,6 +6,8 @@
 | --- | --- |
 | `status.md` | Current state map |
 | `adr-001-runtime-adapters.md` | **ADR-001**, the platform decision: runtime adapters, open vocabularies, instance config, contract 3.0 (index below) |
+| `adr-002-multi-user-rbac.md` | **ADR-002:** multi-user identities, roles/overrides, route policy, filtered views/SSE and revocation |
+| `adr-003-split-origin-auth.md` | **ADR-003:** human bearer/refresh auth, SSE tickets, split-origin deployment and setup/Settings access contract |
 | `api.md` | The wire contract 2.5 (`/api/v2`): envelopes, errors, views, SSE, commands, setup |
 | `api-v3.md` | Contract 3.0 (`/api/v3`): the deltas D1–D10 over 2.5 |
 | `migration-v3.md` | Moving the UI from `/api/v2` to `/api/v3` |
@@ -24,6 +26,8 @@
 | ADR | Title | Status |
 | --- | --- | --- |
 | **ADR-001** | Agent Office as a platform: runtime adapters, open vocabularies, instance config | **Accepted** (G1, 2026-10-05), amended §12 (R12) and extended §13–§14 |
+| **ADR-002** | Multi-user identities and resource permissions | **Accepted**, critic-60/security-40 on `4466b165` (2026-10-10); implementation reviews separate |
+| **ADR-003** | Split-origin authentication and the external-access flow | **Accepted**, critic-60/security-40 on `4466b165` (2026-10-10); implementation reviews separate |
 
 ### ADR-001 sections
 | § | Topic | State |

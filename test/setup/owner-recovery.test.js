@@ -21,8 +21,8 @@ async function publish(tmp, { withOwner = true } = {}) {
   try { if (withOwner) store.users.createOwner({ email: owner.email, passwordHash: await hashPassword(owner.password), personId: store.owner.id }); }
   finally { store.close(); }
   // Also valid on the audited onboarding build, whose DB shape still claimed v1.
-  const cfg = config(IC.VERSION); cfg.owner.authSource = 'database';
-  IC.writeInstanceConfig(IC.configPaths({ HOME: tmp }), cfg, { version: IC.VERSION, sessionSecret: 's'.repeat(48), runtimeToken: null });
+  const cfg = config(2); cfg.owner.authSource = 'database';
+  IC.writeInstanceConfig(IC.configPaths({ HOME: tmp }), cfg, { version: 2, sessionSecret: 's'.repeat(48), runtimeToken: null });
 }
 function saveBody(code, o = owner) {
   return { setupCode: code, instance: config().instance, owner: { displayName: o.displayName, email: o.email }, runtime: { adapter: 'demo' },

@@ -55,7 +55,8 @@ async function publish(topic) {
   const set = subs.get(topic);
   if (!set) return;
   const data = topic === 'office' ? await om.officeVM() : await om.layoutVM();
-  set({ data, loading: false, error: null });
+  const stale = topic === 'office' && q.get('stale') ? q.get('stale').split(',') : [];
+  set({ data, meta: topic === 'office' ? { stale, generatedAt: Date.now() } : undefined, loading: false, error: null });
 }
 services.stream = {
   status: createStore({ conn: q.get('conn') ?? 'open', gateway: null, capabilities: q.get('lecture') ? { openclawWrites: false, storeWrites: false } : null, lastFrameAt: q.get('conn') ? Date.now() - 95_000 : null, topicsOk: true }),

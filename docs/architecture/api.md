@@ -1,12 +1,13 @@
 # API contract (v2)
 
-**Contract version 2.7** (2026-10-08: Sender identity and participants; 2.5, 2026-10-06: first-run setup §5.7; 2.4: named session-group refs; 2.3: project images; 2.2: S6.1 live findings and review R8; 2.1 merged the office-dev, projects and frontend proposals). This document is the single source of truth for the HTTP and SSE wire format between the server (architect) and its consumers (frontend `/v2`, office-dev, projects). Only the architect edits it; proposals go through the PM.
+**Contract version 2.8** (2026-10-10: adapter-declared canonical health checks and remedies; 2.7: sender identity and participants; 2.5, 2026-10-06: first-run setup §5.7; 2.4: named session-group refs; 2.3: project images; 2.2: S6.1 live findings and review R8; 2.1 merged the office-dev, projects and frontend proposals). This document is the single source of truth for the HTTP and SSE wire format between the server (architect) and its consumers (frontend `/v2`, office-dev, projects). Only the architect edits it; proposals go through the PM.
 
-**Contract 3.2** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.7 until the UI has moved (`migration-v3.md`).
+**Contract 3.4** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.8 until the UI has moved (`migration-v3.md`).
 
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
+| 2.8 | 2026-10-10 | Add canonical adapter-declared `HealthCheckVM` rows, bounded automatic/one-click/guided remedies and audit outcomes; `POST /health/checks/:id/fix` and `POST /health/fix-all`. Santé uses localized explanations instead of raw source/path names. Unknown session classifications remain generic and count once. **T-0053 additive:** `OccupantVM.isNew?: boolean` marks an auto-added agent during its first 24 hours; absent or false means no marker. |
 | 2.7 | 2026-10-09 | Locked missing-secrets recovery page; strict named partial-login boot errors; first-run DB owner and code-gated resumption/amendment/recovery; adapter-owned detection/discovery and connect capability; explicit `agent:<id>` peer occupants and role `agent`; runtime-scoped display names; reviewed installation plans with safe descriptor I/O and rollback; network guide; config v2 with strict v1 reader. Setup route examples and `SetupVM` schema are executable. Same additions in contract 3.2. |
 | 2.6 | 2026-10-08 | Runtime-neutral Sender identity (`senderInfo` on trace/chat messages), `SessionVM.participants` for humans and primary agents plus `SessionVM.subagents` with linked delegation labels/tasks, metadata-free display text and plain-text summaries, stable human avatars and sender grouping. `user.sender` remains a compatibility display string. See [sender-identities.md](sender-identities.md). |
 | 2.5 | 2026-10-06 | **Compatibility exception (G5; review-22 R22-09):** `MetaVM.labels` no longer carries the server-only `prompt.*` keys (`prompt.projectSummary`, `prompt.noSources`: agent prompts, never UI text) on 2.x either. Every other 2.x byte is unchanged by G5. <br>**G4 first-run setup (§5.7, ADR-001 §5).** New routes `GET /api/v2/setup`, `POST /api/v2/setup/check`, `POST /api/v2/setup/discover`, `PUT /api/v2/setup`, from frontend-12 §2 with these changes: **`owner.password`** (write-only) in `PUT`, and `draft.owner.passwordSet`; **`SetupVM.configured`**; **`draft` is null** unless `state` is `open`; a locked instance answers 403 **`forbidden` `{issue:'locked'}`** (`readonly` stays for a read-only instance); results use the standard `CommandResult` envelope. **`MetaVM.instance.configured: boolean`** (additive). Examples `setup-vm`, `setup-check-request`/`-result`, `setup-discover-result`, `setup-save-request`/`-result`, `error-403-setup` (+ sidecars). |
@@ -122,9 +123,13 @@ interface Kpi { id: string; label: LabelRef; value: number | null; unit: Unit; s
 ```
 
 ### 3.1 MetaVM, MeVM
+
+`GET /meta` is public for bootstrap, with request-aware enrichment on both versions. Without a valid owner cookie it contains static labels, null `primaryAgent`/`runtime`, no source inventory in the envelope, and (v3) null `instance.name`/empty `runtimes`. Agent/project/runtime names and the dynamic dictionary are owner-only, including chosen Settings names. Invalid/expired/revoked cookies receive the public projection; bearer scope remains unchanged. Responses are `no-store` and vary by `Accept-Language, Cookie`; public/owner validation fallback caches are separate. Both projections preserve `bootId`, configured state, versions and locale/time-zone fields. Clients refresh on login and clear private metadata before rendering logout/expiry, discarding old in-flight responses.
+
 ```ts
 interface MetaVM {
-  modelVersion: number; apiVersion: 2; contractVersion: '2.7'; serverVersion: string;
+  bootId: string; // opaque process identity; stable until the owning process restarts
+  modelVersion: number; apiVersion: 2; contractVersion: '2.8'; serverVersion: string;
   env: 'production' | 'staging' | 'dev';     // mock mode is allowed only when meta is 404 or env !== 'production'
   capabilities: {                            // R3-10: two independent switches
     openclawWrites: boolean;                 // false when PORTAL_READONLY=1 (flows, skills, restart, chat)
@@ -149,7 +154,7 @@ interface MeVM { email: string; displayName: string /* 2.2: owner's name (PORTAL
                gateway: 'up' | 'down'; capabilities: MetaVM['capabilities']; sessionExpiresAt: Ms }
 ```
 ```json
-{ "data": { "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.7", "serverVersion": "2026.10.5-s6", "env": "staging",
+{ "data": { "bootId": "fixture-process-before-restart", "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.8", "serverVersion": "2026.10.5-s6", "env": "staging",
   "capabilities": { "openclawWrites": false, "storeWrites": true }, "readonly": true,
   "labels": { "agentState.working": "Exécute", "projectStatus.in-progress": "En cours", "healthSub.cores": "Sur {n} cœurs" },
   "enums": { "projectStatus": ["idea", "todo", "in-progress", "in-review", "shipped"] } },
@@ -171,23 +176,44 @@ interface OccupantVM {
   title: LabelRef;                           // 2.4 (Q03-A01): the name as a LabelRef (sessionTitle.*; genuine names as raw params), shown in the UI's language
   roleLabel: LabelRef;                       // semantic role label; a custom layout role replaces it as { key: 'custom', params: { text } }
   state: AgentState; stateSince: Ms;
+  execution: { status: 'unknown' | 'idle' | 'running' | 'succeeded' | 'failed'; evidence: { level: 'verified' | 'observed' | 'unknown'; observedAt: Ms | null; expiresAt: Ms | null } };
   stationUid: string | null;                 // null = no free eligible station (overflow), see data-model §12
+  homeTarget?: OfficeTarget | null; sceneTarget?: OfficeTarget | null; // reserved home and backend-selected current target
+  activity?: OfficeActivity | null; sceneTravel?: SceneTravel | null;  // the client animates these backend decisions
+  automaticLook?: { character: string; variant: string | null; accessories: string[] }; // T-0052: durable first-sight look, reused in previews
   look: { character: string; variant: string | null; accessories: string[] };   // resolved server-side (data-model §12); final
   ruleId: string | null;                     // 2.1 (R3-14): the agentId of the layout rule that styled it ('main', '*subagent', …)
   destination: { kind: 'server' | 'meeting'; stationUid: string } | null;   // 2.1 (R3-15): server-authoritative; null on 2.0 data
   sessionKey: SessionKey | null; tokens: number; lastSeenAt: Ms | null;
+  isNew?: boolean;                              // T-0053: auto-added agent, for 24 hours after first sighting
+  summary?: string; model?: string; project?: string; runtime?: string;
+  startedAt?: Ms; lastActivityAt?: Ms; tokensKnown?: boolean; // session read grant only
   // architect-55 (additive, v2 and v3): conversation occupants (direct/group/conversation) whose transcript is known.
   // An exchange = a message from the person answered by the agent, timed at the reply; recent = within windowMs (600000).
   exchanges?: { recent: number; windowMs: number; lastAt: Ms };
 }
+interface OfficeTarget { kind: 'station' | 'lounge' | 'standing' | 'destination' | 'visit'; floorId: string; stationUid: string | null;
+  point: { x: number; y: number }; approachPoint: { x: number; y: number } | null; seatContact: { x: number; y: number } | null;
+  mode: 'stand' | 'desk' | 'sofa'; seatIndex: number | null; facing: 'ne' | 'se' | 'sw' }
+interface OfficeActivity { id: string; kind: 'idle' | 'gym' | 'smoke' | 'coffee'; spotId: string; since: Ms; label: LabelRef }
+interface SceneTravel { id: string; fromFloorId: string; toFloorId: string; departure: OfficeTarget; arrival: OfficeTarget }
 interface JournalItemVM { id: string; at: Ms; count: number; actor: ActorVM; text: LabelRef /* liveEvent.<kind> */; kind: LiveEventKind }
 ```
+
+**Lineage and roster tree (T-0062/T-0092):** `OccupantVM.parentId` is required and nullable: the occupant id of the agent that spawned this one when it is on stage, resolved generically from the session's `parentKey`, then canonical `Session.spawnedBy`, then `Agent.spawnedBy` (`src/engine/model/lineage.js`: `{ agentId, sessionKey, via, label }`; any adapter or orchestrator source fills it; `null` = root or no known spawner). The client receives null when its principal lacks the sessions grant. OfficeVM also supplies stable `groupId`, `rosterOrder`, `rosterDepth`, `floorId`, `stateActive`, and state LabelRefs so clients render the same roster tree and state on every viewport. Each `RosterFloor.items` entry is either an occupant reference or a localized team header; a team header is emitted when a child must appear on a different floor from its parent, so the client never indents it beneath an unrelated root. `RosterFloor.mobileLabelIds` is the backend-selected shortlist of at most three non-conversation occupants whose names may remain visible on that floor's mobile scene. Selection prioritizes active-work states, then canonical team roots, then roster order; every listed ID also occurs in that floor's `occupantIds`. The client only renders this list in the mobile presentation, while keeping every occupant reachable through the scene or roster. Team placement keeps linked members on their lead's floor, with overflow positioned alongside that team.
+
+**On-stage counts (T-0099):** `rosterSummary.count`, the sum of `rosterFloors[].count`, and the `kpi.onStage` value use the same finalized `occupants` set, including a conversation while it is visibly visiting. The mobile summary's `activeCount` and the active KPI share unknown-state handling (`null` when any counted occupant's state is unknown).
+
+**Session-derived fields (agent-identity-1):** `OccupantVM.summary`, `model`, `project`, `runtime`, `startedAt`, `lastActivityAt`, `tokensKnown` and `exchanges` are optional and come from sessions and transcripts. A caller without the sessions read grant gets the same `office` topic through a limited projection on HTTP and SSE: primary and agent occupants only, names that are not transcript-derived, `sessionKey: null`, no journal, no session KPIs and no `cue` frames. Today every cookie session is the owner and reads everything; RBAC (T-0031) decides it with `logs:read`. Every summary and visible name passes the shared redactor (`src/security/redact-text.js`): one line, at most 320 code points, URL userinfo and credential values masked.
+
 Authoritative example: `docs/architecture/examples/office-vm.json`. On 2026.9.8, occupant states come from the run state only (data-model §3): `working`, `idle`, `error`, `offline`.
 ```json
 { "data": { "connection": { "gateway": "up", "since": 1791220000000 },
   "kpis": [ { "id": "active", "label": { "key": "kpi.active" }, "value": 2, "unit": "count", "sub": { "key": "kpi.onStage", "params": { "n": 3 } } } ],
   "occupants": [ { "id": "main", "role": "main", "name": "Timmy", "roleLabel": { "key": "occupantRole.main" }, "state": "working", "stateSince": 1791223100000,
-    "stationUid": "st-timmy", "look": { "character": "timmy", "variant": null, "accessories": [] }, "sessionKey": "agent:main:main", "tokens": 52300, "lastSeenAt": 1791223080000 } ],
+    "stationUid": "st-timmy", "look": { "character": "timmy", "variant": null, "accessories": [] }, "sessionKey": "agent:main:main", "tokens": 52300, "lastSeenAt": 1791223080000 },
+    { "id": "agent:codex:worker", "role": "agent", "name": "Worker", "title": { "key": "sessionTitle.named", "params": { "name": "Worker" } }, "roleLabel": { "key": "occupantRole.agent" }, "state": "idle", "stateSince": 1791223100000,
+      "stationUid": "st-2", "look": { "character": "timmy", "variant": null, "accessories": [] }, "ruleId": "*agent", "destination": null, "sessionKey": "agent:codex:worker", "tokens": 0, "lastSeenAt": null, "isNew": true } ],
   "journal": [ { "id": "le_42", "at": 1791223190000, "count": 3, "actor": { "kind": "system", "name": "Timmy" }, "text": { "key": "activity.calling" }, "kind": "activity" } ],
   "layoutRevision": 4, "queue": [ { "id": "ffffffff-0c01-4000-8000-000000000001", "name": "Veille hebdomadaire", "schedule": { "key": "schedule.weekly", "params": { "day": { "key": "weekday.1" }, "time": "09:00" } } } ] },
   "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [], "topic": { "id": "office", "rev": 118 } } }
@@ -306,7 +332,8 @@ interface CronRunVM {
 ### 3.5 AccessVM, InterlocutorVM
 ```ts
 interface AccessVM {
-  agents: Collection<{ id: AgentId; name: string; model: string | null; isPrimary: boolean }>;
+  agents: Collection<{ id: AgentId; name: string; model: string | null;
+    modelSource: 'explicit' | 'inherited' | null; runtime: string | null; isPrimary: boolean }>;
   interlocutors: Collection<{ id: InterlocutorId; kind: 'discord-user' | 'discord-channel'; name: string | null; avatarUrl: string | null;
                               resolution: 'pending' | 'resolved' | 'failed'; sessionCount: number; totalTokens: number; lastSeenAt: Ms | null;
                               access: { policy: string | null; enabled: boolean | null; requireMention: boolean | null } }>;
@@ -322,6 +349,9 @@ interface InterlocutorVM {
   primarySessionKey: SessionKey | null;
 }
 ```
+
+T-0008 (additive in 2.7/3.2): `modelSource` is the adapter-reported per-agent override vs inherited default; null means unknown. `runtime` is an open external harness id/name (ACP/CLI or any adapter); null means native or unknown. The agents list shows the harness when present, otherwise the effective model with “par défaut” only for confirmed inheritance. Neither the VM nor the UI reads runtime-specific config fields.
+
 ```json
 { "data": { "id": "discord-user:100000000000000001", "kind": "discord-user", "resolution": "resolved",
   "profile": { "displayName": "Guest", "username": "guest", "avatarUrl": null, "isBot": false, "createdAt": 1600000000000 },
@@ -337,13 +367,23 @@ interface InterlocutorVM {
 interface LogRowVM { id: SessionKey; kind: SessionKind; channel: 'wechat' | 'discord' | 'whatsapp' | 'unrecognized' | null; label: string /* French; 2.x */;
                      title: LabelRef /* 2.4 (Q03-A01): sessionTitle.*, in the UI's language */;
                      model: string | null; modelProvider: string | null /* 2.1; shown as provider/model */;
-                     tokens: number; updatedAt: Ms | null; live: boolean; heartbeat: boolean }
+                     tokens: number; updatedAt: Ms | null; live: boolean /* activity indicator; check execution.evidence before calling it confirmed */; heartbeat: boolean;
+                     execution: { status: 'unknown' | 'idle' | 'running' | 'succeeded' | 'failed'; evidence: { level: 'verified' | 'observed' | 'unknown'; observedAt: Ms | null; expiresAt: Ms | null } };
+                     // T-0058 (additive): tokensKnown false → the UI shows no count (never a false 0); the owning connector
+                     // instance with its adapter-declared mark; the agent's display name (owner rename first, redacted)
+                     tokensKnown?: boolean; connector?: { id: string; adapter: string; name: string; mark: { monogram: string; color: '#rrggbb' } } | null;
+                     agent?: { id: AgentId; name: string } | null }
+// Page<LogRowVM>.facets (T-0058): { connectors: (ConnectorRef & {count})[], agents: {id, name, connectorId, count}[] } over the
+// kind/heartbeat-filtered sessions, before ?connector=<instance id> and ?agent=<agent id> (server filters; topic ids keep
+// sorted query keys, e.g. logs?agent=…&connector=…). Titles: the session's canonical displayName, then summary (redacted);
+// a group with no known name is « Groupe sans nom · <platform> »; a raw session key is never a title. 2.x: a generic
+// `conversation` (e.g. a coding-agent session) stays `conversation` (additive), no longer `chat-group`.
 // ?kind=<SessionKind> filters. 2.1: heartbeats are HIDDEN unless ?heartbeat=include (topic logs?heartbeat=include; the
 // UI toggle « Afficher les battements »). Order: updatedAt desc, then id.
 interface SessionVM {
   key: SessionKey; label: string; title: LabelRef /* 2.4 */; kind: SessionKind; model: string | null; modelProvider: string | null; tokens: number; updatedAt: Ms | null;
   cwd: string | null;                        // 2.1 (PM): Session.cwd — workspaceDir, else spawnedCwd, normalised (data-model §2)
-  run: { status: 'idle' | 'running' | 'succeeded' | 'failed'; endReason: 'error' | 'timeout' | 'killed' | 'budget-limited' | null };   // 2.1: closed, labels runEnd.*
+  run: { status: 'unknown' | 'idle' | 'running' | 'succeeded' | 'failed'; endReason: 'error' | 'timeout' | 'killed' | 'budget-limited' | null; evidence: { level: 'verified' | 'observed' | 'unknown'; observedAt: number | null; expiresAt: number | null } };   // evidence and state are independent of source health
   messageCount: number | null;               // 2.1: null when the gateway doesn't report it; window is over the fetched messages
   window: { from: number; to: number }; toolCount: number;
   traceState: 'fresh' | 'stale' | 'unavailable';   // 2.4 (R16-07): fresh = the last transcript read succeeded; stale = it failed (or none
@@ -392,9 +432,13 @@ interface HealthVM {
                       level: 'ok' | 'warn' | 'alert'; value: { n: number; unit: Unit } | { key: string }; sub: LabelRef | null }>;   // 2.1: Unit keys only
   channels: Collection<{ id: string; label: string; health: 'connected' | 'running' | 'stopped' | 'error' | 'not-configured'; lastError: string | null; accounts: number }>;
   sources: Collection<SourceStatusVM>;       // R3-09: same shape as canonical SourceStatus (data-model §10)
+  healthChecks: Collection<HealthCheckVM>; healthAudit: HealthAuditVM[];
   dataQuality: { open: { error: number; warn: number; info: number }; issues: Collection<IssueVM> };
   series: { cpu: number[]; mem: number[]; at0: Ms; stepMs: 60000 };
 }
+interface HealthCheckVM { id: string; adapter: string; severity: 'error' | 'warn' | 'info'; causeCode: string; textKey: string; impactKey: string;
+  remedy: 'none' | 'auto' | 'one-click' | 'guided'; active: boolean; actionId: string | null; guidedPath: string | null; target: string | null; changedAt: Ms; resolvedAt: Ms | null }
+interface HealthAuditVM { checkId: string; actionId: string; at: Ms; outcome: string; attempts: number }
 interface SourceStatusVM {
   id: SourceId; state: 'fresh' | 'stale' | 'down';      // down: transport down (gateway closed); stale: some channel's last outcome failed
   lastOkAt: Ms | null; lastErrorAt: Ms | null; lastError: SourceErrorCategory | null;
@@ -406,7 +450,7 @@ interface IssueVM { id: string /* fingerprint */; code: IssueCode; severity: 'er
                     state: 'open' | 'resolved' | 'muted'; mutable: boolean /* severity !== 'error' */ }
 //   path: a schema path; record entries are '{}', array elements '[]', and a payload key the schemas don't declare is
 //     '<undeclared>' (e.g. '$.agents[].<undeclared>'). channel: ours, or 'gw.event.<name>' only for an event the gateway
-//     advertised, else 'gw.event.<unadvertised>'. The UI shows both as-is (mono).
+//     advertised, else 'gw.event.<unadvertised>'. The UI presents localized check text, not these raw internal labels.
 //   SourceErrorCategory = 'timeout' | 'not-connected' | 'connection-closed' | 'connection-refused' | 'unknown-method' | 'not-found'
 //     | 'permission-denied' | 'invalid-json' | 'invalid-output' | 'unreadable' | 'missing-agent' | 'not-ok' | 'payload-rejected'
 //     | 'killed-or-timeout' | 'rate-limited' /* 2.2: GitHub (projects' repo cache) */ | `exit-${number}` | 'error'
@@ -417,6 +461,7 @@ interface IssueVM { id: string /* fingerprint */; code: IssueCode; severity: 'er
 { "data": { "level": "warn",
   "cards": [ { "id": "cpu", "level": "ok", "value": { "n": 11, "unit": "percent" }, "sub": { "key": "healthSub.cores", "params": { "n": 4 } } } ],
   "channels": [ { "id": "discord", "label": "Discord", "health": "running", "lastError": null, "accounts": 1 } ],
+  "healthChecks": [ { "id": "core|generic:session-sync", "adapter": "core", "severity": "warn", "causeCode": "source-stale", "textKey": "healthCheck.source.stale", "impactKey": "healthImpact.sessions", "remedy": "guided", "active": false, "actionId": null, "guidedPath": "/parametres?onglet=connexion", "target": null, "changedAt": 1791223190000, "resolvedAt": 1791223190000 } ], "healthAudit": [],
   "sources": [ { "id": "gateway", "state": "stale", "lastOkAt": 1791223190000, "lastErrorAt": 1791223150000, "lastError": "timeout",
     "channels": [ { "channel": "gw.rpc.cron.list", "state": "stale", "lastOkAt": null, "lastErrorAt": 1791223150000, "lastError": "timeout" } ] } ],
   "dataQuality": { "open": { "error": 1, "warn": 0, "info": 1 },
@@ -504,10 +549,11 @@ interface LayoutVM {
   theme: { resolved: string; mode: 'auto' | 'fixed'; nextChangeAt: Ms | null; season: string | null /* 2.1 */ };
   default: { data: OfficeLayoutDataV1 };     // 2.1: the shipped layout (design/office/layout.example.json); « Réinitialiser » loads it into the draft
   revisions: Collection<{ id: string /* String(revision) */; revision: number; updatedAt: Ms; updatedBy: ActorVM }>;   // 2.1: newest first, ≤ 20
-  agentsSeen: Collection<{ id: OccupantId; role: OccupantRole; name: string; lastSeenAt: Ms }>;   // 2.1 (R3-14): last 30 days, newest first, ≤ 200
+  agentsSeen: Collection<{ id: OccupantId; role: OccupantRole; name: string; lastSeenAt: Ms; automaticLook?: { character: string; variant: string | null; accessories: string[] } }>;   // 2.1 (R3-14): last 30 days, newest first, ≤ 200
 }
 interface UiPrefs { uiTheme: 'system' | 'dark' | 'light' }
 ```
+`layout.data.idleRelocationMinutes` is optional and bounded to 1–1440; absence means 15 minutes. It is stored with the office layout. Both API versions preserve the value when an older client omits it. The backend picks a declared, reachable activity spot and publishes `activity`, `sceneTarget`, and any `sceneTravel`; the browser only animates those intents.
 Authoritative example: `docs/architecture/examples/layout-vm.json` (its `layout.data`, `default.data` and `manifest` are the design/office example files, verbatim). The shape checker treats `$.data.manifest` as opaque.
 
 ### 3.11 Defaults and null meanings (all VMs)
@@ -579,7 +625,7 @@ A **topic id** is `name` or `name:<param>` or `name?<k>=<v>[&…]`, with params 
 Each frame has `event: <type>`, `id: <streamId>:<seq>` (seq starts at 1 per stream and increases by 1 per frame) and `data: <JSON>`.
 ```ts
 type SseFrame =
-  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.7'; serverTime: Ms; resumed: boolean; topics: string[];
+  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.8'; serverTime: Ms; resumed: boolean; topics: string[];
       rejected?: { topic: string; issue: 'unknown-topic' }[] /* 2.4: unknown topics asked at open */ }
   | { type: 'snapshot'; topic: string; rev: number; data: unknown }
   | { type: 'delta'; topic: string; rev: number; baseRev: number; ops: DeltaOp[] }
@@ -648,6 +694,12 @@ A  ← hello{streamId:'str_A…', resumed:true, topics:[…]}, then frames 58, 5
 A  ← hello{streamId:'str_C…' (new), resumed:false}, then one snapshot per topic in ?topics=
 ```
 The topics of a resumed stream are the stream's own (restored), not the query's. `?topics=` is only used when a new stream is created. **S6:** the resumed `hello` carries **no `id:` line** (so the browser's Last-Event-ID stays on the last replayed frame); every other frame, heartbeats included, has an id.
+
+**Resource bounds (T-0001, PM decisions):** the server's v2/v3 hubs share admission counts: at most 64 active or resumable streams globally, and eight per session. A new tab at the session cap closes that session's oldest stream (including an active or half-open response); the new tab is admitted. At global capacity, a different session gets normal JSON `429 rate_limited` before SSE headers/timers are allocated. Valid same-session `Last-Event-ID` can replace a still-open response without another slot. Its late close cannot detach the replacement. More than eight tabs can rotate as evicted tabs retry; eight is the simultaneous limit.
+
+Replay is limited to 500 frames **and 2 MiB** per stream. The encoded-frame ceiling is 1 MiB for deltas/control frames. A larger delta triggers a current snapshot. **Required snapshots are delivered even when larger** (PM decision), with one value-free warning per server; their payload is excluded from replay, and replay across that gap falls back to a fresh snapshot. The output budget is 1 MiB for normal pending application/known Node data, plus the one required snapshot already being written. Snapshots use contiguous UTF-8 slices of at most 64 KiB, with no other frame interleaved. After `write` returns false, no further writes occur until drain; a five-second interval without observed transport progress closes the stream; progressing snapshots can take longer. A snapshot that exceeds the remaining budget, including existing output, gets the same in-flight exception. Blocked topic changes coalesce into at most 32 topic IDs, with current snapshots fetched after drain instead of accumulating serialized data. A drop with deferred topics forces resync. Normal queue overflow, control-frame overflow, write error or drain timeout closes and forgets the stream. Logout/expiry/shutdown release slots, buffers and timers; a blocked socket receives no additional closing notification. These are process-memory controls, with no SQLite persistence and no absolute size ceiling on required snapshots.
+
+Explicit browser reconnect creates a new EventSource and carries no `Last-Event-ID`: it requests a fresh hello/snapshot. Only the browser's automatic retry uses replay. A process restart also forces snapshot resync.
 
 ### 4.7 Delivery rules
 - **Coalescing:** at most one frame per topic id every 250 ms. Changes that don't alter a topic's VM produce no frame.
@@ -750,7 +802,7 @@ type ProjectSourceInput =                   // R3-12: the server mints id, added
   | { kind: 'manual' };
 type SessionGroupId = string;               // 2.4: opaque, 1–200 chars; OpenClaw: the group name (a rename = a new id)
 ```
-- **Regenerate the summary** is an **OpenClaw-class** command (it runs an agent turn): refused with 403 `readonly` when `openclawWrites` is false, and it answers **202** with `CommandResult<{ turnId }>`, `revision` unchanged, like chat (§5.2). A second request while one is pending → 409 (`issue:'turn-pending'`).
+- **Regenerate the summary** is an **OpenClaw-class** command (it runs an agent turn): requires both `openclawWrites` and `storeWrites`, else 403 `readonly` before claiming or dispatching a turn. Acceptance persists a recoverable comment delivery and pending identity; it answers **202** with `CommandResult<{ turnId }>`, `revision` unchanged, like chat (§5.2). A second request while one is pending → 409 (`issue:'turn-pending'`).
 - **Archive UI (frontend-02 §7.6):** *Archiver* / *Restaurer* in the project header's overflow menu; archived projects are listed by the board filter `archived`.
 - **People overrides UI:** the *Personnes impliquées* panel's row menu (*Rôle…*, *Masquer*), from S15a.
 - **Import** (one transaction per project; no `expectedRevision`; Owner's cookie only):
@@ -897,3 +949,9 @@ The core delegates discovery to `adapter.setup.discover`; the adapter reconciles
 **Environment auth:** only a complete env login (email, session secret, password or hash) replaces file auth. Every partial login environment, including `PORTAL_SECRET` alone, refuses startup with declared variable names only. Stored DB mode and email are never deleted by an incomplete override.
 
 **Executable fixtures:** each new route has `setup-owner`, `setup-resume`, `setup-detect`, `setup-integration-plan`, `setup-integration-apply`, or `setup-network` request/result examples; catalog uses `setup-catalog-result`, modern PUT uses `setup-finalize-request`/`-result`. `test/setup/contract-examples.test.js` inventories actual mounted routes and checks live synthetic HTTP responses against these examples and the strict `SetupVM` schema. Legacy check/discover/save examples remain supported.
+
+### T-0052 additive appearance contract (2026-10-10)
+
+`OccupantVM.automaticLook` and `LayoutVM.agentsSeen[].automaticLook` optionally carry the durable automatic assignment in the same shape as `look`. Owner rules still determine the effective `look`; the additional field lets editor/Store previews reuse the automatic assignment after name/station edits, reset and owner overrides. Both 2.x and 3.0 include it; no new unauthenticated route is added.
+
+Agent rules in `layout.data.agents[]` and `default.data.agents[]` may carry `appearance: 'auto' | 'manual'`. Both authoritative LayoutVM examples and the shipped seed explicitly show auto; the field is optional for legacy clients. Appearance edits explicitly set manual, including choosing the old seed style or no accessories. Name/station edits keep auto. Legacy exact owner rules and changed wildcard styles remain manual; untouched shipped seed styles use auto. Automatic allocation is stored once by canonical agent identity in `office_automatic_looks`, chooses a least-used installed family atomically, and persists through absence, seen-inventory retention, reloads and restarts. New installed families affect new assignments only. Hashes choose ties, variants and optional supported gear; no ID-specific runtime code is used. The existing inventory cap remains 200; live occupants are uncapped by this feature.

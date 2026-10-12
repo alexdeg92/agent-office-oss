@@ -7,7 +7,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const path = require('path');
 const s = require('../../src/schema');
 const { createEngine } = require('../../src/engine');
 const { normaliseSession } = require('../../src/adapters/openclaw/normalise/session');
@@ -15,7 +14,7 @@ const { normaliseSession } = require('../../src/adapters/openclaw/normalise/sess
 const { Session } = require('../../src/model');
 const { listScenarios } = require('../helpers/scenario');
 const { feed } = require('../helpers/feed');
-const { matchGolden, GOLDEN_DIR } = require('../helpers/golden');
+const { matchGolden, goldenFile } = require('../helpers/golden');
 
 // G3b canonical vocabulary (ADR-001 §4.2, §12.3); the 2.x names live only in the projection
 const KINDS = new Set(['primary', 'dashboard', 'subagent', 'scheduled', 'conversation-direct', 'conversation-group', 'conversation', 'acp', 'explicit', 'unrecognized']);
@@ -51,8 +50,14 @@ function invariantViolations(list) {
   return out;
 }
 
-const goldenFile = (sc) => path.join(GOLDEN_DIR, 'engine-sessions', sc.name, 'canonical.json');
-const sameAsGolden = (sc, list) => { try { assert.deepStrictEqual(JSON.parse(JSON.stringify(list)), JSON.parse(fs.readFileSync(goldenFile(sc), 'utf8'))); return true; } catch (_) { return false; } };
+const goldenFor = (sc) => JSON.parse(fs.readFileSync(goldenFile('engine-sessions', sc.name, 'canonical'), 'utf8'));
+const sameAsGolden = (sc, list) => { const expected = goldenFor(sc); try { assert.deepStrictEqual(JSON.parse(JSON.stringify(list)), expected); return true; } catch (_) { return false; } };
+
+it('normalizes runtime spawn references into canonical lineage without guessing an agent name', () => {
+  const { session } = normaliseSession({ key: 'agent:builder:subagent:run-1', spawnedBy: 'agent:pm:main' });
+  assert.deepEqual(session.spawnedBy, { agentId: null, sessionKey: 'agent:pm:main', via: 'runtime', label: null });
+  assert.equal(session.parentKey, 'agent:pm:main');
+});
 
 for (const sc of listScenarios()) {
   describe(`canonical sessions · ${sc.name}`, () => {

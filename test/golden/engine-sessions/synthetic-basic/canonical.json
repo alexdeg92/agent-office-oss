@@ -6,6 +6,7 @@
       "kind": "primary",
       "ruleId": "is-main",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": false,
@@ -16,7 +17,12 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": null,
     "displayName": "Session principale",
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": "provider-a"
@@ -32,6 +38,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -57,6 +66,7 @@
       "kind": "primary",
       "ruleId": "is-main",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": "agent:main:main",
       "background": true,
@@ -67,7 +77,12 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": "provider-a"
@@ -83,6 +98,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -108,6 +126,7 @@
       "kind": "subagent",
       "ruleId": "subagent",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": true,
@@ -118,7 +137,17 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": {
+      "agentId": null,
+      "sessionKey": "agent:main:main",
+      "via": "runtime",
+      "label": null
+    },
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": "provider-a"
@@ -134,11 +163,14 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": 1791223160000,
       "endedAt": 1791223194000,
       "hasActiveSubagentRun": false,
       "runtimeMs": 34000,
-      "lastRunId": null,
+      "lastRunId": "run_synthetic_1",
       "lastError": null
     },
     "costUsd": null,
@@ -159,6 +191,7 @@
       "kind": "subagent",
       "ruleId": "subagent",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": true,
@@ -169,7 +202,17 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": {
+      "agentId": null,
+      "sessionKey": "agent:main:main",
+      "via": "runtime",
+      "label": null
+    },
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": null
@@ -185,6 +228,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": 1791212100000,
       "endedAt": 1791212400000,
       "hasActiveSubagentRun": false,
@@ -210,6 +256,7 @@
       "kind": "scheduled",
       "ruleId": "cron",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": true,
@@ -220,7 +267,12 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": null,
     "provider": "provider-a",
     "usage": {
@@ -233,6 +285,9 @@
       "status": "running",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -258,6 +313,7 @@
       "kind": "conversation-direct",
       "ruleId": "chat-direct",
       "agentId": "main",
+      "reason": null,
       "channel": "discord",
       "heartbeatOf": null,
       "background": false,
@@ -268,7 +324,12 @@
       "chatScope": "direct",
       "interlocutorId": "discord-user:100000000000000001"
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": "provider-a"
@@ -284,6 +345,9 @@
       "status": "running",
       "endReason": null,
       "evidence": "start-without-end",
+      "evidenceLevel": "observed",
+      "observedAt": 1791223200000,
+      "expiresAt": 1791223230000,
       "startedAt": 1791223140000,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -309,6 +373,7 @@
       "kind": "dashboard",
       "ruleId": "dashboard",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": false,
@@ -319,7 +384,17 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": {
+      "agentId": null,
+      "sessionKey": "agent:main:main",
+      "via": "runtime",
+      "label": null
+    },
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": null
@@ -335,6 +410,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -360,6 +438,7 @@
       "kind": "conversation-group",
       "ruleId": "chat-group",
       "agentId": "main",
+      "reason": null,
       "channel": "discord",
       "heartbeatOf": null,
       "background": false,
@@ -370,7 +449,12 @@
       "chatScope": "channel",
       "interlocutorId": "discord-channel:100000000000000002"
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": null
@@ -386,6 +470,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -411,6 +498,7 @@
       "kind": "explicit",
       "ruleId": "explicit",
       "agentId": "main",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": false,
@@ -421,7 +509,12 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": null
@@ -437,6 +530,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -462,6 +558,7 @@
       "kind": "conversation-group",
       "ruleId": "chat-group",
       "agentId": "main",
+      "reason": null,
       "channel": "wechat",
       "heartbeatOf": null,
       "background": false,
@@ -472,7 +569,12 @@
       "chatScope": "group",
       "interlocutorId": "wechat-room:fake-group"
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": null
@@ -488,6 +590,9 @@
       "status": "failed",
       "endReason": "timeout",
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": 1791205140000,
       "endedAt": null,
       "hasActiveSubagentRun": false,
@@ -513,6 +618,7 @@
       "kind": "acp",
       "ruleId": "acp",
       "agentId": "claude",
+      "reason": null,
       "channel": null,
       "heartbeatOf": null,
       "background": true,
@@ -523,7 +629,17 @@
       "chatScope": null,
       "interlocutorId": null
     },
+    "spawnedBy": {
+      "agentId": null,
+      "sessionKey": "agent:main:main",
+      "via": "runtime",
+      "label": null
+    },
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-b",
       "provider": null
@@ -539,6 +655,9 @@
       "status": "failed",
       "endReason": "killed",
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": 1791208800000,
       "hasActiveSubagentRun": false,
@@ -564,6 +683,7 @@
       "kind": "conversation-group",
       "ruleId": "chat-group",
       "agentId": "main",
+      "reason": null,
       "channel": "discord",
       "heartbeatOf": "agent:main:discord:channel:100000000000000002",
       "background": true,
@@ -574,7 +694,12 @@
       "chatScope": "channel",
       "interlocutorId": "discord-channel:100000000000000002"
     },
+    "spawnedBy": null,
     "displayName": null,
+    "summary": null,
+    "summarySource": null,
+    "projectLabel": null,
+    "tokensKnown": true,
     "model": {
       "id": "model-a",
       "provider": null
@@ -590,6 +715,9 @@
       "status": "succeeded",
       "endReason": null,
       "evidence": "status-field",
+      "evidenceLevel": "verified",
+      "observedAt": 1791223200000,
+      "expiresAt": null,
       "startedAt": null,
       "endedAt": null,
       "hasActiveSubagentRun": false,

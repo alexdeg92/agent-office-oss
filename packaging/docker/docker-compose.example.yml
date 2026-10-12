@@ -12,12 +12,14 @@ services:
       context: ../..
       dockerfile: packaging/docker/Dockerfile
     image: agent-office:local
+    restart: unless-stopped
     env_file:
       - path: ../../.env
         required: false
     environment:
       NODE_ENV: production
       AO_ENV: production
+      AO_RESTART_POLICY: unless-stopped
       AO_DATA_DIR: /data
       AO_CONFIG: /config/config.json
       HOST: 0.0.0.0

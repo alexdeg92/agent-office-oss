@@ -4,7 +4,7 @@
 // rotate it or remove it. Every change goes to the Boutique's draft (draft.js), so undo and Enregistrer cover it.
 // Keyboard: arrows move the ghost, R rotates, Enter confirms, Delete removes, Escape steps back.
 import { html, useEffect, useRef, useState } from '../lib.js';
-import { Icon } from '../components/ui.js';
+import { Frame, Icon } from '../components/ui.js';
 import { OfficeScene } from './scene.js';
 import { STATES } from './states.js';
 import { addItem, moveItem, removeItem, findFreeSpot, checkPlacement, itemName, footprintOf, collisionTiles, MAX_ITEMS } from './editor-model.js';
@@ -136,7 +136,9 @@ export function Placement({ draft, index, lay, occupants = [], asset = null, uid
   // Mount the scene once; it follows the draft.
   useEffect(() => {
     const labels = Object.fromEntries(STATES.map((k) => [k, tr(`state.${k}`)]));
-    const sc = new OfficeScene(host.current, { manifest: lay.manifest, layout: data(), assetBase, labels, theme: lay.theme.resolved, primaryName, timeZone });
+    // Include the selected pack's admitted sprites for the placement ghost.
+    const manifest = { ...lay.manifest, furniture: [...index.furniture.values()] };
+    const sc = new OfficeScene(host.current, { manifest, layout: data(), assetBase, labels, theme: lay.theme.resolved, primaryName, timeZone });
     sceneRef.current = sc;
     sc.setEditing(true);
     if (occupants.length) sc.setOccupants(occupants);
@@ -206,13 +208,12 @@ export function Placement({ draft, index, lay, occupants = [], asset = null, uid
   const sel = !p && S.selected ? data().items.find((i) => i.uid === S.selected) : null;
   const target = p ? f(p.asset) : sel ? f(sel.asset) : null;
   const ok = p?.check?.ok;
-  return html`<div class="ao-place" role="dialog" aria-modal="true" aria-labelledby="ao-place-title">
+  return html`<${Frame} class="ao-place" role="dialog" aria-modal="true" aria-labelledby="ao-place-title" bodyClass="ao-frame__body--framed" head=${html`
     <div class="ao-place__top">
       <button type="button" class="bu-btn bu-btn--icon ao-place__close" aria-label=${tr('shop.place.close')} onClick=${() => onClose()}><${Icon} name="close" /></button>
       <h2 class="ao-place__title" id="ao-place-title">${p ? tr(p.moveUid ? 'shop.place.titleMove' : 'shop.place.title', { item: name(p.asset) }) : sel ? itemName(data(), index, sel.uid) : tr('shop.place.titleIdle')}</h2>
     </div>
-    <div class="bu-stage ao-place__stage" ref=${host} role="region" aria-label=${tr('shop.place.stage')}></div>
-    <div class="ao-place__bar" role="toolbar" aria-label=${tr('shop.place.actions')}>
+`} foot=${html`    <div class="ao-place__bar" role="toolbar" aria-label=${tr('shop.place.actions')}>
       <p class=${'ao-place__hint' + (p ? (ok ? ' is-ok' : ' is-bad') : '')} aria-live="polite">${S.said || (p ? tr(ok ? 'shop.place.hintOk' : 'shop.place.hintBad') : sel ? tr('shop.place.hintSelected') : tr('shop.place.hintIdle'))}</p>
       <div class="ao-place__actions">
         ${p || sel ? html`<button type="button" class="bu-btn" disabled=${!canRotate(target)} title=${canRotate(target) ? '' : tr('shop.place.oneOrientation')} onClick=${rotate}><${Icon} name="refresh" />${tr('shop.place.rotate')}</button>` : null}
@@ -222,5 +223,7 @@ export function Placement({ draft, index, lay, occupants = [], asset = null, uid
           : html`<button type="button" class="bu-btn bu-btn--primary" onClick=${() => onClose()}><${Icon} name="check" />${tr('shop.place.done')}</button>`}
       </div>
     </div>
-  </div>`;
+`}>
+    <div class="bu-stage ao-place__stage" ref=${host} role="region" aria-label=${tr('shop.place.stage')}></div>
+  </${Frame}>`;
 }

@@ -70,6 +70,13 @@ function contentSecurityPolicy(html, { apiBase = '' } = {}) {
     "form-action 'self'",
   ].join('; ');
 }
+/** Shared response policy, using the CSP generated from the current rendered shell. */
+function securityHeadersForPolicy(policy, secure = false) {
+  return { 'Content-Security-Policy': policy, 'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin', 'Permissions-Policy': PERMISSIONS,
+    'Cross-Origin-Opener-Policy': 'same-origin', 'X-Frame-Options': 'DENY',
+    ...(secure ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}) };
+}
 /**
  * R27-06 (RFC 9110 §12.5.3): gzip only when the client's Accept-Encoding gives it a q-value above 0, explicitly or
  * through `*` when gzip isn't listed. `gzip;q=0` and identity-only lists get the plain body.
@@ -117,7 +124,14 @@ function normaliseConfig({ basePath = '/', apiBase = '/backend', apiVersion = un
   const bad = (v) => typeof v !== 'string' || /[\s"'<>\\?#\0]/.test(v);
   if (bad(basePath) || !basePath.startsWith('/') || basePath.startsWith('//')) throw new Error(`invalid base path: ${JSON.stringify(basePath)}`);
   if (!basePath.endsWith('/')) basePath += '/';
-  if (bad(apiBase) || (apiBase !== '' && (!apiBase.startsWith('/') || apiBase.startsWith('//')))) throw new Error(`invalid API base: ${JSON.stringify(apiBase)}`);
+  if (bad(apiBase)) throw new Error(`invalid API base: ${JSON.stringify(apiBase)}`);
+  if (apiBase !== '' && (!apiBase.startsWith('/') || apiBase.startsWith('//'))) {
+    try {
+      const api = new URL(apiBase);
+      if (api.protocol !== 'https:' || api.username || api.password || api.search || api.hash || /%2f|%5c|\\/i.test(api.pathname)) throw new Error('unsafe API base');
+      apiBase = api.origin + api.pathname.replace(/\/+$/, '');
+    } catch { throw new Error(`invalid API base: ${JSON.stringify(apiBase)}`); }
+  }
   if (apiVersion == null || apiVersion === '') return { basePath, apiBase: apiBase.replace(/\/+$/, '') };
   apiVersion = Number(apiVersion);
   if (apiVersion !== 2 && apiVersion !== 3) throw new Error(`invalid API version: ${JSON.stringify(apiVersion)}`);
@@ -171,7 +185,7 @@ function endToEnd(headers) {
   return out;
 }
 
-function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'), basePath = '/', apiBase = '/backend', apiVersion = undefined, publicUrl = null, apiProxy = null, trustProxy = process.env.AO_TRUST_PROXY || 'loopback' } = {}) {
+function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'), basePath = '/', apiBase = '/backend', apiVersion = undefined, publicUrl = null, apiProxy = null, trustProxy = process.env.AO_TRUST_PROXY || 'loopback', allowDesignSystem = false } = {}) {
   const isHttps = httpsOf(trustProxyList(trustProxy));
   const cfg = normaliseConfig({ basePath, apiBase, apiVersion });
   const upstream = apiProxy ? parseUpstream(apiProxy) : null;
@@ -197,13 +211,7 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
   const headers = (type, file, req) => ({
     'content-type': type,
     'cache-control': NO_CACHE.test(file) ? 'no-cache, must-revalidate' : 'public, max-age=3600',
-    'content-security-policy': csp,
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'strict-origin-when-cross-origin',
-    'permissions-policy': PERMISSIONS,
-    'cross-origin-opener-policy': 'same-origin',
-    'x-frame-options': 'DENY',
-    ...(isHttps(req) ? { 'strict-transport-security': 'max-age=31536000' } : {}),
+    ...securityHeadersForPolicy(csp, isHttps(req)),
   });
   const gz = new Map();   // key → Buffer (gzip)
   const gzipOf = (key, buf) => {
@@ -283,6 +291,11 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
     if (!(p === routeBase || p === cfg.basePath || p.startsWith(cfg.basePath))) return send(res, 404, 'text/plain; charset=utf-8', 'Not found', '.txt', head);
 
     const rel = p.slice(cfg.basePath.length);   // '' for the mount point itself
+    // A separate static origin cannot validate the owner session itself. Omit the hidden gallery
+    // unless an upstream reverse proxy already enforces that authenticated owner check.
+    if (!allowDesignSystem && ['design-system','pages/ds.js','pages/design-system.css','components/bureau/primitives.js'].includes(rel.replace(/\/+$/, ''))) {
+      return send(res, 404, 'text/plain; charset=utf-8', 'Not found', '.txt', head);
+    }
     let buildId;
     try { buildId = refreshShell(); } catch { return send(res, 503, 'text/plain; charset=utf-8', 'UI shell unavailable', '.txt', head); }
     if (rel === 'build.json') {
@@ -319,14 +332,12 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
   });
 }
 
-module.exports = { renderIndex, normaliseConfig, createFrontendServer, endToEnd, contentSecurityPolicy, inlineScriptHashes, securityHeaders, gzipAccepted, trustProxyList, PERMISSIONS };
+module.exports = { renderIndex, normaliseConfig, createFrontendServer, endToEnd, contentSecurityPolicy, inlineScriptHashes, securityHeaders, gzipAccepted, trustProxyList, PERMISSIONS, securityHeadersForPolicy };
 
 /** The security headers this server sends for a given UI root (docs/guide/deploy.md: the same set at the edge). */
 function securityHeaders({ root = path.join(__dirname, '..', 'public', 'v2'), basePath = '/', apiBase = '/backend', apiVersion = undefined } = {}) {
   const index = renderIndex(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), { basePath, apiBase, apiVersion });
-  return { 'Content-Security-Policy': contentSecurityPolicy(index, { apiBase }), 'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin', 'Permissions-Policy': PERMISSIONS, 'Cross-Origin-Opener-Policy': 'same-origin',
-    'X-Frame-Options': 'DENY', 'Strict-Transport-Security': 'max-age=31536000 (HTTPS only)' };
+  return { ...securityHeadersForPolicy(contentSecurityPolicy(index, { apiBase })), 'Strict-Transport-Security': 'max-age=31536000 (HTTPS only)' };
 }
 
 if (require.main === module && process.argv.includes('--print-headers')) {

@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * Preloaded into the server process under test (`node --require test/helpers/freeze-env.js server.js`)
  * so characterisation output is deterministic:

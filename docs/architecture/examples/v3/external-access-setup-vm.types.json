@@ -1,0 +1,108 @@
+{
+  "$comment": "Open setup ExternalAccessVM; local mode intentionally has no public URL/domain.",
+  "nullable": [
+    "$.savedRevision",
+    "$.activeRevision",
+    "$.settingsRevision",
+    "$.saved",
+    "$.active",
+    "$.lastVerification",
+    "$.draft.apiPublicUrl",
+    "$.draft.domain",
+    "$.fields.mode.reason",
+    "$.fields.apiPublicUrl.reason",
+    "$.fields.uiOrigins.reason",
+    "$.fields.domain.reason",
+    "$.fields.proxy.reason",
+    "$.fields.security.reason",
+    "$.choices.dnsProviders[].consoleUrl"
+  ],
+  "variants": {
+    "$.saved": [
+      {
+        "revision": 1,
+        "draft": {
+          "mode": "local",
+          "apiPublicUrl": null,
+          "uiOrigins": [],
+          "domain": null,
+          "proxy": "caddy",
+          "security": {
+            "accessTokenMinutes": 10,
+            "refreshIdleHours": 12,
+            "refreshAbsoluteDays": 7,
+            "partitionedCookie": false
+          }
+        }
+      }
+    ],
+    "$.active": [
+      {
+        "revision": 1,
+        "draft": {
+          "mode": "local",
+          "apiPublicUrl": null,
+          "uiOrigins": [],
+          "domain": null,
+          "proxy": "caddy",
+          "security": {
+            "accessTokenMinutes": 10,
+            "refreshIdleHours": 12,
+            "refreshAbsoluteDays": 7,
+            "partitionedCookie": false
+          }
+        }
+      }
+    ],
+    "$.lastVerification": [
+      {
+        "revision": 11,
+        "origin": "https://office.example.org",
+        "checkedAt": 1791287000000,
+        "expiresAt": 1791287300000,
+        "state": "passed",
+        "checks": [
+          "dns",
+          "tls",
+          "cors"
+        ],
+        "browser": {
+          "state": "passed",
+          "observedAt": 1791287000000
+        }
+      }
+    ],
+    "$.draft.apiPublicUrl": [
+      "https://api.example.org"
+    ],
+    "$.draft.domain": [
+      "api.example.org"
+    ],
+    "$.fields.mode.reason": [
+      "config.environment-override"
+    ],
+    "$.fields.apiPublicUrl.reason": [
+      "config.environment-override"
+    ],
+    "$.fields.uiOrigins.reason": [
+      "config.environment-override"
+    ],
+    "$.fields.domain.reason": [
+      "config.environment-override"
+    ],
+    "$.fields.proxy.reason": [
+      "config.environment-override"
+    ],
+    "$.fields.security.reason": [
+      "config.environment-override"
+    ],
+    "$.choices.dnsProviders[].consoleUrl": [
+      "https://dash.cloudflare.com/"
+    ]
+  },
+  "types": {
+    "$.savedRevision": "number",
+    "$.activeRevision": "number",
+    "$.settingsRevision": "number"
+  }
+}

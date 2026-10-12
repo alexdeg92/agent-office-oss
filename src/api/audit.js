@@ -17,8 +17,16 @@ const express = require('express');
 
 // every audited write (api.md §4); the v1 entries went with v1 (S16)
 const AUDITED_COMMANDS = [
+  ...[...require('../security/route-declarations').CREDENTIAL_LINK_ROUTES].map(([key,spec])=>{
+    const split=key.indexOf(' ');return {method:key.slice(0,split).toLowerCase(),path:key.slice(split+1),command:()=>spec.command,target:()=>null};
+  }),
+  ...[...require('../security/route-declarations').ROUTES].filter(([key,spec])=>spec.audit==='transaction').map(([key,spec])=>{
+    const split=key.indexOf(' ');return {method:key.slice(0,split).toLowerCase(),path:'/api/v3'+key.slice(split+1),command:()=>spec.command,target:p=>p.id||null};
+  }),
   // API v2 store commands (transport control is never audited, api.md §4.2)
   { method: 'put', path: '/api/v2/health/issues/:id/muted', command: () => 'health.mute', target: (p) => p.id },
+  { method: 'post', path: '/api/v2/health/checks/:id/fix', command: () => 'health.fix', target: (p) => p.id },
+  { method: 'post', path: '/api/v2/health/fix-all', command: () => 'health.fixAll', target: () => null },
   // S7a, Projets (api.md §5.4): every write, the target is the project id
   { method: 'post', path: '/api/v2/projects', command: () => 'projects.create', target: () => null },
   { method: 'post', path: '/api/v2/projects/import', command: () => 'projects.import', target: () => null },
@@ -49,6 +57,7 @@ const AUDITED_COMMANDS = [
   { method: 'put', path: '/api/v2/skills/:name/enabled', command: () => 'skills.setEnabled', target: (p) => p.name },
   { method: 'post', path: '/api/v2/gateway/restart', command: () => 'gateway.restart', target: () => null },
   { method: 'post', path: '/api/v2/chat/messages', command: () => 'chat.send', target: () => null },
+  ...[['post','fix-all'],['post','restart'],['post','reauth'],['post','check'],['post','detect'],['post','herdr/check'],['put','agents'],['put','auto-add'],['put','runtime'],['put','runtimes'],['put','instance'],['put','network'],['put','owner'],['post','password'],['post','integrations/plan'],['post','integrations/apply']].map(([method, route]) => ({ method, path: '/api/v3/settings/' + route, command: () => 'settings.' + route.replace('/', '.').replace('fix-all','fixAll').replace('auto-add','autoAdd'), target: () => null, fieldsOnly: true })),
   // S14b
   { method: 'put', path: '/api/v2/office/layout', command: () => 'office.saveLayout', target: () => null },
   { method: 'put', path: '/api/v2/office/layout/theme', command: () => 'office.setTheme', target: () => null },
@@ -77,10 +86,12 @@ function outcomeOf(status, body) {
 function auditMiddleware({ store, sessionOf, now = () => Date.now(), commands = AUDITED_COMMANDS, log = () => {} }) {
   const router = express.Router();
   for (const spec of commands) {
-    router[spec.method]((spec.path.startsWith('/api/v2/') ? [spec.path, spec.path.replace('/api/v2/', '/api/v3/')] : spec.path),   // G5: /api/v3 too
+    require('../security/route-policy').declareRoute(router,spec.method,(spec.path.startsWith('/api/v2/') ? [spec.path, spec.path.replace('/api/v2/', '/api/v3/')] : spec.path),require('../security/route-declarations').MIDDLEWARE.get('http.audit'),{store,auth:null},   // G5: /api/v3 too
       (req, res, next) => {
       const params = Object.assign({}, req.params);
       const session = sessionOf ? sessionOf(req) : null;
+      // Capture the verified Person before a self-mutation changes status or generation.
+      const human= session && (session.userId ? store.users.byId(session.userId)?.person_id : store.owner.id);
       let body;
       const json = res.json.bind(res);
       res.json = (b) => { body = b; return json(b); };
@@ -93,14 +104,14 @@ function auditMiddleware({ store, sessionOf, now = () => Date.now(), commands = 
         return writeHead.call(this, statusCode, ...rest);
       };
       const record = (status) => {
-        if (req.auditedByGate) return;   // S7d: the token gate recorded this attempt (one row per attempt)
+        if (req.auditedByGate||req.managementAudited) return;   // token gate or repository already recorded this attempt
         const { outcome, detail } = outcomeOf(status, body);
         // S7d: a token request (req.principal, set by the token gate) is the agent's; it never has a cookie session
         const p = req.principal;
-        const actor = p && p.kind === 'agent' ? { kind: 'agent', personId: p.personId } : session ? { kind: 'human', personId: store.owner.id } : { kind: 'anonymous' };
+        const actor = p && p.kind === 'agent' ? { kind: 'agent', personId: p.personId } : human ? { kind: 'human', personId: human } : { kind: 'anonymous' };
         const det = p && p.kind === 'agent' ? [detail, 'token:' + p.tokenId].filter(Boolean).join(' ') : detail;
         try {
-          store.audit.append({ at: now(), requestId: req.requestId, actor, command: spec.command(params), target: safeTarget(spec.target(params)), outcome, detail: det });
+          store.audit.append({ at: now(), requestId: req.requestId, actor, command: spec.command(params), target: spec.fieldsOnly ? (req.settingsChanged || []).join(',') || null : safeTarget(spec.target(params)), outcome, detail: det,...(session?.familyId?{origin:session.origin}:{}) });
         } catch (_) { log('audit: append failed'); }
       };
       next('router');                      // matched: leave the audit router, continue to the real handlers

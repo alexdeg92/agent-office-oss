@@ -36,7 +36,8 @@ describe('G3b · migration 007', () => {
     try {
       const insert = h.db.prepare('INSERT INTO persons (id, kind, name, is_owner, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1)');
       insert.run('per_legacy', 'human', 'Legacy', 1); insert.run('per_current', 'human', 'Current', 0);
-      h.db.prepare("INSERT INTO users (id, person_id, email, password_hash, role, created_at, updated_at) VALUES ('usr_owner', 'per_current', 'owner@example.invalid', 'synthetic-not-a-login-hash', 'owner', 1, 1)").run();
+      h.db.prepare("INSERT INTO users (id, person_id, email, password_hash, role_id, status, credential_source, created_at, updated_at) VALUES ('usr_owner', 'per_current', 'owner@example.invalid', 'synthetic-not-a-login-hash', 'rol_admin', 'active', 'database', 1, 1)").run();
+      h.db.prepare("UPDATE authorization_state SET owner_user_id='usr_owner' WHERE singleton=1").run();
       const persons = createPersonsRepo(h.db);
       assert.equal(persons.owner().id, 'per_current'); assert.equal(persons.owner().links.isOwner, true);
       assert.equal(persons.list().find(p => p.id === 'per_legacy').links.isOwner, undefined);

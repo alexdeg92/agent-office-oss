@@ -1,4 +1,5 @@
 'use strict';
+require('../helpers/scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * The "no personal literals" scanner (ADR-001 §6.1, §12.8). Scans src/**, public/v2/** and the committed tests and
  * fixtures for the words of Owner's own instance. An occurrence is allowed only by an entry of personal-literals.allow.json:
@@ -10,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const TOKENS = [('al' + 'ex') + 'deg92', '/home/' + ('al' + 'ex'), 'Tim' + 'my', 'cater' + 'flow', 'America/' + 'Toronto'];
+const TOKENS = [('al' + 'ex') + 'deg92', '/home/' + ('al' + 'ex'), ('al' + 'ex'), 'Tim' + 'my', 'cater' + 'flow', 'America/' + 'Toronto'];
 const ROOTS = ['src', 'public/v2', 'test'];
 const SKIP_DIRS = new Set(['node_modules', '.git']);
 // R20-07: only the two gitignored roots of captured real data (never committed) are skipped, by exact path; a
@@ -37,7 +38,19 @@ function scan(root) {
       if (!TOKENS.some((t) => text.includes(t))) continue;
       for (const raw of text.split('\n')) {
         for (const token of TOKENS) {
-          const count = raw.split(token).length - 1;
+          let count = 0, offset = 0;
+          while (true) {
+            const at = raw.indexOf(token, offset);
+            if (at < 0) break;
+            offset = at + token.length;
+            // The short owner token is covered by the two existing longer
+            // exact tokens when it occurs inside a configured username/path.
+            const covered = token === TOKENS[2] && TOKENS.slice(0, 2).some(longer => {
+              const start = raw.lastIndexOf(longer, at);
+              return start >= 0 && at >= start && at + token.length <= start + longer.length;
+            });
+            if (!covered) count++;
+          }
           if (count) out.push({ file: rel, token, line: raw.trim(), count });
         }
       }
@@ -47,6 +60,13 @@ function scan(root) {
 }
 
 const keyOf = (x) => JSON.stringify([x.file, x.token, x.line]);
+
+/** The allowance list, with `tokenB64` entries decoded to `token`: the short owner token is stored base64-encoded so the
+ *  committed JSON never carries the bare personal name (public-export privacy gate, packaging/check-public.js). */
+function loadAllow(file = path.join(__dirname, 'personal-literals.allow.json')) {
+  return JSON.parse(fs.readFileSync(file, 'utf8')).map(({ tokenB64, ...a }) =>
+    (tokenB64 === undefined ? a : Object.assign({ file: a.file, token: Buffer.from(tokenB64, 'base64').toString('utf8') }, a)));
+}
 
 /** → { unallowed: [...], stale: [...] }: occurrences without an exact allowance, and allowances that match nothing */
 function check(root, allow) {
@@ -62,4 +82,4 @@ function check(root, allow) {
   return { unallowed, stale };
 }
 
-module.exports = { TOKENS, scan, check, keyOf };
+module.exports = { TOKENS, scan, check, keyOf, loadAllow };

@@ -1,15 +1,37 @@
 {
-  "$comment": "Shape sidecar for office-vm.json (api.md §3.2). occupants[].exchanges (architect-55) is optional: conversation occupants with a known transcript.",
+  "$comment": "Shape sidecar for office-vm.json (api.md §3.2). occupants[].exchanges (architect-55) is optional: conversation occupants with a known answered exchange. occupants[].summary/model/project/runtime/startedAt/lastActivityAt/tokensKnown (agent-identity-1) are optional: present only for callers with the sessions read grant, when the source knows them. occupants[].automaticLook is the durable assignment; its variant may be null. occupants[].parentId (T-0062/T-0092) is required and nullable: the authorized occupant id of the spawner/parent on stage, or null for roots and callers without lineage access.",
   "nullable": [
     "$.connection.since",
     "$.kpis[].value",
-    "$.occupants[].sessionKey",
+    "$.occupants[].automaticLook.variant",
+    "$.occupants[].execution.evidence.expiresAt",
+    "$.occupants[].execution.evidence.observedAt",
     "$.occupants[].lastSeenAt",
+    "$.occupants[].look.variant",
+    "$.occupants[].parentId",
+    "$.occupants[].parentName",
     "$.occupants[].ruleId",
-    "$.occupants[].look.variant"
+    "$.occupants[].sessionKey",
+    "$.occupants[].standingPoint",
+    "$.occupants[].teamId",
+    "$.rosterFloors[].activeCount",
+    "$.rosterFloors[].layout",
+    "$.rosterGroups[].teamId",
+    "$.rosterItems[].overflowLabel",
+    "$.rosterSummary.activeCount",
+    "$.visitIntent.until",
+    "$.visitIntent.hostId",
+    "$.visitIntent.speaker",
+    "$.occupants[].homeTarget",
+    "$.occupants[].sceneTarget",
+    "$.occupants[].activity",
+    "$.occupants[].sceneTravel"
   ],
   "types": {
-    "$.journal[].actor.avatarUrl": "string"
+    "$.journal[].actor.avatarUrl": "string",
+    "$.occupants[].execution.evidence.expiresAt": "number",
+    "$.rosterFloors[].capacity": "number",
+    "$.visitIntent.until": "number"
   },
   "variants": {
     "$.occupants[].destination": [
@@ -17,6 +39,30 @@
         "kind": "server",
         "stationUid": "rack-1"
       }
+    ],
+    "$.rosterFloors[].items": [
+      {
+        "kind": "team-header",
+        "id": "team-header:member:lead:1",
+        "label": {
+          "key": "office.floor.team",
+          "params": {
+            "name": "Lead",
+            "floor": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            }
+          }
+        }
+      }
+    ],
+    "$.visitIntent.meeting": [
+      [
+        "primary",
+        "direct:example"
+      ]
     ]
   },
   "additional": {
@@ -24,6 +70,130 @@
       "recent": 2,
       "windowMs": 600000,
       "lastAt": 1791223140000
+    },
+    "$.occupants[].summary": "Plan de migration",
+    "$.occupants[].model": "model-example",
+    "$.occupants[].project": "agent-office",
+    "$.occupants[].runtime": "Claude Code",
+    "$.occupants[].startedAt": 1791223000000,
+    "$.occupants[].lastActivityAt": 1791223140000,
+    "$.occupants[].tokensKnown": true,
+    "$.occupants[].automaticLook": {
+      "character": "fen",
+      "variant": "moss",
+      "accessories": [
+        "scarf"
+      ]
+    },
+    "$.occupants[].parentId": "primary",
+    "$.occupants[].visitPhase": "person",
+    "$.occupants[].visitOnStage": true,
+    "$.occupants[].visitStateLabel": {
+      "key": "agentState.waiting"
+    },
+    "$.occupants[].stateActive": true,
+    "$.rosterFloors[].mobileLabelIds": [
+      "primary",
+      "subagent:ffffffff-0001-4000-8000-000000000001",
+      "agent:codex:worker"
+    ],
+    "$.rosterFloors[].countLabel": {
+      "key": "office.floor.count",
+      "params": {
+        "n": 4
+      }
+    },
+    "$.occupants[].homeTarget": {
+      "kind": "station",
+      "floorId": "1",
+      "stationUid": "desk-1",
+      "point": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "approachPoint": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "seatContact": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "mode": "desk",
+      "seatIndex": null,
+      "facing": "ne"
+    },
+    "$.occupants[].sceneTarget": {
+      "kind": "station",
+      "floorId": "1",
+      "stationUid": "desk-1",
+      "point": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "approachPoint": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "seatContact": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "mode": "desk",
+      "seatIndex": null,
+      "facing": "ne"
+    },
+    "$.occupants[].activity": {
+      "id": "activity:opaque",
+      "kind": "idle",
+      "spotId": "lobby-waiting",
+      "since": 1791224000000,
+      "label": {
+        "key": "office.activity.idle"
+      }
+    },
+    "$.occupants[].sceneTravel": {
+      "id": "travel:opaque",
+      "fromFloorId": "1",
+      "toFloorId": "rdc",
+      "departure": {
+        "kind": "destination",
+        "floorId": "1",
+        "stationUid": null,
+        "point": {
+          "x": 1.5,
+          "y": 0.5
+        },
+        "approachPoint": {
+          "x": 1.5,
+          "y": 0.5
+        },
+        "seatContact": null,
+        "mode": "stand",
+        "seatIndex": null,
+        "facing": "sw"
+      },
+      "arrival": {
+        "kind": "destination",
+        "floorId": "rdc",
+        "stationUid": null,
+        "point": {
+          "x": 1.5,
+          "y": 0.5
+        },
+        "approachPoint": {
+          "x": 1.5,
+          "y": 0.5
+        },
+        "seatContact": null,
+        "mode": "stand",
+        "seatIndex": null,
+        "facing": "sw"
+      }
     }
-  }
+  },
+  "opaque": [
+    "$.rosterFloors[].layout"
+  ],
+  "optional": []
 }

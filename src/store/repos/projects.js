@@ -35,17 +35,20 @@ function legacyPersonId(db, options) {
 function createFacades(db, options = {}) {
   const onInvalid = options.onInvalid || (() => {});
   const personIdForLegacy = () => legacyPersonId(db, options);
+  const runtimeReferences = require('../runtime-references').createRuntimeReferences(db);
   const valid = (schema, v, table) => { if (check(schema, v).ok) return true; onInvalid(table); return false; };
   const parseRow = (text, schema, table) => {
     let v;
     try { v = P(text); } catch (_) { onInvalid(table); return null; }
     v = mapLegacyActors(v, personIdForLegacy());
-    return valid(schema, v, table) ? v : null;
+    return valid(schema, v, table) ? runtimeReferences.project(v) : null;
   };
 
   // ---- projects (row = the module's project row) --------------------------------------------
   const q = {
     rowGet: db.prepare('SELECT * FROM projects WHERE id = ?'),
+    turnGet: () => db.prepare('SELECT summary_turn FROM projects WHERE id = ?'),
+    turnSet: () => db.prepare('UPDATE projects SET summary_turn = ? WHERE id = ?'),
     rowIds: db.prepare('SELECT id FROM projects ORDER BY rowid'),
     rowUpsert: db.prepare(`INSERT INTO projects (id, name, status, priority, summary, summary_meta_json, last_activity_at, revision, created_at, archived_at)
       VALUES (:id, :name, :status, :priority, :summary, :summary_meta_json, :last_activity_at, :revision, :created_at, :archived_at)
@@ -85,7 +88,7 @@ function createFacades(db, options = {}) {
   };
 
   const rowOf = (r) => ({ id: r.id, name: r.name, status: r.status, priority: r.priority, summary: r.summary,
-    summaryMeta: r.summary_meta_json ? mapLegacyActors(P(r.summary_meta_json), personIdForLegacy()) : null, lastActivityAt: r.last_activity_at,
+    summaryMeta: r.summary_meta_json ? runtimeReferences.project(mapLegacyActors(P(r.summary_meta_json), personIdForLegacy())) : null, lastActivityAt: r.last_activity_at,
     createdAt: r.created_at, revision: r.revision, archivedAt: r.archived_at });
   const rows = {
     get: (id) => { const r = q.rowGet.get(id); return r ? rowOf(r) : undefined; },
@@ -174,7 +177,12 @@ function createFacades(db, options = {}) {
     has: (slug) => !!db.prepare('SELECT 1 FROM project_tag_slugs WHERE slug = ?').get(slug),
     set(slug, v) { db.prepare('INSERT OR IGNORE INTO project_tag_slugs (slug, project_id, created_at) VALUES (?, ?, ?)').run(slug, v.projectId, v.at); return tagSlugs; },
   };
-  return { rows, sources, flags, overrides, history, persons, caches, workspaces, tagSlugs };
+  const summaryTurns = {
+    get: id => q.turnGet().get(id)?.summary_turn || null,
+    set(id, turnId) { q.turnSet().run(turnId, id); return this; },
+    delete: id => q.turnSet().run(null, id).changes > 0,
+  };
+  return { rows, sources, flags, overrides, history, persons, caches, workspaces, tagSlugs, summaryTurns };
 }
 
 class SqlProjectsRepository extends MemoryRepository {

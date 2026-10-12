@@ -49,6 +49,7 @@ export function adaptCharacterPack(pack, base) {
 }
 export function installCharacterPack(index, pack, base) {
   const adapted = adaptCharacterPack(pack, base);
+  adapted.character.accessorySupport = { ...index.characters.get(pack.id)?.accessorySupport, ...adapted.character.accessorySupport };
   index.characters.set(pack.id, adapted.character);
   for (const [id, layers] of Object.entries(adapted.layers)) {
     const accessory = index.accessories.get(id);

@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-decor-v1",
+  "id": "display",
+  "names": {
+    "fr": "Rangement et accents",
+    "en": "Storage and accents"
+  },
+  "artScale": 2,
+  "license": "MIT",
+  "provenance": {
+    "tool": "image_gen.imagegen",
+    "sources": "design/assets/tools/decor-catalog-sources",
+    "export": "crop, alpha endpoint cleanup, positive uniform scale, anchor registration, WebP encoding"
+  },
+  "items": [
+    {
+      "id": "filing-cabinet",
+      "names": {
+        "fr": "Classeur",
+        "en": "Filing cabinet"
+      },
+      "category": "rangement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 61,
+        "y": 162
+      },
+      "size": {
+        "w": 176,
+        "h": 236
+      },
+      "image": "filing-cabinet-day.webp",
+      "images": {
+        "sw@night": "filing-cabinet-night.webp"
+      },
+      "thumbnail": "thumbnails/filing-cabinet.webp",
+      "thumbnailSize": {
+        "w": 70,
+        "h": 96
+      }
+    },
+    {
+      "id": "cube-shelf",
+      "names": {
+        "fr": "Étagère à cubes",
+        "en": "Cube shelving"
+      },
+      "category": "rangement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 100,
+        "y": 201
+      },
+      "size": {
+        "w": 296,
+        "h": 299
+      },
+      "image": "cube-shelf-day.webp",
+      "images": {
+        "sw@night": "cube-shelf-night.webp"
+      },
+      "thumbnail": "thumbnails/cube-shelf.webp",
+      "thumbnailSize": {
+        "w": 95,
+        "h": 96
+      }
+    },
+    {
+      "id": "wall-clock",
+      "names": {
+        "fr": "Horloge",
+        "en": "Wall clock"
+      },
+      "category": "mur",
+      "placement": "wall",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "wall": {
+        "side": "right",
+        "length": 1,
+        "elevation": 90
+      },
+      "anchor": {
+        "x": 13,
+        "y": 97
+      },
+      "size": {
+        "w": 116,
+        "h": 138
+      },
+      "image": "wall-clock-day.webp",
+      "images": {
+        "sw@night": "wall-clock-night.webp"
+      },
+      "thumbnail": "thumbnails/wall-clock.webp",
+      "thumbnailSize": {
+        "w": 79,
+        "h": 96
+      }
+    },
+    {
+      "id": "corkboard",
+      "names": {
+        "fr": "Tableau de liège",
+        "en": "Corkboard"
+      },
+      "category": "mur",
+      "placement": "wall",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "wall": {
+        "side": "right",
+        "length": 2,
+        "elevation": 62
+      },
+      "anchor": {
+        "x": 10,
+        "y": 105
+      },
+      "size": {
+        "w": 214,
+        "h": 211
+      },
+      "image": "corkboard-day.webp",
+      "images": {
+        "sw@night": "corkboard-night.webp"
+      },
+      "thumbnail": "thumbnails/corkboard.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 95
+      }
+    },
+    {
+      "id": "dashboard-screen",
+      "names": {
+        "fr": "Écran mural",
+        "en": "Wall dashboard"
+      },
+      "category": "mur",
+      "placement": "wall",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "wall": {
+        "side": "right",
+        "length": 3,
+        "elevation": 62
+      },
+      "anchor": {
+        "x": 11,
+        "y": 146
+      },
+      "size": {
+        "w": 292,
+        "h": 293
+      },
+      "image": "dashboard-screen-day.webp",
+      "images": {
+        "sw@night": "dashboard-screen-night.webp"
+      },
+      "thumbnail": "thumbnails/dashboard-screen.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 96
+      }
+    },
+    {
+      "id": "neon-sign",
+      "names": {
+        "fr": "Enseigne Agent Office",
+        "en": "Agent Office sign"
+      },
+      "category": "mur",
+      "placement": "wall",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "wall": {
+        "side": "right",
+        "length": 3,
+        "elevation": 62
+      },
+      "anchor": {
+        "x": 11,
+        "y": 66
+      },
+      "size": {
+        "w": 292,
+        "h": 185
+      },
+      "image": "neon-sign-day.webp",
+      "images": {
+        "sw@night": "neon-sign-night.webp"
+      },
+      "thumbnail": "thumbnails/neon-sign.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 59
+      }
+    },
+    {
+      "id": "cactus-trio",
+      "names": {
+        "fr": "Trio de cactus",
+        "en": "Cactus trio"
+      },
+      "category": "plante",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 84,
+        "y": 126
+      },
+      "size": {
+        "w": 169,
+        "h": 174
+      },
+      "image": "cactus-trio-day.webp",
+      "images": {
+        "sw@night": "cactus-trio-night.webp"
+      },
+      "thumbnail": "thumbnails/cactus-trio.webp",
+      "thumbnailSize": {
+        "w": 93,
+        "h": 96
+      }
+    },
+    {
+      "id": "indoor-tree",
+      "names": {
+        "fr": "Arbre d’intérieur",
+        "en": "Indoor tree"
+      },
+      "category": "plante",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 98,
+        "y": 257
+      },
+      "size": {
+        "w": 196,
+        "h": 327
+      },
+      "image": "indoor-tree-day.webp",
+      "images": {
+        "sw@night": "indoor-tree-night.webp"
+      },
+      "thumbnail": "thumbnails/indoor-tree.webp",
+      "thumbnailSize": {
+        "w": 56,
+        "h": 96
+      }
+    }
+  ]
+}

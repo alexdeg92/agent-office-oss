@@ -1,4 +1,5 @@
 'use strict';
+require('../helpers/scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 
 const { createMemoryRepository } = require('../../src/projects');
 

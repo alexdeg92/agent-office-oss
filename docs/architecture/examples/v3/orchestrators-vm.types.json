@@ -1,0 +1,5 @@
+{
+  "$comment": "OrchestratorsVM3. Only opaque canonical IDs and allowlisted host/runtime metadata are public. Pane refs, session refs, paths, titles and command output are private.",
+  "nullable": ["$.hosts[].label", "$.orchestrators[].label", "$.agents[].name", "$.agents[].runtimeKind", "$.hosts[].observedAt", "$.orchestrators[].observedAt"],
+  "types": { "$.agents[].role": "primary | delegate | unknown", "$.agents[].status": "working | blocked | done | idle | unknown" }
+}

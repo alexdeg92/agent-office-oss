@@ -71,6 +71,23 @@ function loadConfig(env = process.env) {
     if (env.AO_ENV !== 'test' && !throwing) console.warn('Agent Office: PORTAL_PASSWORD (plaintext) is deprecated; store PORTAL_PASSWORD_HASH instead (agent-office hash-password) and remove PORTAL_PASSWORD.');
   } else if (env.AO_AUTH_DATABASE !== '1') die('Missing required env var PORTAL_PASSWORD_HASH (see .env.example)', 'PORTAL_PASSWORD_HASH', 'missing');
   const readonly = env.PORTAL_READONLY === '1';
+  if(env.AO_RBAC_ENABLED!==undefined&&!['0','1'].includes(env.AO_RBAC_ENABLED))die('AO_RBAC_ENABLED must be 0 or 1','AO_RBAC_ENABLED','invalid');
+  if(env.AO_SPLIT_AUTH_ENABLED!==undefined&&!['0','1'].includes(env.AO_SPLIT_AUTH_ENABLED))die('AO_SPLIT_AUTH_ENABLED must be 0 or 1','AO_SPLIT_AUTH_ENABLED','invalid');
+  const splitAuthEnabled=env.AO_SPLIT_AUTH_ENABLED==='1';
+  let apiPublicUrl=null,allowedOrigins=Object.freeze([]);
+  if(splitAuthEnabled){
+    if(env.AO_RBAC_ENABLED!=='1')die('AO_SPLIT_AUTH_ENABLED=1 requires AO_RBAC_ENABLED=1','AO_SPLIT_AUTH_ENABLED','requires-rbac');
+    if(env.AO_API_ONLY!=='1')die('AO_SPLIT_AUTH_ENABLED=1 requires AO_API_ONLY=1','AO_API_ONLY','requires-api-only');
+    if(typeof env.AO_TRUST_PROXY!=='string'||!env.AO_TRUST_PROXY.split(',').some(x=>x.trim()))die('AO_SPLIT_AUTH_ENABLED=1 requires explicit AO_TRUST_PROXY addresses','AO_TRUST_PROXY','required');
+    try {
+      const boundary=require('./security/access-boundary');
+      apiPublicUrl=boundary.canonicalApiBase(env.AO_API_PUBLIC_URL);
+      allowedOrigins=boundary.allowedOrigins(env.AO_ALLOWED_ORIGINS);
+      if(!allowedOrigins.length)throw new TypeError('empty origin list');
+    } catch {
+      die('Split auth requires a canonical HTTPS AO_API_PUBLIC_URL and 1–16 exact HTTPS AO_ALLOWED_ORIGINS','AO_ALLOWED_ORIGINS','invalid');
+    }
+  }
   const instance = env.AO_ENV || (readonly ? 'staging' : env.NODE_ENV === 'production' ? 'production' : 'dev');
   if (!['production', 'staging', 'dev', 'test'].includes(instance)) die(`AO_ENV must be production, staging, dev or test (got ${JSON.stringify(instance)})`, 'AO_ENV', 'invalid');
   const dataDir = resolveDataDir(env, instance);
@@ -93,6 +110,10 @@ function loadConfig(env = process.env) {
     ...openclawPaths(env),
     loginEmail: (env.PORTAL_EMAIL || '').toLowerCase(),
     authDatabase: env.AO_AUTH_DATABASE === '1',
+    rbacEnabled: env.AO_RBAC_ENABLED === '1',
+    splitAuthEnabled,
+    apiPublicUrl,
+    allowedOrigins,
     agentNames: env.AO_AGENT_NAMES ? JSON.parse(env.AO_AGENT_NAMES) : {},
     // S6.1: the owner's display name (MeVM.displayName, the owner Person). Not a secret. Default: the e-mail's local part.
     displayName: (env.PORTAL_DISPLAY_NAME || '').trim().slice(0, 80) || null,

@@ -12,11 +12,13 @@ const CASES = [
   ['is-main', 'agent:main:main', { isMain: true }, 'primary'],
   ['main-key', 'agent:main:main', undefined, 'primary'],
   ['subagent', `agent:main:subagent:${UUID}`, undefined, 'subagent'],
+  ['spawn-child-kind', `agent:main:spawn-child:${UUID}`, { kind: 'spawn-child' }, 'subagent'],
   ['subagent-role', 'agent:main:spawned:x', { subagentRole: 'worker' }, 'subagent'],
   ['cron', `agent:main:cron:${UUID}`, undefined, 'scheduled'],
   ['dashboard', `agent:main:dashboard:${UUID}`, undefined, 'dashboard'],
   ['acp', `agent:claude:acp:${UUID}`, undefined, 'acp'],
   ['explicit', 'agent:main:explicit:portal-chat', undefined, 'explicit'],
+  ['named', 'agent:main:ao-projet-synthetic', undefined, 'explicit'],   // T-0058: an operator-named session, not « Unclassified »
   ['chat-direct', `agent:main:discord:direct:${SF}`, undefined, 'conversation-direct'],
   ['chat-group', `agent:main:discord:channel:${SF}`, undefined, 'conversation-group'],
   ['chat', 'agent:main:matrix:space:!abc', undefined, 'conversation'],
@@ -38,6 +40,13 @@ describe('SessionKind classifier', () => {
       assert.equal(c.ruleId, ruleId, key); assert.equal(c.kind, kind, key);
     }
     assert.deepEqual(RULES.map((r) => r.id).sort(), CASES.map((c) => c[0]).sort(), 'a rule without a test case');
+  });
+
+  it('T-0058: a named session keeps its name as explicitKey; reserved single words keep their rules', () => {
+    assert.equal(classifySession('agent:claude-code:ao-projet-synthetic').explicitKey, 'ao-projet-synthetic');
+    assert.equal(classifySession('agent:main:main').kind, 'primary');
+    for (const word of ['subagent', 'cron', 'dashboard', 'acp', 'explicit', 'heartbeat']) assert.equal(classifySession('agent:main:' + word).kind, 'unrecognized', word);
+    assert.equal(classifySession('agent:main:ao-projet-synthetic:heartbeat').heartbeatOf, 'agent:main:ao-projet-synthetic');
   });
 
   it('every fixture key is classified (no unrecognized) — real capture included', () => {

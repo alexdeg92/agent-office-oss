@@ -1,10 +1,77 @@
 {
-  "$comment": "Shape sidecar for logs-page.json (api.md §3.6): GET /api/v2/views/logs (topic only for the first default-size page).",
+  "$comment": "Shape sidecar for logs-page.json (api.md §3.6): GET /api/v2/views/logs (topic only for the first default-size page). T-0058 (additive): items[].tokensKnown/connector/agent and facets are optional. execution evidence is part of the canonical lifecycle projection.",
   "nullable": [
     "$.items[].channel",
     "$.items[].model",
     "$.items[].modelProvider",
     "$.items[].updatedAt",
-    "$.nextCursor"
-  ]
+    "$.items[].execution.evidence.observedAt",
+    "$.items[].execution.evidence.expiresAt",
+    "$.nextCursor",
+    "$.items[].connector",
+    "$.items[].agent",
+    "$.facets.agents[].connectorId"
+  ],
+  "additional": {
+    "$.items[].tokensKnown": true,
+    "$.items[].execution": {
+      "status": "unknown",
+      "evidence": {
+        "level": "unknown",
+        "observedAt": null,
+        "expiresAt": null
+      }
+    },
+    "$.items[].connector": {
+      "id": "legacy",
+      "adapter": "openclaw",
+      "name": "OpenClaw",
+      "mark": {
+        "monogram": "OC",
+        "color": "#b23a0b",
+        "logo": "assets/connectors/openclaw.svg",
+        "providerName": "OpenClaw"
+      }
+    },
+    "$.items[].agent": {
+      "id": "main",
+      "name": "Timmy"
+    },
+    "$.facets": {
+      "connectors": [
+        {
+          "id": "legacy",
+          "adapter": "openclaw",
+          "name": "OpenClaw",
+          "mark": {
+            "monogram": "OC",
+            "color": "#b23a0b",
+            "logo": "assets/connectors/openclaw.svg",
+            "providerName": "OpenClaw"
+          },
+          "count": 3
+        }
+      ],
+      "agents": [
+        {
+          "id": "main",
+          "name": "Timmy",
+          "connectorId": "legacy",
+          "count": 3
+        }
+      ]
+    },
+    "$.items[].connector.mark.logo": "assets/connectors/openclaw.svg",
+    "$.items[].connector.mark.logoDark": "assets/connectors/codex-dark.svg",
+    "$.items[].connector.mark.providerName": "OpenClaw",
+    "$.facets.connectors[].mark.logo": "assets/connectors/openclaw.svg",
+    "$.facets.connectors[].mark.logoDark": "assets/connectors/codex-dark.svg",
+    "$.facets.connectors[].mark.providerName": "OpenClaw"
+  },
+  "types": {
+    "$.items[].execution.status": "string",
+    "$.items[].execution.evidence.level": "string",
+    "$.items[].execution.evidence.observedAt": "number",
+    "$.items[].execution.evidence.expiresAt": "number"
+  }
 }

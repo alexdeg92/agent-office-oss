@@ -25,9 +25,13 @@ Names and meanings match `.env.example`. Set only what this instance needs.
 | `AO_DATA_DIR` | no | Store directory. In the image, `/data` |
 | `AO_CONFIG` | no | Instance config path. In the image, `/config/config.json` |
 | `AO_API_ONLY` | no | `1`: the API serves no UI. Set on the API service |
+| `AO_SPLIT_AUTH_ENABLED` | no | `1` opts into the cross-origin human bearer transport. Requires `AO_RBAC_ENABLED=1`, `AO_API_ONLY=1`, the HTTPS API URL and an exact HTTPS origin list below |
+| `AO_API_PUBLIC_URL` | when split auth is enabled | Canonical HTTPS API base used for token audience and refresh-cookie Path, including any external prefix, e.g. `https://api.example.org/backend` |
+| `AO_ALLOWED_ORIGINS` | when split auth is enabled | JSON array of 1–16 exact HTTPS frontend origins, with no paths or wildcards, e.g. `["https://office.example.org"]` |
+| `AO_TRUST_PROXY` | required for split auth | Express trusted-proxy addresses; split auth accepts forwarded HTTPS only from these peers. Keep this to the actual ingress proxy CIDRs, and configure that proxy to overwrite forwarded-protocol headers |
 | `AO_PUBLIC_URL` | no | Origin users type in the browser, `scheme://host[:port]` with no path. Required for cookie writes when that origin is not loopback (a name, a LAN address, or HTTPS). A loopback one-port install uses the browser's Host and does not need this |
 | `AO_PUBLIC_API_BASE` | no | Prefix the browser uses. Default `/backend` when API-only |
-| `AO_API_BASE` | no | Same prefix, read by the static server. Default `/backend` |
+| `AO_API_BASE` | no | API prefix read by the static server. Default `/backend`; for split-origin hosting, set the exact HTTPS API base including its external prefix, e.g. `https://api.example.org/backend` |
 | `AO_BASE_PATH` | no | UI mount point. Default `/` |
 | `PORTAL_DISPLAY_NAME` | no | Owner display name. Default: the email's local part |
 | `PORTAL_COOKIE_SECURE` | no | `1` or `0`. Default on when `AO_ENV=production` |
@@ -60,3 +64,8 @@ Proxy/tunnel syntax follows the official [Caddy reverse-proxy guide](https://cad
 While setup remains open, verify the fresh local setup code, then use **Modifier le compte / Edit account** to correct name/email or replace the password. Omitting a replacement password preserves the current hash. A valid DB-auth config with a missing owner row reopens this code-protected recovery; a configured owner is locked, and a missing private secrets file serves locked setup with a clear restore-and-restart message and no setup code or writes. Config v2 and schema 015 are forward migrations; rollback restores a private pre-upgrade DB/config/secrets backup (operations.md). All default backups containing owner hashes are sensitive.
 
 A gateway URL override does not borrow the private file's token for a different destination. Supply the URL and token together for a new gateway. Runtime detection follows the same rule for local and remote credentials.
+
+
+Multi-user authorization is enabled at startup with `auth: {"rbacEnabled": true}` in `config.json`, or `AO_RBAC_ENABLED=1`. It defaults to disabled. `AO_RBAC_ENABLED=0` overrides the file; other environment values refuse startup. Restart after changing this operator setting. Enabled instances use the migrated administrator identity, database-user sign-in, invitations, and resource permissions for HTTP, commands and streams. The session cookie remains `taco_sess`. This switch does not enable split-origin token authentication. See [the management contract](../architecture/rbac-management.md).
+
+Split-origin token authentication stays off unless `AO_SPLIT_AUTH_ENABLED=1` is set on an RBAC-enabled API-only service. Terminate HTTPS at a trusted reverse proxy, configure `AO_TRUST_PROXY` with only that proxy's addresses, and ensure it overwrites `X-Forwarded-Proto`; the service refuses every request unless its socket is TLS or Express verifies HTTPS through that trusted peer. Configure `AO_API_PUBLIC_URL` to the externally visible API base and set `AO_ALLOWED_ORIGINS` to exact static-frontend origins. On boot the service reconciles persisted token families against this audience/origin boundary, so removing an origin or changing the API URL revokes old families permanently. The default same-origin cookie login remains available; cross-origin refresh cookies are accepted only on the refresh protocol, while other browser API calls require a bearer token.

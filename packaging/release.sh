@@ -59,8 +59,10 @@ printf '%s\n' '# Agent Office Homebrew tap' '' 'Install: `brew install alexdeg92
 
 packaging/export-public.sh dist/public
 docker build --provenance=false -f packaging/docker/Dockerfile -t "agent-office:${version}" .
-IMAGE="agent-office:${version}" node --test packaging/first-run.test.js
-IMAGE="agent-office:${version}" packaging/docker/smoke.sh
+image_id=$(docker image inspect --format '{{.Id}}' "agent-office:${version}")
+IMAGE="$image_id" node --test packaging/first-run.test.js
+IMAGE="$image_id" packaging/docker/smoke.sh
+IMAGE="$image_id" packaging/docker/demo-smoke.sh
 
 node -e '
 const fs = require("fs");
@@ -73,7 +75,7 @@ fs.writeFileSync("dist/RELEASE_NOTES.md", notes);
 printf '%s\n' "release: prepared ${version}"
 printf '%s\n' "tarball: ${tarball}"
 printf '%s\n' "sha256:  ${sha}"
-printf '%s\n' "image:   agent-office:${version}"
+printf '%s\n' "image:   ${image_id}"
 printf '%s\n' "notes:   dist/RELEASE_NOTES.md"
 printf '\n'
-node -e 'process.stdout.write(require("./packaging/release-tools").publishCommands(process.argv[1]))' "$version"
+node -e 'process.stdout.write(require("./packaging/release-tools").publishCommands(process.argv[1], process.argv[2]))' "$version" "$image_id"

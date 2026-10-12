@@ -2,7 +2,8 @@
 // Runtime adapter registry (ADR-001 §3). The core asks for an adapter by id; it never imports adapter
 // internals. One adapter per instance in 3.0 (PM decision on ADR-001 Q2); G4 picks it from the instance config.
 // G6: `demo` synthesises a small team with no runtime at all (src/adapters/demo; ADR-001 §13)
-const ADAPTERS = { openclaw: () => require('./openclaw'), demo: () => require('./demo') };
+const ADAPTERS = { openclaw: () => require('./openclaw'), demo: () => require('./demo'), 'claude-code': () => require('./claude-code'), codex: () => require('./codex') };
+const ORCHESTRATOR_SOURCES = { herdr: () => require('./herdr'), 'agent-team-pm': () => require('./agent-team-pm') };
 
 function adapterById(id) {
   const load = Object.prototype.hasOwnProperty.call(ADAPTERS, id) ? ADAPTERS[id] : null;
@@ -10,6 +11,32 @@ function adapterById(id) {
   return load();
 }
 const defaultAdapter = () => adapterById('openclaw');
+function settingsCapabilities(id) {
+  try { return adapterById(id).setup?.capabilities || {}; } catch { return {}; }
+}
+const defaultAutoAdd = id => settingsCapabilities(id).autoAddDefault === true;
+const settingsBrand = id => settingsCapabilities(id).brand || null;
 
 const detectRuntimes = ctx => require('./detection').detectRuntimes(ctx);
-module.exports = { detectRuntimes, adapterById, defaultAdapter, ADAPTER_IDS: Object.keys(ADAPTERS) };
+
+// Host and team sources implement the same read-only source interface used by the engine.
+// Callers select a declared source adapter here rather than reaching into provider internals.
+function orchestratorSourceAdapter(id, options) {
+  const load=Object.prototype.hasOwnProperty.call(ORCHESTRATOR_SOURCES,id)?ORCHESTRATOR_SOURCES[id]:null;
+  if(!load)throw new Error('unknown orchestrator source adapter: '+id);
+  return load().createSource(options);
+}
+function orchestratorSourceCapabilities(id) {
+  const load=Object.prototype.hasOwnProperty.call(ORCHESTRATOR_SOURCES,id)?ORCHESTRATOR_SOURCES[id]:null;
+  return load?.().setup?.capabilities || {};
+}
+const defaultSourceEnable=id=>orchestratorSourceCapabilities(id).autoEnableDefault===true;
+const sourceBrand=id=>orchestratorSourceCapabilities(id).brand || null;
+function detectOrchestratorSource(id,options) {
+  const load=Object.prototype.hasOwnProperty.call(ORCHESTRATOR_SOURCES,id)?ORCHESTRATOR_SOURCES[id]:null;
+  return load?.().detectSource?.(options) || null;
+}
+
+module.exports = { detectRuntimes, adapterById, defaultAdapter, settingsCapabilities, defaultAutoAdd, settingsBrand,
+  orchestratorSourceAdapter, orchestratorSourceCapabilities, defaultSourceEnable, sourceBrand, detectOrchestratorSource,
+  ADAPTER_IDS: Object.keys(ADAPTERS) };

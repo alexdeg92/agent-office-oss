@@ -4,13 +4,14 @@ export const SLOT_ORDER = ['body', 'neck', 'face', 'head', 'badge'];
 
 export function indexManifest(m) {
   const by = (arr) => new Map((arr ?? []).map((o) => [o.id, o]));
+  const accessories = by((m.accessories ?? []).map(a => ({ ...a, layers: { ...a.layers } })));
   return {
     manifest: m,
     proj: m.projection,
     rooms: by(m.rooms),
     furniture: by(m.furniture),
     characters: by([...(m.characters ?? []), ...(m.characterPacks?.packs ?? [])]),
-    accessories: by(m.accessories),
+    accessories,
     themes: by(m.themes),
   };
 }
@@ -125,7 +126,7 @@ export function seatModeFor(character, variantId, station) {
  * A pose with neither shows nothing.
  * @returns {{ back: {id,slot,path}[], front: {id,slot,path,legacy?:true}[] }}
  */
-export function accessoryLayers(index, characterId, accessoryIds, pose, variantId = null, { legacy = true } = {}) {
+export function accessoryLayers(index, characterId, accessoryIds, pose, variantId = null, { legacy = true, mode = 'day' } = {}) {
   const seen = new Set();
   const back = [];
   const front = [];
@@ -133,7 +134,8 @@ export function accessoryLayers(index, characterId, accessoryIds, pose, variantI
   list.sort((a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot));
   for (const a of list) {
     if (seen.has(a.slot)) continue;
-    const v2 = (variantId && a.layers?.[`${characterId}/${variantId}`]?.[pose]) || a.layers?.[characterId]?.[pose];
+    const registered = (variantId && a.layers?.[`${characterId}/${variantId}`]?.[pose]) || a.layers?.[characterId]?.[pose];
+    const v2 = registered?.modes ? registered.modes[mode] : registered;
     if (v2 && (v2.back || v2.front)) {
       seen.add(a.slot);
       // frames: per-frame paths aligned with the body frames (working-ne typing loop); null = static.

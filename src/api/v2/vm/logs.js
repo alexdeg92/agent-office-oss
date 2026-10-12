@@ -1,38 +1,52 @@
 'use strict';
 // Journaux: Page<LogRowVM> and SessionVM (api.md §3.6). Pure builders over canonical sessions and transcripts.
-// Labels are French display strings; the agent is never named here (platform direction: the UI names it from MetaVM).
+// Labels preserve declared session/project names. Runtime-neutral observed activity supplements verified run state.
 const { project2x: P2 } = require('../project2x');   // G3a: the 2.x wire values (ADR §12.6); G5: or project3x (the `P` param)
 // G5: { runtimeKind } in 3.0 (right after `kind`), nothing in 2.x (the hook returns undefined)
 const runtimeKindOf = (P, s) => { const rk = P.runtimeKind(s.class.kind); return rk === undefined ? {} : { runtimeKind: rk }; };
 
 const LIMIT_DEFAULT = 50, LIMIT_MAX = 200;
-const tail = (s, n) => String(s || '').slice(-n);
+const { parseId } = require('../../../runtime-ids');
 const { projectEvents, participantsOf } = require('../../../engine/model/sender');
 const { messageCountOf } = require('../../../projects/session-summary');
+const { redactText } = require('../../../security/redact-text');
+const { executionState } = require('../../../engine/execution-state');
+const executionVM = (run, activity = null, now = Date.now()) => {
+  let e = executionState(run, now);
+  if (e.level === 'unknown' && activity?.kind === 'working') e = { ...e, level: 'observed', observedAt: activity.since ?? null, expiresAt: activity.expiresAt ?? null };
+  return { status: e.status, evidence: { level: e.level, observedAt: e.observedAt, expiresAt: e.expiresAt } };
+};
 
 /**
  * A session's title as a LabelRef (Q03-A01): generated parts are label keys (sessionTitle.*), so the UI shows them in
  * its own language; genuine names (a flow's, an interlocutor's, an explicit session's) travel as raw params.
  * @param {object} s canonical Session
- * @param {{ interlocutorName?: (id) => string|null, flowName?: (jobId) => string|null }} names
+ * @param {{ interlocutorName?: (id) => string|null, flowName?: (jobId) => string|null, agentName?: (id) => string|null }} names
  */
 function sessionTitle(s, names = {}) {
   const c = s.class;
-  // Room titles may identify the room by a bounded ID. Unknown people use the same localized
-  // fallback on every runtime/channel; their opaque IDs never substitute for a person's name.
-  const idOf = (iid) => { if (!iid) return ''; if (/^discord-(user|channel):/.test(iid)) return tail(iid, 6); return tail(iid.slice(iid.indexOf(':') + 1), 24); };
-  const named = (name) => ({ key: 'sessionTitle.named', params: { name } });
+  // Unknown people use the same localized fallback on every runtime/channel; their opaque IDs never substitute for a
+  // person's name. T-0058 (security-155): EVERY dynamic title value (names, flow names, explicit session names) goes
+  // through the shared redactor, and a title is never a raw-key fragment; an empty result is « Session sans titre ».
+  const untitled = { key: 'sessionTitle.untitled' };
+  const clean = (v, maxLength = 120) => (v == null ? null : redactText(String(v), { maxLength }));
+  const named = (name) => { const n = clean(name); return n ? { key: 'sessionTitle.named', params: { name: n } } : untitled; };
+  // a session's own canonical title (adapter displayName, then summary); never its raw key
+  const own = () => { for (const v of [s.displayName, s.summary]) { const x = v && v !== s.key ? clean(v) : null; if (x) return x; } return null; };
   let t;
   switch (c.kind) {
     case 'primary': t = { key: 'sessionTitle.main' }; break;
-    case 'subagent': t = { key: 'sessionTitle.subagent', params: { id: String(c.subagentId || '').slice(0, 4) } }; break;
-    case 'scheduled': { const n = names.flowName && c.cronJobId ? names.flowName(c.cronJobId) : null; t = n ? { key: 'sessionTitle.cronNamed', params: { name: n } } : { key: 'sessionTitle.cron' }; break; }
+    case 'subagent': t = { key: 'sessionTitle.subagent', params: { id: String(parseId(c.subagentId, 'agent')?.local || c.subagentId || '').slice(0, 4) } }; break;
+    case 'scheduled': { const n = names.flowName && c.cronJobId ? names.flowName(c.cronJobId) : null; const name = clean(n); t = name ? { key: 'sessionTitle.cronNamed', params: { name } } : { key: 'sessionTitle.cron' }; break; }
     case 'conversation-direct': { const n = (names.interlocutorName && c.interlocutorId ? names.interlocutorName(c.interlocutorId) : null) || names.senderName?.(s); t = n ? named(n) : { key: 'sessionTitle.user', params: { id: '' } }; break; }
-    case 'conversation-group': { const n = names.interlocutorName && c.interlocutorId ? names.interlocutorName(c.interlocutorId) : null; t = n ? named(n) : { key: 'sessionTitle.channel', params: { id: idOf(c.interlocutorId) } }; break; }
+    // a group shows its name from the adapter/enricher; otherwise « Groupe sans nom » and its platform, never an id
+    case 'conversation-group': { const n = (names.interlocutorName && c.interlocutorId ? names.interlocutorName(c.interlocutorId) : null) || own(); const platform = c.channel || (/^([a-z][a-z0-9]*)-/.exec(c.interlocutorId || '') || [])[1];
+      t = n ? named(n) : platform ? { key: 'sessionTitle.groupUnnamed', params: { platform: { key: 'channel.' + platform } } } : { key: 'sessionTitle.groupUnnamedPlain' }; break; }
     case 'dashboard': t = { key: 'sessionTitle.dashboard' }; break;
-    case 'explicit': t = s.displayName ? named(s.displayName) : { key: 'sessionTitle.explicit', params: { id: c.explicitKey || tail(s.key, 12) } }; break;
-    case 'acp': t = s.displayName ? named(s.displayName) : { key: 'sessionTitle.acp' }; break;
-    default: t = named(s.displayName || s.key);
+    case 'explicit': { const n = own(), id = n ? null : clean(c.explicitKey, 64); t = n ? named(n) : id ? { key: 'sessionTitle.explicit', params: { id } } : untitled; break; }
+    case 'acp': { const n = own(); t = n ? named(n) : { key: 'sessionTitle.acp' }; break; }
+    case 'conversation': { const n = own() || names.agentLabel?.(c.agentId) || names.agentName?.(c.agentId); t = n ? named(n) : untitled; break; }
+    default: { const n = own(); t = n ? named(n) : untitled; }
   }
   return c.heartbeatOf ? { key: 'sessionTitle.heartbeat', params: { title: t } } : t;
 }
@@ -45,10 +59,16 @@ function renderFr(ref) {
 }
 const sessionLabel = (s, names = {}) => renderFr(sessionTitle(s, names));
 
-function rowVM(s, names, P = P2) {
+// T-0058: which connector and which agent a row came from (canonical, adapter-declared), and whether tokens are known
+const connectorOf = (s, names) => { const c = names.connectorOf?.(s.key); return c ? { id: c.id, adapter: c.adapter, name: c.name, mark: c.mark } : null; };
+const agentOf = (s, names) => { const id = s.class.agentId; if (!id) return null; const name = names.agentLabel?.(id); return name ? { id, name } : null; };
+const tokensKnown = (s) => (typeof s.tokensKnown === 'boolean' ? s.tokensKnown : s.usage.total > 0);
+function rowVM(s, names, P = P2, now = Date.now()) {
   return Object.assign({ id: s.key, kind: P.sessionKind(s.class.kind) }, runtimeKindOf(P, s), { channel: P.channelId(s.class.channel), label: sessionLabel(s, names), title: sessionTitle(s, names),
     model: s.model ? s.model.id : null, modelProvider: s.model ? s.model.provider : s.provider,
-    tokens: s.usage.total, updatedAt: s.updatedAt, live: s.run.status === 'running', heartbeat: !!s.class.heartbeatOf });
+    tokens: s.usage.total, tokensKnown: tokensKnown(s), updatedAt: s.updatedAt, live: executionState(s.run, now).status === 'running' || names.activity?.(s.key)?.kind === 'working', heartbeat: !!s.class.heartbeatOf,
+    execution: executionVM(s.run, names.activity?.(s.key), now),
+    connector: connectorOf(s, names), agent: agentOf(s, names) });
 }
 
 const encodeCursor = (o) => Buffer.from(JSON.stringify({ o })).toString('base64url');
@@ -70,20 +90,37 @@ function parseLogsQuery(q = {}, P = P2) {
   if (offset === null) return { error: { field: 'cursor', issue: 'invalid' } };
   let limit = LIMIT_DEFAULT;
   if (q.limit != null && q.limit !== '') { limit = Number(q.limit); if (!Number.isInteger(limit) || limit < 1 || limit > LIMIT_MAX) return { error: { field: 'limit', issue: 'invalid' } }; }
-  return { kind, heartbeat: q.heartbeat === 'include', offset, limit };
+  // T-0058: connector (instance id) and agent (agent id) filters: opaque bounded strings, matched exactly
+  const opaque = (v) => (v == null || v === '' ? null : String(v).length <= 512 ? String(v) : undefined);
+  const connector = opaque(q.connector), agent = opaque(q.agent);
+  if (connector === undefined) return { error: { field: 'connector', issue: 'invalid' } };
+  if (agent === undefined) return { error: { field: 'agent', issue: 'invalid' } };
+  return { kind, heartbeat: q.heartbeat === 'include', connector, agent, offset, limit };
 }
 
 // Order: updatedAt desc (unknown last), then id. Heartbeats hidden unless asked for (2.1).
-function buildLogsPage(sessions, { kind = null, heartbeat = false, offset = 0, limit = LIMIT_DEFAULT } = {}, names = {}, P = P2) {
-  const rows = sessions.filter((s) => (heartbeat || !s.class.heartbeatOf) && (!kind || P.sessionKindsIn(kind).includes(s.class.kind)))
+// T-0058: `facets` lists every connector and agent present (before the connector/agent filters), for the filter menus.
+function buildLogsPage(sessions, { kind = null, heartbeat = false, connector = null, agent = null, offset = 0, limit = LIMIT_DEFAULT, now = Date.now() } = {}, names = {}, P = P2) {
+  const visible = sessions.filter((s) => (heartbeat || !s.class.heartbeatOf) && (!kind || P.sessionKindsIn(kind).includes(s.class.kind)));
+  const connectors = new Map(), agents = new Map();
+  for (const s of visible) {
+    const c = connectorOf(s, names), a = agentOf(s, names);
+    if (c) connectors.set(c.id, { ...c, count: (connectors.get(c.id)?.count || 0) + 1 });
+    if (a) agents.set(a.id, { ...a, connectorId: c ? c.id : null, count: (agents.get(a.id)?.count || 0) + 1 });
+  }
+  const rows = visible.filter((s) => (!connector || connectorOf(s, names)?.id === connector) && (!agent || s.class.agentId === agent))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || a.key.localeCompare(b.key));
-  const items = rows.slice(offset, offset + limit).map((s) => rowVM(s, names, P));
-  return { items, nextCursor: offset + limit < rows.length ? encodeCursor(offset + limit) : null };
+  const items = rows.slice(offset, offset + limit).map((s) => rowVM(s, names, P, now));
+  const byName = (x, y) => x.name.localeCompare(y.name) || x.id.localeCompare(y.id);
+  return { items, nextCursor: offset + limit < rows.length ? encodeCursor(offset + limit) : null,
+    facets: { connectors: [...connectors.values()].sort(byName), agents: [...agents.values()].sort(byName) } };
 }
 
 // The topic id a logs query belongs to (first page only; api.md §3 table)
-function logsTopicOf({ kind, heartbeat }) {
-  const q = []; if (heartbeat) q.push('heartbeat=include'); if (kind) q.push('kind=' + encodeURIComponent(kind));
+function logsTopicOf({ kind, heartbeat, connector = null, agent = null }) {
+  // query keys sorted (topics.js canonical id)
+  const q = []; if (agent) q.push('agent=' + encodeURIComponent(agent)); if (connector) q.push('connector=' + encodeURIComponent(connector));
+  if (heartbeat) q.push('heartbeat=include'); if (kind) q.push('kind=' + encodeURIComponent(kind));
   return q.length ? 'logs?' + q.join('&') : 'logs';
 }
 
@@ -93,7 +130,7 @@ function logsTopicOf({ kind, heartbeat }) {
  */
 // traceState (R16-07): 'fresh' (the last transcript read succeeded), 'stale' (it failed, or none yet: the last good
 // trace is shown), 'unavailable' (the runtime has no transcript capability). Never an empty "success".
-function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P = P2) {
+function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P = P2, now = Date.now()) {
   if (!s) return null;
   const context = names.senderContext?.(s) || {};
   const events = projectEvents(t?.events, context);
@@ -107,7 +144,7 @@ function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P 
   return Object.assign({ key: s.key, label: sessionLabel(s, names), title: sessionTitle(s, names), kind: P.sessionKind(s.class.kind) }, runtimeKindOf(P, s), {
     model: s.model ? s.model.id : null, modelProvider: s.model ? s.model.provider : s.provider,
     tokens: s.usage.total, updatedAt: s.updatedAt, cwd: s.cwd,
-    run: { status: s.run.status, endReason: s.run.endReason },
+    run: { ...executionVM(s.run, names.activity?.(s.key), now), endReason: s.run.endReason },
     messageCount: messageCountOf(s, t, names.conversationMessageCount?.(s.key)),
     window: t ? { from: t.window.from, to: t.window.to } : { from: 0, to: 0 },
     toolCount: events.filter((e) => e.kind === 'tool').length,
@@ -118,4 +155,4 @@ function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P 
   });
 }
 
-module.exports = { buildLogsPage, buildSessionVM, parseLogsQuery, logsTopicOf, sessionLabel, sessionTitle, LIMIT_DEFAULT, LIMIT_MAX };
+module.exports = { buildLogsPage, buildSessionVM, parseLogsQuery, logsTopicOf, sessionLabel, sessionTitle, executionVM, LIMIT_DEFAULT, LIMIT_MAX };

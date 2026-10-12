@@ -23,6 +23,13 @@ const RULES = [
   { id: 'is-main', kind: 'primary', match: (k, r) => (r && r.isMain === true ? {} : null) },
   { id: 'main-key', kind: 'primary', match: (k) => (/^agent:[^:]+:main$/.test(k) ? {} : null) },
   { id: 'subagent', kind: 'subagent', match: (k) => { const m = k.match(/^agent:[^:]+:subagent:([^:]+)$/); return m ? { subagentId: m[1] } : null; } },
+  // Gateway session rows can identify spawned children by their explicit kind even
+  // when the key uses the newer spawn-child spelling instead of :subagent:.
+  { id: 'spawn-child-kind', kind: 'subagent', match: (k, r) => {
+    if (!r || String(r.kind || '').toLowerCase() !== 'spawn-child') return null;
+    const tail = k.replace(/^agent:[^:]+:/, '');
+    return { subagentId: tail || k };
+  } },
   // structured fallback: no key grammar, so the subject is the key itself (minus the agent prefix),
   // which keeps two such sub-agents distinct everywhere (R2-04)
   { id: 'subagent-role', kind: 'subagent', match: (k, r) => (r && typeof r.subagentRole === 'string' && r.subagentRole ? { subagentId: k.replace(/^agent:[^:]+:/, '') || k } : null) },
@@ -30,6 +37,9 @@ const RULES = [
   { id: 'dashboard', kind: 'dashboard', match: (k) => (/^agent:[^:]+:dashboard:[^:]+$/.test(k) ? {} : null) },
   { id: 'acp', kind: 'acp', match: (k) => (/^agent:[^:]+:acp:[^:]+$/.test(k) ? {} : null) },
   { id: 'explicit', kind: 'explicit', match: (k) => { const m = k.match(/^agent:[^:]+:explicit:(.+)$/); return m ? { explicitKey: m[1] } : null; } },
+  // T-0058: a session the operator named (`--session <name>` → agent:<id>:<name>, one free segment) is explicit too;
+  // reserved words keep their own rules, so 'agent:x:main' stays primary and 'agent:x:cron' stays unrecognized.
+  { id: 'named', kind: 'explicit', match: (k) => { const m = k.match(/^agent:[^:]+:([^:]+)$/); return m && !NOT_CHANNELS.has(m[1]) ? { explicitKey: m[1] } : null; } },
   { id: 'chat-direct', kind: 'conversation-direct', match: (k) => chat(k, (sc) => DIRECT.includes(sc)) },
   { id: 'chat-group', kind: 'conversation-group', match: (k) => chat(k, (sc) => GROUP.includes(sc)) },
   // chat-shaped (agent:<id>:<channel>:<scope>:<peer>) with a scope we don't know: still a conversation (§12.3)
@@ -75,6 +85,7 @@ function classifySession(key, row, opts = {}) {
     }
     break;
   }
+  if (out.kind === 'unrecognized') out.reason = 'unmatched-key';
   return out;
 }
 

@@ -1,0 +1,5 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "planId": "acp_0123456789abcdefghijklmnop",
+  "checks": ["dns", "tls", "cors", "public"]
+}

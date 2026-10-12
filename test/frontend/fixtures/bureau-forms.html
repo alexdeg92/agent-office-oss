@@ -1,0 +1,66 @@
+<!doctype html><html lang="fr" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
+<title>Bureau native forms — synthetic fixture</title>
+<link rel="stylesheet" href="/bureau/bureau.css"><link rel="stylesheet" href="/components/frame.css">
+<script type="importmap">{"imports":{"preact":"/vendor/preact.mjs","preact/hooks":"/vendor/preact-hooks.mjs","htm":"/vendor/htm.mjs"}}</script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:var(--bu-bg);color:var(--bu-text-primary);font:var(--bu-type-body)}
+#fixture{height:100dvh;max-width:var(--bu-size-prose);margin:auto}
+h1{margin:0;font:var(--bu-type-title)}h2,legend{margin:0;font:var(--bu-type-heading)}
+form{display:grid;gap:var(--bu-space-4)}fieldset{margin:0;padding:0;border:0;min-width:0}
+.forms-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--bu-space-4)}
+.forms-footer{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--bu-space-2)}
+@media(max-width:820px){.forms-grid{grid-template-columns:minmax(0,1fr)}}
+</style></head><body><div id="fixture"></div>
+<script type="module">
+import {html,render} from '/lib.js';
+import {Frame} from '/components/ui.js';
+import {Field,TextInput,TextArea,Select,Checkbox,Radio,Button,loadStyles} from '/components/bureau/index.js';
+import {setLang} from '/i18n.js';
+await loadStyles();
+const state={english:false,long:false,error:null,hint:true,environment:false,busy:false,disabled:false,mixed:false,
+ name:'Atlas',port:'18789',url:'https://example.test',notes:'Équipe de démonstration',runtime:'openclaw',checked:false,radio:'a',
+ events:[],submits:[],decline:false,transform:false};
+const patch=changes=>{Object.assign(state,changes);draw();};
+const edit=(key,value)=>{state.events.push({kind:'controlled',key,value});if(!state.decline)patch({[key]:state.transform?value.toUpperCase():value});};
+const native=(key,event)=>state.events.push({kind:event.type,key,value:event.currentTarget.type==='checkbox'||event.currentTarget.type==='radio'?event.currentTarget.checked:event.currentTarget.value});
+function draw(){
+ const en=state.english;
+ render(html`<${Frame} tag="main" class="bu-page" bodyLabel=${en?'Configuration':'Configuration'}
+  head=${html`<h1>${en?'Settings':'Paramètres'}</h1>`} bar=${html`<h2>${en?'Connection':'Connexion'}</h2>`}
+  foot=${html`<div class="forms-footer"><${Button} id="cancel" label=${en?'Cancel':'Annuler'} variant="ghost" disabled=${state.disabled} />
+   <${Button} id="save" type="submit" form="settings-form" name="intent" value="save" label=${state.long?(en?'Save this configuration for the entire office':'Enregistrer cette configuration pour tout le bureau'):(en?'Save':'Enregistrer')}
+    variant="primary" busy=${state.busy} disabled=${state.disabled} onClick=${e=>native('save',e)} /></div>`}>
+  <form id="settings-form" onSubmit=${event=>{event.preventDefault();state.submits.push(Object.fromEntries(new FormData(event.currentTarget,event.submitter)));}}>
+   <${Field} id="agent-name" label=${state.long?(en?'Name displayed for this desktop automation agent':'Nom affiché pour cet agent d’automatisation du bureau'):(en?'Name':'Nom')} required=${true}
+    hint=${state.hint?(en?'Visible in the office':'Visible dans le bureau'):null} error=${state.error}
+    environment=${state.environment?{variable:'AO_AGENT_NAME',reason:en?'Managed by the server':'Géré par le serveur'}:null}
+    control=${props=>html`<${TextInput} ...${props} name="agentName" form="settings-form" autoComplete="nickname" maxLength=${80}
+     value=${state.name} disabled=${state.disabled} readOnly=${state.environment} busy=${state.busy}
+     onValueChange=${value=>edit('name',value)} onInput=${event=>native('name',event)} />`} />
+   <div class="forms-grid">
+    <${Field} id="agent-port" label="Port" control=${props=>html`<${TextInput} ...${props} name="port" type="number" min=${1} max=${65535} step=${1} width="short"
+      value=${state.port} onValueChange=${value=>edit('port',value)} disabled=${state.disabled} />`} />
+    <${Field} id="agent-runtime" label=${en?'Runtime':'Moteur'} control=${props=>html`<${Select} ...${props} name="runtime" width="full" value=${state.runtime}
+      options=${[{value:'openclaw',label:'OpenClaw'},{value:'claude',label:'Claude Code'},{value:'missing',label:en?'Unavailable':'Indisponible',disabled:true}]}
+      busy=${state.busy} disabled=${state.disabled} onValueChange=${value=>edit('runtime',value)} onChange=${event=>native('runtime',event)} />`} />
+   </div>
+   <${Field} id="agent-url" label=${en?'Service address':'Adresse du service'} control=${props=>html`<${TextInput} ...${props} name="url" type="url" autocomplete="off" spellcheck=${false}
+    value=${state.url} onInput=${event=>{native('url',event);if(!state.decline)patch({url:event.currentTarget.value});}} disabled=${state.disabled} />`} />
+   <${Field} id="agent-notes" label=${en?'Notes':'Notes'} control=${props=>html`<${TextArea} ...${props} name="notes" rows=${2} maxLength=${200} value=${state.notes}
+     onValueChange=${value=>edit('notes',value)} onInput=${event=>native('notes',event)} disabled=${state.disabled} />`} />
+   <${Checkbox} id="agent-active" name="active" value="yes" checked=${state.checked} mixed=${state.mixed} busy=${state.busy} disabled=${state.disabled}
+    label=${state.long?(en?'Include this agent in the office after saving the configuration':'Inclure cet agent dans le bureau après l’enregistrement de la configuration'):(en?'Active in the office':'Actif dans le bureau')}
+    onCheckedChange=${value=>edit('checked',value)} onInput=${event=>native('active-input',event)} onChange=${event=>native('active-change',event)} />
+   <fieldset><legend>${en?'Primary agent':'Agent principal'}</legend>
+    ${['a','b'].map((value,index)=>html`<${Radio} key=${value} id=${'primary-'+value} name="primary" value=${value} checked=${state.radio===value} busy=${state.busy} disabled=${state.disabled}
+     label=${index===0?'Atlas':'Vega'} onCheckedChange=${checked=>{if(checked)edit('radio',value);}} onChange=${event=>native('primary',event)} />`)}
+   </fieldset>
+   <${Field} id="secret-contract" label=${en?'Replacement token':'Jeton de remplacement'}
+    control=${props=>html`<${TextInput} ...${props} name="secret" type="password" autoComplete="new-password" maxLength=${1024}
+     value="" onInput=${()=>{}} disabled=${state.disabled} />`} />
+  </form>
+ </${Frame}>`,document.querySelector('#fixture'));
+}
+window.bureauForms={state,draw,patch,setLang};draw();
+</script></body></html>

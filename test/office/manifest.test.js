@@ -78,7 +78,18 @@ describe('manifest.example.json ↔ delivered art', () => {
       if (size) assert.deepEqual([size.w, size.h], a.canvas, `${what} size`);
     };
     for (const r of manifest.rooms) for (const p of Object.values(r.images)) check(p, r.anchor, r.size, r.id);
+    const sofa = manifest.furniture.find(f => f.id === 'sofa'), sofaAnchors = anchors['Office/furniture/sofa.png'].seatAnchors;
+    assert.deepEqual(sofa.station.seated.seats, Object.entries(sofaAnchors).map(([id, [x, y]]) => ({ id, seatPoint: { x, y } })), 'every authored sofa seat has its own registered hip contact in draw order');
+    assert.equal(new Set(sofa.station.seated.seats.map(seat => `${seat.seatPoint.x},${seat.seatPoint.y}`)).size, sofa.station.seated.seats.length, 'multi-seat furniture contacts are distinct');
     for (const f of manifest.furniture) {
+      if (f.packManifest) {
+        // Pack registrations replace the shared legacy ledger; the thin image is a thumbnail.
+        const { pack, metadataBytes } = require('../../packaging/decor-pack-registry').readDecorManifest(path.join(ROOT, 'design', f.packManifest));
+        assert.ok(require('../../packaging/decor-pack-registry').validateDecorPack(pack, path.dirname(path.join(ROOT, 'design', f.packManifest)), metadataBytes).ok);
+        const descriptor = require('../../public/v2/office/decor-packs').decorDescriptors(pack, f.packManifest.replace(/manifest\.json$/, '')).find(x => x.id === f.id);
+        assert.deepEqual(f, descriptor);
+        continue;
+      }
       check(f.image, f.anchor, f.size, f.id);
       for (const p of Object.values(f.images ?? {})) check(p, f.anchor, f.size, f.id);
       for (const [name, part] of Object.entries(f.station?.parts ?? {})) {

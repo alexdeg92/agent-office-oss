@@ -17,7 +17,8 @@ const crypto = require('crypto');
 const s = require('./schema');
 const { isHash } = require('./security/password');
 
-const VERSION = 2;
+const VERSION = 3;
+const { scopedId, parseId, INSTANCE_ID } = require('./runtime-ids');
 // A complete login replaces file auth. A secret-only override preserves the file auth mode.
 const LOGIN_ENV = ['PORTAL_EMAIL', 'PORTAL_SECRET', 'PORTAL_PASSWORD_HASH', 'PORTAL_PASSWORD'];
 const AGENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -27,8 +28,19 @@ const validZone = (tz) => { try { new Intl.DateTimeFormat('en', { timeZone: tz }
 
 const str = (min, max) => s.string().min(min).max(max);
 const Look = s.object({ character: str(1, 64), variant: str(1, 64).nullable(), accessories: s.array(str(1, 64)).max(8) }, { extra: 'reject' });
+const AccessConfig = s.object({
+  mode: s.enumOf(['local', 'lan', 'private', 'public-same-origin', 'public-split-origin', 'tunnel']),
+  apiPublicUrl: str(1, 2048).nullable(), uiOrigins: s.array(str(1, 2048)).max(16), domain: str(1, 253).nullable(),
+  proxy: s.enumOf(['caddy', 'traefik', 'cloudflare', 'manual']),
+  security: s.object({ accessTokenMinutes: s.int().min(5).max(15), refreshIdleHours: s.int().min(1).max(24),
+    refreshAbsoluteDays: s.int().min(1).max(30), partitionedCookie: s.boolean() }, { extra: 'reject' }),
+}, { extra: 'reject' }).refine(value => {
+  try { require('./access/draft').validateAccessDraft(value); return true; } catch { return false; }
+}, 'canonical external access draft');
 const ConfigShape = {
   version: s.literal(1),
+  auth:s.object({rbacEnabled:s.boolean()},{extra:'reject'}).optional(),
+  access: AccessConfig.optional(), accessRevision: s.int().min(0).optional(),
   instance: s.object({ name: str(1, 80), locale: s.enumOf(['fr', 'en']), timeZone: s.string().refine(validZone, 'IANA time zone') }, { extra: 'reject' }),
   owner: s.object({ displayName: str(1, 80), email: s.string().refine((v) => EMAIL.test(v), 'e-mail') }, { extra: 'reject' }),
   // G6: 'openclaw' needs its gateway; 'demo' (a synthesised team) takes an optional seed
@@ -50,18 +62,38 @@ const ConfigV2Schema = s.object({ ...ConfigShape, version: s.literal(2),
     return !!adapter.setup.connect && s.validate(adapter.setup.configSchema, r).ok;
   }, 'connectable adapter config'),
   owner: s.object({ displayName: str(1, 80), email: s.string().refine(v => EMAIL.test(v), 'e-mail'), authSource: s.literal('database') }, { extra: 'reject' }),
-  agents: s.object({ primary: s.string().refine(v => AGENT_ID.test(v), 'agent id').nullable(), looks: s.record(Look), names: s.record(s.record(str(1, 80))).optional() }, { extra: 'reject' }),
+  agents: s.object({ primary: s.string().refine(v => AGENT_ID.test(v), 'agent id').nullable(), looks: s.record(Look), names: s.record(s.record(str(1, 80).nullable())).optional(), hidden: s.record(s.array(s.string().refine(v => AGENT_ID.test(v), 'agent id'))).optional(), configured: s.record(s.array(s.string().refine(v => AGENT_ID.test(v), 'agent id'))).optional() }, { extra: 'reject' }),
   network: s.object({ mode: s.enumOf(['local', 'lan', 'tailnet', 'public', 'tunnel']), host: str(1, 255), port: s.int().min(1).max(65535), publicUrl: s.string().nullable(), cookieSecure: s.boolean() }, { extra: 'reject' }).optional(),
 }, { extra: 'reject' });
-const ConfigSchema = s.union([LegacyConfigSchema, ConfigV2Schema]);
+const runtimeEntryValid = r => {
+  if (!r || !INSTANCE_ID.test(r.id) || typeof r.enabled !== 'boolean') return false;
+  const { id, enabled, name, ...native } = r;
+  if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length>80 || /[\x00-\x1f\x7f]/.test(name))) return false;
+  if (!require('./adapters').ADAPTER_IDS.includes(native.adapter)) return false;
+  const adapter = require('./adapters').adapterById(native.adapter);
+  return !!adapter.setup.connect && s.validate(adapter.setup.configSchema, native).ok;
+};
+const { runtime: singleRuntime, ...V3Base } = ConfigShape;
+const ConfigV3Schema = s.object({ ...V3Base, version: s.literal(3),
+  owner: s.object({ displayName: str(1, 80), email: s.string().refine(v => EMAIL.test(v), 'e-mail'), authSource: s.literal('database') }, { extra: 'reject' }),
+  runtimes: s.array(s.unknown().refine(runtimeEntryValid, 'declared runtime instance')).max(32)
+    .refine(rows => new Set(rows.map(r => r.id)).size === rows.length, 'unique runtime instance ids'),
+  sources: s.object({ herdr: s.boolean().optional() }, { extra: 'reject' }).optional(),
+  agents: s.object({ primary: s.string().refine(v => !!parseId(v, 'agent'), 'scoped agent id').nullable(), looks: s.record(Look),
+    names: s.record(s.record(str(1, 80).nullable())).optional(), hidden: s.record(s.array(str(1, 4096))).optional(), configured: s.record(s.array(str(1, 4096))).optional() }, { extra: 'reject' }),
+  network: s.object({ mode: s.enumOf(['local', 'lan', 'tailnet', 'public', 'tunnel']), host: str(1, 255), port: s.int().min(1).max(65535), publicUrl: s.string().nullable(), cookieSecure: s.boolean() }, { extra: 'reject' }).optional(),
+}, { extra: 'reject' });
+const ConfigSchema = s.union([LegacyConfigSchema, ConfigV2Schema, ConfigV3Schema]);
 const secretShape = { sessionSecret: str(32, 256), runtimeToken: str(1, 4096).nullable() };
 const LegacySecretsSchema = s.object({ version: s.literal(1), ...secretShape, passwordHash: s.string().refine(isHash, 'scrypt hash') }, { extra: 'reject' });
 const SecretsV2Schema = s.object({ version: s.literal(2), ...secretShape }, { extra: 'reject' });
-const SecretsSchema = s.union([LegacySecretsSchema, SecretsV2Schema]);
+const SecretsV3Schema = s.object({ version: s.literal(3), sessionSecret: str(32, 256),
+  runtimes: s.record(s.object({ runtimeToken: str(1, 4096).nullable().optional() }, { extra: 'reject' })) }, { extra: 'reject' });
+const SecretsSchema = s.union([LegacySecretsSchema, SecretsV2Schema, SecretsV3Schema]);
 function versionedSchema(schema, value) {
   if (schema !== ConfigSchema && schema !== SecretsSchema) return schema;
-  if (value?.version !== 1 && value?.version !== 2) throw new ConfigError('configuration', [{ path: '$.version', detail: 'unsupported config version; supported: 1, 2' }]);
-  return schema === ConfigSchema ? (value.version === 1 ? LegacyConfigSchema : ConfigV2Schema) : (value.version === 1 ? LegacySecretsSchema : SecretsV2Schema);
+  if (![1, 2, 3].includes(value?.version)) throw new ConfigError('configuration', [{ path: '$.version', detail: 'unsupported config version; supported: 1, 2, 3' }]);
+  return schema === ConfigSchema ? [null, LegacyConfigSchema, ConfigV2Schema, ConfigV3Schema][value.version] : [null, LegacySecretsSchema, SecretsV2Schema, SecretsV3Schema][value.version];
 }
 
 function configPaths(env = process.env) {
@@ -114,13 +146,26 @@ function readInstanceConfig(env = process.env) {
 
 // The file, as the env variables src/config.js reads (only what the file holds)
 function fileEnv(config, secrets) {
+  // The legacy env projection remains usable by setup/doctor and older callers.
+  // Multi-source consumers use runtimeInstances() rather than broadcasting it.
+  if (config?.version === 3) {
+    const legacy = config.runtimes.find(r => r.id === 'legacy');
+    const primary = parseId(config.agents.primary, 'agent');
+    const selected = legacy || config.runtimes.find(r => r.enabled), adapter = selected?.adapter || 'demo';
+    const projected = { ...config, version: 2, runtime: selected ? nativeRuntime(selected) : { adapter },
+      agents: { ...config.agents, primary: primary?.runtime === 'legacy' ? primary.local : null,
+        names: { [adapter]: config.agents.names?.legacy || {} } } };
+    return fileEnv(projected, secrets ? { version: 2, sessionSecret: secrets.sessionSecret, runtimeToken: selected ? secrets.runtimes[selected.id]?.runtimeToken ?? null : null } : null);
+  }
   const out = {};
   const set = (k, v) => { if (v != null && v !== '') out[k] = String(v); };
   if (config) {
+    if(config.auth)set('AO_RBAC_ENABLED',config.auth.rbacEnabled?'1':'0');
     set('PORTAL_EMAIL', config.owner.email); set('PORTAL_DISPLAY_NAME', config.owner.displayName);
     if (config.owner.authSource === 'database') set('AO_AUTH_DATABASE', '1');
     if (config.agents.names) set('AO_AGENT_NAMES', JSON.stringify(config.agents.names[config.runtime.adapter] || {}));
     if (config.network) { set('HOST', config.network.host); set('PORT', config.network.port); set('AO_PUBLIC_URL', config.network.publicUrl); set('PORTAL_COOKIE_SECURE', config.network.cookieSecure ? '1' : '0'); }
+    if (config.access) set('AO_ALLOWED_ORIGINS', JSON.stringify(config.access.uiOrigins));
     set('AO_INSTANCE_NAME', config.instance.name); set('AO_LOCALE', config.instance.locale); set('AO_TIME_ZONE', config.instance.timeZone);
     set('AO_RUNTIME', config.runtime.adapter); set('AO_PRIMARY_AGENT', config.agents.primary);
     Object.assign(out, require('./adapters').adapterById(config.runtime.adapter).setup.env({ runtime: config.runtime, token: secrets?.runtimeToken }));
@@ -142,12 +187,60 @@ function effectiveEnv(env, { config, secrets }) {
     throw new ConfigError('environment', [{ path: '$', detail: 'incomplete environment login: ' + LOGIN_ENV.filter(k => env[k] !== undefined).join(', ') }]);
   }
 
-  if (config?.agents.names && env.AO_AGENT_NAMES === undefined) {
+  if (config?.version === 3) {
+    if (!config.runtimes.some(r => r.id === 'legacy') && Object.keys(env).some(k => k === 'AO_RUNTIME' || k === 'AO_PRIMARY_AGENT' || k.startsWith('AO_AGENT_') || ['OC_GATEWAY_TOKEN', 'OC_GATEWAY_URL'].includes(k))) {
+      throw new ConfigError('environment', [{ path: '$.runtimes', detail: 'legacy runtime overrides require the legacy instance' }]);
+    }
+    const legacy = config.runtimes.find(r => r.id === 'legacy');
+    if (legacy) require('./adapters').adapterById(legacy.adapter).setup.overrideEnv?.({ env, runtime: nativeRuntime(legacy), effective: out });
+  } else if (config?.agents.names && env.AO_AGENT_NAMES === undefined) {
     const selected = out.AO_RUNTIME || require('./adapters').defaultAdapter().definition.id;
     out.AO_AGENT_NAMES = JSON.stringify(config.agents.names[selected] || {});
   }
-  if (config) require('./adapters').adapterById(config.runtime.adapter).setup.overrideEnv?.({ env, runtime: config.runtime, effective: out });
+  if (config && config.version !== 3) require('./adapters').adapterById(config.runtime.adapter).setup.overrideEnv?.({ env, runtime: config.runtime, effective: out });
   return out;
+}
+
+const nativeRuntime = ({ id, enabled, name, ...native }) => native;
+// Pure upgrade: reading v2 never publishes or changes the caller's object.
+function upgradeV2(config, secrets) {
+  if (config.version === 3) return { config: structuredClone(config), secrets: secrets && structuredClone(secrets) };
+  if (config.version !== 2) throw new ConfigError('configuration', [{ path: '$.version', detail: 'database owner migration required before v3' }]);
+  const { runtime, ...other } = structuredClone(config), adapter = runtime.adapter;
+  const agents = { ...other.agents,
+    primary: other.agents.primary ? scopedId('legacy', 'agent', other.agents.primary) : null,
+    looks: Object.fromEntries(Object.entries(other.agents.looks || {}).map(([key, value]) => [key === 'primary' ? key : scopedId('legacy', 'agent', key.replace(/^agent:/, '')), value])) };
+  for (const key of ['names', 'hidden', 'configured']) if (other.agents[key]) agents[key] = { legacy: other.agents[key][adapter] || (key === 'names' ? {} : []) };
+  return { config: { ...other, version: 3, runtimes: [{ id: 'legacy', enabled: true, ...runtime }], agents },
+    secrets: secrets ? { version: 3, sessionSecret: secrets.sessionSecret, runtimes: { legacy: { runtimeToken: secrets.runtimeToken } } } : null };
+}
+
+// Resolve each source independently. Legacy env overrides cannot leak a token
+// into another gateway. Child cfgs deliberately contain no runtime collection.
+function runtimeInstances(base, files, env = {}) {
+  const upgraded = files.config?.version === 2 ? upgradeV2(files.config, files.secrets) : files;
+  if (!upgraded.config || upgraded.config.version !== 3) return null;
+  const config = upgraded.config;
+  return config.runtimes.map(entry => {
+    const A = require('./adapters').adapterById(entry.adapter), token = upgraded.secrets?.runtimes[entry.id]?.runtimeToken ?? null;
+    const adapterEnv = A.setup.env({ runtime: nativeRuntime(entry), token });
+    const scopedEnv = { HOME: env.HOME || os.homedir(), ...adapterEnv, ...(entry.id === 'legacy' ? env : {}) };
+    if (entry.id === 'legacy') A.setup.overrideEnv?.({ env, runtime: nativeRuntime(entry), effective: scopedEnv });
+    const kind = scopedEnv.AO_RUNTIME || entry.adapter;
+    if (kind !== entry.adapter && !scopedEnv.OC_GATEWAY_TOKEN) throw new ConfigError('environment', [{ path: '$.runtimes', detail: 'adapter override requires its explicit credential' }]);
+    const child = require('./config').tryLoadConfig({ PORTAL_EMAIL: base.loginEmail, PORTAL_SECRET: base.sessionSecret,
+      AO_AUTH_DATABASE: base.authDatabase ? '1' : undefined, PORTAL_PASSWORD_HASH: base.passwordHash || undefined,
+      PORTAL_PASSWORD: base.loginPassword || undefined, AO_ENV: base.instance, AO_DATA_DIR: base.dataDir,
+      AO_RUNTIME: kind, ...scopedEnv });
+    const primary = parseId(config.agents.primary, 'agent');
+    return { id: entry.id, name:entry.name, adapter: kind, enabled: entry.enabled, config: nativeRuntime(entry), cfg: { ...child, ...base,
+      gatewayUrl: child.gatewayUrl, gatewayToken: child.gatewayToken, ...A.paths?.(scopedEnv),
+      runtimeAdapter: kind, demoSeed: child.demoSeed,
+      primaryAgent: primary?.runtime === entry.id ? primary.local : null,
+      agentNames: entry.id === 'legacy' && env.AO_AGENT_NAMES !== undefined ? JSON.parse(env.AO_AGENT_NAMES) : config.agents.names?.[entry.id] || {},
+      hiddenAgents: config.agents.hidden?.[entry.id] || [], configuredAgents: config.agents.configured?.[entry.id] || null,
+      runtimeId: entry.id, runtimeConfig: nativeRuntime(entry) } };
+  });
 }
 
 const completeEnvLogin = env => !!(env.PORTAL_EMAIL && env.PORTAL_SECRET && (env.PORTAL_PASSWORD_HASH || env.PORTAL_PASSWORD));
@@ -164,59 +257,15 @@ function setupState(env, files) {
   return 'open';
 }
 
-// One file: a private temporary (0600, fsynced), then link() to the final name. link() refuses an existing name, so a
-// publication never overwrites a file (R21-03: exclusive); the temporary is always removed.
-function publishFile(file, value) {
-  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`);
-  const fd = fs.openSync(tmp, 'wx', 0o600);
-  try {
-    try { fs.writeSync(fd, JSON.stringify(value, null, 2) + '\n'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-    fs.linkSync(tmp, file);
-  } finally { try { fs.unlinkSync(tmp); } catch (_) { /* already gone */ } }
-}
-// R22-01: the publication lock is an OS lock, not a file convention. A SQLite write transaction (BEGIN IMMEDIATE) on
-// `.publish-lock.sqlite` in the config dir: acquiring it is atomic, a live owner can never be robbed (there is nothing
-// to "take over"), and the OS releases it when its owner exits or dies, so no staleness rule is needed.
-const LOCK_DB = '.publish-lock.sqlite';
-function acquirePublishLock(dir) {
-  const { DatabaseSync } = require('node:sqlite');
-  const file = path.join(dir, LOCK_DB);
-  try { fs.closeSync(fs.openSync(file, 'a', 0o600)); fs.chmodSync(file, 0o600); } catch (_) { /* opened below; reported there */ }
-  const db = new DatabaseSync(file, { timeout: 0 });
-  try { db.exec('BEGIN IMMEDIATE'); } catch (e) {
-    db.close();
-    if (/locked|busy/i.test(String(e.message))) throw Object.assign(new Error('another publication is in progress'), { code: 'EBUSY' });
-    throw e;
-  }
-  let released = false;
-  return () => { if (released) return; released = true; try { db.exec('ROLLBACK'); } finally { db.close(); } };
-}
-/**
- * Publishes both files (R21-03, R22-01), recoverably and exclusively:
- *   1. the lock (one publisher at a time, an OS lock: acquirePublishLock); 2. a committed config.json → EEXIST (never overwritten);
- *   3. an orphan secrets.json (an interrupted publication: no commit) is removed; 4. secrets.json; 5. config.json, the
- *   commit marker, last. A crash before 5 leaves an uncommitted state that boot ignores and the next setup replaces.
- */
-function writeInstanceConfig(paths, config, secrets, { replace = false } = {}) {
+// Schema validation stays here; setup and settings share the single safe publisher.
+const acquirePublishLock = dir => require('./ops/config-publisher').acquirePublishLock(dir);
+function writeInstanceConfig(paths, config, secrets, options = {}) {
   if (config.version !== secrets.version) throw new ConfigError(paths.secrets, [{ path: '$.version', message: 'must match config version' }]);
   for (const [file, schema, v] of [[paths.file, ConfigSchema, config], [paths.secrets, SecretsSchema, secrets]]) {
     const r = s.validate(versionedSchema(schema, v), v);
     if (!r.ok) throw new ConfigError(file, safeIssues(r.issues || []));
   }
-  const dir = path.dirname(paths.file);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  fs.chmodSync(dir, 0o700);   // mkdir's mode is masked by umask and leaves an existing directory as it was
-  const release = acquirePublishLock(dir);
-  try {
-    if (!replace && fs.existsSync(paths.file)) throw Object.assign(new Error('already configured'), { code: 'EEXIST' });
-    if (!replace && fs.existsSync(paths.secrets)) fs.unlinkSync(paths.secrets);
-    if (replace) {
-      const safe = require('./ops/safe-fs');
-      safe.mutate(paths.secrets, { type: 'write', text: JSON.stringify(secrets, null, 2) + '\n', mode: 0o600 });
-      safe.mutate(paths.file, { type: 'write', text: JSON.stringify(config, null, 2) + '\n', mode: 0o600 });
-    } else { publishFile(paths.secrets, secrets); publishFile(paths.file, config); }
-    try { const fd = fs.openSync(dir, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); } } catch (_) { /* best effort */ }
-  } finally { release(); }
+  return require('./ops/config-publisher').publish(paths, config, secrets, options);
 }
 
 /**
@@ -240,4 +289,5 @@ function securePermissions({ paths, dataDir = null, uid = process.getuid ? proce
 }
 
 module.exports = { VERSION, configPaths, readInstanceConfig, writeInstanceConfig, securePermissions, acquirePublishLock, effectiveEnv, fileEnv, setupState, isConfigured, envConfigured,
-  LegacyConfigSchema, LegacySecretsSchema, ConfigV2Schema, SecretsV2Schema, ConfigSchema, SecretsSchema, completeEnvLogin, ConfigError, AGENT_ID, GATEWAY_URL, EMAIL, validZone, LOGIN_ENV };
+  LegacyConfigSchema, LegacySecretsSchema, ConfigV2Schema, SecretsV2Schema, ConfigV3Schema, SecretsV3Schema, ConfigSchema, SecretsSchema,
+  upgradeV2, runtimeInstances, nativeRuntime, completeEnvLogin, ConfigError, AGENT_ID, GATEWAY_URL, EMAIL, validZone, LOGIN_ENV };

@@ -100,10 +100,10 @@ describe('S7c · skills and the gateway restart', () => {
     for (const [name, status] of [['a.b', 400], ['-x', 400], ['inconnue', 404]]) assert.equal((await h.request('PUT', `/api/v2/skills/${name}/enabled`, { enabled: true })).status, status, name);
   });
 
-  it('restart: needs the confirmation word; a failed fallback is 502 and keeps no cooldown; via the gateway RPC; a second within 2 min is 429', async () => {
+  it('restart: needs the confirmation word; an unsupported RPC is 502 and keeps no cooldown; via the gateway RPC; a second within 2 min is 429', async () => {
     assert.equal((await h.request('POST', '/api/v2/gateway/restart', {})).status, 400);
     assert.equal((await h.request('POST', '/api/v2/gateway/restart', { confirm: 'oui' })).status, 400);
-    // no RPC handler: the fallback is the service manager, which the test PATH's fake systemctl always refuses
+    // No RPC handler: refuse the selected gateway restart; there is no host-service fallback.
     const down = await h.request('POST', '/api/v2/gateway/restart', { confirm: 'redemarrer' });
     assert.equal(down.status, 502); assert.equal(down.json.error.code, 'upstream_failed');
     h.gw.handlers['gateway.restart.request'] = () => ({ ok: true });
@@ -133,7 +133,10 @@ describe('S7c · async chat over the chat topic', () => {
     assert.equal(chat.data.sessionKey, 'agent:main:explicit:portal-chat');
     assert.equal(chat.meta.topic.id, 'chat');
     const turn = h.cliCalls().find((a) => a[0] === 'agent');
-    assert.deepEqual(turn, ['agent', '--message=Bonjour', '--agent=main', '--json', '--timeout=150', '--session-key=portal-chat']);
+    assert.deepEqual(turn, ['agent', '--message=Bonjour', '--agent=main', '--json', '--timeout=150', '--channel=webchat', '--reply-channel=webchat', '--session-key=agent:main:explicit:portal-chat']);
+    const fence = h.cliCalls().find(a => a[0] === 'gateway' && a[2] === 'sessions.patch');
+    assert.equal(JSON.parse(fence.find(a => a.startsWith('--params=')).slice(9)).key, chat.data.sessionKey);
+    assert.ok(turn.includes('--session-key=' + chat.data.sessionKey), 'chat follows the exact fenced/dispatch session');
     for (const body of [{ text: '' }, { text: 'x'.repeat(8001) }, { text: 'a', extra: 1 }]) assert.equal((await h.request('POST', '/api/v2/chat/messages', body)).status, 400);
   });
 });

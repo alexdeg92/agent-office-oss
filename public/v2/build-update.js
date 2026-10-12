@@ -5,7 +5,7 @@ import { getUIBuildId } from './api.js';
 // Never import a new page into an old document, even before its next heartbeat.
 export function createBuildUpdate({ build = buildId, fetchBuild = getUIBuildId,
   notify = () => {}, reload = (url) => location.assign(url), currentUrl = () => location.href } = {}) {
-  let stale = false, pending = null;
+  let stale = false, pending = null, checkedAt = null;
   function observe(next) {
     if (build && typeof next === 'string' && next && next !== build && !stale) {
       stale = true;
@@ -13,9 +13,19 @@ export function createBuildUpdate({ build = buildId, fetchBuild = getUIBuildId,
     }
     return stale;
   }
-  function check() {
+  function check({ maxAge = 0 } = {}) {
     if (stale) return Promise.resolve(true);
-    if (!pending) pending = Promise.resolve().then(fetchBuild).then(observe, () => false).finally(() => { pending = null; });
+    if (!pending && maxAge > 0 && checkedAt !== null && Date.now() - checkedAt < maxAge) return Promise.resolve(false);
+    if (!pending) {
+      let timer;
+      // The version endpoint must never hold navigation hostage. Late results still
+      // announce an update; the HTTP client aborts its request independently.
+      const deadline = new Promise(resolve => { timer = setTimeout(() => resolve(false), 800); });
+      const request = Promise.resolve().then(fetchBuild).then(observe, () => false);
+      pending = Promise.race([request, deadline]).finally(() => {
+        clearTimeout(timer); pending = null; checkedAt = Date.now();
+      });
+    }
     return pending;
   }
   return {

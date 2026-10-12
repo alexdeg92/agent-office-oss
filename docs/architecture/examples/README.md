@@ -1,4 +1,4 @@
-# Contract examples (api.md 2.7)
+# Contract examples (api.md 2.8)
 
 **Authoritative example payloads** for every VM and command shared across agents (PM decision on review-07).
 They are the wire contract in executable form. PM delegated these contract edits to onboarding-1 for this fix round.
@@ -30,6 +30,13 @@ They are the wire contract in executable form. PM delegated these contract edits
 | `skill-list-vm.json` | `GET /api/v2/views/skills` → `Ok<SkillListVM>` (S7b) | §3.7 |
 | `skill-detail-vm.json` | `GET /api/v2/views/skills/:name` → `Ok<SkillDetailVM>` (S7b) | §3.7 |
 | `setup-vm.json` | `GET /api/v2/setup` → `Ok<SetupVM>` (G4) | §5.7 |
+| `v3/external-access-vm.json` | `GET /api/v3/settings/access` or `POST /api/v3/setup/access/state` → `Ok<ExternalAccessVM>`; its DNS provider catalog is data-driven | ADR-003 §8–§9 |
+| `v3/external-access-setup-vm.json` | Open setup `ExternalAccessVM`; local topology has null public URL/domain and no published config | ADR-003 §8–§9 |
+| `v3/external-access-plan-request.json` / `external-access-plan.json` | `POST /api/v3/{settings,setup}/access/plan`; plan is read-only | ADR-003 §8 |
+| `v3/external-access-checks-request.json` / `external-access-check-status-request.json` / `external-access-cancel-request.json` | Explicit bounded DNS/TLS/CORS/public check job lifecycle; setup requests add `setupCode` | ADR-003 §8–§10 |
+| `v3/external-access-check-status.json` | `POST /api/v3/{settings,setup}/access/checks/status` → typed observations and DNS/provider evidence | ADR-003 §8–§10 |
+| `v3/external-access-check-status-waiting.json` | Valid, divergent resolver answers are `waiting`; a resolver timeout remains `unknown` in the preceding fixture | ADR-003 §8–§10 |
+| `v3/external-access-error.json` | Invalid domain error; other probe failures use the documented category keys, never raw upstream text | ADR-003 §8–§10 |
 | `setup-check-request.json` / `setup-check-result.json` | `POST /api/v2/setup/check` | §5.7 |
 | `setup-discover-result.json` | `POST /api/v2/setup/discover` (request = check's) | §5.7 |
 | `setup-save-request.json` / `setup-save-result.json` | `PUT /api/v2/setup` | §5.7 |

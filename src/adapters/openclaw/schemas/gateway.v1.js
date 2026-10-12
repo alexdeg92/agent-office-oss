@@ -99,8 +99,11 @@ const schemas = {
 
   'gw.rpc.agents.list': s.object({
     defaultId: str(), mainKey: str(),
-    agents: s.array(s.object({ id: s.string().min(1), name: str(), workspace: str(), model: Model.optional() },
-      { known: ['workspaceGit', 'agentRuntime', 'thinkingLevels', 'thinkingOptions', 'thinkingDefault', 'defaultPermissionMode'] }), { perItem: true }),
+    agents: s.array(s.object({ id: s.string().min(1), name: str(), displayName: str(), role: str(), description: str(), workspace: str(), model: Model.optional(),
+      modelSource: s.enumOf(['explicit', 'inherited']).optional(),
+      agentRuntime: s.object({ id: s.string().min(1).max(256) }, { known: ['source', 'fallback', 'cloudPlacementSupported',
+        'cloudPlacementExecutionMode', 'devicePlacement', 'devicePlacementSupported'] }).optional() },
+      { known: ['workspaceGit', 'thinkingLevels', 'thinkingOptions', 'thinkingDefault', 'defaultPermissionMode'] }), { perItem: true }),
   }, { known: ['ownership', 'selectionRequired', 'scope'] }),
 
   'gw.rpc.sessions.list': s.object({

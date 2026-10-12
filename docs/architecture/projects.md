@@ -357,14 +357,14 @@ const projects = createProjectService({
 | `commands.setPersonOverride` | `PUT /api/v2/projects/:id/people/:personId` | `setPersonOverride` |
 | `commands.appendHistory` | `POST /api/v2/projects/:id/history` | `appendHistory` |
 | `commands.importCandidates` | `POST /api/v2/projects/import` | `importCandidates` |
-| `commands.regenerateSummary` | `POST /api/v2/projects/:id/summary/regenerate` | none (revision read) |
-| `commands.abandonSummary` | none (the route calls it when the agent turn fails, is empty, or is dropped) | none |
-| `commands.completeSummary` | none (the route calls it when the agent turn returns text) | `edit`, only if the turn id and revision still match |
+| `commands.regenerateSummary` | `POST /api/v2/projects/:id/summary/regenerate` | `claimSummary` (internal turn identity only) |
+| `commands.abandonSummary` | none (the route calls it when the agent turn fails, is empty, or is dropped) | `abandonSummary` (internal turn identity only) |
+| `commands.completeSummary` | none (the route calls it when the agent turn returns text) | `completeSummary`, only if the turn id and revision still match |
 | `refresh(changeSet)` | engine change, or a timer | repo refresh, `ingestActivity`, `applyProjectRisks` |
 
 A command calls exactly one repository method. That method is the transaction. Import is the exception the API already states: `importCandidates` commits each created project inside that one call, so one bad candidate does not roll back the others. A no-op still enters the method and publishes nothing. A thrown `ProjectError` publishes nothing. A 409 whose `revision` is set gets `err.body` from `projectConflictBody` (`error.current.vm` is the current `ProjectVM`). `source-in-use` stays a 409 with `revision: null` and no body.
 
-The 200 body is `CommandResult`. `result` is `null` except import (`{ created, skipped }`) and summary regeneration (`{ turnId }`). `vm` is the fresh `ProjectVM` for a single project, and `null` for import. `revision` is the project revision, or `null` for import. Regeneration checks `expectedRevision`, stores one pending turn per project, and does not write. A second call while that turn is pending is 409 `issue: 'turn-pending'`. The pending turn clears when `commands.edit` changes the summary, when `commands.completeSummary({ id, turnId, expectedRevision, summary })` applies that turn, or when `commands.abandonSummary({ id, turnId })` is called with that turn's id. Completion writes the summary only when `turnId` is still the pending turn and `expectedRevision` is still the project revision (the revision returned when the turn was accepted). Otherwise it drops the reply: no write, and a newer pending turn stays. Abandon writes nothing: the revision, the summary, and the history stay, and nothing is published. A different `turnId`, or a second call, leaves the pending turn as it is. The architect answers 202 and runs the agent turn; this module does not. A failed or empty turn, or a dropped completion, calls abandon for that turn id only.
+The 200 body is `CommandResult`. `result` is `null` except import (`{ created, skipped }`) and summary regeneration (`{ turnId }`). `vm` is the fresh `ProjectVM` for a single project, and `null` for import. `revision` is the project revision, or `null` for import. Regeneration checks `expectedRevision` and stores one pending turn per project in `projects.summary_turn` (migration 016), without changing the public project revision/history. The identity survives store and service restarts. Comment-driven acceptance claims it with the delivery insert before 202; the comment worker uses the same guarded completion with the current revision to allow intervening tag changes. A child fallback keeps that identity until the parent settles or the delivery expires. A second call while that turn is pending is 409 `issue: 'turn-pending'`. The pending turn clears when `commands.edit` changes the summary, when `commands.completeSummary({ id, turnId, expectedRevision, summary })` applies that turn, or when `commands.abandonSummary({ id, turnId })` is called with that turn's id. Completion writes the summary only when `turnId` is still the pending turn and `expectedRevision` is still the project revision (the revision returned when the turn was accepted). Otherwise it drops the reply: no write, and a newer pending turn stays. Abandon clears only the internal identity: the revision, summary and history stay, and nothing is published. A different `turnId`, or a second call, leaves the pending turn as it is. The architect answers 202 and runs the agent turn; this module does not. A failed or empty turn, or a dropped completion, calls abandon for that turn id only.
 
 `candidates()` remembers the list it just proposed. Import treats any other key as `skipped: unknown`. Empty `keys` is 400 `empty-selection`. An override for a key that was not selected is 400 `override-not-selected`. Both fail before the repository call.
 
@@ -468,34 +468,22 @@ After the ADR: examples and `src/i18n/fr.js` first, then this module. This note 
 
 ## Project covers (covers-1)
 
-`src/projects/covers/engine.js` is the pluggable backend engine. Its generators implement
-`{id: 'agent'|'code', supports(context), generate(context)}`; `supports` returns positive capability evidence,
-and `generate` returns `{cover: Buffer, thumb: Buffer, ext: 'svg'|'webp'}`. Classification consumes the name,
-summary, labels, status and linked source references. The code renderer uses slug-seeded Bureau motifs and
-the project title. It has no dependency, model call, remote font or external image reference.
+`src/projects/covers/engine.js` generates covers locally and deterministically. Classification consumes the
+name, summary, labels, status and linked source references. The code renderer uses slug-seeded Bureau motifs
+and the project title; it has no dependency, model call, remote font or external image reference. Cover
+generation never starts an agent turn or invokes an image, delivery or messaging tool.
 
 The service's `onProjectChanged` hook covers commands, imports and runtime tag discovery. Startup observes
 all projects too. A changed name/summary/slug or classified type is debounced for 750 ms, with a single
-instance-wide worker and a 60 s limit covering discovery, session waiting and generation. Code is the
-fallback for failed/empty/unusable agent results. Stale results are discarded by content fingerprint and
+instance-wide worker and a 60 s limit covering local generation. Stale results are discarded by content fingerprint and
 job version, without changing the project revision, history or last-activity clock. Scheduling uses a
 monotonic clock. The next startup recovers unfinished work from the persisted fingerprints.
 
-OpenClaw exposes `runtime.imageGenerators({sessionSlug, signal})`: read-only `agents.list`, the per-session
-`tools.effective` inventory (older runtimes: `tools.catalog`) and per-agent `skills list --agent … --json`.
-Successful per-agent skill reads are cached for 120 s (bounded to 64 agents); effective tools are checked
-for each project session. Image understanding alone is not generation. An eligible generation skill requires an execution tool; a
-model requires explicit image-generation capability. The selected agent receives an undelivered CLI turn
-in `agent:<id>:ao-projet-<slug>`, serialized with that project's comments/summary turns when the thread is
-available. Only returned local PNG/JPEG/WebP files inside that job's output directory are accepted; no
-remote media fetching occurs. Paths are resolved and symlinks refused. CLI and rasterizer accept abort
-signals. No direct OpenClaw config or workspace writes are made by this engine.
-
 Files live in `<dataDir>/project-covers/media/<sha256>.<svg|webp>`; small metadata records are atomically
 replaced in `project-covers/records/<projectId>.json`. Generated code output is self-contained SVG at
-480×270 / 160×90. Agent/upload output is normalized to WebP with an optional local ImageMagick converter
+480×270 / 160×90. Upload output is normalized to WebP with an optional local ImageMagick converter
 (single thread, memory/disk limits, 10 s per conversion). Budgets are enforced at 25 KiB / 6 KiB. Without
-that executable, code covers still work, agent generation is skipped and raster upload is unavailable.
+that executable, code covers still work and raster upload is unavailable.
 Immutable files are retained so old hash URLs remain valid.
 
 Project/card VMs have `cover: null | {url, thumbUrl, source: 'agent'|'code'|'upload', generatedAt}`.

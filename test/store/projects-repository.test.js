@@ -40,12 +40,13 @@ describe('SQL projects repository · durability', () => {
       PORTAL_EMAIL: 'owner@example.invalid', PORTAL_PASSWORD: 'test-password', PORTAL_SECRET: 'test-secret',
       AO_PROJECTS_OWNERS: ' acme, existing-org ' });
     assert.deepEqual(cfg.projectsOwners, ['acme', 'existing-org']);
-    const legacyActor = OWNER_ACTOR_SHORT.find((value) => value !== 'owner');
-    assert.equal(legacyActor, ['al', 'ex'].join(''));
+    const legacyActor = OWNER_ACTOR_SHORT[0];
+    assert.deepEqual(OWNER_ACTOR_SHORT, ['owner'], 'owner identity comes from configured ownerPersonId, not a personal name alias');
     let h = openDatabase({ dir, instance: 'test' });
     const existingOwner = Owner();
     let repo = createProjectsRepository(h.db, { persons: [existingOwner, timmy()], ownerPersonId: existingOwner.id,
       timmyPersonId: timmy().id, githubOwners: cfg.projectsOwners, now: () => AT });
+    assert.throws(() => repo.createProject({ name: 'Unconfigured personal alias', actor: ['al', 'ex'].join('') }), /Acteur invalide/);
     const p = repo.createProject({ name: 'Existing project', actor: legacyActor,
       sources: [{ kind: 'github', ref: { owner: 'existing-org', repo: 'agent-office' } }] });
     const q = repo.addLabel({ id: p.id, expectedRevision: p.revision, label: 'existing', actor: legacyActor });

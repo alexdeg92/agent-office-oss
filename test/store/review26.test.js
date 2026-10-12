@@ -51,6 +51,24 @@ describe('R26-01 · one unit: code points, as SQLite counts them', () => {
     } finally { fs.rmSync(d, { recursive: true, force: true }); }
   });
 
+  it('scrubs raw chat identities before persisting historical occupant names', () => {
+    const d = tmp();
+    try {
+      const h = openDatabase({ dir: path.join(d, 'data'), instance: 'test' });
+      try {
+        const office = createOfficeRepo(h.db, { now: () => 1 });
+        assert.deepEqual(office.seen([
+          { id: 'conversation:synthetic-peer', role: 'conversation', name: 'discord-user:123456789012345678' },
+          { id: 'conversation:synthetic-peer-2', role: 'conversation', name: 'raw-handle user id:14694' },
+        ], 1), { stored: 2, rejected: 0 });
+        const stored = h.db.prepare('SELECT name FROM office_agents_seen ORDER BY occupant_id').all().map(row => row.name);
+        assert.deepEqual(stored, ['Conversation', 'Conversation']);
+        assert.equal(JSON.stringify(stored).includes('123456789012345678'), false);
+        assert.equal(JSON.stringify(stored).includes('14694'), false);
+      } finally { h.close(); }
+    } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  });
+
   it('an upgrade never strands a stored row: 007 rows of 200 astral / combining code points survive 008 and 009', () => {
     const d = tmp(), mig = path.join(d, 'm');
     try {

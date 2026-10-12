@@ -1,0 +1,308 @@
+{
+  "data": {
+    "state": "configured",
+    "settingsRevision": 12,
+    "draft": {
+      "mode": "public-split-origin",
+      "apiPublicUrl": "https://api.example.org/backend",
+      "uiOrigins": [
+        "https://office.example.org"
+      ],
+      "domain": "api.example.org",
+      "proxy": "caddy",
+      "security": {
+        "accessTokenMinutes": 10,
+        "refreshIdleHours": 12,
+        "refreshAbsoluteDays": 7,
+        "partitionedCookie": false
+      }
+    },
+    "fields": {
+      "mode": {
+        "source": "config",
+        "editable": true,
+        "reason": null
+      },
+      "apiPublicUrl": {
+        "source": "config",
+        "editable": true,
+        "reason": null
+      },
+      "uiOrigins": {
+        "source": "environment",
+        "editable": false,
+        "reason": "config.environment-override"
+      },
+      "domain": {
+        "source": "config",
+        "editable": true,
+        "reason": null
+      },
+      "proxy": {
+        "source": "default",
+        "editable": true,
+        "reason": null
+      },
+      "security": {
+        "source": "default",
+        "editable": true,
+        "reason": null
+      }
+    },
+    "choices": {
+      "modes": [
+        {
+          "id": "local",
+          "labelKey": "access.mode.local",
+          "descriptionKey": "access.mode.local.help"
+        },
+        {
+          "id": "lan",
+          "labelKey": "access.mode.lan",
+          "descriptionKey": "access.mode.lan.help"
+        },
+        {
+          "id": "private",
+          "labelKey": "access.mode.private",
+          "descriptionKey": "access.mode.private.help"
+        },
+        {
+          "id": "public-same-origin",
+          "labelKey": "access.mode.public-same-origin",
+          "descriptionKey": "access.mode.public-same-origin.help"
+        },
+        {
+          "id": "public-split-origin",
+          "labelKey": "access.mode.public-split-origin",
+          "descriptionKey": "access.mode.public-split-origin.help"
+        },
+        {
+          "id": "tunnel",
+          "labelKey": "access.mode.tunnel",
+          "descriptionKey": "access.mode.tunnel.help"
+        }
+      ],
+      "proxies": [
+        "caddy",
+        "traefik",
+        "cloudflare",
+        "manual"
+      ],
+      "dnsProviders": [
+        {
+          "id": "cloudflare",
+          "labelKey": "access.dns.provider.cloudflare",
+          "consoleUrl": "https://dash.cloudflare.com/",
+          "nsSuffixes": [
+            "ns.cloudflare.com"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        },
+        {
+          "id": "route53",
+          "labelKey": "access.dns.provider.route53",
+          "consoleUrl": "https://console.aws.amazon.com/route53/",
+          "nsSuffixes": [
+            "awsdns-00.com",
+            "awsdns-00.net",
+            "awsdns-00.org",
+            "awsdns-00.co.uk"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": [
+            "^ns-[0-9]+\\.awsdns-[0-9]+\\.(?:com|net|org|co\\.uk)$"
+          ]
+        },
+        {
+          "id": "google-cloud-dns",
+          "labelKey": "access.dns.provider.googleCloud",
+          "consoleUrl": "https://console.cloud.google.com/net-services/dns/zones",
+          "nsSuffixes": [
+            "googledomains.com"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        },
+        {
+          "id": "namecheap",
+          "labelKey": "access.dns.provider.namecheap",
+          "consoleUrl": "https://ap.www.namecheap.com/Domains/DomainControlPanel",
+          "nsSuffixes": [
+            "registrar-servers.com"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        },
+        {
+          "id": "godaddy",
+          "labelKey": "access.dns.provider.godaddy",
+          "consoleUrl": "https://dcc.godaddy.com/manage/dns",
+          "nsSuffixes": [
+            "domaincontrol.com"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        },
+        {
+          "id": "ovh",
+          "labelKey": "access.dns.provider.ovh",
+          "consoleUrl": "https://www.ovh.com/manager/",
+          "nsSuffixes": [
+            "ovh.net"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        },
+        {
+          "id": "gandi",
+          "labelKey": "access.dns.provider.gandi",
+          "consoleUrl": "https://account.gandi.net/",
+          "nsSuffixes": [
+            "gandi.net"
+          ],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        },
+        {
+          "id": "unknown",
+          "labelKey": "access.dns.provider.unknown",
+          "consoleUrl": null,
+          "nsSuffixes": [],
+          "records": [
+            "A",
+            "AAAA",
+            "CNAME"
+          ],
+          "api": "none",
+          "nsPatterns": []
+        }
+      ]
+    },
+    "securityDefaults": {
+      "accessTokenMinutes": {
+        "value": 10,
+        "min": 5,
+        "max": 15
+      },
+      "refreshIdleHours": {
+        "value": 12,
+        "min": 1,
+        "max": 24
+      },
+      "refreshAbsoluteDays": {
+        "value": 7,
+        "min": 1,
+        "max": 30
+      },
+      "partitionedCookie": false
+    },
+    "lastVerification": {
+      "revision": 11,
+      "origin": "https://office.example.org",
+      "checkedAt": 1791287000000,
+      "expiresAt": 1791287300000,
+      "state": "passed",
+      "checks": [
+        "dns",
+        "tls",
+        "cors"
+      ],
+      "browser": {
+        "state": "passed",
+        "observedAt": 1791287000000
+      }
+    },
+    "restartRequired": true,
+    "savedRevision": 12,
+    "activeRevision": 11,
+    "saved": {
+      "revision": 12,
+      "draft": {
+        "mode": "public-split-origin",
+        "apiPublicUrl": "https://api.example.org/backend",
+        "uiOrigins": [
+          "https://office.example.org"
+        ],
+        "domain": "api.example.org",
+        "proxy": "caddy",
+        "security": {
+          "accessTokenMinutes": 10,
+          "refreshIdleHours": 12,
+          "refreshAbsoluteDays": 7,
+          "partitionedCookie": false
+        }
+      }
+    },
+    "active": {
+      "revision": 11,
+      "draft": {
+        "mode": "public-split-origin",
+        "apiPublicUrl": "https://api.example.org/backend",
+        "uiOrigins": [
+          "https://office.example.org"
+        ],
+        "domain": "api.example.org",
+        "proxy": "caddy",
+        "security": {
+          "accessTokenMinutes": 10,
+          "refreshIdleHours": 12,
+          "refreshAbsoluteDays": 7,
+          "partitionedCookie": false
+        }
+      }
+    },
+    "securityHeaders": {
+      "locked": [
+        "content-security-policy",
+        "x-frame-options",
+        "strict-transport-security"
+      ],
+      "connectSrc": [
+        "https://office.example.org"
+      ],
+      "editable": false
+    },
+    "pendingActivation": true
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

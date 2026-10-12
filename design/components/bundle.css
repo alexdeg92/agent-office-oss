@@ -580,14 +580,14 @@ button.bu-row:hover, a.bu-row:hover { background: var(--bu-surface-hover); borde
 
 /* AvatarStack: stacked solid discs (Owner's iPad review). Later avatars sit ON TOP; every disc has a 2px ring in the
    colour of what's behind the stack (--_ring: surface on cards, bg on the project header), so the overlap reads as
-   stacked discs. The overlap is space-1 (4px: 14 % of a 28px card disc, 13 % of 32px), small enough that the initials
-   of each disc stay fully visible (3px on 28px card discs: wide initials such as « MW » still fit). « +N » is a disc
+   stacked discs. The overlap is 2px on 32px discs and 2px on 28px card discs; together with the 2px ring, this
+   leaves wide initials such as « OW » fully visible. « +N » is a disc
    of the same size. Agent state = an inner ring drawn over the portrait. */
 .bu-avatar-stack { --_ring: var(--bu-surface); --_ds: var(--bu-size-control-sm); display: inline-flex; align-items: center; margin: 0; padding: 0 0 0 2px; list-style: none; isolation: isolate; }
 .bu-avatar-stack--sm { --_ds: calc(var(--bu-space-6) + var(--bu-space-1)); }
 .bu-avatar-stack > li { position: relative; display: flex; }
-.bu-avatar-stack > li + li { margin-left: calc(var(--bu-space-1) * -1); }
-.bu-avatar-stack--sm > li + li { margin-left: calc(var(--bu-space-1) * -0.75); }
+.bu-avatar-stack > li + li { margin-left: calc(var(--bu-space-1) * -0.5); }
+.bu-avatar-stack--sm > li + li { margin-left: calc(var(--bu-space-1) * -0.5); }
 .bu-avatar-stack .bu-avatar { --_s: var(--_ds); box-shadow: 0 0 0 2px var(--_ring); letter-spacing: -0.02em; }
 .bu-avatar-stack .bu-avatar img { border-radius: var(--bu-radius-pill); }
 .bu-avatar-stack .bu-avatar[data-agent-state]::after { content: ""; position: absolute; inset: 0; border-radius: var(--bu-radius-pill); box-shadow: inset 0 0 0 2px var(--_st); pointer-events: none; }

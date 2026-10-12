@@ -22,7 +22,7 @@ const sub = (n = 'data') => path.join(dir, n);
 describe('store · database', () => {
   it('creates the data dir 0700 and the files 0600, applies 001 once, records it', () => {
     const h = openDatabase({ dir: sub(), instance: 'test', now: () => NOW });
-    assert.deepEqual(h.applied, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    assert.deepEqual(h.applied, require('../../src/store/db').listMigrations().map(m => m.version));
     h.db.exec("INSERT INTO ui_prefs (key, value_json, updated_at) VALUES ('uiTheme', '\"auto\"', 1)");   // forces the WAL
     assert.equal(mode(sub()), 0o700);
     for (const f of [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm']) if (fs.existsSync(path.join(sub(), f))) assert.equal(mode(path.join(sub(), f)), 0o600, f);
@@ -31,15 +31,15 @@ describe('store · database', () => {
     h.close();
     const again = openDatabase({ dir: sub(), instance: 'test' });
     assert.deepEqual(again.applied, []);
-    assert.deepEqual(again.db.prepare('SELECT version, name FROM schema_migrations').all().map((r) => ({ ...r })), [{ version: 1, name: 'init' }, { version: 2, name: 'projects' }, { version: 3, name: 'sessions' }, { version: 4, name: 'api_tokens' }, { version: 5, name: 'office' }, { version: 6, name: 'locale_pref' }, { version: 7, name: 'open_identities' }, { version: 8, name: 'seen_canonical' }, { version: 9, name: 'seen_id_limit' }, { version: 10, name: 'priority_p9' }, { version: 11, name: 'project_tag_slugs' }, { version: 12, name: 'project_comments' }, { version: 13, name: 'sender_captures' }, { version: 14, name: 'users' }, { version: 15, name: 'setup_owner' }]);
+    assert.deepEqual(again.db.prepare('SELECT version, name FROM schema_migrations').all().map((r) => ({ ...r })), require('../../src/store/db').listMigrations().map(({version,name}) => ({version,name})));
     again.close();
   });
 
-  it('migrations 001–015 hold the store tables (layouts come with their contract, S14b)', () => {
+  it('migrations hold the declared store, namespace and compatibility-policy tables', () => {
     const h = openDatabase({ dir: sub(), instance: 'test' });
     const tables = h.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((r) => r.name);
-    assert.deepEqual(tables, ['api_token_salt', 'api_tokens', 'audit_log', 'history_events', 'interlocutor_cache', 'office_agents_seen', 'office_layout_revisions', 'office_layouts', 'person_identities', 'persons', 'project_comments', 'project_flags', 'project_people', 'project_sources', 'project_tag_slugs', 'projects',
-      'quarantine', 'repo_cache', 'revoked_sessions', 'schema_migrations', 'sender_captures', 'store_meta', 'ui_prefs', 'users', 'workspace_snapshots']);
+    assert.deepEqual(tables, ['api_token_salt', 'api_tokens', 'audit_log', 'auth_bootstrap_challenges', 'auth_families', 'authorization_state', 'history_events', 'human_access_tokens', 'interlocutor_cache', 'invitations', 'office_agents_seen', 'office_automatic_looks', 'office_layout_revisions', 'office_layouts', 'permission_audit_changes', 'permission_resources', 'person_identities', 'persons', 'project_comments', 'project_flags', 'project_people', 'project_sources', 'project_tag_slugs', 'projects',
+      'quarantine', 'refresh_tokens', 'repo_cache', 'revoked_sessions', 'role_permissions', 'roles', 'runtime_alias_policy', 'runtime_auto_add', 'runtime_detection', 'runtime_instance_bindings', 'runtime_migration', 'schema_migrations', 'sender_captures', 'settings_restart', 'settings_state', 'store_meta', 'stream_tickets', 'ui_prefs', 'user_overrides', 'users', 'workspace_snapshots']);
     h.close();
   });
 

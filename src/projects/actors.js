@@ -4,7 +4,7 @@ const { validation } = require('./errors');
 const { OWNER_ACTOR_SHORT } = require('./constants');
 
 /**
- * Command actor. `owner` is the owner Person, `{ kind: 'agent', agentId }` is an agent Person
+ * Command actor. `owner` resolves to the configured owner Person, `{ kind: 'agent', agentId }` is an agent Person
  * (the primary comes from the engine resolver), `system` is a component. History stores an ActorRef
  * with `personId` (data-model.md). The command shorthand `'timmy'` is refused. A stored `'timmy'`
  * is mapped on read by `mapLegacyActors` and is not rewritten.

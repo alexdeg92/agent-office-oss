@@ -53,7 +53,7 @@ describe('core · fake adapter without OpenClaw shapes (§12.4)', () => {
     assert.equal(card.level, 'ok');
     assert.deepEqual(card.sub, { key: 'healthSub.protocol', params: { n: 7 } }, 'HealthVM reads the protocol from engine.runtime()');
 
-    const meta = buildMetaVM({ instance: 'test', readonly: false, readonlyStore: false }, { engine });
+    const meta = buildMetaVM({ instance: 'test', readonly: false, readonlyStore: false }, { engine, authenticated: true });
     assert.deepEqual(meta.runtime, { id: 'fake', name: 'Fake Runtime', gatewayLabel: 'Serveur factice' });
   });
 

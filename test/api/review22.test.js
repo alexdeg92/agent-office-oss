@@ -11,6 +11,7 @@ const { hashPassword } = require('../../src/security/password');
 const { loadScenario } = require('../helpers/scenario');
 const { startServer } = require('../helpers/harness');
 const { openSse } = require('../helpers/sse-client');
+const { CONTRACT_VERSION, CONTRACT_VERSION_V3 } = require('../../src/api/v2/envelope');
 
 const tmpDir = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
 const CONFIG = (name) => ({ version: 1, instance: { name, locale: 'en', timeZone: 'UTC' }, owner: { displayName: name, email: name.toLowerCase() + '@example.invalid' },
@@ -103,7 +104,7 @@ describe('R22-03 · a fresh instance serves the v3 bootstrap (meta and setup) be
   it('GET /api/v3/meta → a 3.0 MetaVM with configured:false; /api/v3/setup works like v2', async () => {
     const meta = await h.get('/api/v3/meta');
     assert.equal(meta.status, 200, meta.text);
-    assert.deepEqual([meta.json.data.apiVersion, meta.json.data.contractVersion, meta.json.data.instance.configured], [3, '3.2', false]);
+    assert.deepEqual([meta.json.data.apiVersion, meta.json.data.contractVersion, meta.json.data.instance.configured], [3, CONTRACT_VERSION_V3, false]);
     const setup = await h.get('/api/v3/setup');
     assert.equal(setup.status, 200); assert.equal(setup.json.data.state, 'open');
     assert.equal((await h.get('/api/v3/views/office')).status, 503, 'everything else waits for configuration');
@@ -188,11 +189,12 @@ describe('R22-08 · mount aliases in another case pick the version their path na
   it('/API/V3 and /api/V3 are 3.0 (meta, office, stream hello, transport POSTs); /API/v2 is 2.5', async () => {
     for (const p of ['/API/V3/meta', '/api/V3/meta']) assert.equal((await h.get(p)).json.data.apiVersion, 3, p);
     assert.equal((await h.get('/API/v2/meta')).json.data.apiVersion, 2);
+    assert.equal((await h.get('/API/v2/meta')).json.data.contractVersion, CONTRACT_VERSION);
     assert.equal((await h.get('/API/V3/views/office')).json.data.occupants[0].id, 'primary');
     const s = openSse(h.base, '/API/V3/stream?topics=office', { cookie: h.cookie });
     try {
       const hello = await s.next((e) => e.event === 'hello');
-      assert.equal(hello.data.contractVersion, '3.2');
+      assert.equal(hello.data.contractVersion, CONTRACT_VERSION_V3);
       const r = await h.request('POST', `/API/V3/stream/${hello.data.streamId}/topics`, { add: ['health'] });
       assert.equal(r.status, 200, 'the stream id is found in the v3 hub: ' + r.text);
     } finally { s.close(); }

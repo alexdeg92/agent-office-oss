@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 // Minimal SSE client for tests (no dependency): parses frames ({ id, event, data }) as they arrive.
 const http = require('http');
 

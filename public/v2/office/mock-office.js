@@ -5,6 +5,7 @@
 // are reproducible. Pure; no DOM.
 import { indexManifest } from './assets.js';
 import { resolveOccupants, validateLayout, toVocabulary, canonicalRole, canonicalRuleId } from './layout-rules.js';
+import { planFloors, validateFloors } from './floors.js';
 import { createMockLayoutStore } from './mock-store.js';
 
 const MIN = 60_000;
@@ -41,7 +42,7 @@ const chip = (id, name, state) => ({ id: `per_${id.replace(/[^a-z0-9]/gi, '').pa
 /** The mock's stored layout carries the seen-agent period explicitly (O8 default, 30 minutes), so 3.0 reads show the optional field. */
 const withPresence = (l) => structuredClone(l.presence ? l : { ...l, presence: { seenMinutes: 30 } });
 
-export function createOfficeMock({ manifest, layout, scenario = '1', now = () => Date.now(), mainName = 'Timmy', timeZone = undefined, version = 2 }) {
+export function createOfficeMock({ manifest, layout, scenario = '1', now = () => Date.now(), mainName = 'Morgan', timeZone = undefined, version = 2 }) {
   // The contract version this mock speaks (api-v3.md D3/D4): 2 → 2.x names (main, *cron, dm:…), 3 → 3.0 names (primary,
   // *scheduled, direct:…). Internally the mock keeps 2.x ids; every VM, cue and layout is projected on the way out,
   // and layouts written in either vocabulary are accepted (layout-rules.js reads both).
@@ -56,7 +57,7 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
   const index = indexManifest(manifest);
   const store = createMockLayoutStore({
     data: withPresence(layout), defaultData: withPresence(layout), manifest, now, timeZone,
-    validate: (d) => validateLayout(d, index),
+    validate: (d) => [...validateLayout(d, index), ...(d.floors ? validateFloors(d, index) : [])],
     agentsSeen: [{ id: 'subagent:archiviste', role: 'subagent', name: 'Archiviste', lastSeenAt: now() - 3 * 86_400_000 }],
   });
   let step = 0;
@@ -65,6 +66,7 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
   let seq = 0;
   let layoutRev = store.revision;
   const t0 = now();
+  let visitLastAt = t0;
 
   function stepNow() {
     if (scenario === 'vide') return { main: 'idle', subs: [] };
@@ -88,8 +90,16 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
     // the server does.
     if (scenario === 'visite') {
       const talking = step === 0 || step === 2;
+      const visitorPresent = step !== 1 || now() - visitLastAt < 60_000;
       return [{ id: 'main', role: 'main', sourceName: mainName, state: talking ? 'working' : 'idle' },
-        ...(talking ? [{ id: 'dm:camille', role: 'dm', sourceName: 'Camille', state: 'working' }] : [])];
+        ...(visitorPresent ? [{ id: 'dm:camille', role: 'dm', sourceName: 'Camille', state: step === 1 ? 'idle' : 'working' }] : [])];
+    }
+    // T-0062: ?mock=lignee — canonical lineage (OccupantVM.parentId): two spawned sub-agents and a DM of the main agent
+    if (scenario === 'lignee') {
+      return [{ id: 'main', role: 'main', sourceName: mainName, state: 'working' },
+        { id: 'subagent:scout', role: 'subagent', sourceName: NAMES.scout, state: 'researching', parent: 'main' },
+        { id: 'subagent:plume', role: 'subagent', sourceName: NAMES.plume, state: 'writing', parent: 'main' },
+        { id: 'dm:camille', role: 'dm', sourceName: 'Camille', state: 'working', parent: 'main' }];
     }
     if (scenario === 'foule') {
       return [{ id: 'main', role: 'main', sourceName: mainName, state: CROWD_STATES[step % CROWD_STATES.length] },
@@ -127,6 +137,7 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
     /** Advance the script; returns the cue frames to emit (SSE `cue`). */
     tick() {
       step++;
+      if (scenario === 'visite') visitLastAt = now();
       // delegating carries the newly arrived sub-agent as partnerId (api.md 2.1 §4.4) and an interactionId.
       const prev = new Set(SCRIPT[(step - 1 + SCRIPT.length) % SCRIPT.length].subs.map(([k]) => k));
       const fresh = stepNow().subs.map(([k]) => k).filter((k) => !prev.has(k));
@@ -143,7 +154,7 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
       recordSeen(src);
       for (const id of since.keys()) if (!src.some((x) => x.id === id)) since.delete(id);   // one who left starts afresh
       const resolved = resolveOccupants(d, index, src);
-      const occupants = src.map((s, i) => {
+      let occupants = src.map((s, i) => {
         const r = resolved[i];
         return {
           id: pid(s.id), role: prole(s.role), name: r.name,
@@ -157,11 +168,79 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
           // Scripted exec tool: Atlas « calling » goes to the server rack (server-authoritative destination).
           destination: s.id === 'subagent:atlas' && s.state === 'calling' && d.items.some((it) => it.uid === 'rack') ? { kind: 'server', stationUid: 'rack' } : null,
           sessionKey: s.id === 'main' ? 'agent:main:main' : `agent:main:subagent:${s.id.split(':')[1]}`,
-          tokens: 52_300 + i * 8_100 + step * 640, lastSeenAt: now(),
+          execution: s.state === 'unknown' || s.state === 'offline' ? { status: 'unknown', evidence: { level: 'unknown', observedAt: null, expiresAt: null } }
+            : s.state === 'observed' ? { status: 'unknown', evidence: { level: 'observed', observedAt: now(), expiresAt: now() + 30000 } }
+              : { status: s.state === 'working' || s.state === 'calling' || s.state === 'thinking' || s.state === 'writing' || s.state === 'researching' ? 'running'
+                : s.state === 'error' ? 'failed' : 'idle',
+                evidence: { level: 'verified', observedAt: now(), expiresAt: null } },
+          tokens: 52_300 + i * 8_100 + step * 640, lastSeenAt: now(), ...(s.parent ? { parentId: pid(s.parent) } : {}),
         };
       });
+      let visitIntent = { hostId: pid('main'), desk: [], meeting: [], talking: false, speaker: null, until: null, visitors: [] };
+      if (scenario === 'visite') {
+        const visitor = occupants.find(o => o.id === pid('dm:camille'));
+        const elapsed = now() - visitLastAt;
+        let phase = null;
+        if (visitor && step === 0) phase = elapsed < 12_000 ? 'person' : 'agent';
+        else if (visitor && step === 1 && elapsed < 60_000) phase = 'linger';
+        else if (visitor && step === 2) phase = 'person';
+        if (visitor && phase) {
+          if (phase === 'agent') { visitor.state = 'waiting'; visitor.stateLabel = { key: 'agentState.waiting' }; }
+          if (phase === 'linger') { visitor.state = 'idle'; visitor.stateLabel = { key: 'agentState.idle' }; }
+          visitor.visitPhase = phase; visitor.visitOnStage = true; visitor.visitStateLabel = visitor.stateLabel;
+          visitor.stateDetailLabel = visitor.stateLabel; visitor.stateLastLabel = { key: 'office.lastState', params: { state: visitor.stateLabel } };
+          const meeting = step === 2;
+          visitIntent = { hostId: pid('main'), desk: meeting ? [] : [visitor.id], meeting: meeting ? [pid('main'), visitor.id] : [],
+            talking: phase !== 'linger', speaker: phase === 'person' ? visitor.id : phase === 'agent' ? pid('main') : null,
+            until: phase === 'person' ? visitLastAt + 12_000 : phase === 'linger' ? visitLastAt + 60_000 : null,
+            visitors: [{ id: visitor.id, phase, stateLabel: visitor.stateLabel, onStage: true }] };
+        }
+      }
+      const floorPlan = planFloors(index, d, occupants);
+      occupants = floorPlan.occupants;
       const active = occupants.filter((o) => !['idle', 'offline'].includes(o.state)).length;
       for (const o of occupants) delete o.sourceName;
+      // The mock is a source fixture for the same render-only OfficeVM contract
+      // as production; grouping, order and floor counts are provided here.
+      const byId = new Map(occupants.map(o => [o.id, o]));
+      const parentOf = new Map(occupants.map(o => [o.id, typeof o.parentId === 'string' && byId.has(o.parentId) ? o.parentId : null]));
+      const children = new Map();
+      for (const [id, parentId] of parentOf) if (parentId) { const rows = children.get(parentId) || []; rows.push(id); children.set(parentId, rows); }
+      const ordered = [], seen = new Set();
+      const visit = (id, rootId, depth) => { if (seen.has(id)) return; seen.add(id); ordered.push({ id, rootId, depth }); for (const child of children.get(id) || []) visit(child, rootId, depth + 1); };
+      for (const o of occupants) if (!parentOf.get(o.id)) visit(o.id, o.id, 0);
+      for (const o of occupants) if (!seen.has(o.id)) { parentOf.set(o.id, null); visit(o.id, o.id, 0); }
+      const conversationRoles = new Set(['direct', 'group', 'conversation', 'session', 'dm', 'channel']);
+      const conversationIds = occupants.filter(o => conversationRoles.has(o.role)).map(o => o.id);
+      const conversations = new Set(conversationIds);
+      const rows = new Map();
+      for (const [order, entry] of ordered.entries()) {
+        const o = byId.get(entry.id), parentId = parentOf.get(entry.id);
+        rows.set(entry.id, { ...o, parentId, parentName: !conversations.has(entry.id) && parentId ? byId.get(parentId)?.name || null : null,
+          parentAmbiguous: false, rosterDepth: conversations.has(entry.id) ? 0 : entry.depth, teamId: null, groupId: entry.rootId, rosterOrder: order, floorId: o.floorId || '1', standingPoint: null,
+          stateActive: !['unknown', 'idle', 'offline'].includes(o.state), stateLabel: { key: `agentState.${o.state}` },
+          stateDetailLabel: { key: `agentState.${o.state}` }, stateLastLabel: { key: 'office.lastState', params: { state: { key: `agentState.${o.state}` } } } });
+      }
+      const rosterItems = ordered.filter(entry => !parentOf.get(entry.id) && !conversations.has(entry.id)).map(({ id: rootId }) => {
+        const childIds = ordered.filter(entry => entry.rootId === rootId && entry.id !== rootId && !conversations.has(entry.id)).map(entry => entry.id);
+        const previewOccupantIds = [rootId, ...childIds.slice(0, 2)], overflowCount = Math.max(0, childIds.length - 2);
+        return { id: rootId, kind: childIds.length ? 'group' : 'occupant', isGroup: childIds.length > 0, rootId, occupantIds: [rootId, ...childIds], childIds,
+          previewOccupantIds, overflowCount, openLabel: { key: 'office.mobile.openTeam', params: { name: rows.get(rootId).name, n: childIds.length } },
+          delegatesLabel: { key: 'office.mobile.delegates', params: { n: childIds.length } }, overflowLabel: overflowCount ? { key: 'office.mobile.overflowCount', params: { n: overflowCount } } : null,
+          order: rows.get(rootId).rosterOrder, count: childIds.length, label: rows.get(rootId).title };
+      });
+      const rosterPreviewItems = rosterItems.slice(0, 5);
+      const rosterPopulation = occupants.filter(o => !conversations.has(o.id));
+      const order = id => id === 'rdc' ? 0 : id === 'gym' ? 10002 : Number(id) || 1;
+      const rosterFloors = floorPlan.floors.map(floor => {
+        const people = floor.occupants, floorActive = people.some(o => o.state === 'unknown') ? null : people.filter(o => !['idle','offline'].includes(o.state)).length;
+        return { id: floor.id, order: order(floor.id), label: { key: floor.id === 'rdc' ? 'office.floor.rdc' : floor.id === 'gym' ? 'office.floor.gym' : floor.id === '1' ? 'office.floor.first' : 'office.floor.number', ...(Number(floor.id) > 1 ? { params: { n: Number(floor.id) } } : {}) },
+          countLabel: { key: 'office.floor.count', params: { n: people.length } },
+          statusLabel: floorActive == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active: floorActive, idle: people.filter(o => ['idle','offline'].includes(o.state)).length } },
+          kind: floor.kind, occupantIds: people.map(o => o.id), mobileLabelIds: [], items: people.map(o => ({ kind: 'occupant', id: `occupant:${o.id}`, occupantId: o.id })), count: people.length, activeCount: floorActive,
+          idleCount: people.filter(o => ['idle','offline'].includes(o.state)).length,
+          layout: { room: floor.layout.room, theme: floor.layout.theme, items: floor.layout.items }, capacity: floor.capacity };
+      });
       return {
         connection: { gateway: scenario === 'panne' ? 'down' : 'up', since: t0 - 42 * MIN },
         kpis: [
@@ -172,7 +251,14 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
           { id: 'tokens', label: { key: 'kpi.tokens' }, value: occupants.reduce((n, o) => n + o.tokens, 0), unit: 'tokens', sub: null },
           { id: 'cpu', label: { key: 'kpi.cpu' }, value: 18 + (step % 5) * 3, unit: 'percent', sub: null },
         ],
-        occupants,
+        occupants: ordered.map(entry => rows.get(entry.id)), rosterGroups: [], rosterItems, rosterPreviewItems,
+        rosterOverflowCount: Math.max(0, rosterItems.length - rosterPreviewItems.length), rosterSummary: { count: rosterPopulation.length,
+          activeCount: rosterPopulation.some(o => o.state === 'unknown') ? null : rosterPopulation.filter(o => !['idle', 'offline'].includes(o.state)).length },
+        rosterAllLabel: { key: 'office.mobile.all', params: { n: rosterItems.length } },
+        rosterOverflowLabel: { key: 'office.mobile.overflowCount', params: { n: Math.max(0, rosterItems.length - rosterPreviewItems.length) } },
+        conversationIds, conversationCount: conversationIds.length, conversationLabel: { key: 'office.mobile.conversations', params: { n: conversationIds.length } },
+        stateLabels: Object.fromEntries(['unknown','observed','idle','thinking','working','researching','writing','calling','waiting','error','offline'].map(state => [state, { key: `agentState.${state}` }])),
+        visitIntent, rosterFloors, unseatedTeams: [],
         journal: [...journal],
         layoutRevision: store.revision,
         queue: [

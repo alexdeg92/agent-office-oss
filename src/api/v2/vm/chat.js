@@ -19,11 +19,20 @@ function buildChatVM({ sessionKey, transcript, pending, errors = [], local = [],
   }
   for (const x of errors) msgs.push({ id: x.id, role: 'error', at: x.at, text: x.text, meta: null });
   // R15-03: messages of finished turns (the sent text, the reply) until the transcript itself shows them
-  const inTranscript = (m) => msgs.some((t) => t.role === m.role && t.text === m.text && t.at >= m.since - 1000);
-  for (const m of local) if (!inTranscript(m)) msgs.push({ id: m.id, role: m.role, at: m.at, text: m.text, meta: m.meta });
+  const transcriptMessages = msgs.slice();
+  const claimed = new Set();
+  const inTranscript = m => {
+    const echo = transcriptMessages.find(t => !claimed.has(t.id) && t.role === m.role && t.text === m.text && t.at >= m.since - 1000);
+    if (!echo) return false;
+    claimed.add(echo.id);
+    // The portal knows who accepted these recent turns even when the runtime omits human identity.
+    if (m.senderInfo) echo.senderInfo = m.senderInfo;
+    return true;
+  };
+  for (const m of local) if (!inTranscript(m)) msgs.push({ id: m.id, role: m.role, at: m.at, text: m.text, meta: m.meta, senderInfo: m.senderInfo });
   // the message being answered, until the transcript has it
-  if (pending && !msgs.some((m) => m.role === 'user' && m.at >= pending.since - 1000 && m.text === pending.text)) {
-    msgs.push({ id: 'pending_' + pending.turnId, role: 'user', at: pending.since, text: pending.text, meta: null });
+  if (pending && !inTranscript({ ...pending, role: 'user' })) {
+    msgs.push({ id: 'pending_' + pending.turnId, role: 'user', at: pending.since, text: pending.text, senderInfo: pending.senderInfo, meta: null });
   }
   for (const m of msgs) m.senderInfo = knownSender(m.senderInfo || resolveSender({ role: m.role === 'error' ? 'system' : m.role }, senderContext), senderContext);
   msgs.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));

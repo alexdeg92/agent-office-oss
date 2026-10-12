@@ -1,0 +1,86 @@
+{
+  "fonts": {
+    "display": "IBM Plex Sans",
+    "sans": "IBM Plex Sans",
+    "mono": "IBM Plex Mono"
+  },
+  "radius": [
+    6,
+    8,
+    12
+  ],
+  "colors": {
+    "bg": [
+      "#081117",
+      "#F1F6F7"
+    ],
+    "bg-sunken": [
+      "#060D12",
+      "#E8F0F2"
+    ],
+    "surface": [
+      "#101D24",
+      "#FFFFFF"
+    ],
+    "surface-raised": [
+      "#15232B",
+      "#F7FAFB"
+    ],
+    "surface-overlay": [
+      "#17252D",
+      "#FFFFFF"
+    ],
+    "surface-hover": [
+      "#1C303A",
+      "#E8F0F2"
+    ],
+    "surface-selected": [
+      "#14323D",
+      "#E0EFF3"
+    ],
+    "text-primary": [
+      "#ECF4F6",
+      "#13232C"
+    ],
+    "text-secondary": [
+      "#C0D0D7",
+      "#344E5A"
+    ],
+    "text-tertiary": [
+      "#97A9B2",
+      "#50616A"
+    ],
+    "accent": [
+      "#087B98",
+      "#006B87"
+    ],
+    "accent-hover": [
+      "#066B84",
+      "#005970"
+    ],
+    "accent-pressed": [
+      "#055D74",
+      "#004C60"
+    ],
+    "accent-text": [
+      "#8CD3E4",
+      "#006B87"
+    ],
+    "accent-subtle": [
+      "#12313B",
+      "#E0EFF3"
+    ],
+    "accent-border": [
+      "#33758A",
+      "#6D9BA7"
+    ],
+    "focus-ring": [
+      "#67C8E1",
+      "#006B87"
+    ],
+    "border-control": [
+      "#71858F",
+      "#697E87"
+    ]
+  }
+}

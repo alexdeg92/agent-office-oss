@@ -1,0 +1,17 @@
+{
+  "setupCode": "AO-ABCD-EFGH",
+  "settingsRevision": null,
+  "draft": {
+    "mode": "local",
+    "apiPublicUrl": null,
+    "uiOrigins": [],
+    "domain": null,
+    "proxy": "caddy",
+    "security": {
+      "accessTokenMinutes": 10,
+      "refreshIdleHours": 12,
+      "refreshAbsoluteDays": 7,
+      "partitionedCookie": false
+    }
+  }
+}

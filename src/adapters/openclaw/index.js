@@ -19,6 +19,7 @@ const { normaliseTranscript } = require('./normalise/transcript');
 const { normaliseConfig } = require('./normalise/config');
 const { normaliseSession } = require('./normalise/session');
 const { classifySession } = require('./classify/session-kind');
+const { createSessionWalker } = require('./session-walker');
 
 const SCHEMAS = Object.assign({}, require('./schemas/gateway.v1'), require('./schemas/cli.v1'), require('./schemas/config.v1'));
 const TESTED_WITH = ['2026.9.8'];
@@ -30,7 +31,8 @@ const ROUTES = {
   'gw.rpc.sessions.list': { op: 'sessions.page', prep: (v, env) => ({ page: v, offset: env.context && env.context.offset }) },
   'gw.rpc.sessions.describe': { op: 'sessions.describe', prep: (v) => v.session },
   // a catalog-only event (no sessionKey) carries no row: key null, the op skips it (the adapter refreshes the groups)
-  'gw.event.sessions.changed': { op: 'sessions.changed', prep: (v) => { const { sessionKey, reason, activitySummary, ...rest } = v; return Object.assign(rest, { key: sessionKey || null }); } },
+  'gw.event.sessions.changed': { op: 'sessions.changed', prep: (v) => { const { sessionKey, reason, runId, ...rest } = v;
+    return Object.assign(rest, { key: sessionKey || null, lastRunId: rest.lastRunId || runId || null }); } },
   'gw.rpc.sessions.groups.list': { op: 'sessionGroups' },
   'gw.rpc.agents.list': { op: 'agents' },
   'gw.rpc.cron.list': { op: 'flows' },
@@ -59,6 +61,7 @@ function runtimeHealth({ healthEvent, channelsStatus }) {
 const definition = {
   id: 'openclaw',
   name: 'OpenClaw',
+  mark: { monogram: 'OC', color: '#b23a0b', providerName: 'OpenClaw', logo: 'assets/connectors/openclaw.svg' },
   testedWith: TESTED_WITH,
   schemas: SCHEMAS,
   routes: ROUTES,
@@ -90,18 +93,8 @@ const definition = {
 const GROUPS_REFRESH_MS = 60 * 1000;
 const { every } = require('../../ops/timescale');
 
-// The gateway restart's fallback: the user service manager (systemd), when the gateway's own RPC is unavailable.
-// OC_SERVICE names the unit (default openclaw-gateway.service). Never used on a read-only instance.
-function restartService(cfg) {
-  const { execFile } = require('child_process');
-  const uid = process.getuid ? process.getuid() : 1000;
-  const env = Object.assign({}, process.env, { XDG_RUNTIME_DIR: '/run/user/' + uid, DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/' + uid + '/bus' });
-  const unit = cfg.openclawService || 'openclaw-gateway.service';
-  return new Promise((resolve) => execFile('systemctl', ['--user', 'restart', unit], { timeout: 30000, env }, (err) => resolve({ ok: !err })));
-}
-
 // Connection-bound parts, built at the composition root (server.js).
-function createRuntime(cfg, { senderCaptures = null } = {}) {
+function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
   const { Gateway } = require('./transport');
   const { createCli } = require('./cli');
   const { tapGateway, tapCli } = require('./taps');
@@ -109,29 +102,37 @@ function createRuntime(cfg, { senderCaptures = null } = {}) {
   const { bind: bindReads } = require('./reads');
   const { createSkillDocReader } = require('./skill-doc');
   const gw = new Gateway({ url: cfg.gatewayUrl, gatewayToken: cfg.gatewayToken, identityPath: cfg.identityPath, stateDbPath: cfg.stateDbPath });
-  const cli = createCli({ bin: cfg.openclawBin, home: cfg.openclawHome, readonly: cfg.readonly });
+  const cli = createCli({ bin: cfg.openclawBin, home: cfg.openclawHome, readonly: cfg.readonly,
+    env: { ...(cliEnv || process.env), OC_GATEWAY_URL: cfg.gatewayUrl, OC_GATEWAY_TOKEN: cfg.gatewayToken || '',
+      OPENCLAW_GATEWAY_URL: cfg.gatewayUrl, OPENCLAW_GATEWAY_TOKEN: cfg.gatewayToken || '', OPENCLAW_GATEWAY_PASSWORD: '' } });
   const reads = bindReads({ gw, cli });   // §12.4: every read here has its capability true
   const capture = senderCaptures && cfg.senderCapture !== false && !cfg.readonlyStore ? require('./sender-capture').createSenderCapture(senderCaptures) : null;
+  let sessionsListFailure = null, retrySessionsList = async () => ({ ok: false, category: 'not-started' });
   const boundDefinition = { ...definition,
-    capabilities: () => ({ ...definition.capabilities(), senderCapture: !!capture }),
+    capabilities: () => { const caps = definition.capabilities(); return { ...caps, senderCapture: !!capture, restart:!!caps.restart && commands.restartableUrl(cfg.gatewayUrl) }; },
     normalise: { ...definition.normalise, transcript: (key, value, at, window, issue, ctx = {}) => {
       if (capture) { try { capture.observe(key, value.messages, ctx.session); } catch {} }
       return normaliseTranscript(key, value, at, window, issue, { ...ctx, capturedSender: capture?.lookup });
-    } },
+    }, agents: (value) => normaliseAgents(value, require('./agent-settings').readAgentSettings(cfg.openclawConfigPath)) },
     resolveSender: (raw, ctx = {}) => definition.resolveSender(raw, { ...ctx, capturedSender: capture?.lookup }),
+    health: {
+      checks: () => sessionsListFailure ? [{ id: 'session-sync', severity: 'warn', causeCode: sessionsListFailure, textKey: `healthCheck.sessionSync.${sessionsListFailure}`,
+        impactKey: 'healthImpact.sessions', remedy: 'auto', actionId: 'retry-session-sync' }] : [],
+      remedies: { 'retry-session-sync': (context, options) => retrySessionsList(context, options) },
+    },
   };
-  let stopCapture = null;
-  let groupsTimer = null, groupsSoon = null, attached = null;
+  let stopCapture = null, disposed = false, nextSourceOrder = null;
+  let groupsTimer = null, groupsSoon = null, attached = null, sessionWalker = null;
   const loops = [];
   // R1-11: SKILL.md bodies, read only inside OpenClaw's documented skill roots (agent workspaces from the engine)
   const skillDocs = createSkillDocReader({ home: cfg.openclawHome, bin: cfg.openclawBin,
     workspaces: () => (attached ? attached.agents().map((a) => a.workspace).filter(Boolean) : []) });
   return {
     definition: boundDefinition, gw, cli, reads,
-    imageGenerators: require('./image-capabilities').bindImageCapabilities({ gw, cli }),
+    updateConnection: (pair) => gw.updateConnection(pair),
     attach(engine) {
       attached = engine;
-      tapGateway(gw, engine); tapCli(cli, engine); engine.setReads(reads);
+      nextSourceOrder = tapGateway(gw, engine).nextSourceOrder; tapCli(cli, engine); engine.setReads(reads);
       stopCapture = capture?.watch(gw, (key) => engine.session(key));
       // S7b: the session-group catalog changes rarely: read it on connect, every GROUPS_REFRESH_MS while connected,
       // and shortly after a catalog-only `sessions.changed` ({reason: 'groups'}, no sessionKey).
@@ -143,25 +144,23 @@ function createRuntime(cfg, { senderCaptures = null } = {}) {
       });
       groupsTimer = setInterval(refreshGroups, every(GROUPS_REFRESH_MS)); if (groupsTimer.unref) groupsTimer.unref();
     },
-    close() { stopCapture?.(); clearInterval(groupsTimer); clearTimeout(groupsSoon); for (const t of loops) clearInterval(t); },
+    close() { disposed=true; sessionWalker?.invalidate(); gw.close(); stopCapture?.(); clearInterval(groupsTimer); clearTimeout(groupsSoon); for (const t of loops) clearInterval(t); },
     /**
      * The runtime's own read loops (moved out of the v1 legacy runtime at S16 prep, same order and periods). Every read
      * goes through the taps. `hooks.refreshed()` runs after each full refresh (interlocutor enrichment).
      */
     start(engine, hooks = {}) {
+      if (disposed) return;
       const call = (m, p) => gw.call(m, p).catch(() => null);
-      const SESSIONS_PAGE = 300, MAX_PAGES = 20;
       // every page of sessions.list (R2-02); a failed or stalled page stops the walk (the snapshot is then incomplete)
-      const listAllSessions = async () => {
-        let offset = 0;
-        for (let i = 0; i < MAX_PAGES; i++) {
-          const page = await call('sessions.list', offset ? { limit: SESSIONS_PAGE, offset } : { limit: SESSIONS_PAGE });
-          if (!page || page.hasMore !== true) return page;
-          const next = Number.isInteger(page.nextOffset) ? page.nextOffset : offset + ((page.sessions && page.sessions.length) || 0);
-          if (next <= offset) return page;
-          offset = next;
-        }
-        return null;
+      sessionWalker = createSessionWalker({ gw, nextAcquisitionGeneration: nextSourceOrder,
+        onFailure: category => { sessionsListFailure = category; attached?.notifyHealth?.(); },
+        onSuccess: () => { sessionsListFailure = null; attached?.notifyHealth?.(); },
+      });
+      const listAllSessions = options => sessionWalker.walk(options);
+      retrySessionsList = async (_context, { signal } = {}) => {
+        const page = await listAllSessions({ signal });
+        return { ok: !!page, category: sessionsListFailure };
       };
       const refreshAll = () => Promise.all([call('agents.list', {}), call('cron.list', {}), listAllSessions(), call('channels.status', {})]);
       const { readOpenclawConfig } = require('./config-source');
@@ -169,6 +168,7 @@ function createRuntime(cfg, { senderCaptures = null } = {}) {
       const fire = (name, ...args) => { try { if (hooks[name]) hooks[name](...args); } catch (e) { console.log('[hook]', e.message); } };
       gw.on('open', async () => {
         await refreshAll();
+        if (disposed) return;
         fire('refreshed');
         this.refreshSkills();   // the listing is known now: the resolver has a primary
         call('sessions.subscribe', {}); call('sessions.messages.subscribe', {});
@@ -186,11 +186,11 @@ function createRuntime(cfg, { senderCaptures = null } = {}) {
       for (const t of loops) if (t.unref) t.unref();
     },
     skillDoc: (filePath) => skillDocs.read(filePath),
-    commands: commands.bind(cli, { gw, restartService: cfg.readonly ? null : () => restartService(cfg), readonly: !!cfg.readonly }),
+    commands: commands.bind(cli, { gw, gatewayUrl:cfg.gatewayUrl, readonly: !!cfg.readonly }),
     // S7c: re-reads after a write (ingested by the taps)
     refreshFlows: () => gw.call('cron.list', {}).catch(() => null),
     // G3a: the resolver's primary; without one (no listing yet) nothing is read
-    refreshSkills: () => { const a = attached && attached.primaryAgent(); return a ? cli.run(['skills', 'list', '--agent', a.id, '--json'], 30000) : Promise.resolve({ ok: false, refused: 'agent-unknown' }); },
+    refreshSkills: () => { const a = !disposed && attached && attached.primaryAgent(); return a ? cli.run(['skills', 'list', '--agent', a.id, '--json'], 30000, { freshness: true }) : Promise.resolve({ ok: false, refused: 'agent-unknown' }); },
   };
 }
 
@@ -199,9 +199,9 @@ const doctor = (ctx) => require('./doctor').doctor(ctx);
 
 // architect-56: the project-tag installer (src/adapters/openclaw/integration.js) with a CLI bound to the runtime's paths
 const projectTag = () => Object.assign({}, require('./integration'), {
-  cli: ({ openclawBin, openclawHome, readonly = false }) => require('./cli').createCli({ bin: openclawBin, home: openclawHome, readonly }) });
+  cli: ({ openclawBin, openclawHome, readonly = false, env }) => require('./cli').createCli({ bin: openclawBin, home: openclawHome, readonly, env }) });
 
-const setup = { connect: true,
+const setup = { connect: true, capabilities: { brand: { mark: 'OC', color: '#b54d31', foreground: '#ffffff', providerName: 'OpenClaw', logo: 'assets/connectors/openclaw.svg' } },
   env: ({ runtime, token }) => ({ OC_GATEWAY_URL: runtime.openclaw.gatewayUrl, ...(token ? { OC_GATEWAY_TOKEN: token } : {}) }),
   overrideEnv({ env, runtime, effective }) {
     const { cleanUrl } = require('./connection');
@@ -220,12 +220,39 @@ setup.discover = async ({ gw, detected = [] }) => {
       model: typeof a.model === 'string' ? a.model : typeof a.model?.primary === 'string' ? a.model.primary : null };
   });
 };
-setup.integrationAgents = async ({ paths, agents }) => {
+setup.integrationTargets = ctx => require('./agent-targets').targets(ctx);
+setup.integrationAgents = async ({ paths, agents, env }) => {
+  const local = setup.integrationTargets({ paths, env });
+  if (local.length) return local;
   if (agents?.some(a => a.workspace)) return agents.filter(a => a.workspace);
   if (!paths.openclawBin || !paths.openclawHome) return [];
   const I = projectTag();
-  const agentsFromCli = await I.discoverAgents(I.cli(paths), { home: paths.openclawHome }) || [];
+  const agentsFromCli = await I.discoverAgents(I.cli({ ...paths, env }), { home: paths.openclawHome }) || [];
   return agentsFromCli.map(a => ({ ...a, workspace: require('path').resolve(paths.openclawHome, a.workspace) }));
+};
+// Settings asks the adapter for descriptors, effective values and validated connection pairs.
+setup.settings = {
+  detectionIdentity: ({ cfg, entry, detection }) => detection
+    ? { paths: detection.checkedPaths?.slice(0, 1), gateways: [detection.connection?.gatewayUrl] }
+    : { paths: !entry || entry.id === 'legacy' ? [cfg.openclawConfigPath] : [], gateways: [cfg.gatewayUrl] },
+  probe: ({ runtime, paths, probe }) => (probe || setup.probe)({ url: runtime.gatewayUrl, token: runtime.token, identityPath: paths.identityPath, stateDbPath: paths.stateDbPath }),
+  secret: runtime => runtime.token,
+  detectedValues: detected => ({ gatewayUrl: detected.connection?.gatewayUrl, token: detected.secret }),
+  fields: [
+    { id: 'gatewayUrl', label: { key: 'settings.field.gatewayUrl' }, type: 'url', required: true, writeOnly: false, options: [] },
+    { id: 'token', label: { key: 'settings.field.token' }, type: 'secret', required: true, writeOnly: true, options: [] },
+  ],
+  envKeys: { gatewayUrl: 'OC_GATEWAY_URL', token: 'OC_GATEWAY_TOKEN' },
+  values: cfg => ({ gatewayUrl: cfg.gatewayUrl, token: cfg.gatewayToken }),
+  resolve(input, current = {}) {
+    const C = require('./connection');
+    const raw = input.gatewayUrl;
+    const url = C.cleanUrl(raw);
+    if (!url || url !== raw || raw.length > 2048 || !/^wss?:\/\/[^\s/?#]+(?:\/[^\s]*)?$/.test(raw)) throw Object.assign(new Error('invalid connection'), { field: 'runtime.gatewayUrl' });
+    const token = input.token === undefined && url === current.gatewayUrl ? current.token : input.token;
+    if (typeof token !== 'string' || !token || token.length > 4096) throw Object.assign(new Error('credential required for destination'), { field: 'runtime.token' });
+    return { adapter: 'openclaw', gatewayUrl: url, token };
+  },
 };
 const detect = (ctx) => require('../detectors/openclaw').detect(ctx);
 module.exports = { paths: require('./paths').paths, definition, createRuntime, runtimeHealth, ROUTES, doctor, projectTag, setup, detect };

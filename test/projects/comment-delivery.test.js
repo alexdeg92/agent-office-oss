@@ -24,7 +24,7 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-delivery-'));
   let store = openStore({ dir: tmp, instance: 'test', ownerName: 'Camille', now: () => clock, log: () => {} });
   store.persons.ensureAgent('main', 'Orion');
-  const repository = createProjectsRepository(store.db, { ownerPersonId: store.owner.id, primaryAgentId: () => 'main', githubOwners: [] });
+  let repository = createProjectsRepository(store.db, { ownerPersonId: store.owner.id, primaryAgentId: () => 'main', githubOwners: [] });
   const sessions = [KEY, CHILD, 'linked-old', 'linked-new'].map((key, i) => ({ key, group: key === KEY ? null : 'projet:bulletin',
     updatedAt: BASE + i, class: { kind: key === CHILD ? 'subagent' : 'conversation-direct', agentId: 'main', channel: null, interlocutorId: null }, usage: { total: 0 } }));
   const engine = {
@@ -53,7 +53,7 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
   let thread = makeThread(), server;
   function mount() {
     const app = express(); app.use(express.json());
-    thread.mount(app, { authed: (req, res, next) => next(), guard: () => (req, res, next) => readonly ? next(new ApiError('readonly')) : next(), ok: (res, data) => res.json(data) });
+    thread.mount(app, { authed: (req, res, next) => {req.session={email:'synthetic@example.invalid'};next();}, guard: () => (req, res, next) => readonly ? next(new ApiError('readonly')) : next(), ok: (res, data) => res.json(data) });
     app.use(errorMiddleware()); server = app.listen(0, '127.0.0.1');
     return new Promise((r) => server.once('listening', r));
   }
@@ -64,7 +64,7 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
     return { status: r.status, body: await r.json() };
   };
   t.after(async () => { thread.close(); await thread.idle(); await new Promise((r) => server.close(r)); store.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
-  return { p, raw, turns, engine, repository,
+  return { p, raw, turns, engine, get repository() { return repository; },
     get store() { return store; }, get thread() { return thread; }, get service() { return service; },
     setClock: (v) => { clock = v; }, setOffline: (v) => { offline = v; }, setTurn: (fn) => { onTurn = fn; }, request,
     async restart() {
@@ -72,6 +72,7 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
       store = openStore({ dir: tmp, instance: 'test', ownerName: 'Camille', now: () => clock, log: () => {} });
       // Repository statements belong to the reopened SQLite connection.
       const reopened = createProjectsRepository(store.db, { ownerPersonId: store.owner.id, primaryAgentId: () => 'main', githubOwners: [] });
+      repository = reopened;
       service = createProjectService({ repository: reopened, engineRegistry: engineRegistry(engine), primaryAgentId: () => 'main', clock: () => clock });
       thread = createProjectThread({ store, engine, runtime, topics, cfg, now: () => clock, pollMs: 5, relayGraceMs: grace });
       thread.attach({ service, repository: reopened }); await mount();
@@ -134,6 +135,8 @@ it('summary request also survives yield and restart, updates from the final answ
   assert.equal(h.repository.getProject(h.p.id).summary, 'Résumé initial');
   await h.restart();
   assert.equal(h.thread.hasPendingSummary(h.p.id), true);
+  const current = h.repository.getProject(h.p.id);
+  assert.throws(() => h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: current.revision }), e => e.code === 'conflict' && e.details[0].issue === 'turn-pending');
   h.setClock(BASE + 100); h.raw.set(CHILD, messages('child'));
   h.raw.set(KEY, [...messages('initial'), ...messages('completion'), ...messages('relay')]);
   await waitFor(() => state(h, c.id).follow.phase === 'settled');
@@ -295,4 +298,50 @@ it('mention ids and display names ignore case and accents, including decomposed 
   for (const token of ['@main', '@Orion', '@orion', '@ORION']) assert.deepEqual(h.thread.mentionsOf(token), ['main']);
   for (const token of ['@ÉLOÏSE', '@eloise', '@E\u0301loi\u0308se', '@ÉCLAIREUR', '@eclaireur']) assert.deepEqual(h.thread.mentionsOf(token), ['éclaireur']);
   assert.deepEqual(h.thread.mentionsOf('@main @Orion @oRiOn'), ['main']);
+});
+
+it('a manual edit restored to its original text after restart still beats an old summary delivery', async (t) => {
+  const h = await setup(t), accepted = h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.p.revision });
+  const c = h.thread.requestSummary(h.p.id, 'main', { kind: 'human' }, { turnId: accepted.result.turnId });
+  await waitFor(() => replies(h, c.id).length === 1);
+  let p = h.repository.getProject(h.p.id);
+  h.service.commands.edit({ id: p.id, expectedRevision: p.revision, summary: 'Manual' });
+  p = h.repository.getProject(h.p.id);
+  h.service.commands.edit({ id: p.id, expectedRevision: p.revision, summary: 'Résumé initial' });
+  await h.restart();
+  const newer = h.service.commands.regenerateSummary({ id: p.id, expectedRevision: h.repository.getProject(p.id).revision });
+  h.setClock(BASE + 100); h.raw.set(CHILD, messages('child'));
+  h.raw.set(KEY, [...messages('initial'), ...messages('completion'), ...messages('relay')]);
+  await waitFor(() => state(h, c.id).follow.phase === 'settled');
+  assert.equal(h.repository.getProject(p.id).summary, 'Résumé initial');
+  assert.equal(h.repository.getSummaryTurn(p.id), newer.result.turnId);
+  assert.equal(replies(h, c.id).length, 3);
+});
+it('child fallback keeps the durable summary turn for the later parent relay, including restart', async (t) => {
+  const h = await setup(t, { grace: 0 }), accepted = h.thread.startSummary({ id: h.p.id, expectedRevision: h.p.revision }, 'main', { kind: 'human' });
+  const c = h.store.comments.active().find(c => c.kind === 'event');
+  await waitFor(() => replies(h, c.id).length === 1);
+  h.setClock(BASE + 100); h.raw.set(CHILD, messages('child')); h.raw.set(KEY, [...messages('initial'), ...messages('completion')]);
+  await waitFor(() => h.repository.getProject(h.p.id).summary.startsWith('Plan final du sous-agent'));
+  await h.restart(); assert.equal(h.repository.getSummaryTurn(h.p.id), accepted.result.turnId);
+  assert.throws(() => h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.repository.getProject(h.p.id).revision }), e => e.code === 'conflict');
+  h.raw.set(KEY, [...messages('initial'), ...messages('completion'), ...messages('relay')]);
+  await waitFor(() => state(h, c.id).follow.phase === 'settled');
+  assert.equal(h.repository.getSummaryTurn(h.p.id), null);
+  assert.equal(h.repository.getProject(h.p.id).summary, replies(h, c.id).at(-1));
+});
+it('retrying a timed-out summary claims a new durable identity, not a null turn id', async (t) => {
+  const h = await setup(t), accepted = h.thread.startSummary({ id: h.p.id, expectedRevision: h.p.revision }, 'main', { kind: 'human', personId:h.store.owner.id });
+  const c = h.store.comments.active().find(c => c.kind === 'event');
+  await waitFor(() => replies(h, c.id).length === 1); h.setOffline(true); h.setClock(BASE + 7200001);
+  await waitFor(() => state(h, c.id).status === 'no-reply'); await h.thread.idle();
+  assert.equal(h.repository.getSummaryTurn(h.p.id), null);
+  h.setOffline(false); h.setTurn(() => ({ text: 'Retried summary' }));
+  const retried = await h.request('POST', '/' + c.id + '/retry', { agentId: 'main' });
+  assert.equal(retried.status, 202);
+  const identity = state(h, c.id).follow.summary.turnId;
+  assert.ok(identity && identity !== accepted.result.turnId);
+  await waitFor(() => state(h, c.id).follow.phase === 'settled');
+  assert.equal(h.repository.getProject(h.p.id).summary, 'Retried summary');
+  assert.equal(h.repository.getSummaryTurn(h.p.id), null);
 });

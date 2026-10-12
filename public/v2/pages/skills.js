@@ -32,7 +32,7 @@ export function SkillsPage({ match }) {
   const search = q.q || '';
   const set = (patch) => router.setQuery(patch);
 
-  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-frame"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
+  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-page"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
   const keep = (s, except) => (except === 'source' || !source || s.source === source) && (except === 'status' || !status || s.status === status)
     && (except === 'scope' || !scope || (s.visibility && s.visibility[scope])) && matchesQuery(s.id + ' ' + (s.description || ''), search);
   const shown = all ? all.filter((s) => keep(s)) : [];
@@ -44,7 +44,7 @@ export function SkillsPage({ match }) {
     [msg('skills.filter.scope'), 'portee', scope, [['', msg('skills.filter.allScopes'), count('scope', () => true)], ...rules.SCOPES.map((k) => [k, t('skillVisibility.' + k), count('scope', (s) => s.visibility && s.visibility[k])])]],
   ] : [];
 
-  return html`<div class="bu-page ao-frame ao-frame--wide ao-skills" aria-busy=${vm.resyncing || !all ? 'true' : undefined}>
+  return html`<div class="bu-page ao-page ao-page--wide ao-skills" aria-busy=${vm.resyncing || !all ? 'true' : undefined}>
     <div class="ao-skills__layout">
       <aside class="ao-skills__aside" aria-label=${msg('skills.filters')}>${groups.map(([title, param, value, options]) => html`<div key=${param} class="bu-filter">
         <h3 class="bu-eyebrow">${title}</h3>
@@ -53,7 +53,7 @@ export function SkillsPage({ match }) {
       </div>`)}</aside>
       <div class="ao-skills__main">
         <div class="bu-toolbar">
-          <h2 class="bu-title ao-skills__title">${msg('skills.title')}</h2>
+
           ${vm.data ? html`<span class="bu-caption bu-text-tertiary">${msg('skills.count', { n: vm.data.counts.active, total: fmt.number(vm.data.counts.total) })}</span>` : null}
           <span class="bu-spacer"></span>
           <div class="bu-input-group ao-skills__search"><${Icon} name="search" />

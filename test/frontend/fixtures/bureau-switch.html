@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shared Switch — synthetic browser fixture</title>
+  <link rel="stylesheet" href="/bureau/bureau.css">
+  <script type="importmap">{"imports":{"preact":"/vendor/preact.mjs","preact/hooks":"/vendor/preact-hooks.mjs","htm":"/vendor/htm.mjs"}}</script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:var(--bu-space-6);background:var(--bu-bg);color:var(--bu-text-primary);font:var(--bu-type-body)}
+    main{max-width:var(--bu-size-prose);margin:auto}h1{font:var(--bu-type-title);margin:0 0 var(--bu-space-6)}
+    section{display:grid;gap:var(--bu-space-4);padding:var(--bu-space-4);background:var(--bu-surface);border:1px solid var(--bu-border-default);border-radius:var(--bu-radius-card)}
+    p{margin:0;font:var(--bu-type-caption);color:var(--bu-text-secondary)}
+  </style>
+</head>
+<body><main><h1>Apparence</h1><div id="fixture"></div></main>
+<script type="module">
+  import {html,render} from '/lib.js';
+  import {Switch,loadStyles} from '/components/bureau/index.js';
+  await Promise.all([loadStyles(),loadStyles()]);
+  const state={checked:true,busy:false,error:null,calls:[],hold:false};
+  const change=value=>{state.calls.push(value);if(state.hold)state.busy=true;else state.checked=value;draw();};
+  function draw(){render(html`<section>
+    <${Switch} id="surprises" label="Animations surprises" checked=${state.checked} busy=${state.busy} error=${state.error}
+      describedBy="surprises-help" onCheckedChange=${change} />
+    <p id="surprises-help">Des pauses et des gestes dans le bureau.</p>
+    <${Switch} label="Une préférence avec un nom très long qui doit rester lisible sur un petit écran" checked=${false} onCheckedChange=${()=>{}} />
+    <${Switch} label="Préférence indisponible" checked=${false} disabled=${true} onCheckedChange=${()=>{throw Error('Disabled callback');}} />
+  </section>`,document.querySelector('#fixture'));}
+  window.bureauFixture={state,draw,settle(ok){state.busy=false;if(ok){state.checked=state.calls.at(-1);state.error=null;}else state.error='La modification a échoué. Réessayez.';draw();}};
+  draw();
+</script>
+</body></html>

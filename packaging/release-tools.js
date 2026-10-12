@@ -41,8 +41,9 @@ function releaseNotes(changelog, version) {
   return `${lines.slice(start, end).join('\n').trim()}\n`;
 }
 
-function publishCommands(version) {
+function publishCommands(version, imageId) {
   assertVersion(version);
+  if (!/^sha256:[a-f0-9]{64}$/.test(imageId || '')) throw new Error('verified immutable image ID is required');
   const tar = `dist/alexdeg92-agent-office-${version}.tgz`;
   return [
     '# Operator commands; never run by this script.',
@@ -51,7 +52,7 @@ function publishCommands(version) {
     `gh release create v${version} ${tar} --notes-file dist/RELEASE_NOTES.md --repo alexdeg92/agent-office-oss`,
     '# In the tap repo alexdeg92/homebrew-tap: copy packaging/homebrew/agent-office.rb to Formula/agent-office.rb, commit, and push that repo.',
     '',
-    `docker tag agent-office:${version} ghcr.io/alexdeg92/agent-office-oss:${version}`,
+    `docker tag ${imageId} ghcr.io/alexdeg92/agent-office-oss:${version}`,
     `docker push ghcr.io/alexdeg92/agent-office-oss:${version}`,
     '',
   ].join('\n');

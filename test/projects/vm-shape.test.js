@@ -6,12 +6,12 @@ const { buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, proje
 const { compareExample, loadExample } = require('../helpers/contract-shape');
 const { AT, repository } = require('./helpers');
 
-const alexId = 'per_alex00000000000';
+const ownerId = 'per_alex00000000000';
 const timmyId = 'per_0a1b2c3d4e5f6g7h';
 const gitId = 'per_9g8f7e6d5c4b3a21';
 
 const persons = [
-  { id: alexId, kind: 'human', name: 'owner', avatarUrl: null, links: {} },
+  { id: ownerId, kind: 'human', name: 'owner', avatarUrl: null, links: {} },
   { id: timmyId, kind: 'agent', name: 'Timmy', avatarUrl: null, links: { agentId: 'main' } },
   { id: gitId, kind: 'git', name: 'inconnu', avatarUrl: null, links: {} },
 ];
@@ -52,7 +52,7 @@ function shapeProject() {
       fetchedAt: AT,
     },
     people: [
-      { personId: alexId, role: 'responsable', origin: 'manual', commitCount: 12 },
+      { personId: ownerId, role: 'responsable', origin: 'manual', commitCount: 12 },
       { personId: timmyId, role: null, origin: 'derived', liveState: 'working', commitCount: null },
       { personId: gitId, role: null, origin: 'derived', commitCount: 2 },
     ],
@@ -60,7 +60,7 @@ function shapeProject() {
 }
 
 function historyEvents() {
-  const Owner = { kind: 'human', personId: alexId };
+  const Owner = { kind: 'human', personId: ownerId };
   const timmy = { kind: 'agent', personId: timmyId };
   return [
     { id: 'evt_status', at: AT, kind: 'status', actor: Owner, from: 'todo', to: 'in-progress' },
@@ -149,7 +149,7 @@ describe('view models match the 2.4 examples', () => {
   });
 
   it('buildHistoryPage matches history-page.json', () => {
-    const Owner = { kind: 'human', personId: alexId };
+    const Owner = { kind: 'human', personId: ownerId };
     const page = buildHistoryPage([
       { id: 'evt_archived', at: AT, kind: 'archived', actor: Owner },
       { id: 'evt_people', at: AT - 1, kind: 'people-override', actor: Owner, personId: timmyId, role: 'développeur', hidden: false },

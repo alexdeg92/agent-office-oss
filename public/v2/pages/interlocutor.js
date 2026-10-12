@@ -9,8 +9,10 @@ import * as fmt from '../fmt.js';
 import { Icon, EmptyState, ErrorState, Ago, Skeleton } from '../components/ui.js';
 import { displayName, ResolutionNote, policyText } from './access.js';
 import { isPerson, channelOf } from '../vocab.js';
+import { loadAccessStyles } from './access-styles.js';
 
 const enc = encodeURIComponent;
+export const loadStyles=loadAccessStyles;
 const yesNo = (v) => (v == null ? '—' : msg(v ? 'common.yes' : 'common.no'));
 
 export function InterlocutorPage({ match }) {
@@ -20,11 +22,11 @@ export function InterlocutorPage({ match }) {
   const back = router.href('habilitations');
   const Back = () => html`<a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.habilitations')}</a>`;
   if (vm.data === undefined && vm.error) {
-    return html`<div class="bu-page ao-frame ao-frame--detail"><${Back} />
+    return html`<div class="bu-page ao-page ao-page--detail"><${Back} />
       ${vm.error.code === 'not_found' ? html`<${EmptyState} icon="personne" title=${msg('person.notFound')} text=${msg('person.notFound.text', { agent: agentName() })}><a class="bu-btn" href=${back}>${msg('person.back')}</a></${EmptyState}>`
         : html`<${ErrorState} error=${vm.error} onRetry=${vm.retry} />`}</div>`;
   }
-  if (vm.data === undefined) return html`<div class="bu-page ao-frame ao-frame--detail ao-interlocutor" aria-busy="true"><${Back} /><${Skeleton} kind="title" /><${Skeleton} kind="block" /></div>`;
+  if (vm.data === undefined) return html`<div class="bu-page ao-page ao-page--detail ao-interlocutor" aria-busy="true"><${Back} /><${Skeleton} kind="title" /><${Skeleton} kind="block" /></div>`;
   const d = vm.data;
   const user = isPerson(d);
   const p = d.profile;
@@ -32,7 +34,7 @@ export function InterlocutorPage({ match }) {
   const sessionHref = (key) => router.href('session', { sessionKey: key });
   const access = d.access || {};
 
-  return html`<div class="bu-page ao-frame ao-frame--detail ao-interlocutor" aria-busy=${vm.resyncing ? 'true' : undefined}>
+  return html`<div class="bu-page ao-page ao-page--detail ao-interlocutor" aria-busy=${vm.resyncing ? 'true' : undefined}>
     <${Back} />
     <header class="bu-detail-header">
       ${p && p.avatarUrl ? html`<span class="bu-avatar bu-avatar--xl"><img src=${p.avatarUrl} alt="" /></span>`

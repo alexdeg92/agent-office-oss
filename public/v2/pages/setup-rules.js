@@ -21,7 +21,7 @@ export function blocker(step, s) {
     case 'agents': return !s.agents?.length ? 'setup.err.agents' : s.agents.some(a => !a.name?.trim()) ? 'onboarding.name.required' : null;
     case 'identities': return !s.primary || !s.agents.some(a => a.id === s.primary) ? 'setup.err.primary' : s.ownerSaved && s.agents.some(a => !s.looks[a.id]?.character) ? 'onboarding.styles.wait' : null;
     case 'office': return !s.name.trim() ? 'setup.err.name' : !validZone(s.timeZone) ? 'setup.err.zone' : null;
-    case 'network': return !validNetwork(s.network) ? 'onboarding.network.invalid' : null;
+    case 'network': return s.accessStaged ? null : 'access.stageRequired';
     default: return null;
   }
 }
@@ -70,7 +70,7 @@ export function payload(s, vm) {
     owner: { displayName: s.owner.trim(), email: s.email.trim(), ...(s.password ? { password: s.password } : {}) },
     runtime: runtimeBody(s),
     agents: { primary: s.primary, looks: s.looks, ...(s.ownerSaved ? { names: Object.fromEntries((s.agents || []).map(a => [a.id, a.name.trim()])) } : {}) },
-    ...(s.ownerSaved ? { network: s.network } : {}),
+    ...(s.accessLegacyFallback ? { network: { mode: 'local', port: vm?.network?.port || 18789, publicUrl: '' } } : {}),
     ...(offersProjet(vm, s) ? { integrations: { projet: s.projet !== false, ...(s.ownerSaved ? { reviewed: true } : {}) } } : {}),
   };
 }

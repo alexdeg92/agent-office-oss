@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * Golden files: test/golden/<group>/<scenario>/<name>.json, or test/golden/local/<group>/<scenario>/ for
  * a captured (local-only, gitignored) scenario: goldens derived from real data are never committed either.

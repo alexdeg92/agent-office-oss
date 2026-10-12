@@ -38,6 +38,41 @@ test('build update: missing/failed checks preserve offline navigation; concurren
   assert.equal(await createBuildUpdate({ build: 'A', fetchBuild: async () => { throw Error('offline'); } }).beforeNavigate('/journaux'), true);
 });
 
+test('build update: a stalled endpoint releases navigation at 800ms and the page reuses its check', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  let reads = 0, resolve, notices = 0;
+  const release = createBuildUpdate({ build: 'A', fetchBuild: () => {
+    reads++; return new Promise(r => { resolve = r; });
+  }, notify: () => { notices++; }, reload: () => {} });
+  let continued = false;
+  const navigation = release.beforeNavigate('/journaux').then(value => { continued = value; });
+  await Promise.resolve();
+  t.mock.timers.tick(799); await Promise.resolve();
+  assert.equal(continued, false);
+  t.mock.timers.tick(1); await navigation;
+  assert.equal(continued, true);
+  assert.equal(await release.check({ maxAge: 800 }), false);
+  assert.equal(reads, 1, 'the lazy page does not add a second navigation delay');
+  resolve('B'); await Promise.resolve(); await Promise.resolve();
+  assert.equal(release.stale, true, 'a late deployment result still announces the update');
+  assert.equal(notices, 1);
+  assert.equal(await release.beforeNavigate('/bureau'), false);
+});
+
+test('build update: a successful check cancels its deadline and the next navigation checks afresh', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  let deployed = 'A', reads = 0;
+  const release = createBuildUpdate({ build: 'A', fetchBuild: async () => { reads++; return deployed; }, reload: () => {} });
+  assert.equal(await release.beforeNavigate('/journaux'), true);
+  assert.equal(await release.check({ maxAge: 800 }), false);
+  assert.equal(reads, 1);
+  deployed = 'B';
+  assert.equal(await release.beforeNavigate('/bureau'), false);
+  assert.equal(reads, 2);
+  t.mock.timers.tick(800);
+  assert.equal(release.stale, true);
+});
+
 test('router: deployment guard blocks links and popstate before subscribers can render a lazy route', async () => {
   configure({ basePath: '/', apiBase: '/backend' });
   const events = {}, emitted = [], history = [];

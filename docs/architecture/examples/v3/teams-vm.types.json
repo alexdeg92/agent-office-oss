@@ -1,0 +1,5 @@
+{
+  "$comment": "TeamsVM3 contains board metadata only. Task briefs, review notes, inbox/message bodies and all source paths/basenames remain private.",
+  "nullable": ["$.members[].hostAgentId", "$.members[].parentMemberId", "$.members[].spawnedBy", "$.members[].spawnedBy.agentId", "$.members[].spawnedBy.sessionKey", "$.members[].spawnedBy.label", "$.tasks[].priority", "$.tasks[].ownerMemberId", "$.tasks[].createdAt", "$.tasks[].updatedAt", "$.tasks[].reviews[].reviewerMemberId", "$.tasks[].reviews[].createdAt", "$.diagnostics.partialLabel"],
+  "types": { "$.tasks[].state": "open | claimed | working | review | done | blocked", "$.tasks[].reviews[].verdict": "go | no-go | pending | unknown" }
+}

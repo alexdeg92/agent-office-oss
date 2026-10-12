@@ -11,13 +11,11 @@ const RULES = [
   ['Telegram bot token', /\b\d{8,12}:[A-Za-z0-9_-]{35}\b/g],
   ['chat ID', /(?<![\d.])\b\d{17,20}\b(?![\d.])/g],
   ['Telegram ID', /(?:telegram(?:(?!\n).){0,40}?(?:user|chat|peer|id)|(?:user|chat|peer|channel|bot)[_-]?id|["']id["'])["'\s:=/]+(-?\d{8,13})\b/gi],
-  ['email', /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi],
+  // The domain consumes Unicode letters/digits so an internationalized domain is evaluated whole, never as an ASCII prefix.
+  ['email', /[A-Z0-9._%+-]+@[\p{L}\p{N}.-]+\.\p{L}{2,}/giu],
 ];
 // Explicitly synthetic identifiers already used by the fixture generator and tests.
 const syntheticId = (s) => /^100000\d{11,14}$/.test(s) || /^0{8}\d{9,11}$/.test(s) || /^(\d)\1+$/.test(s) || /^(?:1234567890)+12345678?$/.test(s) || /^123456789012345678$/.test(s);
-// Only this exact protocol declaration is exempt from the private-name rule. Other occurrences,
-// including another line in the same file, still fail. Removing the alias breaks existing callers.
-const LEGACY_OWNER_DECLARATION = "const OWNER_ACTOR_SHORT = Object.freeze(['owner', '" + ('al' + 'ex') + "']);";
 function scan(root, env = process.env) {
   const findings = []; let count = 0, bytes = 0;
   const privateValues = [env.PORTAL_EMAIL, ...Object.entries(env).filter(([k]) => /^(?:PORTAL_(?:SECRET|PASSWORD|PASSWORD_HASH)|OC_GATEWAY_TOKEN)$/.test(k)).map(([, v]) => v)].filter((v) => v && v.length >= 3);
@@ -38,7 +36,6 @@ function scan(root, env = process.env) {
       }
       // The author attribution in LICENSE is explicitly required public metadata.
       let nameText = file === 'LICENSE' ? text.replace(/^Copyright \(c\) 2026 .*$/m, '') : text;
-      if (file === 'src/projects/constants.js') nameText = nameText.split('\n').map((line) => line === LEGACY_OWNER_DECLARATION ? '' : line).join('\n');
       for (const name of privateNames) {
         const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         if (new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'iu').test(nameText)) findings.push({ file, rule: 'private person name' });
@@ -47,11 +44,16 @@ function scan(root, env = process.env) {
         for (const match of text.matchAll(re)) {
           const value = match[1] || match[0];
           if (rule === 'email' && (binary || /\.(?:png|webp|svg|js|mjs|json|jpg)$/i.test(value))) continue;
-          if (rule === 'email' && /^(?:git@(?:github|gitlab)\.com|[\w.-]+@(?:[\w.-]+\.)?(?:example|invalid))$/i.test(value)) continue;
-          if (rule === 'email' && value === '41898282+github-actions[bot]' + '@users.' + 'noreply.github.com') continue;
-          if (rule === 'email' && /(?:avatars|images)\.githubusercontent\.com$/i.test(value)) continue;
           if ((rule === 'chat ID' || rule === 'Telegram ID') && syntheticId(value)) continue;
-          if (rule === 'email' && /@(?:[\w.-]*\.)?example\.(?:com|org|net|invalid|ca)$/i.test(value)) continue;
+          // An email exemption applies only to a whole address: the match must end at a domain boundary, so a
+          // reserved-looking prefix of a longer domain (y.test.com, y.testé.com, y.test1) is never exempted.
+          const wholeAddress = rule === 'email' && !/^[\p{L}\p{N}\p{M}._-]/u.test(text.slice(match.index + match[0].length));
+          if (wholeAddress && /^git@(?:github|gitlab)\.com$/i.test(value)) continue;
+          if (wholeAddress && value === '41898282+github-actions[bot]' + '@users.' + 'noreply.github.com') continue;
+          if (wholeAddress && /(?:avatars|images)\.githubusercontent\.com$/i.test(value)) continue;
+          // RFC 2606 / RFC 6761 reserved names only (never a registrable look-alike such as a ccTLD example domain):
+          // the second-level example.com/.org/.net and the reserved TLDs .test, .invalid and .example, all-ASCII.
+          if (wholeAddress && /@(?:[A-Za-z0-9-]+\.)*(?:example\.(?:com|org|net)|[A-Za-z0-9-]+\.(?:test|invalid|example))$/i.test(value)) continue;
           // Copyright attribution in font licences is public provenance, retained verbatim.
           if (rule === 'email' && /(?:^|\/)(?:OFL[^/]*\.txt|OFL\.txt)$/.test(file)) continue;
           findings.push({ file, rule, line: text.slice(0, match.index).split('\n').length - 1 });

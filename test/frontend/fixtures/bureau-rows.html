@@ -1,0 +1,53 @@
+<!doctype html><html lang="fr" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shared Bureau rows — synthetic browser fixture</title>
+<link rel="stylesheet" href="/bureau/bureau.css">
+<script type="importmap">{"imports":{"preact":"/vendor/preact.mjs","preact/hooks":"/vendor/preact-hooks.mjs","htm":"/vendor/htm.mjs"}}</script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bu-bg);color:var(--bu-text-primary);font:var(--bu-type-body)}
+main{height:100dvh;max-width:var(--bu-size-prose);margin:auto;display:grid;grid-template-rows:auto minmax(0,1fr);padding:var(--bu-space-4)}
+h1{font:var(--bu-type-title);margin:0;padding-block:var(--bu-space-4)}
+#fixture{overflow:auto;overscroll-behavior:contain;min-height:0;padding:var(--bu-space-1)}
+section{margin-bottom:var(--bu-space-4);padding:var(--bu-space-4);background:var(--bu-surface);border:1px solid var(--bu-border-default);border-radius:var(--bu-radius-card)}
+ul{margin:0 0 var(--bu-space-4);padding:0;background:var(--bu-surface);border:1px solid var(--bu-border-default);border-radius:var(--bu-radius-card)}
+input{max-width:100%;min-height:var(--bu-size-touch);width:calc(var(--bu-space-16) + var(--bu-space-8));font:var(--bu-type-body);padding:var(--bu-space-2);background:var(--bu-bg-sunken);color:var(--bu-text-primary);border:1px solid var(--bu-border-control);border-radius:var(--bu-radius-control)}
+.badge{font:var(--bu-type-label-sm);border:1px solid var(--bu-border-default);border-radius:var(--bu-radius-xs);padding:var(--bu-space-0-5) var(--bu-space-1)}
+.values{display:grid;gap:var(--bu-space-4)}
+</style></head><body><main><h1>Runtimes et agents</h1><div id="fixture"></div></main>
+<script type="module">
+import {html,render} from '/lib.js';
+import {SettingRow,ListRow,Menu,KeyValue,loadStyles} from '/components/bureau/index.js';
+import {setLang} from '/i18n.js';
+await loadStyles();
+const state={removed:false,hideValue:false,value:'https://api.example.test/office/installation/instance-a-very-long-path-with-no-breaks',calls:[]};
+function items(name,remove=false){return [
+ {id:'rename',label:'Modifier le nom',onSelect:()=>state.calls.push('rename')},
+ {id:'hide',label:'Masquer',onSelect:()=>state.calls.push('hide')},
+ {id:'primary',label:'Définir comme principal',disabled:true,reason:'Choisissez un autre agent visible.',onSelect:()=>state.calls.push('disabled')},
+ {id:'separator',kind:'separator'},
+ {id:'appearance',kind:'link',label:'Changer l’apparence',href:'#appearance'},
+ {id:'remove',label:'Retirer du bureau',danger:true,onSelect:()=>{state.calls.push('remove');if(remove){state.removed=true;draw();}}},
+];}
+function draw(){render(html`
+ <section><${SettingRow} id="port-row" label="Port" description="Port du serveur de bureau."
+  control=${props=>html`<input id=${props.id} aria-describedby=${props.describedBy} value="18789" />`} />
+  <${SettingRow} label="Adresse de la passerelle" environment=${{variable:'OC_GATEWAY_URL',reason:'Modifiez la variable pour changer cette adresse.'}}
+    control=${html`<${KeyValue} label="Adresse configurée" value="ws://127.0.0.1:18793" />`} />
+ </section>
+ <ul aria-label="Agents du bureau">
+ ${state.removed?null:html`<${ListRow} key="atlas" title="Atlas — coordination et documentation de votre projet à très long nom"
+  avatar=${html`<img src="/bureau/assets/Characters/bastion/moss/portrait.webp" alt="" />`} meta="atlas-coordination-documentation-instance-du-bureau"
+  badges=${html`<span class="badge">Principal</span>`} selected=${true}
+  actions=${html`<${Menu} label="Actions pour Atlas" items=${items('Atlas',true)} />`} />`}
+ <${ListRow} key="scout" title="Scout" meta="scout" muted=${true} badges=${html`<span class="badge">Masqué</span>`}
+  actions=${html`<${Menu} label="Actions pour Scout" items=${items('Scout')} />`} />
+ </ul>
+ <section class="values" id="appearance">
+ ${state.hideValue?null:html`<${KeyValue} id="gateway-key" label="Adresse" value=${state.value} copyable=${true} />`}
+ <${KeyValue} label="Tentatives" value=${0} copyable=${true} />
+ <${KeyValue} label="Désactivé" value=${false} />
+ <${KeyValue} label="Adresse publique" value=${null} />
+ </section>`,document.querySelector('#fixture'));}
+window.bureauRows={state,draw,setLang};draw();
+</script></body></html>

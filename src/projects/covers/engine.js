@@ -1,10 +1,12 @@
 'use strict';
 const fs = require('node:fs');
+const {AsyncLocalStorage}=require('node:async_hooks');
+const {ApiError}=require('../../api/v2/errors');
+const {runAuthorized}=require('../../security/dispatch-context');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { fingerprint } = require('./classify');
 const { generateCode } = require('./code');
-const { createAgentGenerator } = require('./agent');
 const { createRasterizer } = require('./raster');
 const { createCoverStore } = require('./store');
 function bounded(run, ms, controller) {
@@ -18,11 +20,13 @@ function bounded(run, ms, controller) {
     Promise.resolve().then(run).then((v) => finish(resolve, v), (e) => finish(reject, e));
   });
 }
-function createCoverEngine({ dataDir, getProject, runtime = null, writable = true, agentAllowed = () => true, onChange = () => {},
-  urlFor, runTurn, debounceMs = 750, timeoutMs = 60000, rasterize = createRasterizer(), generators = null, now = () => Date.now(), log = () => {} }) {
+function createCoverEngine({ dataDir, getProject, writable = true, onChange = () => {},
+  urlFor, debounceMs = 750, timeoutMs = 60000, rasterize = createRasterizer(), generators = null, now = () => Date.now(), log = () => {} }) {
   const store = createCoverStore({ dataDir, writable, urlFor });
   const code = { id: 'code', supports: () => true, generate: ({ project }) => generateCode(project) };
-  const plugins = generators || [createAgentGenerator({ runtime, rasterize, allowed: agentAllowed, timeoutMs, runTurn }), code];
+  // Covers are local and deterministic; never dispatch an agent turn from this background worker.
+  const plugins = generators || [code];
+  const authority=new AsyncLocalStorage();
   const queue = new Map(), versions = new Map(), uploads = new Set();
   let running = false, closed = false, timer = null, active = null, activeJob = null;
   const projectOf = (id) => { try { return getProject(id); } catch (_) { return null; } };
@@ -40,7 +44,8 @@ function createCoverEngine({ dataDir, getProject, runtime = null, writable = tru
     if (!force && !bytes && ((record && record.fingerprint === signature) || (existing && existing.fingerprint === signature))) return false;
     if (existing && existing.reject) existing.reject(new Error('upload-superseded'));
     const version = (versions.get(project.id) || 0) + 1; versions.set(project.id, version);
-    queue.set(project.id, { id: project.id, fingerprint: signature, version, bytes, resolve, reject, readyAt: performance.now() + (bytes || force ? 0 : debounceMs) });
+    const scope=authority.getStore()||null;
+    queue.set(project.id, { scope, authorize:bytes?scope?.write:scope?.generate, id: project.id, fingerprint: signature, version, bytes, resolve, reject, readyAt: performance.now() + (bytes || force ? 0 : debounceMs) });
     if (bytes) uploads.add(project.id);
     arm(); return true;
   }
@@ -50,50 +55,59 @@ function createCoverEngine({ dataDir, getProject, runtime = null, writable = tru
     if (!job) return arm();
     queue.delete(job.id); running = true; activeJob = job;
     const controller = new AbortController(); active = controller;
-    let outputDir, uploaded = false;
-    try {
-      const project = projectOf(job.id); if (!project) throw new Error('project-gone');
-      let result, source;
-      if (job.bytes) {
-        if (!rasterize) throw new Error('rasterizer-unavailable');
-        result = await bounded(() => rasterize(job.bytes, { signal: controller.signal }), timeoutMs, controller); source = 'upload';
-      } else {
-        outputDir = fs.mkdtempSync(path.join(store.dir, 'job-')); fs.chmodSync(outputDir, 0o700);
-        const context = { project, outputDir, signal: controller.signal };
-        try {
-          await bounded(async () => {
-            for (const plugin of plugins) {
-              const capability = await plugin.supports(context);
-              if (controller.signal.aborted) throw new Error('aborted');
-              if (!capability) continue;
-              result = await plugin.generate({ ...context, capability }); source = plugin.id;
-              const limits = require('./code').LIMITS;
-              if (!result || !Buffer.isBuffer(result.cover) || !Buffer.isBuffer(result.thumb) || !['svg', 'webp'].includes(result.ext) || result.cover.length > limits.cover || result.thumb.length > limits.thumb) throw new Error('generator-budget');
-              return;
-            }
-            throw new Error('no-generator');
-          }, timeoutMs, controller);
-        } catch (_) { log('covers: generator failed; code fallback'); result = generateCode(project); source = 'code'; }
+    let outputDir, uploaded = false, refused = false;
+    const authorize=job.authorize||(()=>{});
+    await authority.run(job.scope,()=>runAuthorized(()=>{},async()=>{
+      try {
+        authorize();
+        const project = projectOf(job.id); if (!project) throw new Error('project-gone');
+        let result, source;
+        if (job.bytes) {
+          if (!rasterize) throw new Error('rasterizer-unavailable');
+          result = await bounded(() => runAuthorized(authorize,()=>rasterize(job.bytes, { signal: controller.signal })), timeoutMs, controller); source = 'upload';
+        } else {
+          outputDir = fs.mkdtempSync(path.join(store.dir, 'job-')); fs.chmodSync(outputDir, 0o700);
+          const context = { project, outputDir, signal: controller.signal };
+          try {
+            await bounded(() => runAuthorized(authorize,async () => {
+              for (const plugin of plugins) {
+                authorize();
+                const capability = await plugin.supports(context);
+                authorize();
+                if (controller.signal.aborted) throw new Error('aborted');
+                if (!capability) continue;
+                result = await plugin.generate({ ...context, capability });
+                authorize();source = plugin.id;
+                const limits = require('./code').LIMITS;
+                if (!result || !Buffer.isBuffer(result.cover) || !Buffer.isBuffer(result.thumb) || !['svg', 'webp'].includes(result.ext) || result.cover.length > limits.cover || result.thumb.length > limits.thumb) throw new Error('generator-budget');
+                return;
+              }
+              throw new Error('no-generator');
+            }), timeoutMs, controller);
+          } catch (e) { if(e instanceof ApiError)throw e;authorize();log('covers: generator failed; code fallback'); result = generateCode(project); source = 'code'; }
+        }
+        authorize();
+        const latest = projectOf(job.id), record = store.get(job.id);
+        if (closed || versions.get(job.id) !== job.version || !latest || (!job.bytes && (fingerprint(latest) !== job.fingerprint || record && record.source === 'upload' || uploads.has(job.id)))) {
+          if (job.reject) job.reject(new Error('cover-superseded'));
+          return;
+        }
+        store.save(job.id, result, { source, fingerprint: job.bytes ? fingerprint(latest) : job.fingerprint, generatedAt: now() });
+        uploaded = !!job.bytes;
+        onChange(job.id);
+        if (job.resolve) job.resolve(store.vm(job.id));
+      } catch (e) { if(!(e instanceof ApiError)){try{authorize();}catch(current){e=current;}}refused=e instanceof ApiError;log(refused?'covers: permission refused':'covers: generation failed');if(job.reject)job.reject(refused?e:new Error('cover-failed')); }
+      finally {
+        if (outputDir) fs.rmSync(outputDir, { recursive: true, force: true });
+        if (job.bytes && !(queue.get(job.id) || {}).bytes) uploads.delete(job.id);
+        running = false; active = null; activeJob = null;
+        if (job.bytes && !uploaded && !refused && !uploads.has(job.id)) enqueue(projectOf(job.id));
+        arm();
       }
-      const latest = projectOf(job.id), record = store.get(job.id);
-      if (closed || versions.get(job.id) !== job.version || !latest || (!job.bytes && (fingerprint(latest) !== job.fingerprint || record && record.source === 'upload' || uploads.has(job.id)))) {
-        if (job.reject) job.reject(new Error('cover-superseded'));
-        return;
-      }
-      store.save(job.id, result, { source, fingerprint: job.bytes ? fingerprint(latest) : job.fingerprint, generatedAt: now() });
-      uploaded = !!job.bytes;
-      onChange(job.id);
-      if (job.resolve) job.resolve(store.vm(job.id));
-    } catch (_) { log('covers: generation failed'); if (job.reject) job.reject(new Error('cover-failed')); }
-    finally {
-      if (outputDir) fs.rmSync(outputDir, { recursive: true, force: true });
-      if (job.bytes && !(queue.get(job.id) || {}).bytes) uploads.delete(job.id);
-      running = false; active = null; activeJob = null;
-      if (job.bytes && !uploaded && !uploads.has(job.id)) enqueue(projectOf(job.id));
-      arm();
-    }
+    }));
   }
   return {
+    withAuthority(scope,fn) { return authority.run(scope,()=>runAuthorized(scope?.write,fn)); },
     store,
     vm: (id) => store.vm(id),
     observe: (project) => enqueue(project),

@@ -6,10 +6,24 @@ import { readFileSync } from 'node:fs';
 import * as vmcheck from '../../public/v2/vmcheck.js';
 import { validateVM } from '../../public/v2/generated/vm-schemas.js';
 import { createStream } from '../../public/v2/stream.js';
+import { configure } from '../../public/v2/config.js';
 
 const example = (name) => JSON.parse(readFileSync(new URL(`../../docs/architecture/examples/${name}.json`, import.meta.url), 'utf8')).data;
 const strict = () => vmcheck.enable({ onIssue: (where, name, issues) => { throw new Error(`${where}: ${name}: ${issues.map((i) => i.path + ' ' + i.detail).join('; ')}`); } });
-afterEach(() => vmcheck.disable());
+afterEach(() => { vmcheck.disable(); configure({}); });
+
+test('Settings uses its v3 schema on both v2 and v3 deployments and reports credential leaks without values',async () => {
+  const vm=JSON.parse(readFileSync(new URL('../../docs/architecture/examples/settings/settings-vm.json',import.meta.url))).data;
+  const issues=[];await vmcheck.enable({onIssue:(where,name,details)=>issues.push({where,name,details})});
+  for(const apiVersion of [2,3]) {
+    configure({apiVersion});
+    assert.equal(vmcheck.schemaForPath('/api/v3/settings?locale=en'),'settings');
+    assert.deepEqual(vmcheck.check('settings',vm,'GET Settings'),[]);
+    const bad=structuredClone(vm);bad.runtimes[0].values.token.value='fixture leaked credential';
+    assert.ok(vmcheck.check('settings',bad,'PUT runtime').length);
+  }
+  assert.equal(issues.length,2);assert.ok(!JSON.stringify(issues).includes('fixture leaked credential'));
+});
 
 test('a VM with an undefined field fails, with the path; the contract example passes', () => {
   const h = example('health-vm');

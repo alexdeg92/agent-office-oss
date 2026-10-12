@@ -11,6 +11,7 @@
   "types": {
     "$.revision": "number",
     "$.vm": "any",
+    "$.result.selected": "string",
     "$.result.runtimes[].agents[].name": "string",
     "$.result.runtimes[].agents[].nameSource": "string",
     "$.result.runtimes[].agents[].model": "string"

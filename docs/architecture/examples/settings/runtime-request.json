@@ -1,0 +1,8 @@
+{
+  "expectedRevision": 1,
+  "runtime": {
+    "adapter": "openclaw",
+    "gatewayUrl": "ws://127.0.0.1:18793",
+    "token": "fixture-token"
+  }
+}

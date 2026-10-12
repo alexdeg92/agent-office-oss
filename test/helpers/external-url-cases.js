@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 const { MAX_EXTERNAL_URL_LENGTH } = require('../../public/v2/url-policy.js');
 const base = 'https://example.invalid/';
 const allowed = [

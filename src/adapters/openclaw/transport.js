@@ -42,7 +42,24 @@ class Gateway extends EventEmitter {
     // §12.1: construction never throws. No token or no usable identity → `notConfigured` (a category), and
     // start() never connects; the server still boots and serves.
     this.notConfigured = null;
-    const loaded = this.gatewayToken ? loadIdentity({ identityPath: opts.identityPath, stateDbPath: opts.stateDbPath }) : { missing: 'no-token' };
+    this.identityOptions = { identityPath: opts.identityPath, stateDbPath: opts.stateDbPath };
+    this._loadIdentity();
+    this.pending = new Map();
+    this.connected = false;
+    this.backoff = 1000;
+    this.ws = null;
+    this.retry = opts.retry !== false;   // G4 setup probe: one attempt only
+    this.lastErrorCode = null;           // the socket error's code (ECONNREFUSED…), never its message
+    this.rejected = false;               // this attempt received an explicit refused connect
+    this.rejectionBackoff = 30000;
+    this.rejectionLogged = false;
+    this.timers = opts.timers || { setTimeout, clearTimeout }; // injectable retry clock
+    this.started = false;
+  }
+
+  _loadIdentity() {
+    this.notConfigured = null;
+    const loaded = this.gatewayToken ? loadIdentity(this.identityOptions) : { missing: 'no-token' };
     if (loaded.identity) {
       try {
         this.identity = loaded.identity;
@@ -51,16 +68,39 @@ class Gateway extends EventEmitter {
       } catch (_) { this.notConfigured = 'identity-invalid'; }
     } else this.notConfigured = loaded.missing;
     if (this.notConfigured) { this.identity = null; this.pk = null; this.pubRaw = null; }
-    this.pending = new Map();
-    this.connected = false;
-    this.backoff = 1000;
-    this.ws = null;
-    this.retry = opts.retry !== false;   // G4 setup probe: one attempt only
-    this.lastErrorCode = null;           // the socket error's code (ECONNREFUSED…), never its message
-    this.rejected = false;               // the gateway refused our connect (credentials)
+  }
+
+  _clearPending() {
+    for (const [, p] of this.pending) p.resolve({ ok: false, error: { message: 'socket closed' } });
+    this.pending.clear();
+  }
+
+  // A URL and its token are an explicit pair; changing either invalidates old callbacks and retry state.
+  updateConnection(pair) {
+    if (!pair || !Object.hasOwn(pair, 'url') || !Object.hasOwn(pair, 'gatewayToken')) throw Error('gateway URL/token pair required');
+    if (pair.url === this.url && pair.gatewayToken === this.gatewayToken) return false;
+    this.timers.clearTimeout(this._retryTimer); this._retryTimer = null;
+    const old = this.ws; this.ws = null; this.connected = false; this._clearPending();
+    try { old?.terminate(); } catch (_) {}
+    this.url = pair.url; this.gatewayToken = pair.gatewayToken;
+    this.rejected = false; this.rejectionLogged = false; this.rejectionBackoff = 30000; this.backoff = 1000; this.lastErrorCode = null;
+    this._loadIdentity();
+    if (old) this.emit('close');
+    if (this.started) this.start();
+    return true;
+  }
+
+  close() {
+    this.retry = false; this.started = false;
+    this.timers.clearTimeout(this._retryTimer); this._retryTimer = null;
+    const old = this.ws; this.ws = null; this.connected = false; this._clearPending();
+    try { old?.terminate(); } catch (_) {}
+    if (old) this.emit('close');
   }
 
   start() {
+    this.started = true;
+    if (this._retryTimer || this.ws && this.ws.readyState !== WebSocket.CLOSED) return;
     if (this.notConfigured) {
       this.emit('log', 'not configured (' + this.notConfigured + '): not connecting');
       this.emit('not-configured', this.notConfigured);
@@ -70,13 +110,14 @@ class Gateway extends EventEmitter {
   }
 
   _connect() {
+    this.rejected = false; this.lastErrorCode = null;
     let ws;
     try { ws = new WebSocket(this.url); } catch (e) { this.lastErrorCode = 'bad-url'; this.emit('close'); return this.retry ? this._retry() : undefined; }
     this.ws = ws;
-    let handshakeDone = false;
     const hardTimeout = setTimeout(() => { try { ws.close(); } catch (_) {} }, 15000);
 
     ws.on('message', async (data) => {
+      if (this.ws !== ws) return;
       let m;
       try { m = JSON.parse(data.toString()); } catch (_) { return; }
       if (m.type === 'res' && this.pending.has(m.id)) {
@@ -101,15 +142,26 @@ class Gateway extends EventEmitter {
               caps: [], auth: { token: this.gatewayToken }, role: 'operator', scopes: this.scopes,
               device: { id: this.identity.deviceId, publicKey: this.pubRaw, signature, signedAt, nonce },
             }, 10000);
-            if (!r.ok) { this.rejected = true; throw new Error('connect rejected'); }
-            handshakeDone = true;
+            if (this.ws !== ws) return;
+            if (!r.ok) {
+              // Synthetic timeout/socket errors from _raw are transport failures, not a refused response.
+              if (r.type === 'res' && r.ok === false) {
+                this.rejected = true;
+                if (!this.rejectionLogged) {
+                  this.rejectionLogged = true;
+                  this.emit('log', 'connect rejected: retrying with backoff from 30 seconds to 10 minutes');
+                }
+              }
+              throw new Error('connect failed');
+            }
             clearTimeout(hardTimeout);
             this.connected = true;
-            this.backoff = 1000;
+            this.backoff = 1000; this.rejected = false; this.rejectionBackoff = 30000; this.rejectionLogged = false;
             this.hello = r.payload;
             this.emit('open', r.payload);
           } catch (e) {
-            this.emit('log', 'connect failed: ' + e.message);
+            if (this.ws !== ws) return;
+            if (!this.rejected) this.emit('log', 'connect failed (transport)');
             try { ws.close(); } catch (_) {}
           }
         } else {
@@ -121,19 +173,21 @@ class Gateway extends EventEmitter {
 
     ws.on('close', () => {
       clearTimeout(hardTimeout);
+      if (this.ws !== ws) return;
       this.connected = false;
-      for (const [, p] of this.pending) p.resolve({ ok: false, error: { message: 'socket closed' } });
-      this.pending.clear();
+      this._clearPending();
       this.emit('close');
       if (this.retry) this._retry();
     });
-    ws.on('error', (e) => { this.lastErrorCode = (e && e.code) || 'error'; this.emit('log', 'ws error: ' + e.message); });
+    ws.on('error', (e) => { if (this.ws !== ws) return; this.lastErrorCode = (e && e.code) || 'error'; this.emit('log', 'ws error (' + this.lastErrorCode + ')'); });
   }
 
   _retry() {
     if (this._retryTimer) return;
-    this._retryTimer = setTimeout(() => { this._retryTimer = null; this._connect(); }, this.backoff);
-    this.backoff = Math.min(30000, Math.round(this.backoff * 1.7));
+    const delay = this.rejected ? this.rejectionBackoff : this.backoff;
+    this._retryTimer = this.timers.setTimeout(() => { this._retryTimer = null; this._connect(); }, delay);
+    if (this.rejected) this.rejectionBackoff = Math.min(600000, this.rejectionBackoff * 2);
+    else this.backoff = Math.min(30000, Math.round(this.backoff * 1.7));
   }
 
   _raw(method, params, timeoutMs) {
@@ -166,7 +220,6 @@ function probeGateway({ url, token, identityPath, stateDbPath, timeoutMs = 8000,
   return new Promise((resolve) => {
     const t0 = now();
     const gw = new Gateway({ url, gatewayToken: token, identityPath, stateDbPath, retry: false });
-    gw.close = () => { gw.retry = false; try { if (gw.ws) gw.ws.close(); } catch (_) {} };
     // no token or no device identity: the gateway can't accept us → the credentials are the problem
     if (gw.notConfigured) return resolve({ status: 'unauthorized', protocol: null, latencyMs: null, gw: null });
     let done = false;

@@ -1,5 +1,5 @@
 /* First-run setup (F8; frontend-22: Bureau cards): a full-page flow outside the shell. Steps, form and note are cards. */
-.ao-setup-page { min-height: 100dvh; background: var(--bu-bg); padding: var(--bu-space-6) var(--bu-space-6) var(--bu-space-12); }
+.ao-setup-page { height: 100%; min-height: 0; background: var(--bu-bg); padding: 0; }
 .ao-setup { max-width: var(--ao-detail-max); margin-inline: auto; }
 .ao-setup__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--bu-space-3); margin-bottom: var(--bu-space-6); }
 .ao-setup__logo img { height: 28px; width: auto; }
@@ -61,7 +61,6 @@
   .ao-setup__step:not(.is-current) > a, .ao-setup__step:not(.is-current) > span { font-size: 0; gap: 0; }   /* numbers only; the current step keeps its name */
   .ao-setup__step:not(.is-current) .ao-setup__num { font: var(--bu-type-mono-sm); }
 }
-@media (max-width: 640px) { .ao-setup-page { padding: var(--bu-space-4) var(--bu-space-4) var(--bu-space-10); } }
 .ao-setup__top { padding-right: 7.5rem; }   /* room for the floating « Maquette » badge (mock only) */
 .ao-setup__prefs { flex-wrap: wrap; }
 @media (max-width: 640px) {
@@ -86,3 +85,16 @@
 .ao-onb-detected-agents { list-style: none; padding: 0; margin-block: var(--bu-space-3) 0; }
 .ao-onb-detected-agent { display: flex; align-items: center; flex-wrap: wrap; gap: var(--bu-space-2); padding-block: var(--bu-space-2); border-top: 1px solid var(--bu-border); }
 .ao-onb-detected-agent strong, .ao-onb-detected-agent code { overflow-wrap: anywhere; min-width: 0; }
+
+/* Setup uses the same bounded head/body/foot rows as every app region. */
+.ao-setup { width: 100%; gap: var(--bu-space-4); }
+.ao-setup__top { margin-bottom: var(--bu-space-4); }
+.ao-setup__head { margin-bottom: 0; }
+.ao-setup__footer { display: grid; grid-template-columns: 15rem minmax(0, 1fr) 17rem; gap: var(--bu-space-5); }
+.ao-setup__footer > * { grid-column: 2; }
+.ao-setup__nav { margin: 0; padding: var(--bu-space-3); border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-card); background: var(--bu-surface); }
+@media (max-width: 1100px) { .ao-setup__footer { grid-template-columns: minmax(0, 1fr); } .ao-setup__footer > * { grid-column: 1; } }
+
+
+.ao-setup > .ao-frame__head { padding-top: max(var(--ao-frame-gutter), env(safe-area-inset-top)); }
+.ao-setup > .ao-frame__foot { padding-bottom: max(var(--bu-space-3), env(safe-area-inset-bottom)); }

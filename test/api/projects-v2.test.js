@@ -78,7 +78,7 @@ describe('Projets v2 · commands, views, 409, audit', () => {
     // R13-05: exact argv, every flag with its own value (the primary agent of the synthetic scenario is main)
     const turn = h.cliCalls().find((a) => a[0] === 'agent');
     assert.deepEqual(turn.filter((a) => !a.startsWith('--message=')),
-      ['agent', '--agent=main', '--json', '--timeout=150', '--session-key=agent:main:ao-projet-agent-office']);
+      ['agent', '--agent=main', '--json', '--timeout=150', '--channel=webchat', '--reply-channel=webchat', '--session-key=agent:main:ao-projet-agent-office']);
   });
 });
 

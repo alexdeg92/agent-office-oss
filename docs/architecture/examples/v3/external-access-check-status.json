@@ -1,0 +1,87 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "jobId": "acj_0123456789abcdefghijklmnop",
+      "planId": "acp_0123456789abcdefghijklmnop",
+      "state": "unknown",
+      "elapsedMs": 12000,
+      "pollAfterMs": 5000,
+      "checks": [
+        {
+          "kind": "dns",
+          "target": "api.example.org",
+          "perspective": "server",
+          "state": "unknown",
+          "observedAt": 1791288012000,
+          "elapsedMs": 12000,
+          "expiresAt": null,
+          "reason": {
+            "key": "dns.timeout"
+          },
+          "fix": {
+            "key": "access.fix.retryDns"
+          },
+          "evidence": {
+            "provider": {
+              "id": "cloudflare",
+              "confidence": "medium",
+              "evidence": [
+                {
+                  "resolver": "google",
+                  "ns": "ada.ns.cloudflare.com"
+                }
+              ]
+            },
+            "resolvers": [
+              {
+                "id": "google",
+                "state": "answered",
+                "records": {
+                  "A": [
+                    {
+                      "name": "api.example.org",
+                      "type": "A",
+                      "value": "198.51.100.8",
+                      "ttl": 300
+                    }
+                  ],
+                  "AAAA": [],
+                  "CNAME": [],
+                  "NS": [
+                    {
+                      "name": "api.example.org",
+                      "type": "NS",
+                      "value": "ada.ns.cloudflare.com",
+                      "ttl": 86400
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "cloudflare",
+                "state": "timeout",
+                "records": {
+                  "A": [],
+                  "AAAA": [],
+                  "CNAME": [],
+                  "NS": []
+                }
+              }
+            ],
+            "matched": 1,
+            "expected": 2
+          },
+          "retryAfterMs": 5000
+        }
+      ]
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288012000,
+    "stale": []
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$comment": "Named bounded check job status payload; nullable states include a concrete witness.",
+  "nullable": [
+    "$.result.checks[].observedAt",
+    "$.result.checks[].expiresAt",
+    "$.result.checks[].reason",
+    "$.result.checks[].fix",
+    "$.result.checks[].retryAfterMs",
+    "$.result.checks[].evidence"
+  ],
+  "variants": {
+    "$.result.checks[].observedAt": [
+      1791288012000
+    ],
+    "$.result.checks[].expiresAt": [
+      1791288300000
+    ],
+    "$.result.checks[].reason": [
+      {
+        "key": "dns.resolver-disagreement"
+      }
+    ],
+    "$.result.checks[].fix": [
+      {
+        "key": "access.fix.retryDns"
+      }
+    ],
+    "$.result.checks[].retryAfterMs": [
+      5000
+    ],
+    "$.result.checks[].evidence": [
+      {
+        "resolver": "google",
+        "record": "A"
+      }
+    ]
+  }
+}

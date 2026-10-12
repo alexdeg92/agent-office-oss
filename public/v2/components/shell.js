@@ -1,7 +1,7 @@
 // App shell (Nav README): desktop sidebar + top bar; mobile top bar + 5-slot bottom bar (BRIEF decisions log).
 import { assetUrl } from '../config.js';
-import { html } from '../lib.js';
-import { Icon, LivePill, Clock, ConnectionBanner } from './ui.js';
+import { html, useEffect, useState } from '../lib.js';
+import { Frame, Icon, LivePill, Clock, ConnectionBanner } from './ui.js';
 import { NAV, BOTTOM_TABS, routeByName, activeNav, activeTab } from '../router.js';
 import { services } from '../services.js';
 import { useStore, runtimeCan } from '../hooks.js';
@@ -9,6 +9,7 @@ import { theme, setTheme } from '../theme.js';
 import { isMock } from '../api.js';
 import { withAgent, msg, getLang, LANGS } from '../i18n.js';
 import { chooseLang } from '../lang.js';
+import { watchReleaseBadge } from '../release-badge.js';
 
 const LOGOS = assetUrl('bureau/assets/Logos/');
 
@@ -51,13 +52,16 @@ export function Shell({ match, me, status, onLogout, children }) {
   const navActive = activeNav(match);
   const tab = activeTab(match);
   const route = match.route && (match.route.parent ? routeByName(match.route.parent) : match.route);
-  const title = route ? route.label : msg('shell.notFound');
-  const question = route ? route.question : msg('shell.notFound.question');
+  const override = key => key && msg(key) !== key ? msg(key) : null;
+  const title = override(match.route?.titleKey) || (route ? route.label : msg('shell.notFound'));
+  const question = override(match.route?.subtitleKey) || (route ? route.question : msg('shell.notFound.question'));
   // MeVM.displayName (2.2): the owner's name, else the e-mail's local part (v1 /api/me has no displayName).
   const who = (me && me.displayName) || (me && me.email ? me.email.split('@')[0] : '');
+  const email = me?.email || '';
+  const [hasNewRelease, setHasNewRelease] = useState(false);
+  useEffect(() => watchReleaseBadge(email, setHasNewRelease), [email]);
 
-  // frontend-23: on phones the chat fills the screen between the bars (only its thread scrolls); see app.css « Discuter, mobile ».
-  return html`<div class=${'bu-shell' + (match.name === 'discuter' ? ' ao-shell--fill' : '')}>
+  return html`<div class="bu-shell">
     <a class="ao-skip" href="#contenu">${msg('shell.skip')}</a>
     <nav class="bu-sidebar" aria-label=${msg('shell.nav')}>
       <a class="bu-brand" href=${router.href('bureau')} aria-label=${msg('shell.home')}><${Logo} kind="wordmark" class="ao-brand-wordmark" /></a>
@@ -69,9 +73,9 @@ export function Shell({ match, me, status, onLogout, children }) {
         <div class="ao-prefs"><${ThemeSwitch} /><${LangSwitch} /></div>
         <div class="bu-usercard">
           <span class="bu-avatar bu-avatar--human" aria-hidden="true">${initials(who)}</span>
-          <div class="bu-usercard__text"><span class="bu-usercard__name">${who}</span><span class="bu-usercard__role">${msg('shell.role.admin')}</span></div>
-          <a class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" href=${router.href('a-propos')} aria-label=${msg('nav.a-propos')} title=${msg('nav.a-propos')}
-            aria-current=${match.name === 'a-propos' ? 'page' : undefined}><${Icon} name="info" /></a>
+          <div class="bu-usercard__text"><span class="bu-usercard__name">${who}</span><span class="bu-usercard__role" title=${me?.roleName||msg('shell.role.member')}>${me?.roleName||msg('shell.role.member')}</span></div>
+          <a class=${'bu-btn bu-btn--ghost bu-btn--sm ao-about-entry' + (hasNewRelease ? ' ao-about-entry--new' : '')} href=${router.href('a-propos')} aria-label=${msg('nav.a-propos') + (hasNewRelease ? ', ' + msg('release.notes.new') : '')} title=${msg('nav.a-propos')}
+            aria-current=${match.name === 'a-propos' ? 'page' : undefined}><${Icon} name="info" />${hasNewRelease ? html`<span class="bu-tag ao-new-release">${msg('release.notes.new')}</span>` : null}</a>
           <button class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${msg('shell.logout')} title=${msg('shell.logout')} onClick=${onLogout}><${Icon} name="logout" /></button>
         </div>
       </div>
@@ -92,7 +96,8 @@ export function Shell({ match, me, status, onLogout, children }) {
         <${LivePill} status=${status} compact />
       </header>
       <${ConnectionBanner} status=${status} onReconnect=${() => services.stream.reconnect()} />
-      <main id="contenu" class="ao-main" tabindex="-1">${children}</main>
+      <${Frame} tag="main" id="contenu" class="ao-main" tabindex="-1" bodyLabel=${title}
+        bodyClass=${match.route?.framed ? 'ao-frame__body--framed' : ''} bodyProps=${{ key: match.name + JSON.stringify(match.params) }}>${children}</${Frame}>
       <nav class="bu-bottombar" aria-label=${msg('shell.tabs')}>
         ${BOTTOM_TABS.filter((name) => runtimeCan(routeByName(name).needs)).map((name) => {
           const r = routeByName(name);

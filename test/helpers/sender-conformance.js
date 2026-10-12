@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 // Reusable adapter gate: invoke with hooks and a runtime-specific synthetic raw-message factory.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

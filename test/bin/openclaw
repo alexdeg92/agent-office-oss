@@ -29,6 +29,10 @@ const fails = (process.env.FAKE_OC_FAIL || '').split(',').map((s) => s.trim()).f
 if (fails.includes(sub) || fails.includes(argv[0])) { process.stderr.write('simulated failure: ' + sub + '\n'); process.exit(1); }
 
 function main() {
+  if (sub === 'gateway call' && argv[2] === 'sessions.patch') {
+    const params = JSON.parse(argv.find(a => a.startsWith('--params=')).slice(9));
+    out(JSON.stringify({ ok: true, key: params.key, entry: { sendPolicy: params.sendPolicy } })); return 0;
+  }
   if (argv[0] === '--version') { out('OpenClaw ' + (sc.openclawVersion || '0.0.0') + '\n'); return 0; }
   if (sub === 'skills list' || sub === 'skills info') {
     // Real behaviour with several agents configured: per-agent commands need --agent, else {ok:false}.

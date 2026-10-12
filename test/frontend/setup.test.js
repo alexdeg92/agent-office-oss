@@ -13,7 +13,7 @@ setMeta({ labels: {}, enums: {} });
 const NB = ' ';
 const base = () => ({ code: '', adapter: 'openclaw', gatewayUrl: '', token: '', check: null, agents: null, primary: null, looks: {}, name: '', owner: '', email: '', password: '', password2: '', passwordSet: false, locale: 'fr', timeZone: 'UTC' });
 
-test('onboarding chapters cannot skip owner, detection, connection, names or network validation', () => {
+test('onboarding chapters require external access to be staged before final review', () => {
   const at = (name, s) => R.blocker(R.STEPS.indexOf(name), s);
   let s = base();
   assert.equal(R.reachable(s), 0); assert.equal(at('welcome', s), 'setup.err.code');
@@ -32,9 +32,13 @@ test('onboarding chapters cannot skip owner, detection, connection, names or net
   s.agents[0].name = 'Orion'; assert.equal(at('identities', s), 'setup.err.primary');
   s.primary = 'a1'; assert.equal(at('office', s), 'setup.err.name');
   s.name = 'Bureau'; s.timeZone = 'Mars/Base'; assert.equal(at('office', s), 'setup.err.zone');
-  s.timeZone = 'UTC'; s.network = { mode: 'public', port: 18789, publicUrl: 'http://office.example.com' };
-  assert.equal(at('network', s), 'onboarding.network.invalid');
-  s.network.publicUrl = 'https://office.example.com'; assert.equal(R.reachable(s), R.STEPS.indexOf('review'));
+  s.timeZone = 'UTC';
+  assert.equal(at('network', s), 'access.stageRequired');
+  assert.equal(R.reachable(s), R.STEPS.indexOf('network'));
+  s.accessStaged = true; assert.equal(R.reachable(s), R.STEPS.indexOf('review'));
+  assert.equal(R.payload(s).network, undefined, 'setup publishes the access plan staged server-side');
+  assert.deepEqual(R.payload({ ...s, accessLegacyFallback: true }, { network: { port: 43210 } }).network,
+    { mode: 'local', port: 43210, publicUrl: '' }, 'a pre-T-0078 setup publishes only the legacy local listener fallback');
   assert.equal(R.validNetwork({ mode: 'local', port: 0 }), false);
   assert.equal(R.validNetwork({ mode: 'local', port: 18789, publicUrl: null }), true);
 });

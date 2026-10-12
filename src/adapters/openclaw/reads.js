@@ -25,7 +25,7 @@ function bind({ gw, cli }) {
       if (!opts.agentId) return { ok: false, category: 'missing-agent' };   // G3a: the caller passes the resolver's primary
       const r = await cli.run(['skills', 'info', name, '--agent', opts.agentId, '--json'], 30000);
       if (r.ok) return { ok: true };
-      return { ok: false, category: r.refused ? 'missing-agent' : errorCategory(r.err) };
+      return { ok: false, category: r.refused || errorCategory(r.err) };
     },
   };
 }

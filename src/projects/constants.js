@@ -60,7 +60,7 @@ const ACTIVITY_CLOCK_KINDS = Object.freeze([
 ]);
 
 // Historical owner command alias is a persisted integration contract, not a display name.
-const OWNER_ACTOR_SHORT = Object.freeze(['owner', 'alex']);
+const OWNER_ACTOR_SHORT = Object.freeze(['owner']);
 const ACTOR_SHORT = Object.freeze([...OWNER_ACTOR_SHORT, 'system']);
 
 const AGENT_STATES = Object.freeze([

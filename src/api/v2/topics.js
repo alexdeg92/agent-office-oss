@@ -17,14 +17,26 @@ const COALESCE_MS = 250;
  * @param {object} defs  name → { build(params) → VM, params?: 'none' | 'path' | string[] (allowed query keys) }
  */
 // `check(name, vm, id)` (PM audit (B)): every built VM is validated before it is stored or sent (vm/check.js)
-function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm } = {}) {
+function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm, strictPolicy=false, resourceRegistry=null, onError = () => {} } = {}) {
+  const validatePolicy=(name,def)=>{
+    if(strictPolicy && (!def.permission || !resourceRegistry?.has(def.permission.resource) || !['read','write'].includes(def.permission.level)))throw new Error('undeclared topic policy: '+name);
+  };
+  for(const [name,def] of Object.entries(defs)) {
+    validatePolicy(name,def);
+    if(def.permission)defs[name]={...def,permission:Object.freeze({...def.permission})};
+  }
   const ev = new EventEmitter();
   ev.setMaxListeners(0);
   const state = new Map();     // id → { name, params, rev, vm, timer, dirty, lastAt }
 
   // → { id, name, params } with a canonical id, or null when the name or a param is unknown
   function parse(raw) {
-    if (typeof raw !== 'string' || !raw || raw.length > 300) return null;
+    if (typeof raw !== 'string' || !raw || raw.length > 300) {
+      // Scoped path identities can be longer than the legacy query/topic bound;
+      // only the declared single-key path grammar admits this extension.
+      if (typeof raw !== 'string' || raw.length > 16532 || !/^(session|flow|skill):[^?]+$/.test(raw)) return null;
+      try { if (!require('../../runtime-ids').parseId(decodeURIComponent(raw.slice(raw.indexOf(':') + 1)))) return null; } catch { return null; }
+    }
     let name = raw, param = null, query = null;
     const q = raw.indexOf('?'), c = raw.indexOf(':');
     if (q >= 0) { name = raw.slice(0, q); query = raw.slice(q + 1); } else if (c >= 0) { name = raw.slice(0, c); param = raw.slice(c + 1); }
@@ -69,7 +81,15 @@ function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm
   function rebuild(id) {
     const s = state.get(id);
     s.dirty = false; s.lastAt = Date.now();
-    const vm = check(s.name, defs[s.name].build(s.params), id);
+    let vm;
+    try { vm = check(s.name, defs[s.name].build(s.params), id); }
+    catch (error) {
+      // Schema paths can contain caller-controlled object keys, including
+      // credential-like names. Keep diagnostics to a fixed failure class and
+      // the registry-owned topic name only.
+      try { onError({ topic: s.name, code: 'build_or_check_failed' }); } catch (_) { /* diagnostics cannot break topic behavior */ }
+      throw error;
+    }
     if (s.rev === 0) { s.vm = vm; s.rev = 1; return null; }
     const ops = diff(s.vm, vm);
     if (ops && ops.length === 0) return null;
@@ -112,15 +132,26 @@ function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm
     }
   }
 
+  function forget(raw) {
+    const t = parse(raw); if (!t) return false;
+    const s = state.get(t.id); if (!s) return false;
+    if (s.timer) clearTimeout(s.timer);
+    state.delete(t.id); return true;
+  }
+
   // Topics can be registered by area modules (projects, office…) after creation.
-  function define(name, def) { if (Object.prototype.hasOwnProperty.call(defs, name)) throw new Error('topic already defined: ' + name); defs[name] = def; }
+  function define(name, def) {
+    if (Object.prototype.hasOwnProperty.call(defs, name)) throw new Error('topic already defined: ' + name);
+    validatePolicy(name,def);
+    defs[name] = {...def,...(def.permission?{permission:Object.freeze({...def.permission})}:{})};
+  }
 
   function close() { for (const s of state.values()) if (s.timer) clearTimeout(s.timer); }
 
   // Ids of the topics of one name that have been built (subscribed or fetched at least once).
   const ids = (name) => [...state.entries()].filter(([, s]) => s.name === name && s.rev > 0).map(([id]) => id);
 
-  return { parse, current, invalidate, invalidateIds, define, ids, on: ev.on.bind(ev), off: ev.off.bind(ev), names: () => Object.keys(defs), close, _state: state };
+  return { parse, current, invalidate, invalidateIds, define, forget, ids, declaration:raw=>{const t=parse(raw);return t ? defs[t.name].permission || null : null;}, on: ev.on.bind(ev), off: ev.off.bind(ev), names: () => Object.keys(defs), close, _state: state };
 }
 
 /**
@@ -131,18 +162,23 @@ function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm
  *   stream hub subscribes to it alone: a v3 topic never reaches a v2 stream).
  * @param {object} versions  { [version]: { P, check } }
  */
-function createVersionedTopics(versions, { coalesceMs = COALESCE_MS } = {}) {
+function createVersionedTopics(versions, { coalesceMs = COALESCE_MS, policyDeclarations=null, resourceRegistry=null, onError = () => {} } = {}) {
   const byV = {};
-  for (const [v, o] of Object.entries(versions)) byV[v] = Object.assign(createTopics({}, { coalesceMs, check: o.check }), { P: o.P });
+  for (const [v, o] of Object.entries(versions)) byV[v] = Object.assign(createTopics({}, { coalesceMs, check: o.check, strictPolicy:!!policyDeclarations, resourceRegistry, onError }), { P: o.P });
   const all = Object.values(byV);
   const of = (v) => { const t = byV[v || 2]; if (!t) throw new Error('unknown contract version ' + v); return t; };
   return {
     of,
-    define(name, def) { for (const t of all) t.define(name, { params: def.params, build: (params) => def.build(params, t.P) }); },
+    define(name, def) {
+      if(all.some(t=>t.names().includes(name)))throw new Error('topic already defined: '+name);
+      for (const t of all) t.define(name, { params: def.params, permission:def.permission || policyDeclarations?.get(name), build: (params) => def.build(params, t.P) });
+    },
     invalidate(name) { for (const t of all) t.invalidate(name); },
     invalidateIds(ids) { for (const t of all) t.invalidateIds(ids); },
+    forget(raw, v) { return of(v).forget(raw); },
     current: (raw, v) => of(v).current(raw),
     parse: (raw, v) => of(v).parse(raw),
+    declaration: (raw, v) => of(v).declaration(raw),
     ids: (name) => [...new Set(all.flatMap((t) => t.ids(name)))],
     names: () => of(2).names(),
     close() { for (const t of all) t.close(); },

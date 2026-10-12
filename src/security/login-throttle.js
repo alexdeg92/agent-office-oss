@@ -46,22 +46,34 @@ function createLoginThrottle({ now = () => Date.now() } = {}) {
   // a failure at once (so N parallel requests can't all pass the check), and concurrent verifications are capped
   // (per client and overall). release(true) refunds the attempt on a successful login; release(false) keeps it.
   const inflight = new Map(); let inflightAll = 0;
-  function reserve(ip) {
-    const gate = check(ip);
-    if (!gate.ok) return gate;
+  function admit(ip, passwordAttempt) {
+    if (passwordAttempt) { const gate = check(ip); if (!gate.ok) return gate; }
     if ((inflight.get(ip) || 0) >= INFLIGHT_PER_IP || inflightAll >= INFLIGHT_ALL) return { ok: false, retryAfterSec: 1, scope: 'busy' };
-    failure(ip);
-    const stamp = global[global.length - 1];
     inflight.set(ip, (inflight.get(ip) || 0) + 1); inflightAll++;
-    let done = false;
-    return { ok: true, release(succeeded) {
+    let done = false, counted = false, stamp;
+    function beginPassword() {
+      if (done || counted) return { ok: false, retryAfterSec: 1, scope: 'busy' };
+      const gate = check(ip); if (!gate.ok) return gate;
+      failure(ip); stamp = global[global.length - 1]; counted = true;
+      return { ok: true };
+    }
+    const slot = { ok: true, beginPassword, release(succeeded) {
       if (done) return; done = true;
       const n = (inflight.get(ip) || 1) - 1; if (n) inflight.set(ip, n); else inflight.delete(ip);
       inflightAll--;
-      if (succeeded) { success(ip); const i = global.lastIndexOf(stamp); if (i >= 0) global.splice(i, 1); }
+      if (succeeded && counted) { success(ip); const i = global.lastIndexOf(stamp); if (i >= 0) global.splice(i, 1); }
     } };
+    if (passwordAttempt) {
+      const gate = beginPassword();
+      if (!gate.ok) { slot.release(false); return gate; }
+    }
+    return slot;
   }
-  return { check, failure, success, reserve, _state: () => ({ ips: ips.size, global: global.length, globalUntil, inflightAll }) };
+  const reserve = ip => admit(ip, true);
+  // Protocol parsing/nonces share the finite work capacity, but cannot add or
+  // refund password failures. Promotion checks and counts a guess before hashing.
+  const reserveWork = ip => admit(ip, false);
+  return { check, failure, success, reserve, reserveWork, _state: () => ({ ips: ips.size, global: global.length, globalUntil, inflightAll }) };
 }
 
 module.exports = { createLoginThrottle, IP_FREE, WINDOW_MS, MAX_LOCK_MS, GLOBAL_PER_MIN };

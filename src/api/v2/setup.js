@@ -45,7 +45,7 @@ const text = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <
 function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () => {}, onConfigured = () => {}, throttle = createLoginThrottle(),
   now = () => Number(process.hrtime.bigint() / 1000000n), derivePassword = hashPassword,
   instance = env?.AO_ENV || 'dev', storeFactory = null, detect = null, networkGuide = null, recovery = false,
-  suggestedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', engine = null } = {}) {
+  suggestedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', engine = null, externalAccess = null } = {}) {
   let state = recovery && env.PORTAL_READONLY !== '1' ? 'open' : IC.setupState(env, files);
   let code = state === 'open' ? newSetupCode() : null;
   const expiresAt = now() + SETUP_CODE_TTL;
@@ -87,7 +87,7 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
   // architect-56 · the project tag, installed for the primary agent right after the configuration is published
   // The adapter owns installation. Best effort: setup never fails because of it; the result says what happened.
   const PT = (id) => adapterById(id).projectTag?.();
-  const integrationAgents = (id) => adapterById(id).setup.integrationAgents?.({ paths, agents: detections?.find(d => d.runtime === id)?.agents || [] }) || Promise.resolve([]);
+  const integrationAgents = (id) => adapterById(id).setup.integrationAgents?.({ env, paths: adapterById(id).paths?.(env) || paths, agents: detections?.find(d => d.runtime === id)?.agents || [] }) || Promise.resolve([]);
   async function installProjectTag(runtimeId, agentId, locale) {
     if (!PT(runtimeId)) return { status: 'skipped', reason: 'adapter' };
     try {
@@ -122,7 +122,8 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
 
   function expireIfDue() {
     if (state === 'open' && (expired || now() >= expiresAt)) {
-      expired = true; code = null; remembered = null; detections = null; integration.invalidate();
+      expired = true; if (code) externalAccess?.clearSetup?.({ kind: 'setup', id: code });
+      code = null; remembered = null; detections = null; integration.invalidate();
     }
     return expired;
   }
@@ -146,12 +147,19 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
       throttle.failure(ip);
       throw new ApiError('forbidden', { message: 'Code d’installation invalide.', details: [{ field: 'setupCode', issue: 'invalid' }] });
     }
+    req.setupCodeEpoch = code;
     return b;
   }
   function runtimeOf(b) {
     const r = b.runtime;
     if (!isObj(r)) throw invalid('runtime', 'required');
     if (!ADAPTERS.some((a) => a.id === r.adapter && a.connect)) throw invalid('runtime.adapter', 'invalid');
+    const A = adapterById(r.adapter);
+    if (A.setup.fields.length && !A.setup.fields.includes('gatewayUrl')) {
+      for (const key of Object.keys(r)) if (key !== 'adapter' && !A.setup.fields.includes(key)) throw invalid('runtime', 'unexpected-field');
+      try { return A.setup.settings.resolve(r, A.setup.settings.values(A.paths?.(env) || {})); }
+      catch { throw invalid('runtime', 'invalid'); }
+    }
     if (!adapterById(r.adapter).setup.fields.length) {
       for (const k of Object.keys(r)) if (k !== 'adapter') throw invalid('runtime.' + k, 'unexpected-field');
       return { adapter: r.adapter, gatewayUrl: null, token: null, given: false };
@@ -162,7 +170,7 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
     const token = r.token || (remembered && remembered.adapter === r.adapter && remembered.gatewayUrl === gatewayUrl ? remembered.token : null) || detections?.find(d => d.runtime === r.adapter && d.connection?.gatewayUrl === gatewayUrl)?.secret || adapterById(r.adapter).setup.credential?.({ env, gatewayUrl }) || null;
     return { adapter: r.adapter, gatewayUrl, token, given: !!r.token };
   }
-  const tryProbe = (rt) => (!adapterById(rt.adapter).setup.fields.length ? Promise.resolve({ status: 'connected', protocol: null, latencyMs: 0, gw: null })
+  const tryProbe = (rt) => (adapterById(rt.adapter).setup.fields.length && !adapterById(rt.adapter).setup.fields.includes('gatewayUrl') ? adapterById(rt.adapter).setup.settings.probe({runtime:rt,paths:adapterById(rt.adapter).paths?.(env) || paths}) : !adapterById(rt.adapter).setup.fields.length ? Promise.resolve({ status: 'connected', protocol: null, latencyMs: 0, gw: null })
     : adapterById(rt.adapter).setup.fields.includes('token') && !rt.token ? Promise.resolve({ status: 'unauthorized', protocol: null, latencyMs: 0, gw: null })
     : (probe || adapterById(rt.adapter).setup.probe)({ url: rt.gatewayUrl, token: rt.token, identityPath: paths.identityPath, stateDbPath: paths.stateDbPath }));
   const localAgents = (id) => adapterById(id).setup.agents();
@@ -172,6 +180,36 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
   function mount(r) {
     r.get('/setup/catalog', (req, res, next) => { if (state !== 'open') return next(new ApiError(state === 'readonly' ? 'readonly' : 'forbidden', { details: [{ issue: 'locked' }] })); res.json(okBody(require('./vm/office').officeDefaults().manifest, { engine })); });
     r.get('/setup', (req, res) => res.json(okBody(vm(), { engine })));
+    if (externalAccess) {
+      const strict = (req, res, allowed) => { const b = admit(req, res); for (const key of Object.keys(b)) if (!allowed.includes(key)) throw invalid(key, 'unexpected-field'); return b; };
+      const accessOk = (res, result) => res.json(okBody({ ok: true, result, revision: null, vm: null }, { engine }));
+      const accessV3 = (req, res, next) => req.apiVersion === 3 ? next() : next(new ApiError('not_found'));
+      r.post('/setup/access/state', accessV3, (req, res, next) => { try {
+        strict(req, res, ['setupCode']);
+        const actor = { kind: 'setup', id: req.setupCodeEpoch };
+        res.json(okBody(externalAccess.stateVm({ setup: true, staged: externalAccess.stagedSetup(actor) }), { engine }));
+      } catch (error) { next(error); } });
+      r.post('/setup/access/plan', accessV3, async (req, res, next) => { try {
+        const b = strict(req, res, ['setupCode', 'settingsRevision', 'draft']);
+        const result = await externalAccess.createPlan({ req, draft: b.draft, expectedRevision: b.settingsRevision, setup: true });
+        assertActive(); accessOk(res, result);
+      } catch (error) { next(error); } });
+      r.post('/setup/access/checks', accessV3, (req, res, next) => { try {
+        const b = strict(req, res, ['setupCode', 'planId', 'checks']);
+        accessOk(res, externalAccess.startChecks({ req, planId: b.planId, checks: b.checks, setup: true }));
+      } catch (error) { next(error); } });
+      r.post('/setup/access/checks/status', accessV3, (req, res, next) => { try {
+        const b = strict(req, res, ['setupCode', 'jobId']); accessOk(res, externalAccess.status({ req, jobId: b.jobId, setup: true }));
+      } catch (error) { next(error); } });
+      r.post('/setup/access/checks/cancel', accessV3, (req, res, next) => { try {
+        const b = strict(req, res, ['setupCode', 'jobId']); accessOk(res, externalAccess.cancel({ req, jobId: b.jobId, setup: true }));
+      } catch (error) { next(error); } });
+      r.post('/setup/access/apply', accessV3, (req, res, next) => { try {
+        const b = strict(req, res, ['setupCode', 'planId', 'settingsRevision', 'confirmation']);
+        if (b.settingsRevision !== null || !isObj(b.confirmation) || Object.keys(b.confirmation).some(key => key !== 'configDigest') || typeof b.confirmation.configDigest !== 'string') throw invalid('confirmation', 'invalid');
+        accessOk(res, externalAccess.stageSetup({ req, planId: b.planId, expectedRevision: b.settingsRevision, digest: b.confirmation.configDigest }));
+      } catch (error) { next(error); } });
+    }
 
     r.post('/setup/resume', (req, res, next) => {
       try {
@@ -259,7 +297,7 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
         try { assertActive(); } catch (e) { if (p.gw) p.gw.close(); throw e; }
         if (p.status !== 'connected') throw new ApiError('upstream_failed', { details: [{ issue: p.status }] });
         let agents;
-        try { agents = await adapterById(rt.adapter).setup.discover({ gw: p.gw, detected: detections?.find(d => d.runtime === rt.adapter)?.agents || [] }); }
+        try { agents = await adapterById(rt.adapter).setup.discover({ gw: p.gw, runtime:rt, env, detected: detections?.find(d => d.runtime === rt.adapter)?.agents || [] }); }
         catch (_) { throw new ApiError('upstream_failed', { details: [{ issue: 'agents-list' }] }); }
         finally { p.gw?.close(); }
         assertActive();
@@ -290,27 +328,33 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
         let rt = null;
         try { rt = runtimeOf(b); } catch (e) { if (e.details) issues.push(...e.details); else throw e; }
         if (rt && adapterById(rt.adapter).setup.fields.includes('token') && !rt.token) bad('runtime.token', 'required');
-        if (typeof agents.primary !== 'string' || !IC.AGENT_ID.test(agents.primary)) bad('agents.primary', agents.primary == null ? 'required' : 'invalid');
+        const validAgent=id=>ownerAccount() ? typeof id==='string' && id.length>0 && Buffer.byteLength(id)<=4096 && !/[\x00-\x1f\x7f]/.test(id) : IC.AGENT_ID.test(id || '');
+        if (!validAgent(agents.primary)) bad('agents.primary', agents.primary == null ? 'required' : 'invalid');
         const looks = agents.looks == null ? {} : agents.looks;
         const integ = b.integrations == null ? {} : b.integrations;
         if (!isObj(integ) || Object.keys(integ).some((k) => !['projet', 'reviewed'].includes(k)) || (integ.projet != null && typeof integ.projet !== 'boolean')) bad('integrations', 'invalid');
         if (integ.reviewed != null && integ.reviewed !== true) bad('integrations.reviewed', 'invalid');
         const projet = integ.projet !== false;   // opt-out
-        if (!isObj(looks) || Object.keys(looks).some((k) => !IC.AGENT_ID.test(k))) bad('agents.looks', 'invalid');
+        if (!isObj(looks) || Object.keys(looks).some((k) => !validAgent(k))) bad('agents.looks', 'invalid');
         const names = agents.names;
-        if (names != null && (!isObj(names) || !Object.keys(names).length || Object.entries(names).some(([id, n]) => !IC.AGENT_ID.test(id) || !text(n, 80)) || !names[agents.primary])) bad('agents.names', 'invalid');
+        if (names != null && (!isObj(names) || !Object.keys(names).length || Object.entries(names).some(([id, n]) => !validAgent(id) || !text(n, 80)) || !names[agents.primary])) bad('agents.names', 'invalid');
         if (ownerAccount() && (ownerAccount().email !== email || setupStore.persons.ensureOwner().name !== displayName)) bad('owner', 'owner-exists');
         let netConfig;
         if (b.network != null) { try { netConfig = networkConfig(b.network); } catch { bad('network', 'invalid'); } }
         let initialLayout;
         if (ownerAccount()) { try { initialLayout = require('../../ops/setup-layout').setupLayout({ primary: agents.primary, looks, names: names || {} }); } catch { bad('agents.looks', 'invalid'); } }
         if (issues.length) throw new ApiError('validation_failed', { details: issues });
-        const config = { version: ownerAccount() ? IC.VERSION : 1, instance: { name, locale: inst.locale, timeZone: inst.timeZone }, owner: { displayName, email, ...(ownerAccount() ? { authSource: 'database' } : {}) },
+        const stagedAccess = externalAccess?.stagedSetup?.({ kind: 'setup', id: req.setupCodeEpoch });
+        let config = { version: ownerAccount() ? 2 : 1, instance: { name, locale: inst.locale, timeZone: inst.timeZone }, owner: { displayName, email, ...(ownerAccount() ? { authSource: 'database' } : {}) },
           runtime: adapterById(rt.adapter).setup.config(rt), agents: { primary: agents.primary, looks, ...(names ? { names: { [rt.adapter]: names } } : {}) },
+          ...(stagedAccess ? { access: stagedAccess, accessRevision: (files.config?.accessRevision || 0) + 1 }
+            : files.config?.access ? { access: files.config.access, accessRevision: files.config.accessRevision ?? 1 } : {}),
           ...(netConfig ? { network: netConfig } : {}),
           integrations: { projet } };
-        const secrets = { version: config.version, sessionSecret: crypto.randomBytes(48).toString('base64url'),
+        let secrets = { version: config.version, sessionSecret: crypto.randomBytes(48).toString('base64url'),
           ...(ownerAccount() ? {} : { passwordHash: await derivePassword(owner.password) }), runtimeToken: rt.token };
+        if (ownerAccount()) ({ config, secrets } = IC.upgradeV2(config, secrets));
+        if (initialLayout && config.version === 3) initialLayout = require('../../store/runtime-references').layout(initialLayout);
         assertActive();   // a concurrent PUT or elapsed expiry can never publish after the await
         // Durably seed the DB before publishing config.json, the filesystem commit marker.
         // A failed publication can be retried with changed looks while setup is still open.
@@ -326,6 +370,7 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
           throw new ApiError('upstream_unavailable', { details: [{ issue: 'write-failed' }] });
         }
         state = 'locked'; code = null; remembered = null;
+        externalAccess?.clearSetup?.({ kind: 'setup', id: req.setupCodeEpoch });
         throttle.success(req.ip || 'unknown');
         log('Agent Office: setup complete; configuration written to ' + files.paths.file);
         const projetResult = !PT(rt.adapter) ? { status: 'skipped', reason: 'adapter' } : !projet ? { status: 'skipped', reason: 'opted-out' }
@@ -336,7 +381,7 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
     });
   }
 
-  return { mount, close: () => { clearTimeout(expiryTimer); expired = true; code = null; remembered = null; detections = null; integration.invalidate(); if (setupStore) { setupStore.close(); setupStore = null; } }, state: () => state, vm, _code: () => { expireIfDue(); return code; } };
+  return { mount, setExternalAccess: service => { externalAccess = service; }, close: () => { if (code) externalAccess?.clearSetup?.({ kind: 'setup', id: code }); clearTimeout(expiryTimer); expired = true; code = null; remembered = null; detections = null; integration.invalidate(); if (setupStore) { setupStore.close(); setupStore = null; } }, state: () => state, vm, _code: () => { expireIfDue(); return code; } };
 }
 
 module.exports = { createSetup, newSetupCode, PASSWORD_MIN, SETUP_CODE_TTL };

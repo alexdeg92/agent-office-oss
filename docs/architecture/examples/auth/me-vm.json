@@ -1,0 +1,14 @@
+{
+  "data": {
+    "email": "lectrice@example.invalid",
+    "displayName": "Lectrice",
+    "gateway": "up",
+    "capabilities": { "openclawWrites": false, "storeWrites": false },
+    "sessionExpiresAt": 1791651600000,
+    "user": { "id": "usr_reader000000000", "personId": "per_reader000000000", "roleId": "rol_reader" },
+    "permissions": { "office": "read", "logs": "none", "settings.network": "none", "adapter.example.history": "none" },
+    "resourceStatus": { "office": "available", "logs": "available", "settings.network": "available", "adapter.example.history": "unavailable" },
+    "permissionRevision": { "user": 1, "role": 1, "registry": 1 }
+  },
+  "meta": { "modelVersion": 1, "generatedAt": 1791651000000, "stale": [] }
+}

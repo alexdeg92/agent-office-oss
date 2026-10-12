@@ -1,14 +1,68 @@
 {
-  "$comment": "Shape sidecar for logs-page.json (api.md §3.6): GET /api/v2/views/logs (topic only for the first default-size page). 3.0: kind is primary|subagent|scheduled|conversation-direct|conversation-group|conversation|internal|unrecognized; runtimeKind names an internal session (dashboard|acp|explicit), else null; channel is a ChannelRef or null.",
+  "$comment": "Shape sidecar for logs-page.json (api.md §3.6): GET /api/v2/views/logs (topic only for the first default-size page). 3.0: kind is primary|subagent|scheduled|conversation-direct|conversation-group|conversation|internal|unrecognized; runtimeKind names an internal session (dashboard|acp|explicit), else null; channel is a ChannelRef or null. T-0058 (additive): items[].tokensKnown/connector/agent and facets are optional.",
   "nullable": [
     "$.items[].channel",
     "$.items[].model",
     "$.items[].modelProvider",
     "$.items[].runtimeKind",
     "$.items[].updatedAt",
-    "$.nextCursor"
+    "$.nextCursor",
+    "$.items[].connector",
+    "$.items[].agent",
+    "$.facets.agents[].connectorId",
+    "$.items[].execution.evidence.observedAt",
+    "$.items[].execution.evidence.expiresAt"
   ],
   "types": {
-    "$.items[].runtimeKind": "string"
+    "$.items[].runtimeKind": "string",
+    "$.items[].execution.evidence.expiresAt": "number"
+  },
+  "additional": {
+    "$.items[].tokensKnown": true,
+    "$.items[].connector": {
+      "id": "legacy",
+      "adapter": "openclaw",
+      "name": "OpenClaw",
+      "mark": {
+        "monogram": "OC",
+        "color": "#b23a0b",
+        "logo": "assets/connectors/openclaw.svg",
+        "providerName": "OpenClaw"
+      }
+    },
+    "$.items[].agent": {
+      "id": "main",
+      "name": "Timmy"
+    },
+    "$.facets": {
+      "connectors": [
+        {
+          "id": "legacy",
+          "adapter": "openclaw",
+          "name": "OpenClaw",
+          "mark": {
+            "monogram": "OC",
+            "color": "#b23a0b",
+            "logo": "assets/connectors/openclaw.svg",
+            "providerName": "OpenClaw"
+          },
+          "count": 3
+        }
+      ],
+      "agents": [
+        {
+          "id": "main",
+          "name": "Timmy",
+          "connectorId": "legacy",
+          "count": 3
+        }
+      ]
+    },
+    "$.items[].connector.mark.logo": "assets/connectors/openclaw.svg",
+    "$.items[].connector.mark.logoDark": "assets/connectors/codex-dark.svg",
+    "$.items[].connector.mark.providerName": "OpenClaw",
+    "$.facets.connectors[].mark.logo": "assets/connectors/openclaw.svg",
+    "$.facets.connectors[].mark.logoDark": "assets/connectors/codex-dark.svg",
+    "$.facets.connectors[].mark.providerName": "OpenClaw"
   }
 }

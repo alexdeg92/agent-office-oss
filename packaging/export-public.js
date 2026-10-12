@@ -34,7 +34,7 @@ function exportTree(dest) {
     const top = rel.split('/')[0];
     if (top === 'design') {
       // Keep reproducible design sources, runtime images and their public font licences.
-      if (!/^design\/(?:css|components|fonts|office|scripts)\//.test(rel) && !['design/tokens.json', 'design/icons.json'].includes(rel) && !sourceAssets.has(rel)) continue;
+      if (!/^design\/(?:css|components|fonts|office|scripts|identity-1)\//.test(rel) && !['design/tokens.json', 'design/icons.json'].includes(rel) && !sourceAssets.has(rel)) continue;
     } else if (!allowedRoots.has(top) && !rootFiles.has(rel)) continue;
     const from = path.join(ROOT, rel), to = path.join(dest, rel);
     const st = fs.lstatSync(from);

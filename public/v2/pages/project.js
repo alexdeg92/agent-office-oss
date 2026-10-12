@@ -37,7 +37,7 @@ export function ProjectPage({ match }) {
   useEffect(() => { if (vm.data) document.title = vm.data.name + ' · ' + msg('nav.projets') + ' · Agent Office'; }, [vm.data && vm.data.name]);
 
   if (vm.data === undefined && vm.error) {
-    return html`<div class="bu-page ao-frame ao-frame--detail">
+    return html`<div class="bu-page ao-page ao-page--detail">
       <a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>
       ${vm.error.code === 'not_found'
         ? html`<${EmptyState} icon="projets" title=${msg('project.notFound')} text=${msg('project.notFound.text')}><a class="bu-btn" href=${back}>${msg('project.backToBoard')}</a></${EmptyState}>`
@@ -48,7 +48,7 @@ export function ProjectPage({ match }) {
   const p = vm.data;
   const ctx = { p, topic, id, writes: useCapability('storeWrites') };
 
-  return html`<div class="bu-page ao-frame ao-project" aria-busy=${vm.resyncing ? 'true' : undefined}>
+  return html`<div class="bu-page ao-page ao-project" aria-busy=${vm.resyncing ? 'true' : undefined}>
     <a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>
     ${vm.error ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('common.updateFailed', { error: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('common.retry')}</button></div>` : null}
     ${!ctx.writes ? html`<p class="ao-ro bu-caption bu-text-secondary" id="projet-lecture"><${Icon} name="info" />${msg('project.readonly')}</p>` : null}
@@ -396,7 +396,7 @@ function Flags({ p, topic, id, writes }) {
 }
 
 function DetailSkeleton({ back }) {
-  return html`<div class="bu-page ao-frame ao-project" aria-busy="true" aria-label=${msg('project.loading')}>
+  return html`<div class="bu-page ao-page ao-project" aria-busy="true" aria-label=${msg('project.loading')}>
     <a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>
     <div class="bu-project-header"><${Skeleton} kind="block" w="cover" /><div class="bu-project-header__body"><${Skeleton} w="30" /><${Skeleton} kind="title" /><${Skeleton} w="50" /></div></div>
     <div class="ao-project__grid"><div class="ao-project__col"><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div><div class="ao-project__col"><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div></div>

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "Le nom de domaine est invalide.",
+    "requestId": "req_0123456789ab",
+    "details": [{"field": "domain", "issue": "invalid"}]
+  }
+}

@@ -8,7 +8,7 @@
           "name": "Claude Code",
           "found": true,
           "confidence": "presence",
-          "supported": false,
+          "supported": true,
           "connection": null,
           "agents": []
         },
@@ -76,7 +76,7 @@
           "agents": []
         }
       ],
-      "selected": "openclaw"
+      "selected": null
     },
     "revision": null,
     "vm": null

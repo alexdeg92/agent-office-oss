@@ -70,4 +70,16 @@ describe('VM check · through the real engine quarantine', () => {
     const issue = engine.dataQuality().issues.find((i) => i.channel === 'vm.prefs');
     assert.ok(issue); assert.equal(issue.code, 'vm.invalid'); assert.equal(issue.path, '$.uiTheme');
   });
+
+  it('clears persisted legacy health-view validation issues after repeated valid checks', () => {
+    const { createEngine } = require('../../src/engine');
+    const engine = createEngine({ now: () => Date.UTC(2026, 9, 6) });
+    engine.declareFields(require('../../src/schema').declaredNames(Object.values(VM_SCHEMAS)));
+    engine.quarantine.record({ code: 'vm.invalid', severity: 'error', channel: 'core:vm.health', path: '$.level' });
+    const c = createVmCheck({ mode: 'fallback', report: issue => engine.quarantine.record(issue),
+      resolve: (channel, name) => { engine.quarantine.markClean(channel); if (name === 'health') engine.quarantine.markClean('core:vm.health'); } });
+    const health = loadExample('health-vm').data;
+    for (let i = 0; i < 10; i++) c.check('health', health);
+    assert.equal(engine.dataQuality().issues.find(issue => issue.channel === 'core:vm.health')?.state, 'resolved');
+  });
 });

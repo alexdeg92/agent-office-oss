@@ -3,25 +3,21 @@
 // into hosts the page provides; the scene itself is the live preview. Every rule comes from
 // layout-rules.js (shared with the server); the store is the layout API (or mock-store.js).
 import { h, render } from 'preact';
+import { Frame } from '../components/ui.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import htm from 'htm';
 import {
-  History, addItem, moveItem, removeItem, renameItem, duplicateItem, findFreeSpot, updateAgent, updateTheme,
-  toggleAccessory, effectiveAccessories, checkPlacement, validateLayout, resolveOccupants, itemName,
+  History, addItem, moveItem, removeItem, renameItem, duplicateItem, findFreeSpot, updateTheme,
+  checkPlacement, validateLayout, resolveOccupants, itemName,
   collisionTiles, footprintOf, homeStations, ruleKind, MAX_ITEMS, NAME_MAX, ROLE_MAX,
 } from './editor-model.js';
 import { poseImage, accessoryLayers, resolveUrl, furnitureImage, roomImage, themeFor } from './assets.js';
 import { STATES, viewFor } from './states.js';
 import { displayName } from './names.js';
 import { SetupCharacters } from './setup-characters.js';
-import { agentRows as sharedAgentRows } from './agent-looks.js';
-import { config } from '../config.js';
-import { duration as words } from './strings.js';
-import { defaultAccessoriesFor, canonicalRuleId, canonicalRole, roleOfRule, presenceMinutes } from './layout-rules.js';
-const PRESENCE_CHOICES = [0, 15, 30, 60, 120, 240];
-const presenceText = (m) => words(m * 60_000);
+import { agentRows as sharedAgentRows, ruleView as sharedRuleView, patchAgent as sharedPatchAgent, looksOf as sharedLooksOf } from './agent-looks.js';
+import { defaultAccessoriesFor, canonicalRuleId, canonicalRole } from './layout-rules.js';
 import { resolveTheme } from './theme.js';
-import { SurpriseSetting } from './surprise-setting.js';
 import { s as tr, labelOf, intlLocale } from './strings.js';
 
 const html = htm.bind(h);
@@ -102,7 +98,7 @@ class EditorController {
   // -- scene preview --
   occupantsPreview() {
     const live = this.o.getOccupants();
-    const resolved = resolveOccupants(this.draft, this.index, live.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name })));
+    const resolved = resolveOccupants(this.draft, this.index, live.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, automaticLook: o.automaticLook })));
     return resolved.map((r, i) => ({
       ...live[i], ...r,
       // Disposition pauses states on « Inactif » so nobody acts up while furniture moves (editor.md §1).
@@ -366,27 +362,15 @@ class EditorController {
 
   /** The rule the agent editor writes to: its exact rule, created on first change from the resolved look. */
   ruleView(row) {
-    const exact = this.draft.agents.find((a) => canonicalRuleId(a.agentId) === canonicalRuleId(row.id));
-    if (exact) return { rule: exact, own: true };
-    const [r] = resolveOccupants(this.draft, this.index, [{ id: row.id, role: row.role, sourceName: row.sourceName }]);
-    return { rule: { agentId: row.id, match: { kind: row.role }, character: r.look.character, variant: r.look.variant, name: null, role: null, station: 'auto' }, own: false, resolved: r };
+    return sharedRuleView(this.draft, this.index, row);
   }
 
   patchAgent(row, patch, announce) {
-    const { rule, own } = this.ruleView(row);
-    let next = this.draft;
-    if (!own) next = updateAgent(next, row.id, { ...rule, accessories: undefined });
-    const clean = { ...patch };
-    next = updateAgent(next, row.id, clean);
-    const a = next.agents.find((x) => x.agentId === row.id);
-    for (const k of Object.keys(a)) if (a[k] === undefined) delete a[k];
-    this.commit(next, announce);
+    this.commit(sharedPatchAgent(this.draft, this.index, row, patch), announce);
   }
 
   // -- Thème --
   patchTheme(patch, announce) { this.commit(updateTheme(this.draft, patch), announce); }
-  /** O8 (3.0): how long a seen agent stays at its desk (layout.presence.seenMinutes). */
-  patchPresence(minutes, announce) { this.commit({ ...this.draft, presence: { seenMinutes: minutes } }, announce); }
 
   // -- save, reset, conflicts, versions --
   async save({ overwrite = false } = {}) {
@@ -648,18 +632,7 @@ function CharactersPanel({ ctl }) {
   // O6: looks are edited with the setup step's component (one implementation for setup and the editor). Its value
   // is each row's effective look in the draft; a change is written to that row's rule, so undo, save, 409 and the
   // shared validator work as for any other edit. Explicit gear equal to the colour's defaults is stored as « default ».
-  // Agents without an own rule are resolved together, in roster order, so a default rule's colour rotation holds.
-  const people = rows.filter((r) => !r.isDefault);
-  const resolvedLooks = new Map(resolveOccupants(ctl.draft, idx, people.map((r) => ({ id: r.id, role: r.role, sourceName: r.sourceName }))).map((o, i) => [people[i].id, o.look]));
-  const lookOf = (r) => {
-    const { rule: ru, own } = ctl.ruleView(r);
-    if (r.isDefault || own) {
-      const c = idx.characters.get(ru.character);
-      return { character: ru.character, variant: ru.variant ?? c?.variants?.[0]?.id ?? null, accessories: effectiveAccessories(idx, ru) };
-    }
-    return resolvedLooks.get(r.id);
-  };
-  const value = Object.fromEntries(rows.map((r) => [r.id, lookOf(r)]));
+  const value = sharedLooksOf(ctl.draft, idx, rows);
   const same = (a, b) => a.character === b.character && (a.variant ?? null) === (b.variant ?? null) && a.accessories.length === b.accessories.length && a.accessories.every((x) => b.accessories.includes(x));
   function onLooks(next) {
     for (const r of rows) {
@@ -714,7 +687,6 @@ function ThemePanel({ ctl }) {
   return html`
     <section aria-labelledby="ao-theme-title">
       <h3 class="ao-panel__title" id="ao-theme-title">${tr('ed.themeTitle')}</h3>
-      <${SurpriseSetting} />
       <div class="bu-segmented" role="group" aria-label=${tr('ed.themeGroup')}>
         ${['auto', 'day', 'night'].map((id) => [id, tr(`office.theme.${id}`)]).map(([id, label]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(mode === id)} onClick=${() => set(id)}>${label}</button>`)}
       </div>
@@ -734,11 +706,6 @@ function ThemePanel({ ctl }) {
         </select>
         <span class="bu-field__hint">${seasons.length ? tr('ed.seasonHelp') : tr('ed.seasonNoneAvailable')}</span></label>
       <p class="bu-field__hint">${tr('ed.themeIndependent')}</p>
-      ${config.apiVersion === 3 ? html`<label class="bu-field"><span class="bu-field__label">${tr('ed.presence')}</span>
-        <select class="bu-select" value=${String(presenceMinutes(ctl.draft))} onChange=${(e) => { const m = Number(e.target.value); ctl.patchPresence(m, m ? tr('ed.presenceSet', { duration: presenceText(m) }) : tr('ed.presenceOff')); }}>
-          ${PRESENCE_CHOICES.map((m) => html`<option value=${String(m)}>${m ? presenceText(m) : tr('ed.presenceNone')}</option>`)}
-        </select>
-        <span class="bu-field__hint">${tr('ed.presenceHelp')}</span></label>` : null}
     </section>
     <${Problems} errors=${ctl.errors} />`;
 }
@@ -791,11 +758,10 @@ function Modal({ ctl }) {
   }, [m?.kind]);
   if (!m) return null;
   const frame = (title, desc, body, footer) => html`<div class="bu-scrim ao-scrim" onClick=${(e) => { if (e.target === e.currentTarget) ctl.closeModal(); }}>
-    <div class="bu-modal bu-modal--sm" role="dialog" aria-modal="true" aria-labelledby="ao-modal-title">
+    <${Frame} class="bu-modal bu-modal--sm" role="dialog" aria-modal="true" aria-labelledby="ao-modal-title" bodyClass="bu-modal__body" head=${html`
       <div class="bu-modal__header"><div style="flex:1"><h2 class="bu-modal__title" id="ao-modal-title">${title}</h2>${desc ? html`<p class="bu-modal__desc">${desc}</p>` : null}</div>
         <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost" aria-label=${tr('ed.close')} onClick=${() => ctl.closeModal()}><${Icon} name="x" /></button></div>
-      ${body ? html`<div class="bu-modal__body">${body}</div>` : null}
-      <div class="bu-modal__footer">${footer}</div></div></div>`;
+      `} foot=${html`<div class="bu-modal__footer">${footer}</div>`}>${body}</${Frame}></div>`;
   if (m.kind === 'leave') return frame(tr('ed.leave.title'), tr('ed.leave.desc'), null, html`
     <button type="button" class="bu-btn bu-btn--ghost" ref=${first} onClick=${() => ctl.closeModal()}>${tr('ed.stay')}</button>
     <button type="button" class="bu-btn bu-btn--danger" onClick=${() => { ctl.modal = null; ctl.close({ saved: false }); }}>${tr('ed.quit')}</button>`);
@@ -847,6 +813,9 @@ export async function openEditor(opts) {
   render(html`<${EditorBar} ctl=${ctl} />`, opts.barHost);
   render(html`<${EditorPanel} ctl=${ctl} />`, opts.asideHost);
   render(html`<${ItemToolbar} ctl=${ctl} />`, overlay);
+  // The opener becomes hidden while editing; start at the editor's mode controls
+  // instead of leaving keyboard users to traverse the entire furniture catalogue.
+  opts.barHost.querySelector('.bu-segmented__opt[aria-pressed="true"]:not(:disabled)')?.focus({ preventScroll: true });
   const origExit = opts.onExit;
   ctl.o.onExit = (r) => {
     render(null, opts.barHost);

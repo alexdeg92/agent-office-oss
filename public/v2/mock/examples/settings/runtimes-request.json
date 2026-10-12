@@ -1,0 +1,22 @@
+{
+  "expectedRevision": 1,
+  "runtimes": [
+    {
+      "id": "legacy",
+      "adapter": "openclaw",
+      "enabled": true,
+      "gatewayUrl": "ws://127.0.0.1:18793",
+      "name": "OpenClaw"
+    },
+    {
+      "id": "claude",
+      "adapter": "claude-code",
+      "enabled": true,
+      "home": "/tmp/synthetic-claude",
+      "include": "synthetic-project",
+      "exclude": "",
+      "agentGrouping": "project",
+      "name": "Claude Code · Synthetic projects"
+    }
+  ]
+}

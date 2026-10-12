@@ -8,17 +8,22 @@
  *   interlocutors: only Discord's are visible in 2.x
  *   occupant role 'primary'     → 'main'; 'scheduled' → 'cron'; 'direct' → 'dm'; 'group' and 'conversation' → 'channel'
  *   session kind 'primary' → 'main'; 'scheduled' → 'cron'; 'conversation-direct' → 'chat-direct';
- *                'conversation-group' and 'conversation' → 'chat-group' (inbound: the reverse, for the logs filter)
+ *                'conversation-group' → 'chat-group' (inbound: the reverse, for the logs filter); T-0058: a generic
+ *                'conversation' (e.g. a coding-agent session) stays 'conversation' (additive 2.x value), never « Group »
  *   channel      any ChannelRef → a 2.x ChannelId ('discord' | 'whatsapp' | 'wechat' | 'unrecognized')
  *   live kind    unchanged in 2.x
  *   board filter (inbound) 'with-timmy' ≡ 'with-agent' for the primary
  * The 3.0 contract (G5) uses the canonical values directly; these aliases never appear in 3.0.
  */
 const OCCUPANT_ID = { primary: 'main' };
-const ROLE = { primary: 'main', scheduled: 'cron', direct: 'dm', group: 'channel', conversation: 'channel' };
-const SESSION_KIND = { primary: 'main', scheduled: 'cron', 'conversation-direct': 'chat-direct', 'conversation-group': 'chat-group', conversation: 'chat-group' };
+const ROLE = { primary: 'main', main: 'main', agent: 'agent', subagent: 'subagent', scheduled: 'cron', cron: 'cron',
+  direct: 'dm', dm: 'dm', group: 'channel', channel: 'channel', conversation: 'channel',
+  // Canonical 3.x roles that have no distinct 2.x spelling use their closest
+  // established 2.x occupant category at the wire boundary.
+  session: 'channel', 'team-host': 'agent', host: 'agent', 'team-member': 'subagent', member: 'subagent' };
+const SESSION_KIND = { primary: 'main', scheduled: 'cron', 'conversation-direct': 'chat-direct', 'conversation-group': 'chat-group' };
 const SESSION_KIND_IN = { main: 'primary', cron: 'scheduled', 'chat-direct': 'conversation-direct', 'chat-group': 'conversation-group' };
-const SESSION_KINDS_2X = ['main', 'dashboard', 'subagent', 'cron', 'chat-direct', 'chat-group', 'acp', 'explicit', 'unrecognized'];
+const SESSION_KINDS_2X = ['main', 'dashboard', 'subagent', 'cron', 'chat-direct', 'chat-group', 'conversation', 'acp', 'explicit', 'unrecognized'];
 const CHANNELS_2X = new Set(['discord', 'whatsapp', 'wechat', 'unrecognized']);
 
 const project2x = {
@@ -31,10 +36,10 @@ const project2x = {
   },
   // 2.x knows Discord interlocutors only (InterlocutorVM.kind 'discord-user' | 'discord-channel'); other families are 3.0
   interlocutorVisible: (id) => /^discord-(user|channel):/.test(String(id)),
-  occupantRole: (role) => (Object.prototype.hasOwnProperty.call(ROLE, role) ? ROLE[role] : role),
+  occupantRole: (role) => (Object.prototype.hasOwnProperty.call(ROLE, role) ? ROLE[role] : 'agent'),
   sessionKind: (kind) => (Object.prototype.hasOwnProperty.call(SESSION_KIND, kind) ? SESSION_KIND[kind] : kind),
   // inbound: a 2.x SessionKind (logs ?kind=) → the canonical kinds it stands for
-  sessionKindsIn: (kind) => (kind === 'chat-group' ? ['conversation-group', 'conversation'] : [Object.prototype.hasOwnProperty.call(SESSION_KIND_IN, kind) ? SESSION_KIND_IN[kind] : kind]),
+  sessionKindsIn: (kind) => ([Object.prototype.hasOwnProperty.call(SESSION_KIND_IN, kind) ? SESSION_KIND_IN[kind] : kind]),
   channelId: (ref) => (ref == null ? null : CHANNELS_2X.has(ref) ? ref : 'unrecognized'),
   liveKind: (kind) => kind,
   // inbound: a 2.x board filter → the canonical filter. Applied from G3b, when projects knows 'with-agent' (unused in G3a)

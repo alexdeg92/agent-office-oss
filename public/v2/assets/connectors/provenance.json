@@ -1,0 +1,120 @@
+{
+  "format": 1,
+  "purpose": "Small, nominative connector identifiers in Agent Office. These marks identify the connected provider; they are not Agent Office artwork or endorsements.",
+  "assets": [
+    {
+      "id": "openclaw",
+      "provider": "OpenClaw",
+      "canonicalPath": "public/v2/assets/connectors/openclaw.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/openclaw/openclaw/main/apps/linux/src-tauri/icons/icon.svg",
+      "sourceType": "official repository asset",
+      "license": "OpenClaw repository MIT license covers repository code; trademark rights are not granted by that license.",
+      "brandGuidelines": { "use": "Nominative identification in the OpenClaw connector row/logs only; no implied endorsement.", "modification": "None. SVG is served unchanged.", "minimumSize": "No published minimum found.", "clearSpace": "No published measurement found; retain the source SVG viewBox and do not crop." },
+      "fallback": { "monogram": "OC", "color": "#b54d31" },
+      "registeredBy": "src/adapters/openclaw/index.js"
+    },
+    {
+      "id": "claude-code",
+      "provider": "Claude Code",
+      "canonicalPath": "public/v2/assets/connectors/claude-code.svg",
+      "sourceUrl": "https://claude.ai/favicon.svg",
+      "sourceType": "official Claude site icon",
+      "license": "No separate asset license or logo usage guide is stated at the source. Anthropic/Claude retain all trademark and copyright rights.",
+      "brandGuidelines": { "use": "Nominative identification in the Claude Code connector row/logs only; no implied endorsement.", "modification": "None. SVG is served unchanged.", "minimumSize": "No published minimum found.", "clearSpace": "No published measurement found; retain the source SVG viewBox and do not crop." },
+      "fallback": { "monogram": "CC", "color": "#b8753e" },
+      "registeredBy": "src/adapters/claude-code/index.js"
+    },
+    {
+      "id": "codex",
+      "provider": "Codex (OpenAI)",
+      "canonicalPath": "public/v2/assets/connectors/codex.svg",
+      "darkCanonicalPath": "public/v2/assets/connectors/codex-dark.svg",
+      "sourceUrl": "https://cdn.openai.com/brand/OpenAI-Logos-2025.zip",
+      "sourceAsset": "OpenAI-logos(new)/SVGs/OpenAI-black-monoblossom.svg and OpenAI-white-monoblossom.svg",
+      "sourceType": "official OpenAI brand download; no distinct distributable Codex vector found",
+      "license": "OpenAI Marks remain OpenAI property. The terms on https://openai.com/brand/ grant limited, non-exclusive and non-transferable use under the published guidelines and may be changed or terminated.",
+      "brandGuidelines": { "use": "Only in direct connection with the Codex connector, beside its Codex label; keep subordinate to Agent Office and do not imply endorsement.", "modification": "None. Original black/white variants are served for contrast.", "minimumSize": "No numeric minimum found.", "clearSpace": "Follow the prescribed spacing; no numeric measurement was published for this asset. Preserve its original viewBox/internal whitespace." },
+      "fallback": { "monogram": "CX", "color": "#187b67" },
+      "registeredBy": "src/adapters/codex/index.js"
+    },
+    {
+      "id": "cursor",
+      "provider": "Cursor",
+      "canonicalPath": "public/v2/assets/connectors/cursor-light.svg",
+      "darkCanonicalPath": "public/v2/assets/connectors/cursor-dark.svg",
+      "sourceUrl": "https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/brand/cursor-brand-assets.zip",
+      "sourceAsset": "General Logos/Cube/SVG/CUBE_2D_LIGHT.svg and CUBE_2D_DARK.svg",
+      "sourceType": "official asset bundle linked by Cursor brand page https://cursor.com/brand",
+      "license": "No separate asset license found; Cursor/Anysphere retain trademark and copyright rights.",
+      "brandGuidelines": { "use": "Nominative identification in a Cursor connector only; no implied endorsement.", "modification": "None. Original light/dark assets are served according to UI color scheme.", "minimumSize": "No numeric minimum found.", "clearSpace": "No numeric measurement found; retain the full source viewBox." },
+      "fallback": { "monogram": "CU", "color": "#26251e" },
+      "registeredBy": null,
+      "status": "asset prepared; adapter registration awaits Cursor adapter"
+    },
+    {
+      "id": "herdr",
+      "provider": "herdr",
+      "sourceUrl": "https://github.com/motionharvest/herdr/blob/main/assets/logo.svg",
+      "sourceType": "official repository logo",
+      "sourceAsset": "assets/logo.svg",
+      "sourceCommit": "f7bcaf3e1bd098cc30fc45965e1028732922ca43",
+      "sha256": "f4a8400d515fcf50112a952a5b48f5fa6e6b02b4dcb0b483ca92be39f7d7f7a1",
+      "variants": "No distinct light/dark herdr mark in the official repository at this commit; the unmodified SVG is used in both themes.",
+      "license": "Repository code is dual-licensed AGPL-3.0-or-later/commercial; no explicit logo/trademark grant or usage guide found.",
+      "brandGuidelines": { "use": "Nominative identification on provider cards, explicitly requested by the owner in T-0074; no endorsement.", "modification": "None. Official repository SVG served unchanged.", "minimumSize": "Not published.", "clearSpace": "No published numeric measurement; preserve the complete source viewBox." },
+      "fallback": { "monogram": "H", "color": "#4f6d9a" },
+      "canonicalPath": "public/v2/assets/connectors/herdr.svg",
+      "registeredBy": "src/adapters/herdr/index.js",
+      "status": "Official repository logo verified byte-for-byte and declared by the herdr source adapter (T-0083)."
+    },
+    {
+      "id": "hermes",
+      "provider": "Hermes Agent",
+      "sourceUrl": "https://github.com/NousResearch/hermes-agent/blob/main/assets/icon-master.svg",
+      "sourceType": "official repository icon",
+      "license": "Repository MIT license does not separately grant trademark rights; no logo usage guide found.",
+      "brandGuidelines": { "use": "Nominative identification on provider cards, explicitly requested by the owner in T-0074; no endorsement.", "modification": "None. Official repository SVG served unchanged.", "minimumSize": "Not published.", "clearSpace": "No published numeric measurement; preserve the complete source viewBox." },
+      "fallback": { "monogram": "HE", "color": "#7559a6" },
+      "canonicalPath": "public/v2/assets/connectors/hermes.svg",
+      "registeredBy": "public/v2/pages/connector-brand.js (prepared local marks)",
+      "status": "Official repository logo prepared for registry-driven connector cards (T-0074)."
+    },
+    {
+      "id": "gemini-cli",
+      "provider": "Gemini CLI",
+      "sourceUrl": "https://geminicli.com/brandassets/gemini-cli-icon_full-color.svg",
+      "sourceType": "official Gemini CLI Brand Kit SVG",
+      "license": "No separate asset license stated; Gemini brand owner retains all trademark rights.",
+      "brandGuidelines": { "use": "The official guide reserves the icon for contexts where it is separated from the product name.", "modification": "Do not alter the asset.", "minimumSize": "No numeric minimum found.", "clearSpace": "One icon width horizontally and one half icon height vertically." },
+      "fallback": { "monogram": "G", "color": "#5364c8" },
+      "canonicalPath": null,
+      "registeredBy": null,
+      "status": "monogram fallback in compact 16–40 px marks because the required clear space cannot be maintained"
+    },
+    {
+      "id": "opencode",
+      "provider": "OpenCode",
+      "canonicalPath": "public/v2/assets/connectors/opencode-light.svg",
+      "darkCanonicalPath": "public/v2/assets/connectors/opencode-dark.svg",
+      "sourceUrl": "https://github.com/anomalyco/opencode/blob/dev/packages/console/app/src/asset/brand/opencode-logo-light-square.svg",
+      "sourceType": "official repository asset; official brand page also provides SVG assets",
+      "license": "OpenCode repository MIT license covers repository code; trademark rights are not separately granted.",
+      "brandGuidelines": { "use": "Nominative identification in an OpenCode connector only; no implied endorsement.", "modification": "None. Original light/dark assets are served by color scheme.", "minimumSize": "No numeric minimum found.", "clearSpace": "No numeric measurement found; preserve the full source viewBox." },
+      "fallback": { "monogram": "OC", "color": "#3f4d63" },
+      "registeredBy": null,
+      "status": "asset prepared; adapter registration awaits OpenCode adapter"
+    },
+    {
+      "id": "github-copilot-cli",
+      "provider": "GitHub Copilot CLI",
+      "sourceUrl": "https://brand.github.com/brand-identity/copilot",
+      "sourceType": "official GitHub Copilot brand guidance",
+      "license": "GitHub marks remain GitHub property.",
+      "brandGuidelines": { "use": "The official 2025+ guide says Copilot has no standalone logo; product lockups build upon the GitHub brand.", "modification": "No standalone asset used.", "minimumSize": "Not applicable to a standalone mark.", "clearSpace": "Not applicable to a standalone mark." },
+      "fallback": { "monogram": "GH", "color": "#8534f3" },
+      "canonicalPath": null,
+      "registeredBy": null,
+      "status": "monogram fallback; no standalone Copilot logo per official guide"
+    }
+  ]
+}

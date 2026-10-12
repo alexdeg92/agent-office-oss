@@ -30,11 +30,11 @@ export function SkillPage({ match }) {
   const Back = () => html`<a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('skill.back')}</a>`;
 
   if (vm.data === undefined && vm.error) {
-    return html`<div class="bu-page ao-frame ao-frame--detail"><${Back} />
+    return html`<div class="bu-page ao-page ao-page--detail"><${Back} />
       ${vm.error.code === 'not_found' ? html`<${EmptyState} icon="competences" title=${msg('skill.notFound.head')} text=${msg('skill.notFound.text')}><a class="bu-btn" href=${back}>${msg('skill.back')}</a></${EmptyState}>`
         : html`<${ErrorState} error=${vm.error} onRetry=${vm.retry} />`}</div>`;
   }
-  if (vm.data === undefined) return html`<div class="bu-page ao-frame ao-frame--detail ao-skill" aria-busy="true"><${Back} /><${Skeleton} kind="title" /><${Skeleton} w="60" /><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div>`;
+  if (vm.data === undefined) return html`<div class="bu-page ao-page ao-page--detail ao-skill" aria-busy="true"><${Back} /><${Skeleton} kind="title" /><${Skeleton} w="60" /><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div>`;
   const { skill: s, detail: d, markdown, flow, needsRestart } = vm.data;
   const homepage = safeExternalUrl(s.homepage);
   const enabled = s.status !== 'disabled';
@@ -54,7 +54,7 @@ export function SkillPage({ match }) {
     } finally { setBusy(false); }
   }
 
-  return html`<div class="bu-page ao-frame ao-frame--detail ao-skill" aria-busy=${vm.resyncing ? 'true' : undefined}>
+  return html`<div class="bu-page ao-page ao-page--detail ao-skill" aria-busy=${vm.resyncing ? 'true' : undefined}>
     <${Back} />
     ${vm.error ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('common.updateFailed', { error: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('common.retry')}</button></div>` : null}
     <header class="bu-detail-header">

@@ -29,5 +29,6 @@ export function sessionRow(e) {
 
 // Inputs can arrive in either order (GET, pagination, live updates); the control describes the rendered order.
 export function historyItems(items, order='desc') {
-  return [...items].sort((a,b) => order==='desc' ? b.at-a.at : a.at-b.at);
+  const sorted = [...items].sort((a,b) => a.at-b.at || a.id.localeCompare(b.id));
+  return order === 'desc' ? sorted.reverse() : sorted;
 }

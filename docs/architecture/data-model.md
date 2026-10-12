@@ -1,6 +1,6 @@
 # Data model: canonical types
 
-Status: **contract 2.2** (2026-10-05; see the api.md changelog). Model version: `MODEL_VERSION = 1`. Only the architect edits this file.
+Status: **contract 2.3** (2026-10-10; additive orchestrator/team types). Model version: `MODEL_VERSION = 1` (unchanged; additions are backward-compatible). Only the architect edits this file.
 
 Every piece of data Agent Office shows is one of the types below. Raw inputs (gateway RPC and events, CLI JSON, `openclaw.json`, Discord REST, GitHub, host metrics) never reach a view: the engine ([engine.md](engine.md)) turns them into these types, or quarantines them. The API ([api.md](api.md)) builds view models only from these types.
 
@@ -44,16 +44,102 @@ interface Agent {
   id: AgentId;
   name: string;               // OpenClaw name; display override lives in OfficeLayout.agents
   workspace: string | null;   // absolute path of the agent's workspace; null if not configured
-  model: { primary: string; provider: string | null };
+  model: { primary: string; provider: string | null } | null;
+  modelSource: 'explicit' | 'inherited' | null; // null = adapter cannot establish provenance
+  runtime: string | null;     // external harness id/name; null = native or unknown execution
+  spawnedBy?: Lineage | null; // optional, exact adapter/orchestrator evidence only
   isPrimary: boolean;         // exactly one agent has true: id === agents.list defaultId ('main')
   mainSessionKey: SessionKey | null;   // agents.list mainKey (capture 2026-10-05); never hard-code 'agent:main:main'
   fallbackModels: string[];   // model.fallbacks
   personId: PersonId;         // its Person (kind 'agent'), created on first sight
+  hostObservations: HostAgentObservation[]; // empty unless exact host/runtime identity evidence links a pane
 }
 ```
 - **Source:** `agents.list` (gateway). The raw `model` is a string or `{primary, fallbacks}`; the engine normalises it. The 2026-10-05 capture has two agents, `main` and `claude-code`; the second one owns the ACP sessions.
+- **T-0008:** model provenance and external harness identity are adapter-owned, runtime-neutral signals. OpenClaw projects only agent model/runtime settings from its local config; unavailable/invalid config leaves provenance null. `agents.list.modelSource`, when reported, takes precedence. Its effective model alone cannot establish provenance. Optional canonical inputs for older adapters become explicit nulls on admission; AccessVM always carries both fields.
 - **Invariants:** ids unique; exactly one `isPrimary`.
 - **Lifecycle:** replaced as a whole on every `agents.list` refresh (10 s). An agent missing from a later list is removed and a `LiveEvent` of kind `agent.removed` is emitted.
+
+An identity-linked host observation is metadata only; it never changes the Agent's runtime identity, primary status, transcript, or Person. Host fields are projected only through `orchestrators.read` per ADR-004 §5.2. Pane refs, titles and runtime session refs remain inside their source adapters.
+
+## 14. Orchestrators and teams (ADR-004)
+
+These optional source records are additive to existing runtime data. All source-scoped identifiers become opaque Agent Office IDs before they reach views. Raw paths, report filenames, pane refs, terminal titles, native runtime session refs, team task briefs, review notes and inbox message bodies are excluded from canonical records.
+
+```ts
+type HostId = string;
+type OrchestratorId = string;
+type HostAgentId = string;
+type TeamId = string;
+type TeamMemberId = string;
+type TaskId = string;
+type ReviewId = string;
+type SourceStatus = 'available' | 'unavailable' | 'unsupported' | 'stale';
+type HostAgentStatus = 'working' | 'blocked' | 'done' | 'idle' | 'unknown';
+type HostAgentRole = 'primary' | 'delegate' | 'unknown';
+interface Lineage {
+  agentId: AgentId | null; sessionKey: SessionKey | null;
+  via: string; label: string | null; // bounded, redacted source-provided role/task label
+}
+
+interface HostAgentObservation {
+  hostAgentId: HostAgentId;
+  hostId: HostId;
+  runtimeKind: string | null; // open source vocabulary
+  role: HostAgentRole;
+  status: HostAgentStatus;
+}
+interface Host {
+  id: HostId; label: string | null; // owner-selected, not a machine/user/path default
+  platform: 'linux' | 'macos' | 'windows' | 'container' | 'unknown';
+  sourceStatus: SourceStatus; observedAt: Ms | null;
+}
+interface Orchestrator {
+  id: OrchestratorId; hostId: HostId; kind: string; // open vocabulary, e.g. 'herdr'
+  label: string | null; sourceStatus: SourceStatus; observedAt: Ms | null;
+}
+interface HostAgent {
+  id: HostAgentId; hostId: HostId; orchestratorId: OrchestratorId;
+  name: string | null; runtimeKind: string | null; role: HostAgentRole; status: HostAgentStatus;
+  observedAt: Ms; staleAfter: Ms;
+  spawnedBy?: Lineage | null; // linked from the owner's stable team-member record when known
+}
+interface IdentityLink {
+  hostAgentId: HostAgentId; agentId: AgentId;
+  evidence: 'shared-runtime-session-ref' | 'explicit-runtime-identity'; confidence: 'exact';
+}
+interface Team {
+  id: TeamId; storeId: string; label: string; status: 'active' | 'stale'; observedAt: Ms;
+}
+interface TeamMember {
+  id: TeamMemberId; teamId: TeamId; name: string; roleKind: 'lead' | 'member' | 'unknown';
+  roleLabel: string | null; // bounded, source-native display label; never used for authorization or core branching
+  roleEvidence: 'explicit' | 'derived-from-structure' | 'unknown';
+  sourceAgentName: string | null; hostAgentId: HostAgentId | null; parentMemberId?: TeamMemberId | null;
+  status: 'active' | 'inactive' | 'unknown';
+  spawnedBy?: Lineage | null;
+}
+interface Task {
+  id: TaskId; teamId: TeamId; title: string; state: 'open' | 'claimed' | 'working' | 'review' | 'done' | 'blocked';
+  priority: 0 | 1 | 2 | 3 | null; ownerMemberId: TeamMemberId | null; reviewerMemberIds: TeamMemberId[];
+  createdAt: Ms | null; updatedAt: Ms | null; commit: string | null;
+  reportPresent: boolean; briefPresent: boolean; messageCount: number;
+}
+interface Review {
+  id: ReviewId; taskId: TaskId; reviewerMemberId: TeamMemberId | null;
+  verdict: 'go' | 'no-go' | 'pending' | 'unknown'; createdAt: Ms | null; reportPresent: boolean;
+}
+interface TeamMessage {
+  id: string; teamId: TeamId; taskId: TaskId | null; fromMemberId: TeamMemberId | null;
+  toMemberId: TeamMemberId | null; createdAt: Ms | null; bodyPresent: boolean;
+}
+```
+
+The runtime adapter privately reconciles host pane observations to exactly one canonical `AgentId` using `(host, normalized runtime kind, exact stable runtime session reference)` or an explicit adapter-mapped runtime identity. The source references are compared inside the adapter and never stored in `IdentityLink`. Name, cwd, workspace, terminal title and pane proximity are not identity. A missing/ambiguous match leaves the HostAgent unlinked; multiple panes may link to one Agent without merging their Sessions or transcripts. Host observations are separate from the runtime Agents collection.
+
+`Lineage` names one known spawner by canonical agent and/or session ID; unknown lineage is absent/null. Adapters scope native references through their runtime instance. For `agent-team-pm`, stable `members/<name>.json` IDs are authoritative: a child’s `spawnedBy` member ID resolves to that member record’s exact `herdrPane`, then to the parent’s exact runtime session/agent reference. Names are display metadata and never participate in pane/runtime identity reconciliation. Herdr session values, pane IDs, and member source references stay private; only canonical scoped IDs and closed lineage metadata are projected to authorized views.
+
+Task/review report paths are private resolver state and are not canonical fields. Canonical tasks/reviews expose `reportPresent`; an authorized `teams.report.resolve` operation may use a short-lived opaque reference with a generic label. The raw basename/path stays private, is contained under the explicitly configured root, and is revalidated at resolution. Team message and brief bodies are metadata-only (`bodyPresent` / `briefPresent`) in v1.
 
 ## 2. Session
 
@@ -96,6 +182,7 @@ interface SessionClassification {
 interface Session {
   key: SessionKey;
   sessionId: string | null;       // OpenClaw's internal id when sent
+  spawnedBy?: Lineage | null;     // exact adapter-normalized creator; null/absent means unknown
   class: SessionClassification;
   displayName: string | null;     // from sessions.describe; null until described
   model: { id: string; provider: string | null } | null;   // id required: a provider without a model id gives model null
@@ -164,7 +251,7 @@ interface Transcript {
 ## 3. Run and Activity
 
 ```ts
-type RunStatus = 'idle' | 'running' | 'succeeded' | 'failed';
+type RunStatus = 'unknown' | 'idle' | 'running' | 'succeeded' | 'failed';
 
 interface RunState {
   status: RunStatus;
@@ -172,9 +259,12 @@ interface RunState {
   endedAt: Ms | null;
   hasActiveSubagentRun: boolean;
   evidence: 'gateway-flag' | 'status-field' | 'start-without-end' | 'live-activity' | 'none';
+  evidenceLevel?: 'verified' | 'observed' | 'unknown';
+  observedAt?: Ms | null;
+  expiresAt?: Ms | null;
 }
 ```
-- **Derivation** (same rules as `runActive()` today, but written as one ordered decision, with `evidence` recording which rule fired): `hasActiveRun` or `hasActiveSubagentRun` → running/`gateway-flag`; raw `status` in a mapped set → that status/`status-field`; `startedAt && !endedAt` → running/`start-without-end`; a non-expired Activity → running/`live-activity`; else idle/`none`.
+- **Derivation**: `hasActiveRun` or `hasActiveSubagentRun` → running/`gateway-flag`; raw `status` in a mapped set → that status/`status-field`; `startedAt && !endedAt` → observed running/`start-without-end` with a bounded lease; absent lifecycle evidence → unknown/`none`. An expired observation becomes unknown and never implies idle or completion.
 - The status table is read with **own-property** lookups (a status like `constructor` is unmapped, not inherited), and an unknown status is reported even when a gateway flag decides the state (S3.1).
 - **Raw `status` values** (capture 2026-10-05): `done`, `complete`, `failed`, `active`, `killed`, `timeout`, `budget_limited`. They're mapped by table:
   - `active` → running;
@@ -209,10 +299,10 @@ interface Activity {
 Who is on stage in the office, where, and in what state. The server decides this; the client only animates it.
 
 ```ts
-type AgentState = 'idle' | 'thinking' | 'working' | 'researching' | 'writing' | 'calling' | 'waiting' | 'error' | 'offline';
-// The 9 states of the brief; 1:1 with --bu-state-* tokens and the poses table in design/office/README.md §4.2.
+type AgentState = 'unknown' | 'observed' | 'idle' | 'thinking' | 'working' | 'researching' | 'writing' | 'calling' | 'waiting' | 'error' | 'offline';
+// The nine animated states map 1:1 to --bu-state-* tokens and poses; unknown/observed are confidence labels, not poses.
 
-type OccupantRole = 'primary' | 'agent' | 'subagent' | 'scheduled' | 'direct' | 'group' | 'conversation';   // canonical (G3b)
+type OccupantRole = 'primary' | 'agent' | 'subagent' | 'scheduled' | 'direct' | 'group' | 'conversation' | 'session';   // canonical (G3b); session is an OfficeVM display role for channel-less runtime sessions
 // SessionKind → role: primary→primary, subagent→subagent, scheduled→scheduled, conversation-direct→direct,
 // conversation-group→group, conversation→conversation. Occupant id 'primary' (else '<role>:<subject>').
 // 2.x wire and layout.schema.json agents[].match.kind (project2x): primary→main, scheduled→cron, direct→dm,
@@ -743,7 +833,7 @@ interface OfficeLayoutDataV1 {
   theme: { mode: 'auto' | 'fixed'; fixed?: string; day?: string; night?: string; nightFrom?: string; nightTo?: string; season?: string | null };
   items: ({ uid: Slug; asset: string; label?: string } & ({ x: number; y: number; orientation?: 'sw' | 'se' } | { wall: 'left' | 'right'; offset: number }))[];
   agents: { agentId: string; match?: { kind: OccupantRole }; character: string; variant?: string | null;
-            accessories?: string[]; name?: string | null; role?: string | null; station?: string }[];
+            accessories?: string[]; appearance?: 'auto' | 'manual'; name?: string | null; role?: string | null; station?: string }[];
 }
 ```
 - **Invariants:** checked on the server at save time, not only by JSON Schema:
@@ -789,6 +879,8 @@ The UI theme is stored server-side, so it follows Owner across devices. That kee
 | Repo | `gh api` | 10 min |
 | HealthSnapshot | `os`, `df`, event `health`, engine source status | 5 s |
 | LiveEvent | derived from the above | live |
+| Host, Orchestrator, HostAgent | Herdr `agent list` snapshot and bounded pane-agent lifecycle/status events | 5 s snapshot + invalidation events |
+| Team, TeamMember, Task, Review, TeamMessage | explicitly configured `agent-team-pm` team-store files | 10 s |
 
 `sessions.usage` is fetched today but never read; it's dropped unless a view needs it.
 

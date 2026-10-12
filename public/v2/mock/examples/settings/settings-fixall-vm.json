@@ -1,0 +1,723 @@
+{
+  "data": {
+    "revision": 1,
+    "readonly": false,
+    "disabledReason": null,
+    "reauth": {
+      "expiresAt": null,
+      "windowMs": 300000
+    },
+    "instance": {
+      "name": {
+        "value": "Atelier",
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "locale": {
+        "value": "fr",
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "timeZone": {
+        "value": "Europe/Paris",
+        "source": "file",
+        "editable": true,
+        "reason": null
+      }
+    },
+    "owner": {
+      "displayName": {
+        "value": "Camille",
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "email": {
+        "value": "owner@example.test",
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "passwordChangeEnabled": true,
+      "reason": null
+    },
+    "network": {
+      "mode": {
+        "value": "local",
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "host": {
+        "value": "127.0.0.1",
+        "source": "file",
+        "editable": false,
+        "reason": {
+          "key": "settings.derivedField"
+        }
+      },
+      "port": {
+        "value": 18789,
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "publicUrl": {
+        "value": null,
+        "source": "file",
+        "editable": true,
+        "reason": null
+      },
+      "cookieSecure": {
+        "value": false,
+        "source": "file",
+        "editable": false,
+        "reason": {
+          "key": "settings.derivedField"
+        }
+      },
+      "active": {
+        "mode": "local",
+        "host": "127.0.0.1",
+        "port": 18789,
+        "publicUrl": null,
+        "cookieSecure": false
+      },
+      "restartRequired": false
+    },
+    "runtimes": [
+      {
+        "id": "openclaw",
+        "name": "OpenClaw",
+        "found": true,
+        "supported": true,
+        "selected": true,
+        "confidence": "config",
+        "reason": {
+          "key": "settings.detection.config"
+        },
+        "checkedPaths": [
+          "/fixture/home/.openclaw/openclaw.json"
+        ],
+        "fields": [
+          {
+            "id": "gatewayUrl",
+            "label": {
+              "key": "settings.field.gatewayUrl"
+            },
+            "type": "url",
+            "required": true,
+            "writeOnly": false,
+            "options": []
+          },
+          {
+            "id": "token",
+            "label": {
+              "key": "settings.field.token"
+            },
+            "type": "secret",
+            "required": true,
+            "writeOnly": true,
+            "options": []
+          }
+        ],
+        "values": {
+          "gatewayUrl": {
+            "value": "ws://127.0.0.1:18793",
+            "source": "file",
+            "editable": true,
+            "reason": null
+          },
+          "token": {
+            "value": null,
+            "source": "file",
+            "editable": true,
+            "reason": null,
+            "tokenSet": true
+          }
+        },
+        "connection": {
+          "status": "connected",
+          "protocol": 4,
+          "latencyMs": 12,
+          "checkedAt": 1791586800000
+        },
+        "adapter": "openclaw",
+        "enabled": true,
+        "candidate": false,
+        "brand": {
+          "mark": "OC",
+          "color": "#b54d31",
+          "foreground": "#ffffff",
+          "providerName": "OpenClaw",
+          "logo": "assets/connectors/openclaw.svg"
+        }
+      },
+      {
+        "id": "codex",
+        "name": "Codex",
+        "found": true,
+        "supported": true,
+        "selected": false,
+        "confidence": "presence",
+        "reason": {
+          "key": "settings.detection.unsupported"
+        },
+        "checkedPaths": [
+          "/fixture/home/.codex"
+        ],
+        "fields": [],
+        "values": {},
+        "connection": {
+          "status": "connected",
+          "protocol": null,
+          "latencyMs": null,
+          "checkedAt": null
+        },
+        "adapter": "codex",
+        "enabled": false,
+        "candidate": true,
+        "brand": {
+          "mark": "CX",
+          "color": "#187b67",
+          "foreground": "#ffffff",
+          "providerName": "Codex",
+          "logo": "assets/connectors/codex.svg",
+          "logoDark": "assets/connectors/codex-dark.svg"
+        }
+      },
+      {
+        "id": "claude-local",
+        "name": "Claude Code · Scratch",
+        "found": true,
+        "supported": true,
+        "selected": false,
+        "confidence": "config",
+        "reason": {
+          "key": "settings.detection.config"
+        },
+        "checkedPaths": [
+          "/fixture/home/.openclaw/openclaw.json"
+        ],
+        "fields": [],
+        "values": {},
+        "connection": {
+          "status": "not-configured",
+          "protocol": null,
+          "latencyMs": null,
+          "checkedAt": null
+        },
+        "adapter": "claude-code",
+        "enabled": false,
+        "candidate": false,
+        "brand": {
+          "mark": "CC",
+          "color": "#b8753e",
+          "foreground": "#20130b",
+          "providerName": "Claude Code",
+          "logo": "assets/connectors/claude-code.svg"
+        }
+      },
+      {
+        "id": "claude-code",
+        "name": "Claude Code · Other installation",
+        "found": true,
+        "supported": true,
+        "selected": false,
+        "confidence": "config",
+        "reason": {
+          "key": "settings.detection.config"
+        },
+        "checkedPaths": [
+          "/fixture/home/.openclaw/openclaw.json"
+        ],
+        "fields": [],
+        "values": {},
+        "connection": {
+          "status": "not-configured",
+          "protocol": null,
+          "latencyMs": null,
+          "checkedAt": null
+        },
+        "adapter": "claude-code",
+        "enabled": false,
+        "candidate": true,
+        "brand": {
+          "mark": "CC",
+          "color": "#b8753e",
+          "foreground": "#20130b",
+          "providerName": "Claude Code",
+          "logo": "assets/connectors/claude-code.svg"
+        }
+      }
+    ],
+    "agents": [
+      {
+        "id": "openclaw:atlas",
+        "agentId": "atlas",
+        "runtime": "openclaw",
+        "name": "Atlas",
+        "detectedName": "Atlas",
+        "nameSource": "IDENTITY.md",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": true,
+        "model": null,
+        "lookRoute": "/boutique?onglet=personnages&agent=primary",
+        "integrations": [
+          {
+            "id": "projet",
+            "status": "installed"
+          }
+        ]
+      },
+      {
+        "id": "openclaw:scribe",
+        "agentId": "scribe",
+        "runtime": "openclaw",
+        "name": null,
+        "detectedName": null,
+        "nameSource": null,
+        "configured": false,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": "/boutique?onglet=personnages&agent=agent%3Ascribe",
+        "integrations": [
+          {
+            "id": "projet",
+            "status": "missing"
+          }
+        ]
+      },
+      {
+        "id": "openclaw:runner",
+        "agentId": "runner",
+        "runtime": "openclaw",
+        "name": "Runner",
+        "detectedName": "Runner",
+        "nameSource": "IDENTITY.md",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": "/boutique?onglet=personnages&agent=agent%3Arunner",
+        "integrations": [
+          {
+            "id": "projet",
+            "status": "missing"
+          }
+        ]
+      },
+      {
+        "id": "openclaw:editor",
+        "agentId": "editor",
+        "runtime": "openclaw",
+        "name": "Editor",
+        "detectedName": "Editor",
+        "nameSource": "IDENTITY.md",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": "/boutique?onglet=personnages&agent=agent%3Aeditor",
+        "integrations": [
+          {
+            "id": "projet",
+            "status": "outdated"
+          }
+        ]
+      },
+      {
+        "id": "openclaw:reviewer",
+        "agentId": "reviewer",
+        "runtime": "openclaw",
+        "name": "Reviewer",
+        "detectedName": "Reviewer",
+        "nameSource": "IDENTITY.md",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": "/boutique?onglet=personnages&agent=agent%3Areviewer",
+        "integrations": [
+          {
+            "id": "projet",
+            "status": "modified"
+          }
+        ]
+      },
+      {
+        "id": "openclaw:observer",
+        "agentId": "observer",
+        "runtime": "openclaw",
+        "name": "Observer",
+        "detectedName": "Observer",
+        "nameSource": "IDENTITY.md",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": "/boutique?onglet=personnages&agent=agent%3Aobserver",
+        "integrations": [
+          {
+            "id": "projet",
+            "status": "unsupported"
+          }
+        ]
+      },
+      {
+        "id": "claude-local:helper",
+        "agentId": "helper",
+        "runtime": "claude-local",
+        "name": "Claude assistant",
+        "detectedName": "Claude assistant",
+        "nameSource": "fixture",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": null,
+        "integrations": []
+      },
+      {
+        "id": "codex:agent-office",
+        "agentId": "agent-office",
+        "runtime": "codex",
+        "name": "Codex · Agent Office",
+        "detectedName": "Agent Office",
+        "nameSource": "fixture",
+        "configured": true,
+        "hidden": false,
+        "isPrimary": false,
+        "model": null,
+        "lookRoute": null,
+        "integrations": []
+      }
+    ],
+    "diagnostics": [
+      {
+        "id": "runtime:openclaw",
+        "level": "ok",
+        "label": {
+          "key": "settings.diagnostic.connected",
+          "params": {
+            "runtime": "OpenClaw"
+          }
+        },
+        "detail": {
+          "key": "settings.diagnostic.protocol",
+          "params": {
+            "protocol": 4,
+            "latencyMs": 12
+          }
+        },
+        "section": "connection",
+        "fix": null
+      },
+      {
+        "id": "runtime:codex",
+        "level": "info",
+        "label": {
+          "key": "settings.diagnostic.detected",
+          "params": {
+            "runtime": "Codex"
+          }
+        },
+        "detail": {
+          "key": "settings.diagnostic.detectedDetail"
+        },
+        "section": "runtimes",
+        "fix": null
+      },
+      {
+        "id": "agent:openclaw:atlas",
+        "level": "ok",
+        "label": {
+          "key": "settings.diagnostic.agentConfigured",
+          "params": {
+            "agent": "Atlas"
+          }
+        },
+        "detail": null,
+        "section": "integrations",
+        "fix": null
+      },
+      {
+        "id": "agent:openclaw:scribe",
+        "level": "warning",
+        "label": {
+          "key": "settings.diagnostic.agentFound",
+          "params": {
+            "agent": "scribe"
+          }
+        },
+        "detail": null,
+        "section": "runtimes",
+        "fix": {
+          "id": "agent.configure:openclaw:scribe",
+          "kind": "agent.configure",
+          "target": {
+            "runtime": "openclaw",
+            "agentId": "scribe",
+            "integration": null
+          },
+          "label": {
+            "key": "settings.fix.agent.configure",
+            "params": {
+              "agentName": "scribe"
+            }
+          },
+          "detail": null,
+          "automatic": false,
+          "requiresInput": true,
+          "requiresConsent": false,
+          "requiresReauth": false,
+          "requiresRestart": false
+        }
+      },
+      {
+        "id": "agent:openclaw:runner",
+        "level": "warning",
+        "label": {
+          "key": "settings.diagnostic.integration.missing",
+          "params": {
+            "agent": "Runner"
+          }
+        },
+        "detail": {
+          "key": "settings.diagnostic.integrationDetail.missing",
+          "params": {
+            "integration": "projet"
+          }
+        },
+        "section": "integrations",
+        "fix": {
+          "id": "integration.install:openclaw:runner:projet",
+          "kind": "integration.install",
+          "target": {
+            "runtime": "openclaw",
+            "agentId": "runner",
+            "integration": "projet"
+          },
+          "label": {
+            "key": "settings.fix.integration.install",
+            "params": {
+              "agentName": "Runner",
+              "integration": "projet"
+            }
+          },
+          "detail": null,
+          "automatic": true,
+          "requiresInput": false,
+          "requiresConsent": false,
+          "requiresReauth": true,
+          "requiresRestart": false
+        }
+      },
+      {
+        "id": "agent:openclaw:editor",
+        "level": "warning",
+        "label": {
+          "key": "settings.diagnostic.integration.outdated",
+          "params": {
+            "agent": "Editor"
+          }
+        },
+        "detail": {
+          "key": "settings.diagnostic.integrationDetail.outdated",
+          "params": {
+            "integration": "projet"
+          }
+        },
+        "section": "integrations",
+        "fix": {
+          "id": "integration.update:openclaw:editor:projet",
+          "kind": "integration.update",
+          "target": {
+            "runtime": "openclaw",
+            "agentId": "editor",
+            "integration": "projet"
+          },
+          "label": {
+            "key": "settings.fix.integration.update",
+            "params": {
+              "agentName": "Editor",
+              "integration": "projet"
+            }
+          },
+          "detail": null,
+          "automatic": true,
+          "requiresInput": false,
+          "requiresConsent": false,
+          "requiresReauth": true,
+          "requiresRestart": false
+        }
+      },
+      {
+        "id": "agent:openclaw:reviewer",
+        "level": "warning",
+        "label": {
+          "key": "settings.diagnostic.integration.modified",
+          "params": {
+            "agent": "Reviewer"
+          }
+        },
+        "detail": {
+          "key": "settings.diagnostic.integrationDetail.modified",
+          "params": {
+            "integration": "projet"
+          }
+        },
+        "section": "integrations",
+        "fix": {
+          "id": "integration.review:openclaw:reviewer:projet",
+          "kind": "integration.review",
+          "target": {
+            "runtime": "openclaw",
+            "agentId": "reviewer",
+            "integration": "projet"
+          },
+          "label": {
+            "key": "settings.fix.integration.review",
+            "params": {
+              "agentName": "Reviewer",
+              "integration": "projet"
+            }
+          },
+          "detail": null,
+          "automatic": false,
+          "requiresInput": true,
+          "requiresConsent": false,
+          "requiresReauth": true,
+          "requiresRestart": false
+        }
+      },
+      {
+        "id": "agent:openclaw:observer",
+        "level": "info",
+        "label": {
+          "key": "settings.diagnostic.integration.unsupported",
+          "params": {
+            "agent": "Observer"
+          }
+        },
+        "detail": {
+          "key": "settings.diagnostic.integrationDetail.unsupported",
+          "params": {
+            "integration": "projet"
+          }
+        },
+        "section": "integrations",
+        "fix": null
+      },
+      {
+        "id": "permissions",
+        "level": "ok",
+        "label": {
+          "key": "settings.diagnostic.privateFiles"
+        },
+        "detail": null,
+        "section": "diagnostic",
+        "fix": null
+      },
+      {
+        "id": "build",
+        "level": "ok",
+        "label": {
+          "key": "settings.diagnostic.currentBuild"
+        },
+        "detail": null,
+        "section": "diagnostic",
+        "fix": null
+      },
+      {
+        "id": "runtime:claude-local",
+        "level": "warning",
+        "label": {
+          "key": "settings.diagnostic.not-configured",
+          "params": {
+            "runtime": "Claude Code · Scratch"
+          }
+        },
+        "detail": null,
+        "section": "connection",
+        "fix": {
+          "id": "runtime.enable:claude-local",
+          "kind": "runtime.enable",
+          "target": {
+            "runtime": "claude-local",
+            "agentId": null,
+            "integration": null
+          },
+          "label": {
+            "key": "settings.fix.runtime.enable",
+            "params": {
+              "runtimeName": "Claude Code · Scratch"
+            }
+          },
+          "detail": {
+            "key": "settings.fix.runtime.enableDetail"
+          },
+          "automatic": false,
+          "requiresInput": false,
+          "requiresConsent": true,
+          "requiresReauth": true,
+          "requiresRestart": false
+        }
+      },
+      {
+        "id": "runtime:claude-code",
+        "level": "warning",
+        "label": {
+          "key": "settings.diagnostic.not-configured",
+          "params": {
+            "runtime": "Claude Code · Other installation"
+          }
+        },
+        "detail": null,
+        "section": "connection",
+        "fix": {
+          "id": "runtime.configure:claude-code",
+          "kind": "runtime.configure",
+          "target": {
+            "runtime": "claude-code",
+            "agentId": null,
+            "integration": null
+          },
+          "label": {
+            "key": "settings.fix.runtime.configure",
+            "params": {
+              "runtimeName": "Claude Code · Other installation"
+            }
+          },
+          "detail": null,
+          "automatic": false,
+          "requiresInput": true,
+          "requiresConsent": false,
+          "requiresReauth": true,
+          "requiresRestart": false
+        }
+      }
+    ],
+    "restart": {
+      "supported": true,
+      "command": null,
+      "reason": null
+    },
+    "herdr": {
+      "found": false,
+      "enabled": false,
+      "active": false,
+      "status": "not-checked",
+      "checkedAt": null
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791586800000,
+    "stale": []
+  }
+}

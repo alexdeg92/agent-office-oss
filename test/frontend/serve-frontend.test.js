@@ -39,8 +39,12 @@ before(async () => {
   root = join(dir, 'ui');
   outside = join(dir, 'private');
   mkdirSync(root); mkdirSync(outside); mkdirSync(join(root, 'bureau'));
+  mkdirSync(join(root,'pages'),{recursive:true}); mkdirSync(join(root,'components','bureau'),{recursive:true});
   writeFileSync(join(root, 'index.html'), INDEX);
   writeFileSync(join(root, 'bureau', 'ok.txt'), 'PUBLIC');
+  writeFileSync(join(root,'pages','ds.js'),'export const example="synthetic gallery";');
+  writeFileSync(join(root,'pages','design-system.css'),'.ds-gallery{}');
+  writeFileSync(join(root,'components','bureau','primitives.js'),'export const Example=()=>null;');
   writeFileSync(join(outside, 'secret.txt'), 'SYNTHETIC_PRIVATE');
   symlinkSync(join(outside, 'secret.txt'), join(root, 'leak.txt'));
   symlinkSync(outside, join(root, 'linkdir'));
@@ -116,6 +120,19 @@ test('R13-13: symlinks out of the served root are 404 (files and directories); r
     assert.doesNotMatch(r.text, /SYNTHETIC_PRIVATE/, p);
   }
   assert.match((await get('/x%00.png')).text, /^HTTP\/1\.1 400/, 'an encoded NUL is refused, not a crash');
+});
+
+test('the standalone static server omits owner-gallery files unless an authenticated edge enables them', async () => {
+  for(const p of ['/design-system','/design-system/','/pages/ds.js','/pages/design-system.css','/components/bureau/primitives.js']) {
+    assert.equal((await fetch(`http://127.0.0.1:${frontPort}${p}`)).status,404,p+' is omitted by default');
+  }
+  const trusted=serve.createFrontendServer({root,allowDesignSystem:true});
+  const port=await listen(trusted);
+  try {
+    assert.equal((await fetch(`http://127.0.0.1:${port}/design-system`)).status,200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/pages/ds.js`)).status,200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/components/bureau/primitives.js`)).status,200);
+  } finally {await close(trusted);}
 });
 
 test('R13-10: renderIndex writes config text literally ($&, $$, $`, quotes) and reads back identically', () => {

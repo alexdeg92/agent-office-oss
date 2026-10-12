@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "1.1.0",
+  "current": { "tag": "deploy-20261011-0147-lineage", "sequence": 14 },
+  "releases": [
+    {
+      "tag": "deploy-20261011-0147-lineage", "version": "1.1.0", "date": "2026-10-11", "time": "01:47", "sequence": 14,
+      "title": { "fr": "Suivre les agents délégués", "en": "Follow delegated agents" },
+      "fr": ["Les agents délégués affichent maintenant le nom de l’agent qui les a lancés, pour mieux suivre leur travail."],
+      "en": ["Delegated agents now show who started them, so it is easier to follow their work."]
+    },
+    {
+      "tag": "deploy-20261011-0134-avatar", "version": "1.1.0", "date": "2026-10-11", "time": "01:34", "sequence": 13,
+      "title": { "fr": "Des portraits mieux cadrés", "en": "Better-framed portraits" },
+      "fr": ["Les portraits des agents restent mieux cadrés dans la liste et la fiche de détail."],
+      "en": ["Agent portraits stay properly framed in the roster and detail view."]
+    },
+    {
+      "tag": "deploy-20261011-0129-healthfix", "version": "1.1.0", "date": "2026-10-11", "time": "01:29", "sequence": 12,
+      "title": { "fr": "Santé avec plusieurs événements", "en": "Health with multiple events" },
+      "fr": ["La page Santé s’ouvre correctement même lorsqu’elle contient plusieurs événements de suivi."],
+      "en": ["The Health page now opens correctly when it contains several activity events."]
+    },
+    {
+      "tag": "deploy-20261011-0019-journaux", "version": "1.1.0", "date": "2026-10-11", "time": "00:19", "sequence": 11,
+      "title": { "fr": "Des Journaux par agent", "en": "Logs grouped by agent" },
+      "fr": ["Les Journaux distinguent le connecteur et l’agent concernés par chaque conversation."],
+      "en": ["Logs now distinguish the connector and agent involved in each conversation."]
+    },
+    {
+      "tag": "deploy-20261011-0014-loginfix", "version": "1.1.0", "date": "2026-10-11", "time": "00:14", "sequence": 10,
+      "title": { "fr": "Une connexion plus lisible", "en": "Clearer sign-in on phones" },
+      "fr": ["La connexion reste lisible et utilisable sur les petits écrans."],
+      "en": ["Sign-in remains clear and usable on small screens."]
+    },
+    {
+      "tag": "deploy-20261010-2358-mobile", "version": "1.1.0", "date": "2026-10-10", "time": "23:58", "sequence": 9,
+      "title": { "fr": "Le Bureau sur téléphone", "en": "The Office on phones" },
+      "fr": ["Le Bureau s’adapte mieux au téléphone, avec des commandes plus faciles à toucher."],
+      "en": ["The Office now fits phones better, with controls that are easier to tap."]
+    },
+    {
+      "tag": "deploy-20261010-2356-looks", "version": "1.1.0", "date": "2026-10-10", "time": "23:56", "sequence": 8,
+      "title": { "fr": "Plus de diversité dans le Bureau", "en": "More variety in the Office" },
+      "fr": ["Les agents ont des apparences plus variées d’une visite à l’autre."],
+      "en": ["Agents have more varied appearances from one visit to the next."]
+    },
+    {
+      "tag": "deploy-20261010-2349-health", "version": "1.1.0", "date": "2026-10-10", "time": "23:49", "sequence": 7,
+      "title": { "fr": "Un diagnostic qui aide à réparer", "en": "Health checks with fixes" },
+      "fr": ["La page Santé explique les problèmes détectés et propose des réparations quand c’est possible."],
+      "en": ["The Health page explains detected problems and offers repairs when available."]
+    },
+    {
+      "tag": "deploy-20261010-2303-themes", "version": "1.1.0", "date": "2026-10-10", "time": "23:03", "sequence": 6,
+      "title": { "fr": "Trois ambiances pour votre Bureau", "en": "Three Office themes" },
+      "fr": ["Choisissez parmi trois ambiances visuelles, et retrouvez les actions Enregistrer et Annuler côte à côte."],
+      "en": ["Choose from three visual themes, with Save and Cancel together for easier editing."]
+    },
+    {
+      "tag": "deploy-20261010-2254-names", "version": "1.1.0", "date": "2026-10-10", "time": "22:54", "sequence": 5,
+      "title": { "fr": "Des agents plus faciles à reconnaître", "en": "Agents easier to recognize" },
+      "fr": ["Les agents ont des noms plus faciles à reconnaître et un bref résumé de leur travail."],
+      "en": ["Agents have easier-to-recognize names and a short summary of what they are doing."]
+    },
+    {
+      "tag": "deploy-20261010-2248-store", "version": "1.1.0", "date": "2026-10-10", "time": "22:48", "sequence": 4,
+      "title": { "fr": "Une boutique plus simple à parcourir", "en": "An easier Store to browse" },
+      "fr": ["La boutique propose une liste compacte pour choisir mobilier et décoration."],
+      "en": ["The Store has a compact list for choosing furniture and decorations."]
+    },
+    {
+      "tag": "deploy-20261010-2215-office", "version": "1.1.0", "date": "2026-10-10", "time": "22:15", "sequence": 3,
+      "title": { "fr": "Un Bureau plus fiable en direct", "en": "A steadier live Office" },
+      "fr": ["Le Bureau garde les autres agents actifs quand une source ralentit, montre mieux le statut En travail et attribue une place à chacun sur le canapé."],
+      "en": ["The Office keeps other agents active when one data source slows down, shows Working status more clearly, and gives each sofa guest a separate seat."]
+    },
+    {
+      "tag": "deploy-20261010-2159", "version": "1.1.0", "date": "2026-10-10", "time": "21:59", "sequence": 2,
+      "title": { "fr": "Une nouvelle page de connexion", "en": "A new sign-in page" },
+      "fr": ["La nouvelle page de connexion présente le Bureau avant même votre arrivée."],
+      "en": ["The new sign-in page gives you a look at the Office before you enter."]
+    },
+    {
+      "tag": "deploy-20261010-2148", "version": "1.1.0", "date": "2026-10-10", "time": "21:48", "sequence": 1,
+      "title": { "fr": "45 objets pour aménager le Bureau", "en": "45 ways to furnish the Office" },
+      "fr": ["Le mobilier et les objets du Bureau comptent maintenant 45 pièces à découvrir."],
+      "en": ["The Office now has 45 furniture and decoration pieces to explore."]
+    },
+    {
+      "tag": "deploy-20261010-2037", "version": "1.1.0", "date": "2026-10-10", "time": "20:37", "sequence": 0,
+      "title": { "fr": "Les vraies sessions Claude Code", "en": "Real Claude Code sessions" },
+      "fr": ["Le connecteur Claude Code lit maintenant les conversations enregistrées pour afficher vos vraies sessions."],
+      "en": ["The Claude Code connector now reads saved conversations so your real sessions appear."]
+    }
+  ]
+}

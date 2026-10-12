@@ -1,0 +1,37 @@
+/* User and role administration stays within the same bounded Bureau frame. */
+.ao-access { display:grid; gap:var(--bu-space-4,1rem); min-width:0; }
+.ao-access__heading { display:flex; align-items:center; gap:var(--bu-space-3,.75rem); flex-wrap:wrap; }
+.ao-access__heading h1 { margin:0 auto 0 0; }
+.ao-access__users { display:grid; grid-template-columns:minmax(15rem, .8fr) minmax(0,1.4fr); gap:var(--bu-space-5,1.25rem); min-height:0; }
+.ao-access__users--detail { grid-template-columns:minmax(15rem,.8fr) minmax(0,1.4fr); }
+.ao-access__list, .ao-access__detail { min-width:0; }
+.ao-access__list { overflow:auto; }
+.ao-access__list h2 { margin:0 0 var(--bu-space-2,.5rem); }
+.ao-access__detail { border-inline-start:1px solid var(--bu-border-subtle,var(--bu-border,#ddd)); padding-inline-start:var(--bu-space-4,1rem); overflow:auto; }
+.ao-access__detail-head { display:grid; grid-template-columns:1fr; gap:.25rem; margin-block-end:var(--bu-space-3,.75rem); }
+.ao-access__detail-head h2,.ao-access__detail-head p { margin:0; overflow-wrap:anywhere; }
+.ao-access__back { display:none; justify-self:start; }
+.ao-access__actions,.ao-access__levels { display:flex; flex-wrap:wrap; gap:.35rem; }
+.ao-access__matrix { display:grid; gap:var(--bu-space-4,1rem); min-width:0; }
+.ao-access__area { min-width:0; }
+.ao-access__area h3 { margin:0 0 .25rem; }
+.ao-access__area .bu-setting-row { border-block-end:1px solid var(--bu-border-subtle,var(--bu-border,#ddd)); }
+.ao-access__levels .bu-button { min-width:4.5rem; }
+.ao-access__empty { display:grid; place-items:center; min-height:12rem; }
+.ao-access__form { display:grid; gap:1rem; }
+.ao-access__review { display:grid; grid-template-columns:minmax(5rem,.35fr) minmax(0,1fr); gap:.5rem 1rem; overflow-wrap:anywhere; }
+.ao-access__review dt { color:var(--bu-text-muted); }
+.ao-access__review dd { margin:0; }
+.ao-access__review code,.ao-access__link { overflow-wrap:anywhere; white-space:pre-wrap; }
+.ao-access__link { padding:.5rem 0; user-select:all; }
+@media(max-width:700px) {
+  .ao-access__users,.ao-access__users--detail { display:block; }
+  .ao-access__users--detail .ao-access__list { display:none; }
+  .ao-access__detail { border:0; padding:0; overflow:visible; }
+  .ao-access__back { display:inline-flex; }
+  .ao-access__heading { align-items:flex-start; }
+  .ao-access__heading h1 { width:100%; }
+  .ao-access__levels { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%; }
+  .ao-access__levels .bu-button { min-width:0; padding-inline:.35rem; }
+  .ao-access__matrix { max-height:min(58vh,34rem); overflow:auto; overscroll-behavior:contain; }
+}

@@ -10,7 +10,7 @@ import { useTopic, runtimeCan } from '../hooks.js';
 import { services } from '../services.js';
 import { t, label, msg, agentName } from '../i18n.js';
 import * as fmt from '../fmt.js';
-import { Icon, EmptyState, ErrorState, Skeleton } from '../components/ui.js';
+import { Frame, Icon, EmptyState, ErrorState, Skeleton } from '../components/ui.js';
 import { openclawWrite, fieldErrors } from '../openclaw-api.js';
 import { FlowFields, FIELDS, useOpenclawWrites, ReadonlyNote, CapabilityNote } from './flows.js';
 
@@ -64,7 +64,9 @@ export function FlowPage({ match }) {
   useEffect(() => () => clearTimeout(armTimer.current), []);
   const back = router.href('flux');
   const Back = () => html`<a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('task.back')}</a>`;
-  const page = (body, busyAttr) => html`<div class="bu-page ao-frame ao-frame--detail ao-flow" aria-busy=${busyAttr ? 'true' : undefined}>${body}</div>`;
+  const page = (body, busyAttr, head, foot, framed = false) => html`<${Frame} class="bu-page ao-page ao-page--detail ao-flow"
+    aria-busy=${busyAttr ? 'true' : undefined} head=${head} foot=${foot}
+    bodyClass=${'ao-flow__content' + (framed ? ' ao-frame__body--framed' : '')}>${body}</${Frame}>`;
 
   if (vm.data === undefined && vm.error) {
     return page(html`<${Back} />${vm.error.code === 'not_found'
@@ -87,32 +89,7 @@ export function FlowPage({ match }) {
     if (r.ok) router.navigate(back);
   }
 
-  return page(html`
-    <${Back} />
-    ${vm.error ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('task.cached', { message: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('task.retry')}</button></div>` : null}
-    <header class="bu-detail-header">
-      <span class="bu-icon-tile bu-icon-tile--lg" aria-hidden="true"><${Icon} name="flux" size="md" /></span>
-      <div class="ao-flow__headtext">
-        <h2 class="bu-detail-header__title">${j.name}<${EnabledChip} enabled=${j.enabled} /><${HealthChip} health=${j.health} /></h2>
-        ${j.description ? html`<p class="bu-detail-header__desc">${j.description}</p>` : null}
-        <p class="bu-detail-header__meta">${label(j.schedule.sentence)}${j.schedule.kind === 'cron' && j.schedule.tz ? ` · ${j.schedule.tz}` : ''} · ${msg('task.meta.agent', { agent: j.agentId })}</p>
-      </div>
-    </header>
-
-    ${can ? html`<div class="ao-flow__actions" data-write-actions>
-      <label class="bu-switch"><input type="checkbox" role="switch" checked=${j.enabled} disabled=${busy === 'enabled'} aria-describedby=${ro}
-        onChange=${(e) => { e.currentTarget.checked = j.enabled; act('enabled', 'PUT', '/enabled', { enabled: !j.enabled }, msg(j.enabled ? 'task.toast.disabled' : 'task.toast.enabled')); }} />${msg(j.enabled ? 'task.enabled' : 'task.disabled')}</label>
-      <button type="button" class="bu-btn bu-btn--primary" disabled=${busy === 'run' || running} aria-busy=${busy === 'run' || running ? 'true' : undefined} aria-describedby=${ro}
-        onClick=${() => act('run', 'POST', '/runs', {}, msg('task.toast.run'))}><${Icon} name="state-working" />${msg(running ? 'task.action.running' : 'task.action.run')}</button>
-      ${editable ? html`<button type="button" class="bu-btn" aria-expanded=${editing ? 'true' : 'false'} aria-controls="fl-edit-form" onClick=${() => setEditing(!editing)}><${Icon} name="pencil" />${msg('task.action.edit')}</button>` : null}
-      <button type="button" class=${'bu-btn ' + (armed ? 'bu-btn--armed' : 'bu-btn--danger-ghost')} disabled=${busy === 'delete'} aria-describedby=${ro} onClick=${remove}>
-        <${Icon} name="close" />${msg(armed ? 'task.action.confirmDelete' : 'task.action.delete')}</button>
-      ${writes ? null : html`<${ReadonlyNote} id="flow-ro" />`}
-    </div>
-    ${editable ? null : html`<p class="bu-caption bu-text-tertiary">${msg('task.notEditable')}</p>`}
-    ${editing && editable ? html`<${EditForm} job=${j} path=${path} onDone=${() => setEditing(false)} />` : null}`
-    : html`<${CapabilityNote} id="flow-ro" />`}
-
+  return page(editing && editable ? html`<${EditForm} job=${j} path=${path} onDone=${() => setEditing(false)} />` : html`
     ${diagram.nodes.length ? html`<section class="bu-card ao-section" aria-labelledby="fl-diagram">
       <h3 class="bu-card__title" id="fl-diagram">${msg('task.diagram.title')}</h3>
       <ol class="bu-flow">${diagram.nodes.map((n, i) => {
@@ -162,7 +139,31 @@ export function FlowPage({ match }) {
       <pre class="bu-code ao-flow__msg"><code>${j.payload.message}</code></pre>
     </section>` : j.payload.kind === 'command' ? html`<section class="bu-card ao-section" aria-labelledby="fl-cmd">
       <h3 class="bu-card__title" id="fl-cmd">${msg('task.command.title')}</h3><pre class="bu-code"><code>${j.payload.argv.join(' ')}</code></pre></section>` : null}
-  `, vm.resyncing);
+`, vm.resyncing, html`
+    <${Back} />
+    ${vm.error ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('task.cached', { message: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('task.retry')}</button></div>` : null}
+    <header class="bu-detail-header">
+      <span class="bu-icon-tile bu-icon-tile--lg" aria-hidden="true"><${Icon} name="flux" size="md" /></span>
+      <div class="ao-flow__headtext">
+        <h2 class="bu-detail-header__title">${j.name}<${EnabledChip} enabled=${j.enabled} /><${HealthChip} health=${j.health} /></h2>
+        ${j.description ? html`<p class="bu-detail-header__desc">${j.description}</p>` : null}
+        <p class="bu-detail-header__meta">${label(j.schedule.sentence)}${j.schedule.kind === 'cron' && j.schedule.tz ? ` · ${j.schedule.tz}` : ''} · ${msg('task.meta.agent', { agent: j.agentId })}</p>
+      </div>
+    </header>
+
+`, can ? html`<div class="ao-flow__actions" data-write-actions>
+      <label class="bu-switch"><input type="checkbox" role="switch" checked=${j.enabled} disabled=${busy === 'enabled'} aria-describedby=${ro}
+        onChange=${(e) => { e.currentTarget.checked = j.enabled; act('enabled', 'PUT', '/enabled', { enabled: !j.enabled }, msg(j.enabled ? 'task.toast.disabled' : 'task.toast.enabled')); }} />${msg(j.enabled ? 'task.enabled' : 'task.disabled')}</label>
+      <button type="button" class="bu-btn bu-btn--primary" disabled=${busy === 'run' || running} aria-busy=${busy === 'run' || running ? 'true' : undefined} aria-describedby=${ro}
+        onClick=${() => act('run', 'POST', '/runs', {}, msg('task.toast.run'))}><${Icon} name="state-working" />${msg(running ? 'task.action.running' : 'task.action.run')}</button>
+      ${editable ? html`<button type="button" class="bu-btn" aria-expanded=${editing ? 'true' : 'false'} aria-controls="fl-edit-form" onClick=${() => setEditing(!editing)}><${Icon} name="pencil" />${msg('task.action.edit')}</button>` : null}
+      <button type="button" class=${'bu-btn ' + (armed ? 'bu-btn--armed' : 'bu-btn--danger-ghost')} disabled=${busy === 'delete'} aria-describedby=${ro} onClick=${remove}>
+        <${Icon} name="close" />${msg(armed ? 'task.action.confirmDelete' : 'task.action.delete')}</button>
+      ${writes ? null : html`<${ReadonlyNote} id="flow-ro" />`}
+    </div>
+    ${editable ? null : html`<p class="bu-caption bu-text-tertiary">${msg('task.notEditable')}</p>`}
+`
+    : html`<${CapabilityNote} id="flow-ro" />`, editing && editable);
 }
 
 function Run({ run: r, open }) {
@@ -201,12 +202,12 @@ function EditForm({ job, path, onDone }) {
     setBusy(false);
     if (res.ok) onDone(); else setErrors(fieldErrors(res.error, FIELDS));
   }
-  return html`<section class="bu-card ao-section" id="fl-edit-form" aria-labelledby="fl-edit">
-    <h3 class="bu-card__title" id="fl-edit">${msg('task.form.title')}</h3>
-    <form class="ao-form" onSubmit=${submit} novalidate>
+  return html`<${Frame} tag="section" class="bu-card ao-section" id="fl-edit-form" aria-labelledby="fl-edit"
+    head=${html`<h3 class="bu-card__title" id="fl-edit">${msg('task.form.title')}</h3>`}
+    foot=${html`      <div class="bu-btn-group"><button type="submit" form="flow-edit" class="bu-btn bu-btn--primary" disabled=${busy} aria-busy=${busy ? 'true' : undefined}>${msg(busy ? 'task.form.saving' : 'task.form.save')}</button>
+        <button type="button" class="bu-btn" onClick=${onDone}>${msg('task.form.cancel')}</button></div>`}>
+    <form id="flow-edit" class="ao-form" onSubmit=${submit} novalidate>
       <${FlowFields} values=${values} errors=${errors} idPrefix="ef" onInput=${(k, v) => setValues((x) => ({ ...x, [k]: v }))} />
-      <div class="bu-btn-group"><button type="submit" class="bu-btn bu-btn--primary" disabled=${busy} aria-busy=${busy ? 'true' : undefined}>${msg(busy ? 'task.form.saving' : 'task.form.save')}</button>
-        <button type="button" class="bu-btn" onClick=${onDone}>${msg('task.form.cancel')}</button></div>
     </form>
-  </section>`;
+  </${Frame}>`;
 }

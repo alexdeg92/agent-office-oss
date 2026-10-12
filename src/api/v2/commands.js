@@ -9,8 +9,12 @@
  */
 const crypto = require('crypto');
 const { ApiError, invalid } = require('./errors');
+const {resolveWireId}=require('./runtime-projection');
 const { buildChatVM } = require('./vm/chat');
 const { LABELS } = require('../../i18n/fr');
+const { humanPerson } = require('../../security/request-actor');
+const { resolveSender } = require('../../engine/model/sender');
+const { runAuthorized } = require('../../security/dispatch-context');
 
 const FLOW_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 const SKILL_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;   // no '.': the name becomes a config path segment
@@ -42,6 +46,7 @@ function check(b, { partial }) {
 // A failed CLI command → 502 upstream_failed (readonly → 403), with the category as the detail issue.
 function failed(x) {
   if (x.failed === 'readonly') return new ApiError('readonly');
+  if (x.failed === 'busy') return new ApiError('rate_limited', { details: [{ issue: 'command-busy' }] });
   return new ApiError('upstream_failed', { details: [{ issue: String(x.failed || 'error') }] });
 }
 
@@ -50,89 +55,116 @@ function failed(x) {
  */
 function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, views, now = () => Date.now(), log = () => {} }) {
   const cmd = runtime && runtime.commands;
+  const pendingFlowRuns = new Set();
   const need = (fn) => { if (!cmd || typeof cmd[fn] !== 'function') throw new ApiError('not_found'); return cmd[fn]; };
+  const dispatch = (req, fn, ...args) => { const run = need(fn); return runAuthorized(req.authorize,()=>run(...args)); };
+  const live = req => { try { req.authorize?.(); return true; } catch (_) { return false; } };
   const primary = () => { const a = engine.primaryAgent(); return a ? a.id : null; };   // G3a: the one resolver
   const needPrimary = () => { const id = primary(); if (!id) throw new ApiError('upstream_unavailable', { details: [{ issue: 'agent-unknown' }] }); return id; };
-  const job = (id) => { if (!FLOW_ID.test(String(id))) throw invalid('jobId', 'invalid-id'); const j = engine.cronJobs().find((x) => x.id === id); if (!j) throw new ApiError('not_found'); return j; };
+  const job = (id,version) => { if (!FLOW_ID.test(String(id)) && !require('../../runtime-ids').parseId(id, 'flow')) throw invalid('jobId', 'invalid-id'); const key = resolveWireId(engine,id,'flow',version); const j = engine.cronJobs().find((x) => x.id === key); if (!j) throw new ApiError('not_found'); return j; };
   // After a flow write: re-read the list (and the job's runs), then the flow topics rebuild.
-  const afterFlows = async (jobId) => {
-    if (runtime && runtime.refreshFlows) { try { await runtime.refreshFlows(); } catch (_) { /* the next poll catches up */ } }
-    if (jobId && views) views.pull('flowRuns', jobId, { limit: 25 }, { force: true }).catch(() => {});
+  const afterFlows = async (req, jobId) => {
+    if (live(req) && runtime && runtime.refreshFlows) { try { await runAuthorized(req.authorize,()=>runtime.refreshFlows()); } catch (_) { /* the next poll catches up */ } }
+    // A successful write does not confer permission to read run history. Recheck after the list refresh too.
+    const historyAuthority = req.authorize ? () => { req.authorize(); if(!store.policy.can(req.user,'logs','read'))throw new ApiError('forbidden'); } : null;
+    if (live(req) && jobId && views && (!req.authorize || store.policy.can(req.user, 'logs', 'read'))) runAuthorized(historyAuthority,()=>views.pull('flowRuns', jobId, { limit: 25 }, { force: true })).catch(() => {});
     topics.invalidate('flows'); topics.invalidate('flow'); topics.invalidate('office');
   };
 
   // R22-05 (api-v3.md D1): a command the adapter DECLARES unavailable doesn't exist on this instance: 404 not_found, before
   // the read-only guard, whatever functions the adapter happens to have.
   const CAPS = { flowWrite: (c) => !!(c.flows && c.flows.write), skillToggle: (c) => !!(c.skills && c.skills.toggle), chat: (c) => !!c.chat, restart: (c) => !!c.restart };
-  const capable = (name) => (req, res, next) => { const c = (engine.runtime().capabilities) || {}; return CAPS[name](c) ? next() : next(new ApiError('not_found')); };
+  const targetRuntime = req => {
+    const wire=req.params.jobId || req.params.name || req.body?.agentId;
+    const kind=req.params.jobId?'flow':req.params.name?'skill':'agent';
+    const key=wire?resolveWireId(engine,wire,kind,req.apiVersion):primary();
+    return req.body?.runtimeId && engine.runtimeForInstance ? engine.runtimeForInstance(req.body.runtimeId) : engine.runtimeFor ? engine.runtimeFor(key) : engine.runtime();
+  };
+  const capable = (name) => (req, res, next) => CAPS[name](targetRuntime(req)?.capabilities || {}) ? next() : next(new ApiError('not_found'));
 
   // ---- flows ------------------------------------------------------------------------------------------------
   r.post('/flows', authed, capable('flowWrite'), guard('openclaw'), async (req, res) => {
     // G5 (api-v3.md D7): 3.0 may name the agent (a listed one) when the runtime declares multi-agent flows; default the primary
-    const caps = (engine.runtime().capabilities || {}).flows || {};
+    const caps = (targetRuntime(req)?.capabilities || {}).flows || {};
     const multi = req.apiVersion === 3 && caps.multiAgent === true;
-    noExtra(req.body, multi ? ['name', 'cron', 'tz', 'message', 'agentId'] : ['name', 'cron', 'tz', 'message']);
+    noExtra(req.body, multi ? ['name', 'cron', 'tz', 'message', 'agentId', 'runtimeId'] : req.apiVersion === 3 ? ['name', 'cron', 'tz', 'message', 'runtimeId'] : ['name', 'cron', 'tz', 'message']);
     const b = check(req.body, { partial: false });
     let agentId = needPrimary();
+    if (req.body.runtimeId && !req.body.agentId) {
+      const source=engine.instances?.find(i=>i.id===req.body.runtimeId && i.enabled);
+      const local=source?.engine?.primaryAgent()?.id || source?.engine?.agents()[0]?.id;
+      if (!local) throw invalid('runtimeId','unknown-agent');
+      agentId=require('../../runtime-ids').scopedId(source.id,'agent',local);
+    }
     if (multi && req.body.agentId !== undefined) {
       if (typeof req.body.agentId !== 'string' || !engine.agents().some((a) => a.id === req.body.agentId)) throw invalid('agentId', 'unknown-agent');
       agentId = req.body.agentId;
     }
-    const x = await need('flowCreate')(Object.assign(b, { agentId }));
+    if (engine.instances) {
+      const eligible = engine.runtimes().filter(r => r.enabled && r.capabilities?.flows?.write);
+      if (eligible.length > 1 && !req.body.runtimeId) throw invalid('runtimeId', 'required');
+      const scope = req.body.runtimeId || eligible[0]?.id;
+      if (!engine.agents().some(a => a.id === agentId && require('../../runtime-ids').parseId(a.id, 'agent')?.runtime === scope)) throw invalid('agentId', 'wrong-runtime');
+    }
+    const x = await dispatch(req, 'flowCreate', Object.assign(b, { agentId, ...(req.body.runtimeId ? { runtimeId: req.body.runtimeId } : {}) }));
     if (!x.ok) throw failed(x);
-    await afterFlows(x.jobId);
+    await afterFlows(req, x.jobId);
     ok(res, result({ jobId: x.jobId }));
   });
   r.patch('/flows/:jobId', authed, capable('flowWrite'), guard('openclaw'), async (req, res) => {
-    const j = job(req.params.jobId);
+    const j = job(req.params.jobId,req.apiVersion);
     noExtra(req.body, ['name', 'cron', 'tz', 'message']);
     if (!Object.keys(req.body).length) throw invalid(null, 'empty');
     if (!(j.schedule && j.schedule.kind === 'cron' && j.payload && j.payload.kind === 'agent-turn')) throw invalid('jobId', 'not-editable');
     const b = check(req.body, { partial: true });
-    const x = await need('flowEdit')(j.id, b);
+    const x = await dispatch(req, 'flowEdit', j.id, b);
     if (!x.ok) throw failed(x);
-    await afterFlows(j.id);
+    await afterFlows(req, j.id);
     ok(res, result());
   });
   r.put('/flows/:jobId/enabled', authed, capable('flowWrite'), guard('openclaw'), async (req, res) => {
-    const j = job(req.params.jobId);
+    const j = job(req.params.jobId,req.apiVersion);
     noExtra(req.body, ['enabled']);
     if (typeof req.body.enabled !== 'boolean') throw invalid('enabled', 'invalid');
-    const x = await need('flowSetEnabled')(j.id, req.body.enabled);
+    const x = await dispatch(req, 'flowSetEnabled', j.id, req.body.enabled);
     if (!x.ok) throw failed(x);
-    await afterFlows(j.id);
+    await afterFlows(req, j.id);
     ok(res, result());
   });
   r.post('/flows/:jobId/runs', authed, capable('flowWrite'), guard('openclaw'), async (req, res) => {
-    const j = job(req.params.jobId);
+    const j = job(req.params.jobId,req.apiVersion);
     noExtra(req.body || {}, []);
     const runs = engine.cronRuns(j.id);
-    if (runs && runs.runs.some((x) => x.status === 'running')) throw new ApiError('conflict', { details: [{ issue: 'run-pending' }] });
-    const x = await need('flowRun')(j.id);
-    if (!x.ok) throw failed(x);
-    await afterFlows(j.id);
-    ok(res, result());
+    if (pendingFlowRuns.has(j.id) || (runs && runs.runs.some((x) => x.status === 'running'))) throw new ApiError('conflict', { details: [{ issue: 'run-pending' }] });
+    pendingFlowRuns.add(j.id);
+    try {
+      const x = await dispatch(req, 'flowRun', j.id);
+      if (!x.ok) throw failed(x);
+      await afterFlows(req, j.id);
+      ok(res, result());
+    } finally { pendingFlowRuns.delete(j.id); }
   });
   r.delete('/flows/:jobId', authed, capable('flowWrite'), guard('openclaw'), async (req, res) => {
-    const j = job(req.params.jobId);
+    const j = job(req.params.jobId,req.apiVersion);
     noExtra(req.body || {}, []);
-    const x = await need('flowDelete')(j.id);
+    const x = await dispatch(req, 'flowDelete', j.id);
     if (!x.ok) throw failed(x);
-    await afterFlows(null);
+    await afterFlows(req, null);
     ok(res, result());
   });
 
   // ---- skills -----------------------------------------------------------------------------------------------
   r.put('/skills/:name/enabled', authed, capable('skillToggle'), guard('openclaw'), async (req, res) => {
-    const name = req.params.name;
-    if (!SKILL_ID.test(name)) throw invalid('name', 'invalid-id');
+    const native = req.params.name;
+    const name = resolveWireId(engine,native,'skill',req.apiVersion);
+    if (!SKILL_ID.test(name) && !require('../../runtime-ids').parseId(name, 'skill')) throw invalid('name', 'invalid-id');
     if (!engine.skills().some((s) => s.name === name)) throw new ApiError('not_found');
     noExtra(req.body, ['enabled']);
     if (typeof req.body.enabled !== 'boolean') throw invalid('enabled', 'invalid');
-    const x = await need('skillSetEnabled')(name, req.body.enabled);
+    const x = await dispatch(req, 'skillSetEnabled', name, req.body.enabled);
     if (!x.ok) throw failed(x);
     if (views) views.pendingRestart.add(name);
-    if (runtime && runtime.refreshSkills) runtime.refreshSkills().catch(() => {});
+    if (live(req) && runtime && runtime.refreshSkills) runAuthorized(req.authorize,()=>runtime.refreshSkills()).catch(() => {});
     topics.invalidate('skills'); topics.invalidate('skill');
     ok(res, result({ needsRestart: true }));
   });
@@ -140,12 +172,14 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
   // ---- the gateway restart (kills the agent's running work: confirmed, rate-limited, audited) ----------------------
   let lastRestart = 0;
   r.post('/gateway/restart', authed, capable('restart'), guard('openclaw'), async (req, res) => {
-    noExtra(req.body, ['confirm']);
+    noExtra(req.body, req.apiVersion === 3 ? ['confirm', 'runtimeId'] : ['confirm']);
+    if (engine.runtimes?.().filter(r => r.enabled && r.capabilities?.restart).length > 1 && !req.body.runtimeId) throw invalid('runtimeId', 'required');
     if (req.body.confirm !== 'redemarrer') throw invalid('confirm', 'invalid');
     if (lastRestart && now() - lastRestart < RESTART_COOLDOWN_MS) throw new ApiError('rate_limited');
     const restart = need('restartGateway');
+    req.authorize?.();
     lastRestart = now();
-    const x = await restart();
+    const x = await runAuthorized(req.authorize,()=>restart(req.body.runtimeId ? { runtimeId: req.body.runtimeId } : undefined));
     if (!x.ok) { lastRestart = 0; throw failed(x); }
     ok(res, result({ via: x.via }));
   });
@@ -165,7 +199,8 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
   topics.define('chat', { build: () => buildChatVM({ sessionKey: chatKey(), transcript: engine.transcript(chatKey()), pending, errors, local, senderContext: { runtime: runtime?.definition?.id || 'generic', operator: store?.owner, agent: (() => { const a = engine.primaryAgent(); return a ? { ...a, id: 'agent:' + a.id } : null; })(), people: store?.persons.senderPeople?.() || store?.persons.list() || [] } }) });
   r.get('/views/chat', authed, async (req, res) => {
     const key = chatKey();
-    if (views && engine.session(key)) await views.pull('transcript', key, {}, { force: true });
+    req.authorize?.();
+    if (views && engine.session(key)) await runAuthorized(req.authorize,()=>views.pull('transcript', key, {}, { force: true }));
     const t = topics.current('chat', req.apiVersion); ok(res, t.vm, { id: t.id, rev: t.rev });
   });
   r.post('/chat/messages', authed, capable('chat'), guard('openclaw'), (req, res) => {
@@ -176,14 +211,17 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
     const turn = need('agentTurn');
     const agentId = needPrimary();
     const turnId = 'turn_' + crypto.randomBytes(8).toString('hex');
-    pending = { turnId, since: now(), text };
+    req.authorize?.();
+    const senderInfo = resolveSender({ role: 'user' }, { runtime: runtime?.definition?.id || 'generic',
+      operator: store ? store.persons.list().find(p => p.id === humanPerson(req, store)) : null });
+    pending = { turnId, since: now(), text, senderInfo };
     topics.invalidate('chat');
     res.status(202);
     ok(res, result({ turnId }));
     const sent = pending;
-    Promise.resolve().then(() => turn({ agentId, text, sessionRef: CHAT_REF, timeoutMs: CHAT_TIMEOUT_MS })).then((x) => {
+    Promise.resolve().then(() => runAuthorized(req.authorize,()=>turn({ agentId, text, sessionRef: CHAT_REF, timeoutMs: CHAT_TIMEOUT_MS }))).then((x) => {
       // R15-03: the sent message and a successful reply are kept until the transcript shows them
-      local.push({ id: 'sent_' + turnId, role: 'user', at: sent.since, since: sent.since, text: sent.text, meta: null });
+      local.push({ id: 'sent_' + turnId, role: 'user', at: sent.since, since: sent.since, text: sent.text, senderInfo: sent.senderInfo, meta: null });
       if (!x.failed && x.text) local.push({ id: 'reply_' + turnId, role: 'assistant', at: Math.max(now(), sent.since + 1), since: sent.since, text: x.text,
         meta: x.meta ? { model: x.meta.model, tokens: x.meta.tokens, durationMs: x.meta.durationMs } : null });
       while (local.length > 40) local.shift();
@@ -191,9 +229,9 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
         errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] + ' (' + (LABELS['sourceError.' + x.failed] || x.failed) + ')' });
         if (errors.length > 20) errors.shift();
       }
-    }).catch(() => { errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] }); })
+    }).catch(() => { errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] }); if (errors.length > 20) errors.shift(); })
       .finally(async () => {
-        if (views) { try { await views.pull('transcript', chatKey(), {}, { force: true }); } catch (_) { /* shown on the next read */ } }
+        if (live(req) && views) { try { await runAuthorized(req.authorize,()=>views.pull('transcript', chatKey(), {}, { force: true })); } catch (_) { /* shown on the next read */ } }
         pending = null;
         topics.invalidate('chat');
       });

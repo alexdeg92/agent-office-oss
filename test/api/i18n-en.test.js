@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const fr = require('../../src/i18n/fr');
 const en = require('../../src/i18n/en');
-const { resolveLocale, fromAcceptLanguage } = require('../../src/i18n');
+const { resolveLocale, fromAcceptLanguage, labelsFor } = require('../../src/i18n');
 const { openDatabase } = require('../../src/store/db');
 const { loadScenario } = require('../helpers/scenario');
 const { startServer } = require('../helpers/harness');
@@ -15,6 +15,10 @@ const { startServer } = require('../helpers/harness');
 const placeholders = (t) => [...String(t).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 describe('i18n · the English registry', () => {
+  it('keeps the canonical conversation kind localized in the v2 client dictionary', () => {
+    assert.equal(labelsFor('fr', 2)['sessionKind.conversation'], 'Conversation');
+    assert.equal(labelsFor('en', 2)['sessionKind.conversation'], 'Conversation');
+  });
   it('has exactly the French keys, the same placeholders, and no French left in it', () => {
     assert.deepEqual(Object.keys(en.LABELS).sort(), Object.keys(fr.LABELS).sort());
     const mismatched = Object.keys(fr.LABELS).filter((k) => placeholders(fr.LABELS[k]).join() !== placeholders(en.LABELS[k]).join());
@@ -57,7 +61,7 @@ describe('i18n · migration 006 keeps the preferences', () => {
       assert.throws(() => pre.db.exec(`INSERT INTO ui_prefs (key, value_json, updated_at) VALUES ('locale', '"en"', 1)`), /CHECK/);
       pre.close();
       const h = openDatabase({ dir, instance: 'test' });
-      assert.deepEqual(h.applied, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+      assert.deepEqual(h.applied, require('../../src/store/db').listMigrations().filter(m => m.version >= 6).map(m => m.version));
       assert.equal(h.db.prepare("SELECT value_json FROM ui_prefs WHERE key = 'uiTheme'").get().value_json, '"dark"');
       h.db.exec(`INSERT INTO ui_prefs (key, value_json, updated_at) VALUES ('locale', '"en"', 1)`);
       h.close();
@@ -74,7 +78,9 @@ describe('i18n · GET /api/v2/meta by locale (real server)', () => {
     let { j, vary } = await meta();
     assert.equal(j.data.locale, 'fr'); assert.equal(j.data.labels['weekday.1'], 'lundi'); assert.match(vary, /Accept-Language/);
     ({ j } = await meta('en-CA,en;q=0.9'));
-    assert.equal(j.data.locale, 'en'); assert.equal(j.data.labels['weekday.1'], 'Monday'); assert.equal(j.data.runtime.gatewayLabel, 'OpenClaw gateway');
+    assert.equal(j.data.locale, 'en'); assert.equal(j.data.labels['weekday.1'], 'Monday'); assert.equal(j.data.runtime, null, 'anonymous metadata omits runtime enrichment');
+    const owner = await h.request('GET', '/api/v2/meta?locale=en');
+    assert.equal(owner.json.data.runtime.gatewayLabel, 'OpenClaw gateway', 'owner metadata still localizes runtime labels');
     assert.equal((await h.request('PATCH', '/api/v2/prefs', { locale: 'fr' })).status, 200);
     ({ j } = await meta('en-CA'));
     assert.equal(j.data.locale, 'fr', 'the preference wins');
@@ -99,11 +105,19 @@ describe('Q03-A01 · generated session titles follow the UI language; genuine na
   const names = { flowName: () => 'Veille hebdomadaire', interlocutorName: () => null };
   it('EN renders generated parts in English; FR rendering equals the 2.x label', () => {
     const cases = [[s('subagent', { subagentId: 'ffff0001' }), 'Subagent ffff'], [s('scheduled', { cronJobId: 'j' }), 'Scheduled task · Veille hebdomadaire'],
-      [s('primary'), 'Main session'], [s('conversation-group', { interlocutorId: 'discord-channel:100000000000000002' }), 'Channel 000002'],
+      [s('primary'), 'Main session'], [s('conversation-group', { interlocutorId: 'discord-channel:100000000000000002' }), 'Unnamed group · Discord'],
       [s('primary', { heartbeatOf: 'agent:main:main' }), 'Main session · heartbeat'], [s('explicit', { explicitKey: 'x' }, { displayName: 'Mon chantier' }), 'Mon chantier']];
     for (const [session, en_] of cases) {
       assert.equal(render(en.LABELS, sessionTitle(session, names)), en_);
       assert.equal(render(fr.LABELS, sessionTitle(session, names)), sessionLabel(session, names));
     }
   });
+});
+
+it('scoped subagent identities keep their native short display label in both contracts',()=>{
+  const {sessionTitle}=require('../../src/api/v2/vm/logs'),{scopedId}=require('../../src/runtime-ids');
+  const raw={class:{kind:'subagent',subagentId:'synthetic-worker'}};
+  const scoped={class:{...raw.class,subagentId:scopedId('runtime-one','agent',raw.class.subagentId)}};
+  assert.deepEqual(sessionTitle(scoped),sessionTitle(raw));
+  assert.equal(sessionTitle(scoped).params.id,'synt');
 });

@@ -13,7 +13,10 @@ const { classesFor } = require('./classes');
 const { undefinedPath } = require('../../../model/entity');
 
 class VmError extends Error {
-  constructor(name, issues) { super('invalid ' + name + ' VM: ' + issues.map((i) => i.path + ' ' + i.detail).slice(0, 5).join('; ')); this.name = 'VmError'; this.vm = name; this.issues = issues; }
+  constructor(name, issues) {
+    super('invalid ' + name + ' VM: ' + issues.map((i) => i.path + ' ' + i.detail).slice(0, 5).join('; '));
+    this.name = 'VmError'; this.vm = name; this.issues = issues;
+  }
 }
 
 /**
@@ -22,7 +25,7 @@ class VmError extends Error {
  * @param {(issue) => void} [o.report]   quarantine sink (production)
  */
 // G5: `version` picks the contract's schemas (2 or 3); issues name the channel 'vm.<name>' (2) or 'vm.v3.<name>' (3)
-function createVmCheck({ mode, report = () => {}, version = 2 }) {
+function createVmCheck({ mode, report = () => {}, resolve = () => {}, version = 2 }) {
   const VM_SCHEMAS = schemasFor(version), VM_CLASSES = classesFor(version);
   const channelOf = (name) => (version === 3 ? 'vm.v3.' : 'vm.') + name;
   const lastGood = new Map();   // key (topic id or route name) → VM
@@ -37,7 +40,7 @@ function createVmCheck({ mode, report = () => {}, version = 2 }) {
   // → the VM to send: an instance of its section's class (frozen), or the last good one in fallback mode; throws in throw mode
   function check(name, vm, key = name) {
     const issues = issuesOf(name, vm);
-    if (!issues.length) { const typed = new VM_CLASSES[name](vm); lastGood.set(key, typed); return typed; }
+    if (!issues.length) { const typed = new VM_CLASSES[name](vm); lastGood.set(key, typed); try { resolve(channelOf(name), name); } catch {} return typed; }
     if (mode === 'throw') throw new VmError(name, issues);
     for (const i of issues.slice(0, 5)) report({ code: 'vm.invalid', severity: 'error', channel: channelOf(name), path: i.path });
     if (lastGood.has(key)) return lastGood.get(key);

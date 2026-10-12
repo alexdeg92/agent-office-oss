@@ -12,39 +12,52 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/readme/hero-dark.webp">
-  <img src="docs/readme/hero-light.webp" width="1440" alt="Agent Office: Atlas and two agents at work in the live Bureau, with activity totals and a team sidebar.">
+  <img src="docs/readme/hero-light.webp" width="1440" alt="Agent Office: Atlas and six subagents at work on the first floor of the live Bureau, with activity totals, the floor list and a team roster grouped under Atlas.">
 </picture>
 
 ## Your team, in one place
 
 Agent Office is a self-hosted dashboard for AI agents, with an animated office that reflects their activity.<br>
-Chat, projects, session logs, skills and system health share one interface, available in English and French.<br>
-Connect OpenClaw today, or explore with the included synthetic demo adapter.
+Chat, projects, workflows, session logs, skills and system health share one interface, available in French and English.<br>
+Connect OpenClaw, Claude Code and Codex side by side, or explore with the included synthetic demo.
 
 <table>
   <tr>
-    <td width="33%"><a href="docs/readme/hero-light.webp"><img src="docs/readme/hero-light.webp" alt="Live Bureau with agents and activity indicators"></a><br><strong>Bureau · Live office</strong><br>See who is working, thinking or waiting, with a live team view.</td>
-    <td width="33%"><a href="docs/readme/chat.webp"><img src="docs/readme/chat.webp" alt="Chat with the main agent"></a><br><strong>Discuter · Chat</strong><br>Keep a conversation with your main agent alongside the work.</td>
-    <td width="33%"><a href="docs/readme/projects.webp"><img src="docs/readme/projects.webp" alt="Project board with status columns and agent assignments"></a><br><strong>Projets · Projects</strong><br>Track status, priorities, assignments and project updates.</td>
+    <td width="33%"><a href="docs/readme/hero-light.webp"><img src="docs/readme/hero-light.webp" alt="Live Bureau with agents, subagents and activity indicators"></a><br><strong>Bureau · Live office</strong><br>See who is working, thinking or waiting. Subagents are listed under the agent that launched them.</td>
+    <td width="33%"><a href="docs/readme/teams.webp"><img src="docs/readme/teams.webp" alt="Second floor of the office with a four-member team grouped under its lead"></a><br><strong>Floors and teams</strong><br>The office grows by floor, with an entrance and a gym. A team sits together, grouped under its lead.</td>
+    <td width="33%"><a href="docs/readme/connectors.webp"><img src="docs/readme/connectors.webp" alt="Connector gallery with Claude Code and Codex connected"></a><br><strong>Connectors · Several runtimes</strong><br>Connect OpenClaw, Claude Code and Codex at the same time, each with its own instances.</td>
   </tr>
   <tr>
-    <td><a href="docs/readme/logs.webp"><img src="docs/readme/logs.webp" alt="Session log with distinct Operator A, Operator B and Operator C senders"></a><br><strong>Journaux · Session logs</strong><br>Read conversations and tool activity, with distinct senders in shared sessions.</td>
-    <td><a href="docs/readme/skills.webp"><img src="docs/readme/skills.webp" alt="Skills list with availability and source information"></a><br><strong>Compétences · Skills</strong><br>Browse skills, requirements and availability for the connected runtime.</td>
-    <td><a href="docs/readme/health.webp"><img src="docs/readme/health.webp" alt="Health view showing resource charts and runtime diagnostics"></a><br><strong>Santé · Health</strong><br>Check resource use, connection status and diagnostic issues.</td>
+    <td><a href="docs/readme/chat.webp"><img src="docs/readme/chat.webp" alt="Chat with the main agent"></a><br><strong>Discuter · Chat</strong><br>Keep a conversation with your main agent alongside the work.</td>
+    <td><a href="docs/readme/projects.webp"><img src="docs/readme/projects.webp" alt="Project board with status columns and agent assignments"></a><br><strong>Projets · Projects</strong><br>Track status, priorities, assignments, risks and comments.</td>
+    <td><a href="docs/readme/workflows.webp"><img src="docs/readme/workflows.webp" alt="Scheduled workflows with their state and next run"></a><br><strong>Flux de travail · Workflows</strong><br>Read scheduled tasks, their last result and next run, and manage them where the runtime allows it.</td>
   </tr>
   <tr>
+    <td><a href="docs/readme/logs.webp"><img src="docs/readme/logs.webp" alt="Session log list mixing OpenClaw, Claude Code and Codex sessions"></a><br><strong>Journaux · Session logs</strong><br>Read conversations and tool activity from every connected runtime in one list.</td>
+    <td><a href="docs/readme/skills.webp"><img src="docs/readme/skills.webp" alt="Skills grid with availability and source information"></a><br><strong>Compétences · Skills</strong><br>Browse skills, requirements and availability for the connected runtime.</td>
+    <td><a href="docs/readme/health.webp"><img src="docs/readme/health.webp" alt="Health view showing resource charts, channels and diagnostics"></a><br><strong>Santé · Health</strong><br>Check resource use, channels, scheduled tasks and diagnostic issues.</td>
+  </tr>
+  <tr>
+    <td><a href="docs/readme/users.webp"><img src="docs/readme/users.webp" alt="User list with roles, pending invitations and per-user permissions"></a><br><strong>Users and roles</strong><br>Invite people, give them a role and adjust permissions area by area.</td>
     <td><a href="docs/readme/store.webp"><img src="docs/readme/store.webp" alt="Character choices in the Boutique"></a><br><strong>Boutique · Make it yours</strong><br>Choose characters, colors and accessories. <a href="docs/readme/furniture.webp">Arrange furniture</a> and switch the office mood.</td>
-    <td><a href="docs/readme/sandbox.webp"><img src="docs/readme/sandbox.webp" alt="Animation sandbox with synthetic agents and playback controls"></a><br><strong>Animation sandbox</strong><br>Try states, gestures and surprise breaks with local test agents.</td>
-    <td><a href="docs/readme/onboarding.webp"><img src="docs/readme/onboarding.webp" alt="First-run wizard for creating a new office"></a><br><strong>Guided setup</strong><br>Connect your runtime, name the agents and build your first office.</td>
+    <td><a href="docs/readme/onboarding.webp"><img src="docs/readme/onboarding.webp" alt="Setup wizard on the external access step"></a><br><strong>Guided setup</strong><br>Detect your runtimes, name the agents, pick their look and choose how your team reaches the office.</td>
   </tr>
 </table>
 
-*All screenshots show synthetic data. Click an image to view it at full size.*
+*All screenshots show synthetic data in the default French interface. Click an image to view it at full size.*
 
 <details>
 <summary>See the office on a phone</summary>
-<p align="center"><img src="docs/readme/mobile.webp" width="320" alt="The responsive Bureau on a phone, with compact navigation and the live office."></p>
+<p align="center"><img src="docs/readme/mobile.webp" width="320" alt="The responsive Bureau on a phone, with up to three name labels on the office map, the floor picker, roster and bottom navigation."></p>
 </details>
+
+## What’s new in 1.2.0
+
+- **Several runtimes at once.** Claude Code and Codex adapters join OpenClaw. Their sessions and transcripts appear in the office and the logs, next to each other; Claude Code subagents are shown under the session that started them.
+- **Floors and teams.** The Bureau has a ground-floor entrance, office floors and a gym. Teams read from an agent-team-pm store (`AO_TEAM_STORE_ROOT`), optionally joined with Herdr presence, are grouped under their lead and seated together.
+- **Multi-user access.** Optional roles (administrator, editor, reader, or your own), invitations and per-user permission exceptions.
+- **External access.** A guided plan for local, LAN, private-network, public-domain, split-origin and tunnel access, with server-side checks. It never edits DNS or proxy files.
+- **Settings.** Provider cards for connectors, per-runtime agent management, a diagnostic tab, and a reworked phone layout.
 
 ## Meet the characters
 
@@ -60,7 +73,7 @@ Choose colors and accessories in the Boutique. Character appearance is independe
 
 ![Real app animation: synthetic agents walk through the office, water a plant and take a gym break.](docs/readme/office-tour.gif)
 
-Working agents type at their desks; idle agents can stretch, read, water plants or take a surprise break. The animation sandbox lets you try those moments directly. The clip above was captured from that sandbox using synthetic agents.
+Working agents type at their desks; idle agents can stretch, read, water plants or take a surprise break. The [animation sandbox](docs/readme/sandbox.webp) lets you try those moments directly. The clip above was captured from that sandbox using synthetic agents.
 
 ## Quick start
 
@@ -72,7 +85,7 @@ agent-office setup
 agent-office start
 ```
 
-Open the URL printed in your terminal, normally **http://127.0.0.1:18789/**. Enter the one-time setup code, create your owner login, and connect your OpenClaw gateway—or choose Demo to explore without one. Configuration persists across restarts.
+Open the URL printed in your terminal, normally **http://127.0.0.1:18789/**. Enter the one-time setup code, create your owner login, and connect your runtime—or choose Demo to explore without one. Add more runtimes later from **Settings → Connexion**. Configuration persists across restarts.
 
 <details>
 <summary><strong>Homebrew · macOS</strong></summary>
@@ -91,12 +104,12 @@ Complete setup before starting the service. Use Homebrew’s data directory duri
 <summary><strong>Docker</strong></summary>
 
 ```sh
-docker pull ghcr.io/alexdeg92/agent-office-oss:1.1.0
+docker pull ghcr.io/alexdeg92/agent-office-oss:1.2.0
 docker run --rm -it --name agent-office \
   -p 127.0.0.1:18789:18789 \
   -v agent-office-data:/data -v agent-office-config:/config \
   -e PORTAL_COOKIE_SECURE=0 \
-  ghcr.io/alexdeg92/agent-office-oss:1.1.0
+  ghcr.io/alexdeg92/agent-office-oss:1.2.0
 ```
 
 The terminal prints the setup code on first boot. Named volumes retain your configuration and data. This command serves HTTP on your own machine; use secure cookies and `AO_PUBLIC_URL` for an HTTPS reverse proxy.
@@ -130,23 +143,26 @@ The integration adds a project skill and an `AGENTS.md` block to the selected wo
 
 ## Works with
 
-Agent Office separates its dashboard from the agent runtime through adapters. Each instance connects to **one active runtime**.
+Agent Office separates its dashboard from the agent runtime through adapters. One instance can connect several runtimes at once.
 
 | Runtime | Current support |
 | --- | --- |
-| **OpenClaw** | Supported adapter: live activity, chat and runtime features. |
+| **OpenClaw** | Live activity, chat, workflows, skills, channels and access policies. |
+| **Claude Code** | Read-only: sessions, subagents and transcripts from the local Claude Code home. |
+| **Codex** | Read-only: sessions, transcripts and token usage from the local Codex home. |
 | **Demo** | Included synthetic team; no gateway or runtime installation required. Runtime writes are disabled. |
-| Hermes, opencode, Claude Code, Codex, Cursor CLI | Presence detection in setup; adapters are **pending support**. Detection does not connect these runtimes to the dashboard. |
+| **Herdr** (optional source) | Read-only presence of the agents running in its panes, linked to runtime sessions only on an exact identity match. |
+| Hermes, OpenCode, Cursor | Shown in the connector gallery; connection is **not available yet**. |
 
-Available actions follow the adapter’s capabilities. [Adapter guide and extension contract →](docs/guide/adapters.md)
+Available actions follow each adapter’s capabilities. [Adapter guide and extension contract →](docs/guide/adapters.md)
 
 ## How it fits together
 
 ```mermaid
 flowchart LR
     Browser["Browser · Bureau, chat, projects"] <--> App["Agent Office · API + live updates"]
-    App <--> Adapter["Runtime adapter"]
-    Adapter <--> Runtime["OpenClaw or synthetic Demo"]
+    App <--> Adapter["Runtime adapters"]
+    Adapter <--> Runtime["OpenClaw · Claude Code · Codex · Demo"]
     App <--> Store["Local SQLite + configuration"]
 ```
 
@@ -164,7 +180,9 @@ Agent Office includes no analytics or telemetry collector. A live runtime, optio
 
 **Does it run my agents?** Your runtime runs the agents. Agent Office shows their activity and exposes the actions that runtime supports.
 
-**Can I use another agent runtime today?** OpenClaw and Demo are the registered adapters. Other detected runtimes are pending support; see the table above.
+**Can I use another agent runtime today?** OpenClaw, Claude Code, Codex and Demo are the registered adapters, and you can connect several at once. Other runtimes are listed but not connectable yet; see the table above.
+
+**Can several people use it?** Yes. Enable multi-user access with `auth: {"rbacEnabled": true}` in `config.json` (or `AO_RBAC_ENABLED=1`), then invite people from Settings. [Configuration](docs/guide/config.md)
 
 **Can I use it on a phone or in French?** Yes. The interface adapts to smaller screens and includes an English/French switch. [Guide français](docs/guide/user-guide.fr.md)
 

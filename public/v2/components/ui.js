@@ -5,6 +5,7 @@ import { toasts, dismiss } from '../toast.js';
 import * as fmt from '../fmt.js';
 import { msg } from '../i18n.js';
 import { assetUrl } from '../config.js';
+import { services } from '../services.js';
 
 /** <${Icon} name="sante" size="md" /> — Lucide symbol from icons.js. Decorative unless `label` is set. */
 export function Icon({ name, size, label, class: cls = '' }) {
@@ -67,6 +68,7 @@ export function ErrorState({ error, onRetry, compact = false }) {
     <p class="bu-empty__title">${msg('common.loadFailed')}</p>
     <p class="bu-empty__text">${(error && error.message) || msg('common.unexpected')}${code || (error && error.requestId) ? html` <code class="bu-mono-sm">${[code, error && error.requestId].filter(Boolean).join(' · ')}</code>` : null}</p>
     ${onRetry ? html`<button class="bu-btn" onClick=${onRetry}><${Icon} name="refresh" />${msg('common.retry')}</button>` : null}
+    ${unreachable && services.router ? html`<a class="bu-btn" href=${services.router.href('parametres',{}, {onglet:'connexion'})}>${msg('settings.openConnection')}</a>` : null}
   </div>`;
 }
 
@@ -88,6 +90,7 @@ export function ConnectionBanner({ status, onReconnect }) {
     <span class="bu-banner__text">${offline ? msg('live.banner.offline') : wait ? msg('live.banner.retrying', { n: wait }) : msg('live.banner.retryingNow')}
       ${status.lastFrameAt ? html` ${msg('live.banner.age', { ago: { ago: status.lastFrameAt, now } })}` : null}</span>
     ${offline ? null : html`<button type="button" class="bu-btn bu-btn--sm" onClick=${onReconnect}>${msg('live.banner.reconnect')}</button>`}
+    <a class="bu-btn bu-btn--sm" href=${services.router.href('parametres',{}, {onglet:'connexion'})}>${msg('settings.openConnection')}</a>
   </div>`;
 }
 
@@ -145,4 +148,16 @@ export function Sparkline({ values, at0, stepMs, label, format = fmt.percent, ma
 /** Loading placeholder. `w` (30 | 40 | 50 | 60 | 70) shortens a line; `style` stays for the office's own sizes. */
 export function Skeleton({ kind, w, style }) {
   return html`<span class=${'bu-skeleton' + (kind ? ' bu-skeleton--' + kind : '') + (w ? ' ao-sk--w' + w : '')} style=${style} aria-hidden="true"></span>`;
+}
+
+// Shared bounded region: only its body scrolls; head and foot occupy grid rows.
+export function Frame({ tag = 'div', class: cls = '', head, bar, foot, bodyClass = '', bodyLabel, bodyProps = {}, elementRef, children, ...attrs }) {
+  const framed = bodyClass.split(' ').includes('ao-frame__body--framed');
+  return html`<${tag} class=${'ao-frame ' + cls} ref=${elementRef} ...${attrs}>
+    <div class="ao-frame__head">${head}</div>
+    <div class="ao-frame__bar">${bar}</div>
+    <div class=${'ao-frame__body ' + bodyClass} data-scroll-body tabindex=${framed ? undefined : '0'}
+      role=${bodyLabel ? 'region' : undefined} aria-label=${bodyLabel} ...${bodyProps}>${children}</div>
+    <div class="ao-frame__foot">${foot}</div>
+  </${tag}>`;
 }

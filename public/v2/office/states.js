@@ -6,7 +6,7 @@ export const STATES = ['idle', 'thinking', 'working', 'researching', 'writing', 
 export const STATE_LABELS = {
   idle: 'Inactif',
   thinking: 'Réfléchit',
-  working: 'Exécute',
+  working: 'Travaille',
   researching: 'Recherche',
   writing: 'Rédige',
   calling: "Appel d'outil",

@@ -15,7 +15,7 @@ export function isRawId(name, occ = {}) {
   const n = name.trim();
   if (n === occ.id || n === occ.agentId || n === occ.sessionKey) return true;
   if (isPrimary(occ) && (n === 'main' || n === 'primary')) return true;     // the contract's primary OccupantId (2.x main, 3.0 primary)
-  return /^(main|primary|subagent|cron|dm|channel|scheduled|direct|group|conversation|agent):\S+$/.test(n);              // `${role}:${subjectId}`, session keys
+  return /^(main|primary|subagent|cron|dm|channel|scheduled|direct|group|conversation|session|agent):\S+$/.test(n);              // `${role}:${subjectId}`, session keys
 }
 
 /**

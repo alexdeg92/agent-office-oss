@@ -32,7 +32,7 @@ const resolveLocale = ({ explicit = null, pref = null, acceptLanguage = null, in
 };
 // G5: one dictionary, two contracts. 2.x never shows a 3.0-only key (its meta stays byte-identical) and 3.0 never shows a
 // 2.x-only one; `prompt.*` keys are the server's own (agent prompts), never sent to a client.
-const V3_ONLY = /^(sessionKind\.(primary|scheduled|conversation-direct|conversation-group|conversation|internal)|runtimeKind\..+|occupantRole\.(primary|scheduled|direct|group|conversation)|interlocutorKind\.(user|room)|resolution\.unresolvable)$/;
+const V3_ONLY = /^(sessionKind\.(primary|scheduled|conversation-direct|conversation-group|internal)|runtimeKind\..+|occupantRole\.(primary|scheduled|direct|group|conversation)|interlocutorKind\.(user|room)|resolution\.unresolvable)$/;
 const V2_ONLY = /^(sessionKind\.(main|cron|chat-direct|chat-group|dashboard|acp|explicit)|occupantRole\.(main|cron|dm|channel)|interlocutorKind\.discord-(user|channel)|channel\.unrecognized)$/;
 const SERVER_ONLY = /^prompt\./;
 const cache = new Map();

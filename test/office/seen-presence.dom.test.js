@@ -1,6 +1,5 @@
 'use strict';
-// O8 in the Bureau (harness, contract 3.0): an agent that leaves the stage stays greyed at its desk with « vu il y a X »
-// (plate, tooltip, roster), not on 2.x; turning presence off in the editor's Thème tab walks it out.
+// Historical agent inventory must never create occupants in the Bureau scene or roster.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { launch, findChrome } = require('./helpers/browser');
@@ -23,19 +22,16 @@ async function page(query) {
 }
 
 describe('seen-agent presence in the Bureau (O8)', { skip, timeout: 120_000 }, () => {
-  it('3.0: Scout, gone from the stage, stays greyed with « Vu il y a … » (plate, tooltip, roster)', async () => {
+  it('3.0: a historical Scout remains in the inventory but never returns to the stage or roster', async () => {
     const p = await page('api=3');
-    const r = await p.eval(`${U}(() => document.querySelector('.ao-char[data-presence="seen"]'));
-      const plate = document.querySelector('.ao-plate[data-presence="seen"]');
-      const row = document.querySelector('.ao-roster[data-presence="seen"]');
-      return { char: document.querySelector('.ao-char[data-presence="seen"]').dataset.occupant, label: plate.getAttribute('aria-label'), title: plate.title,
-        row: row.innerText.replace(/\\n/g, ' | '), grey: getComputedStyle(document.querySelector('.ao-char[data-presence="seen"]')).opacity, headline: document.querySelector('.ao-bureau__lead').innerText };`);
-    assert.equal(r.char, 'subagent:scout');
-    assert.match(r.label, /^Scout, Vu il y a /);
-    assert.match(r.title, /^Vu il y a /);
-    assert.match(r.row, /Scout .*Vu il y a /);
-    assert.ok(Number(r.grey) < 0.8, 'greyed');
-    assert.doesNotMatch(r.headline, /Scout/, 'the headline speaks of the stage only');
+    const r = await p.eval(`${U}(() => !document.querySelector('.ao-char[data-occupant="subagent:scout"]'));
+      return { chars: document.querySelectorAll('.ao-char[data-occupant="subagent:scout"]').length,
+        plates: document.querySelectorAll('.ao-plate[data-occupant="subagent:scout"]').length,
+        roster: [...document.querySelectorAll('.ao-roster__name')].map(node => node.textContent),
+        inventory: window.officeBench.om.layoutVM().agentsSeen.some(row => row.id === 'subagent:scout') };`);
+    assert.equal(r.inventory, true, 'history remains available for editing');
+    assert.equal(r.chars, 0); assert.equal(r.plates, 0);
+    assert.ok(!r.roster.includes('Scout'));
     await p.close();
   });
 
@@ -46,21 +42,15 @@ describe('seen-agent presence in the Bureau (O8)', { skip, timeout: 120_000 }, (
     await p.close();
   });
 
-  it('turning presence off in the editor (Thème) and saving walks the seen agent out', async () => {
+  it('the theme editor no longer offers a misleading historical-presence control', async () => {
     const p = await page('api=3');
-    await p.eval(`${U}(() => document.querySelector('.ao-char[data-presence="seen"]'));
+    await p.eval(`${U}(() => document.querySelector('.ao-controls [data-page-control]'));
       document.querySelector('.ao-controls [data-page-control]').click();
       ${U}(() => document.querySelector('.ao-editbar'));
       [...document.querySelectorAll('.ao-editbar .bu-segmented__opt')].find((b) => b.textContent === 'Thème').click();
-      const sel = await window.officeBench.until(() => [...document.querySelectorAll('.ao-editpanel label.bu-field')].find((l) => l.textContent.includes('Agents vus récemment'))?.querySelector('select'));
-      sel.value = '0'; sel.dispatchEvent(new Event('change', { bubbles: true }));
-      ${U}(() => document.querySelector('.ao-editbar .bu-chip'));
-      document.querySelector('.ao-editbar .bu-btn--primary').click();
-      ${U}(() => !document.querySelector('.ao-editbar'));`);
-    const r = await p.eval(`${U}(() => !document.querySelector('[data-presence="seen"]'));
-      return { presence: window.officeBench.om.layoutVM().layout.data.presence, roster: [...document.querySelectorAll('.ao-roster__name')].map((n) => n.textContent) };`);
-    assert.deepEqual(r.presence, { seenMinutes: 0 });
-    assert.ok(!r.roster.includes('Scout'));
+      ${U}(() => document.querySelector('.ao-editpanel'));
+      return document.querySelector('.ao-editpanel').innerText;`);
+    assert.doesNotMatch(await p.eval('return document.querySelector(".ao-editpanel").innerText;'), /Agents vus récemment/i);
     await p.close();
   });
 });

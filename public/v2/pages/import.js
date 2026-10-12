@@ -11,7 +11,7 @@ import { t, msg, label } from '../i18n.js';
 import * as fmt from '../fmt.js';
 import { get, post, toastError } from '../api.js';
 import { toast } from '../toast.js';
-import { Icon, EmptyState, ErrorState, Ago, Skeleton } from '../components/ui.js';
+import { Frame, Icon, EmptyState, ErrorState, Ago, Skeleton } from '../components/ui.js';
 import { STATUSES, labelTone } from '../board.js';
 
 export const CANDIDATES_URL = '/api/v2/views/project-candidates';
@@ -44,7 +44,7 @@ export function ImportPage({ match }) {
     else { const keys = new Set(vm.data.candidates.map((c) => c.key)); setSelected((s) => new Set([...s].filter((k) => keys.has(k)))); }
   }, [vm.data]);
 
-  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-frame ao-frame--detail"><a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a><${ErrorState} error=${vm.error} onRetry=${vm.reload} /></div>`;
+  if (vm.data === undefined && vm.error) return html`<${Frame} class="bu-page ao-page ao-page--detail"><a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a><${ErrorState} error=${vm.error} onRetry=${vm.reload} /></${Frame}>`;
   const list = vm.data ? vm.data.candidates : null;
   const sel = selected || new Set();
   const visible = list ? list.filter((c) => (!source || c.sources.some((s) => s.kind === source)) && (!conf || c.confidence === conf)) : [];
@@ -80,20 +80,13 @@ export function ImportPage({ match }) {
     }
   }
 
-  return html`<div class="bu-page ao-frame ao-frame--detail ao-import">
+  return html`<${Frame} class="bu-page ao-page ao-page--detail ao-import" head=${html`
     <a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>
     <header class="ao-import__head">
-      <h2 class="bu-title ao-import__title">${msg('projects.import')}</h2>
-      <p class="bu-text-secondary ao-import__lede">${msg('import.lede')}</p>
       ${vm.data ? html`<div class="ao-import__scan"><p class="bu-caption bu-text-tertiary">${msg('import.scanned')} <${Ago} at=${vm.data.scannedAt} /> · ${msg('import.suggestions', { n: list.length })}</p>
         <button type="button" class="bu-btn bu-btn--ghost bu-btn--sm" onClick=${vm.reload} disabled=${vm.loading} aria-busy=${vm.loading ? 'true' : undefined}><${Icon} name="refresh" />${msg('import.refresh')}</button></div>` : null}
     </header>
-    ${!list ? html`<${ImportSkeleton} />` : !list.length ? html`<div class="bu-empty">
-        <img class="ao-illus" src=${assetUrl('bureau/assets/Illustrations/all-good.webp')} alt="" width="400" height="300" />
-        <p class="bu-empty__title">${msg('import.none')}</p>
-        <p class="bu-empty__text">${msg('import.none.text')}</p>
-        <a class="bu-btn" href=${back}>${msg('project.backToBoard')}</a></div>` : html`
-      <div class="bu-toolbar ao-import__filters">
+${list?.length ? html`      <div class="bu-toolbar ao-import__filters">
         <div class="ao-filter"><span class="bu-label bu-text-tertiary" id="f-source">${msg('import.source')}</span>
           <div class="ao-scroll-x"><div class="bu-segmented" role="group" aria-labelledby="f-source">
             ${SOURCE_FILTERS.map(([v, key]) => html`<button key=${v} type="button" class="bu-segmented__opt" aria-pressed=${source === v ? 'true' : 'false'} onClick=${() => router.setQuery({ source: v || null })}>${v ? html`<${Icon} name=${SOURCE_ICON[v]} />` : null}${msg(key)}</button>`)}
@@ -108,19 +101,26 @@ export function ImportPage({ match }) {
           <button type="button" class="bu-btn bu-btn--ghost bu-btn--sm" onClick=${() => setAll(false)} disabled=${!visible.length}>${msg('import.uncheckAll')}</button>
         </div>
       </div>
-      ${visible.length ? html`<ul class="bu-list ao-import__list">
-        ${visible.map((c) => html`<${Candidate} key=${c.key} c=${c} checked=${sel.has(c.key)} o=${overrides[c.key] || {}}
-          onToggle=${(on) => toggle(c.key, on)} onOverride=${(patch) => patchOverride(c.key, patch)} />`)}
-      </ul>` : html`<div class="bu-card bu-card--sunken"><${EmptyState} compact icon="filter" title=${msg('import.noMatch')} text=${msg('import.noMatch.text')} /></div>`}
-      ${visible.length < list.length ? html`<p class="bu-caption bu-text-tertiary">${msg(list.some((c) => sel.has(c.key) && !visible.includes(c)) ? 'import.hiddenChecked' : 'import.hidden', { n: list.length - visible.length })}</p>` : null}
-      <div class="ao-import__bar" role="region" aria-label=${msg('import.region')}>
+` : null}
+`} foot=${list?.length ? html`      <div class="ao-import__bar" role="region" aria-label=${msg('import.region')}>
         <span class="bu-text-secondary" aria-live="polite">${msg('import.selected', { n: count })}</span>
         <span class="bu-spacer"></span>
         <a class="bu-btn" href=${back}>${msg('common.cancel')}</a>
         <button type="button" class="bu-btn bu-btn--primary" disabled=${!count || busy} aria-busy=${busy ? 'true' : undefined} onClick=${submit}>
           <${Icon} name="import" />${msg('import.submit', { n: count })}</button>
-      </div>`}
-  </div>`;
+      </div>` : null}>
+    ${!list ? html`<${ImportSkeleton} />` : !list.length ? html`<div class="bu-empty">
+        <img class="ao-illus" src=${assetUrl('bureau/assets/Illustrations/all-good.webp')} alt="" width="400" height="300" />
+        <p class="bu-empty__title">${msg('import.none')}</p>
+        <p class="bu-empty__text">${msg('import.none.text')}</p>
+        <a class="bu-btn" href=${back}>${msg('project.backToBoard')}</a></div>` : html`
+      ${visible.length ? html`<ul class="bu-list ao-import__list">
+        ${visible.map((c) => html`<${Candidate} key=${c.key} c=${c} checked=${sel.has(c.key)} o=${overrides[c.key] || {}}
+          onToggle=${(on) => toggle(c.key, on)} onOverride=${(patch) => patchOverride(c.key, patch)} />`)}
+      </ul>` : html`<div class="bu-card bu-card--sunken"><${EmptyState} compact icon="filter" title=${msg('import.noMatch')} text=${msg('import.noMatch.text')} /></div>`}
+      ${visible.length < list.length ? html`<p class="bu-caption bu-text-tertiary">${msg(list.some((c) => sel.has(c.key) && !visible.includes(c)) ? 'import.hiddenChecked' : 'import.hidden', { n: list.length - visible.length })}</p>` : null}
+`}
+  </${Frame}>`;
 }
 
 function Candidate({ c, checked, o, onToggle, onOverride }) {

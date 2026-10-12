@@ -1,0 +1,19 @@
+{
+  "expectedRevision": 1,
+  "confirmed": true,
+  "items": [
+    {
+      "id": "integration.install:openclaw:runner:projet"
+    },
+    {
+      "id": "integration.update:openclaw:editor:projet"
+    },
+    {
+      "id": "runtime.enable:claude-local",
+      "consent": true
+    },
+    {
+      "id": "runtime.configure:claude-code"
+    }
+  ]
+}

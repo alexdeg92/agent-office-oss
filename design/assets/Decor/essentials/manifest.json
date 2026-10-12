@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-decor-v1",
+  "id": "essentials",
+  "names": {
+    "fr": "Essentiels du bureau",
+    "en": "Office essentials"
+  },
+  "artScale": 2,
+  "license": "MIT",
+  "provenance": {
+    "tool": "image_gen.imagegen",
+    "sources": "design/assets/tools/decor-catalog-sources",
+    "export": "crop, alpha endpoint cleanup, positive uniform scale, anchor registration, WebP encoding"
+  },
+  "items": [
+    {
+      "id": "standing-desk",
+      "names": {
+        "fr": "Bureau debout",
+        "en": "Standing desk"
+      },
+      "category": "poste",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw",
+        "se"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 212,
+        "y": 204
+      },
+      "size": {
+        "w": 425,
+        "h": 361
+      },
+      "image": "standing-desk-day.webp",
+      "images": {
+        "sw@night": "standing-desk-night.webp",
+        "se": "standing-desk-se-day.webp",
+        "se@night": "standing-desk-se-night.webp"
+      },
+      "thumbnail": "thumbnails/standing-desk.webp",
+      "thumbnailSize": {
+        "w": 94,
+        "h": 96
+      }
+    },
+    {
+      "id": "armchair",
+      "names": {
+        "fr": "Fauteuil",
+        "en": "Armchair"
+      },
+      "category": "assise",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw",
+        "se"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 102,
+        "y": 145
+      },
+      "size": {
+        "w": 198,
+        "h": 209
+      },
+      "image": "armchair-day.webp",
+      "images": {
+        "sw@night": "armchair-night.webp",
+        "se": "armchair-se-day.webp",
+        "se@night": "armchair-se-night.webp"
+      },
+      "thumbnail": "thumbnails/armchair.webp",
+      "thumbnailSize": {
+        "w": 88,
+        "h": 96
+      }
+    },
+    {
+      "id": "tall-bookcase",
+      "names": {
+        "fr": "Bibliothèque haute",
+        "en": "Tall bookcase"
+      },
+      "category": "rangement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw",
+        "se"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 1
+      },
+      "anchor": {
+        "x": 185,
+        "y": 352
+      },
+      "size": {
+        "w": 372,
+        "h": 455
+      },
+      "image": "tall-bookcase-day.webp",
+      "images": {
+        "sw@night": "tall-bookcase-night.webp",
+        "se": "tall-bookcase-se-day.webp",
+        "se@night": "tall-bookcase-se-night.webp"
+      },
+      "thumbnail": "thumbnails/tall-bookcase.webp",
+      "thumbnailSize": {
+        "w": 59,
+        "h": 96
+      }
+    },
+    {
+      "id": "monstera",
+      "names": {
+        "fr": "Monstera",
+        "en": "Monstera"
+      },
+      "category": "plante",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 85,
+        "y": 180
+      },
+      "size": {
+        "w": 169,
+        "h": 218
+      },
+      "image": "monstera-day.webp",
+      "images": {
+        "sw@night": "monstera-night.webp"
+      },
+      "thumbnail": "thumbnails/monstera.webp",
+      "thumbnailSize": {
+        "w": 73,
+        "h": 96
+      }
+    },
+    {
+      "id": "arc-lamp",
+      "names": {
+        "fr": "Lampadaire arqué",
+        "en": "Arc floor lamp"
+      },
+      "category": "deco",
+      "placement": "floor",
+      "layerBias": 0.1,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 41,
+        "y": 234
+      },
+      "size": {
+        "w": 188,
+        "h": 273
+      },
+      "image": "arc-lamp-day.webp",
+      "images": {
+        "sw@night": "arc-lamp-night.webp"
+      },
+      "thumbnail": "thumbnails/arc-lamp.webp",
+      "thumbnailSize": {
+        "w": 64,
+        "h": 96
+      }
+    },
+    {
+      "id": "framed-art",
+      "names": {
+        "fr": "Cadre géométrique",
+        "en": "Geometric framed art"
+      },
+      "category": "mur",
+      "placement": "wall",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "wall": {
+        "side": "right",
+        "length": 2,
+        "elevation": 62
+      },
+      "anchor": {
+        "x": 8,
+        "y": 123
+      },
+      "size": {
+        "w": 214,
+        "h": 238
+      },
+      "image": "framed-art-day.webp",
+      "images": {
+        "sw@night": "framed-art-night.webp"
+      },
+      "thumbnail": "thumbnails/framed-art.webp",
+      "thumbnailSize": {
+        "w": 86,
+        "h": 96
+      }
+    }
+  ]
+}

@@ -34,7 +34,7 @@ const LABELS_3 = {
   'sessionKind.conversation-group': 'Groupe', 'sessionKind.conversation': 'Conversation', 'sessionKind.internal': 'Interne',
   'runtimeKind.dashboard': 'Tableau de bord', 'runtimeKind.acp': 'Session ACP', 'runtimeKind.explicit': 'Session explicite',
   'occupantRole.primary': 'Agent principal', 'occupantRole.scheduled': 'Exécution planifiée', 'occupantRole.direct': 'Conversation privée',
-  'occupantRole.group': 'Groupe', 'occupantRole.conversation': 'Conversation',
+  'occupantRole.group': 'Groupe', 'occupantRole.conversation': 'Conversation', 'occupantRole.session': 'Session · {provider}',
   'interlocutorKind.user': 'Personne', 'interlocutorKind.room': 'Salon',
   'channel.discord': 'Discord',
 };
@@ -73,13 +73,14 @@ export function meta(m, { capabilities = null } = {}) {
   if (m.primaryAgent) labels['agent.' + m.primaryAgent.id] = m.primaryAgent.name;
   const { channel, ...enums } = m.enums || {};
   return {
-    ...m, apiVersion: 3, contractVersion: '3.2',
+    ...m, apiVersion: 3, contractVersion: '3.3',
+    runtimes: m.runtime ? [{id:'legacy',adapter:m.runtime.id,name:m.runtime.name,enabled:true,connection:'connected',capabilities:capabilities || m.runtime.capabilities || CAPABILITIES}] : [],
     runtime: { ...m.runtime, version: m.runtime.version ?? null, capabilities: capabilities || m.runtime.capabilities || CAPABILITIES },
     instance: { name: null, ...m.instance },
     locales: ['fr', 'en'],
     labels,
     enums: { ...enums, sessionKind: ['primary', 'subagent', 'scheduled', 'conversation-direct', 'conversation-group', 'conversation', 'internal', 'unrecognized'],
-      occupantRole: ['primary', 'subagent', 'scheduled', 'direct', 'group', 'conversation'], interlocutorKind: ['user', 'room'] },
+      occupantRole: ['primary', 'subagent', 'scheduled', 'direct', 'group', 'conversation', 'session'], interlocutorKind: ['user', 'room'] },
   };
 }
 

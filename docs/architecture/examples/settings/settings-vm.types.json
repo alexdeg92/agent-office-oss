@@ -1,0 +1,26 @@
+{
+  "$comment": "api-v3 Settings extension. Field values are scalar or null; reason is LabelRef or null. Adapter values are an open record. Credentials have value:null and tokenSet only.",
+  "nullable": [
+    "$.disabledReason",
+    "$.reauth.expiresAt",
+    "$.owner.reason",
+    "$.network.publicUrl.value",
+    "$.network.active.publicUrl",
+    "$.agents[].name",
+    "$.agents[].detectedName",
+    "$.agents[].nameSource",
+    "$.agents[].model",
+    "$.agents[].lookRoute",
+    "$.diagnostics[].detail",
+    "$.restart.command",
+    "$.restart.reason",
+    "$.diagnostics[].fix",
+    "$.diagnostics[].fix.detail",
+    "$.diagnostics[].fix.target.runtime",
+    "$.diagnostics[].fix.target.agentId",
+    "$.diagnostics[].fix.target.integration"
+  ],
+  "opaque": [
+    "$.runtimes[].values"
+  ]
+}

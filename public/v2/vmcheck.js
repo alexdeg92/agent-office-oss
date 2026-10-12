@@ -1,7 +1,5 @@
-// View-model validation in dev and test (PM, architect-23): every VM the UI receives (GET, and the topic state after
-// each applied SSE frame) is checked against the server's own schemas (generated/vm-schemas.js, validateVM). Never in
-// production. An issue is reported loudly, with its path: console.error in the browser, recorded on
-// window.__AO_VM_ISSUES (the browser tests assert it stays empty), and thrown when a test installs a strict reporter.
+// Dev/test validates received VMs against shared server schemas. Issues are value-free and
+// recorded on __AO_VM_ISSUES; strict tests can throw. Production never loads the validator.
 
 import { config, buildQuery } from './config.js';
 
@@ -24,6 +22,7 @@ export const enabled = () => !!validateVM;
 
 /** The schema name for an API path (GETs of the api.md §3 views, meta, me, layout, prefs), else null. */
 export function schemaForPath(path) {
+  if (String(path).split('?')[0].replace(/\/+$/, '') === '/api/v3/settings') return 'settings';
   const p = String(path).split('?')[0].replace(/\/+$/, '').replace(/^\/api\/v3(?=\/)/, '/api/v2');   // same routes on both versions
   if (p === '/api/v2/meta') return 'meta';
   if (p === '/api/v2/me') return 'me';
@@ -48,8 +47,8 @@ export function schemaForTopic(topic) {
 /** Checks one VM when checking is on; returns the issues (empty when valid, unknown or off). */
 export function check(name, vm, where) {
   if (!validateVM || !name || vm === undefined) return [];
-  if (config.apiVersion !== 2) return [];   // G5: the v3 schema set comes with architect's server; until then v3 VMs are checked by the contract tests
-  const r = validateVM(name, vm);
+  if (name !== 'settings' && config.apiVersion !== 2) return [];   // Other v3 views still use contract tests.
+  const r = validateVM(name, vm, name === 'settings' ? 3 : 2);
   if (r.ok) return [];
   report(where, name, r.issues);
   return r.issues;

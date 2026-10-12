@@ -16,10 +16,12 @@ const { startServer } = require('../helpers/harness');
 
 // the protected routes, each with a concrete path (under /api/v2 and /api/v3)
 const PROTECTED = [
-  ['GET', '/me'], ['GET', '/views/health'], ['PUT', '/health/issues/x/muted'], ['GET', '/shots/x.png'],
+  ['GET', '/me'], ['GET', '/views/health'], ['PUT', '/health/issues/x/muted'], ['POST', '/health/checks/x/fix'], ['POST', '/health/fix-all'], ['GET', '/shots/x.png'],
+  ['GET', '/design-system/access'], ['POST', '/stream/ticket'],
   ['GET', '/stream'], ['POST', '/stream/x/topics'], ['POST', '/stream/x/resync'],
   ['GET', '/views/office'], ['GET', '/views/flows'], ['GET', '/views/flows/x'], ['GET', '/views/logs'], ['GET', '/views/sessions/agent%3Amain%3Amain'],
   ['GET', '/views/access'], ['GET', '/views/interlocutors/x'], ['GET', '/views/skills'], ['GET', '/views/skills/weather'], ['GET', '/views/chat'],
+  ['GET', '/orchestrators'], ['GET', '/teams'],
   ['POST', '/flows'], ['PATCH', '/flows/x'], ['PUT', '/flows/x/enabled'], ['POST', '/flows/x/runs'], ['DELETE', '/flows/x'],
   ['PUT', '/skills/weather/enabled'], ['POST', '/gateway/restart'], ['POST', '/chat/messages'],
   ['GET', '/office/layout'], ['GET', '/office/layout/revisions/1'], ['PUT', '/office/layout'], ['PUT', '/office/layout/theme'], ['GET', '/prefs'], ['PATCH', '/prefs'],
@@ -30,8 +32,11 @@ const PROTECTED = [
   ['GET', '/project-covers/x.svg'], ['POST', '/projects/x/cover/regenerate'], ['PUT', '/projects/x/cover'],
   ['POST', '/projects/x/comments/c/retry'], ['GET', '/views/projects/x/comments'], ['POST', '/projects/x/comments'], ['PATCH', '/projects/x/comments/c'], ['DELETE', '/projects/x/comments/c'],   // architect-57
 ];
+const SETTINGS = [['GET','/settings'],['POST','/settings/restart'],['POST','/settings/fix-all'],['POST','/settings/reauth'],['POST','/settings/check'],['POST','/settings/detect'],['POST','/settings/herdr/check'],['PUT','/settings/agents'],['PUT','/settings/auto-add'],['PUT','/settings/runtime'],['PUT','/settings/runtimes'],['PUT','/settings/instance'],['PUT','/settings/network'],['PUT','/settings/owner'],['POST','/settings/password'],['POST','/settings/integrations/plan'],['POST','/settings/integrations/apply'],['GET','/settings/access'],['POST','/settings/access/plan'],['POST','/settings/access/checks'],['POST','/settings/access/checks/status'],['POST','/settings/access/checks/cancel'],['POST','/settings/access/apply']];
 // public on purpose: the bootstrap (meta) and first-run setup (its own one-time code; locked once configured)
-const PUBLIC = new Set(['GET /meta', 'GET /setup', 'POST /setup/check', 'POST /setup/discover', 'PUT /setup', 'GET /setup/catalog', 'POST /setup/resume', 'POST /setup/owner', 'POST /setup/detect', 'POST /setup/integrations/plan', 'POST /setup/integrations/apply', 'POST /setup/network']);
+const PUBLIC = new Set(['GET /meta', 'GET /setup', 'POST /setup/check', 'POST /setup/discover', 'PUT /setup', 'GET /setup/catalog', 'POST /setup/resume', 'POST /setup/owner', 'POST /setup/detect', 'POST /setup/integrations/plan', 'POST /setup/integrations/apply', 'POST /setup/network',
+  // Access bootstrap endpoints are intentionally cookie-public: each request is independently gated by the short-lived one-time setupCode in its body.
+  'POST /setup/access/state', 'POST /setup/access/plan', 'POST /setup/access/checks', 'POST /setup/access/checks/status', 'POST /setup/access/checks/cancel', 'POST /setup/access/apply']);
 
 // the routes the code declares: `r.<method>('<path>', …)` in src/api/v2/*.js, with whether `authed` guards them
 function declared() {
@@ -43,6 +48,7 @@ function declared() {
       if (m) out.push({ route: `${m[1].toUpperCase()} ${m[2]}`, authed: !!m[3], file: f });
     }
   }
+  for (const line of fs.readFileSync(path.join(dir, '../v3/settings.js'), 'utf8').split('\n')) { const m = /\br\.(get|post|put)\('([^']+)',\s*(authed\b)?/.exec(line); if(m) out.push({route:m[1].toUpperCase()+' '+m[2],authed:!!m[3],file:'v3/settings.js'}); }
   return out;
 }
 const template = (p) => p.split('?')[0];
@@ -85,12 +91,27 @@ describe('auth: every protected v2/v3 route refuses bad cookies', () => {
     assert.ok(routes.length >= PROTECTED.length, 'routes found');
     const unguarded = routes.filter((r) => !r.authed && !PUBLIC.has(r.route)).map((r) => r.route + ' (' + r.file + ')');
     assert.deepEqual(unguarded, [], 'a route without `authed` must be listed as PUBLIC');
-    const untested = routes.filter((r) => r.authed && !PROTECTED.some((p) => matches(r.route, p))).map((r) => r.route);
+    const untested = routes.filter((r) => r.authed && !PROTECTED.concat(SETTINGS).some((p) => matches(r.route, p))).map((r) => r.route);
     assert.deepEqual(untested, [], 'every authed route has a negative test');
   });
 
+  it('setup access endpoints require the one-time setup code; cookies do not grant setup authority', async () => {
+    const setup = await startServer(loadScenario('synthetic-basic'), { setupMode: true });
+    try {
+      for (const [suffix, body] of [
+        ['state', {}], ['plan', {}], ['checks', {}], ['checks/status', {}], ['checks/cancel', {}], ['apply', {}],
+      ]) {
+        const r = await fetch(`${setup.base}/api/v3/setup/access/${suffix}`, { method: 'POST', headers: {
+          'content-type': 'application/json', cookie: 'taco_sess=malformed',
+        }, body: JSON.stringify({ ...body, setupCode: 'invalid' }) });
+        assert.equal(r.status, 403, suffix);
+        assert.equal((await r.json()).error.code, 'forbidden', suffix);
+      }
+    } finally { await setup.stop(); }
+  });
+
   for (const version of ['v2', 'v3']) {
-    for (const [method, p] of PROTECTED) {
+    for (const [method, p] of (version === 'v3' ? PROTECTED.concat(SETTINGS) : PROTECTED)) {
       it(`${method} /api/${version}${p} → 401 for missing, tampered, expired, wrong-secret, malformed cookies`, async () => {
         for (const [name, value] of Object.entries(cookies)) {
           const headers = { 'content-type': 'application/json', 'x-ao-request': '1' };   // what the UI sends (R15-01): this tests authentication, not CSRF

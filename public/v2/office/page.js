@@ -1,13 +1,11 @@
-// Bureau page (<basePath>bureau, migration-plan S14a/b), editorial (design/explorations/editorial-guide.md §6):
-// one true sentence about the office now (headline.js) above the illustrated office; beside it a margin with the
-// agents present as a quiet list, the snapshot's freshness and the office theme; below, the Carnet (the journal
-// as dated notes) with the upcoming tasks in its margin. No statistics strip above the scene (guide §6).
-// OfficeVM from the `office` topic, LayoutVM from the `layout` topic. Selection in the URL (?agent=<occupantId>).
-// DOM order is the mobile reading order: headline, scene, agents, notes, Carnet, upcoming tasks. FR and EN.
+// Bureau: OfficeVM + LayoutVM; headline, scene, roster and Carnet in reading order.
 import { html, useEffect, useRef, useState } from '../lib.js';
 import { useTopic, useNow, useStore } from '../hooks.js';
 import { services } from '../services.js';
 import * as i18n from '../i18n.js';
+import { registerMessages } from '../messages.js';
+import * as mobileDictionary from '../messages/bureau-mobile.js';
+registerMessages(mobileDictionary);
 import { t, label, has, agentName } from '../i18n.js';
 import * as fmt from '../fmt.js';
 import * as api from '../api.js';
@@ -15,107 +13,116 @@ import { toast } from '../toast.js';
 import { config, buildQuery } from '../config.js';
 import { streamUnconfirmed } from '../stream.js';
 import * as fmtTz from '../fmt.js';
-import { Icon, Ago, Skeleton } from '../components/ui.js';
+import { Frame, Icon, Ago, Skeleton, ErrorState } from '../components/ui.js';
 import { OfficeScene } from './scene.js';
-import { SurpriseSetting } from './surprise-setting.js';
+import { Modal } from '../components/modal.js';
+let Button, MobileRoster;
+let mobileControls;
+const loadMobileControls=()=>mobileControls ||= Promise.all([
+  import('./mobile-roster.js' + buildQuery),
+  import('../components/bureau/styles.js' + buildQuery).then(module=>module.loadStyles()),
+]).then(([module])=>{Button=module.Button;MobileRoster=module.MobileRoster;}).catch(error=>{mobileControls=null;throw error;});
 import { STATES } from './states.js';
-import { indexManifest, resolveUrl } from './assets.js';
-import { itemName, resolveOccupants, canonicalRuleId, presenceMinutes } from './layout-rules.js';
+import { indexManifest } from './assets.js';
+import { avatarSource, CharacterAvatar } from './avatar.js';
+import { itemName, resolveOccupants, canonicalRuleId } from './layout-rules.js';
 import { displayName } from './names.js';
 import { s as tr, locale, duration, labelOf } from './strings.js';
 import { headline } from './headline.js';
-import { seenOccupants } from './seen.js';
-import { planAnnexes } from './annex.js';
-import { trackTurns, planVisits, isVisitor, phaseOf, lingering } from './visits.js';
+import { floorId, createFloorStore } from './floors.js';
 import { resolveTheme } from './theme.js';
 import { useLayout, officeApi, shippedLayoutVM } from './layout-source.js';
 export { shippedLayoutVM };
-// Names (platform rule + 2.4 OccupantVM.title): the title is rendered in the UI language and in the server's own
-// language (MetaVM.labels), so a generated name is shown localized and a given name stays as written.
+// Localize generated titles; preserve given names.
 const titleSource = (ref) => (ref && services.meta?.labels?.[ref.key] != null ? fmt.interpolate(services.meta.labels[ref.key], ref.params ?? {}) : null);
 const nameOf = (o) => displayName(o, { primaryName: primaryName(), title: o.title ? L(o.title) : null, titleSource: titleSource(o.title) });
-/** The roster in roster order, with the desks the annexes gave (an annex agent is not « sans poste »). */
-function rosterOf(present, plan) {
-  if (!plan.annexes.length) return present;
-  const placed = new Map(plan.annexes.flatMap((a) => a.occupants.map((o) => [o.id, o])));
-  return present.map((o) => placed.get(o.id) ?? o);
-}
-
-/** A cheap identity for a list of occupants (re-render the scene only when something it draws changed). */
 const occupantsKey = (list) => list.map((o) => [o.id, o.state, o.stateSince, o.stationUid, o.presenceLabel ?? '', o.name, JSON.stringify(o.look), o.destination?.stationUid ?? ''].join('\u0001')).join('\u0002');
 
-/**
- * O9: an annex room, a read-only scene of its own (zoom and fit, nameplates, selection; no editor, no theme toggle).
- * The same cues reach it (a cue for an agent elsewhere is ignored by its scene).
- */
-function Annex({ annex, lay, selected, onSelect, unconfirmed, signals }) {
-  const host = useRef(null);
-  const sceneRef = useRef(null);
-  useEffect(() => {
-    const labels = Object.fromEntries(STATES.map((s) => [s, stateLabel(s)]));
-    const scene = new OfficeScene(host.current, { manifest: lay.manifest, layout: annex.layout, assetBase: assetBase(), labels, theme: lay.theme.resolved,
-      onSelect: (id) => onSelect(id), primaryName: () => primaryName(), timeZone: () => fmtTz.timeZone() });
-    sceneRef.current = scene;
-    const listeners = (services.cueListeners ??= new Set());
-    const onCue = (f) => { if (annex.occupants.some((o) => o.id === f.occupantId)) (f.signal ? sceneRef.current?.signal(f.occupantId, f.signal) : sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null })); };
-    listeners.add(onCue);
-    return () => { listeners.delete(onCue); scene.destroy(); sceneRef.current = null; };
-  }, []);
-  useEffect(() => { sceneRef.current?.setLayout(annex.layout); sceneRef.current?.setTheme(lay.theme.resolved); }, [lay.theme.resolved, annex.layout.items.length]);
-  useEffect(() => { sceneRef.current?.setOccupants(named(annex.occupants)); }, [occupantsKey(annex.occupants)]);
-  useEffect(() => { sceneRef.current?.setSignals(signals); }, [signals]);
-  useEffect(() => { sceneRef.current?.select(annex.occupants.some((o) => o.id === selected) ? selected : null); }, [selected, occupantsKey(annex.occupants)]);
-  useEffect(() => { sceneRef.current?.setFrozen(unconfirmed); }, [unconfirmed]);
-  return html`<section class=${'ao-bureau__annex' + (unconfirmed ? ' ao-bureau__annex--last' : '')} aria-labelledby=${'ao-annex-' + annex.n}>
-    <h3 class="ao-below-title" id=${'ao-annex-' + annex.n}>${tr('office.annex', { num: annex.n, n: annex.occupants.length })}</h3>
-    <div class="bu-stage ao-bureau__annexstage" ref=${host} role="region" aria-label=${tr('office.annexStage', { n: annex.n })}></div>
-  </section>`;
+function useSceneRecovery() {
+  const dispose = useRef(null);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => { setError(false); setAttempt(n => n + 1); };
+  const protect = apply => {
+    try { apply(); } catch { dispose.current?.(); setError(true); }
+  };
+  return { dispose, error, attempt, retry, protect };
 }
 
 /** Occupants restyled by a layout (looks and home stations), as the server's OfficeVM would after a save. */
 function withLayout(occupants, lay) {
-  const r = resolveOccupants(lay.layout.data, indexOf(lay.manifest), occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name })));
+  const r = resolveOccupants(lay.layout.data, indexOf(lay.manifest), occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, automaticLook: o.automaticLook })));
   return occupants.map((o, i) => ({ ...o, look: r[i].look, stationUid: r[i].stationUid, ruleId: r[i].ruleId }));
 }
 /** Occupants with their display name resolved (the scene and the headline read `name`). */
-const named = (list) => list.map((o) => ({ ...o, name: nameOf(o) }));
-// The primary agent's configured name, or null (never i18n's « l’agent » fallback: each sentence picks its own form).
+const named = (list) => list.map((o) => ({ ...o, name: nameOf(o), stateLabelText: L(o.stateLabel), stateLastLabelText: L(o.stateLastLabel) }));
+// Keep the generic i18n fallback out; each sentence chooses its own form.
 const primaryName = () => {
   const n = agentName();
   const fallback = typeof i18n.msg === 'function' ? i18n.msg('agent.fallback') : 'votre agent';
   return n && n !== fallback && n !== 'votre agent' ? n : null;
 };
 
-// Seams for the standalone harness (bureau-dev.html): services.officeAssetBase, services.officeApi.
-// Asset base from the runtime config (F7): basePath + 'bureau/' ('/bureau/' at the root, '/v2/bureau/' under /v2).
+// Asset base can be overridden by bureau-dev.html; otherwise use deployment config.
 export const officeAssetBase = () => services.officeAssetBase ?? config.assetBase;
 const assetBase = officeAssetBase;
 const STYLES = ['./office.css', './editor.css', './page.css', './setup-characters.css'].map((p) => new URL(p + buildQuery, import.meta.url).href);
-
 /** LabelRef → text; office keys MetaVM doesn't carry yet fall back to strings.js (`label.<key>`, FR and EN). */
 export function L(ref) {
   if (ref == null) return '';
   if (typeof ref !== 'object') return String(ref);
   if (ref.key === 'custom') return String(ref.params?.text ?? '');
-  if (has(ref.key) || tr(`label.${ref.key}`) === `label.${ref.key}`) return label(ref);
-  return tr(`label.${ref.key}`, Object.fromEntries(Object.entries(ref.params ?? {}).map(([k, v]) => [k, v && typeof v === 'object' ? L(v) : v])));
+  const params = Object.fromEntries(Object.entries(ref.params ?? {}).map(([k, v]) => [k, v && typeof v === 'object' ? L(v) : v]));
+  if (has(ref.key)) return label({ ...ref, params });
+  if (i18n.messageKeys('fr').includes(ref.key) || i18n.messageKeys('en').includes(ref.key)) return i18n.msg(ref.key, params);
+  if (ref.key.startsWith('agentState.')) {
+    const officeText = tr(`state.${ref.key.slice('agentState.'.length)}`, params, locale());
+    if (officeText !== `state.${ref.key.slice('agentState.'.length)}`) return officeText;
+  }
+  const officeText = tr(ref.key, params, locale());
+  if (officeText !== ref.key) return officeText;
+  return tr(`label.${ref.key}`, params);
 }
-/** « Travaille depuis 12 minutes. » for an active state with a known start; else the state's label. */
-const forState = (o, now = Date.now()) => (o.presenceLabel ? `${o.presenceLabel}.` : o.stateSince && !['idle', 'offline'].includes(o.state) && STATES.includes(o.state)
-  ? tr(`office.for.${o.state}`, { duration: duration(Math.max(0, now - o.stateSince)) }) : stateLabel(o.state));
-const stateLabel = (st) => (has(`agentState.${st}`) ? t(`agentState.${st}`) : tr(`state.${st}`));
+const forState = (o) => L(o.stateDetailLabel || o.stateLabel);
+const stateLabel = (o) => L(o?.stateLabel);
+
+const styleLoads = new Map();
+const stylesReady = () => STYLES.every(href => document.querySelector(`link[data-office="${href}"]`)?.dataset.loaded === 'true');
+function loadStyles() {
+  return Promise.all(STYLES.map(href => {
+    if (styleLoads.has(href)) return styleLoads.get(href);
+    const request = new Promise((resolve, reject) => {
+      // A failed link can still have a sheet. Only its load event proves success.
+      document.querySelector(`link[data-office="${href}"]`)?.remove();
+      const link = document.createElement('link');
+      link.rel = 'stylesheet'; link.href = href; link.dataset.office = href;
+      const finish = ok => {
+        clearTimeout(timer); link.onload = link.onerror = null;
+        if (ok) { link.dataset.loaded = 'true'; resolve(); }
+        else { link.remove(); styleLoads.delete(href); reject(new Error(tr('office.mapUnavailable'))); }
+      };
+      const timer = setTimeout(() => finish(false), 10000);
+      link.onload = () => finish(true); link.onerror = () => finish(false);
+      document.head.append(link);
+    });
+    styleLoads.set(href, request);
+    return request;
+  }));
+}
 
 function useStyles() {
+  const [ready, setReady] = useState(stylesReady);
+  const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => { setError(null); setAttempt(n => n + 1); };
   useEffect(() => {
-    for (const href of STYLES) {
-      if (document.querySelector(`link[data-office="${href}"]`)) continue;
-      const l = document.createElement('link');
-      l.rel = 'stylesheet';
-      l.href = href;
-      l.dataset.office = href;
-      document.head.append(l);
-    }
-  }, []);
+    let alive = true;
+    loadStyles().then(() => { if (alive) setReady(true); }, e => { if (alive) setError(e); });
+    const online = () => { if (!stylesReady()) retry(); };
+    window.addEventListener('online', online);
+    return () => { alive = false; window.removeEventListener('online', online); };
+  }, [attempt]);
+  return { ready, error, retry };
 }
 
 /** Re-render on a UI language switch (frontend's i18n.onLang, F6); a no-op before it exists. */
@@ -126,33 +133,14 @@ function useLang() {
 }
 const NO_STATUS = { get: () => null, subscribe: () => () => {} };
 
-/** office-dev-22: the exchange log behind visits, updated once per OfficeVM and kept for the tab (sessionStorage). */
-let visitTrack = (() => { try { return JSON.parse(sessionStorage.getItem('ao.visits') || '{}') || {}; } catch { return {}; } })();
-let trackedVm = null;
-function trackFor(vm, list, now) {
-  if (vm !== trackedVm) {
-    trackedVm = vm;
-    visitTrack = trackTurns(visitTrack, list, now);
-    try { sessionStorage.setItem('ao.visits', JSON.stringify(visitTrack)); } catch { /* storage blocked: memory only */ }
-  }
-  return visitTrack;
-}
-/**
- * office-dev-24: re-render when the visit plan changes by time alone (the person's turn ends, a visitor walks out).
- * Returns schedule(at): idempotent for the same time, so it can be called while rendering.
- */
-function useReplan() {
-  const [, setTick] = useState(0);
-  const timer = useRef(null);
-  useEffect(() => () => clearTimeout(timer.current?.id), []);
-  return (at) => {
-    if ((timer.current?.at ?? null) === (at ?? null)) return;
-    clearTimeout(timer.current?.id);
-    timer.current = at == null ? null : { at, id: setTimeout(() => { timer.current = null; setTick((n) => n + 1); }, Math.max(0, at - Date.now()) + 50) };
-  };
-}
+const floorLabel = floor => L(floor?.label);
 /** office-dev-21: phones customize in the Boutique (the inline editor stacks badly there). */
 const phone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 600px)').matches;
+function usePhone() {
+  const [mobile,setMobile]=useState(phone);
+  useEffect(()=>{const media=matchMedia('(max-width: 600px)');const changed=()=>setMobile(media.matches);media.addEventListener('change',changed);return()=>media.removeEventListener('change',changed);},[]);
+  return mobile;
+}
 const openShop = (query = {}) => {
   const r = services.router;
   const q = new URLSearchParams(Object.entries(query).filter(([, v]) => v != null)).toString();
@@ -161,16 +149,66 @@ const openShop = (query = {}) => {
 // The LayoutVM source (GET + `layout` topic, the shipped fallback) and the layout API live in layout-source.js, shared
 // with the Boutique (office-dev-21).
 export function BureauPage({ match }) {
-  useStyles();
+  const styles = useStyles();
+  useLang();
+  if (!styles.ready) return styles.error
+    ? html`<${Frame} class="bu-page ao-bureau"><${ErrorState} compact error=${{message:tr('office.mapUnavailable')}} onRetry=${styles.retry} /></${Frame}>`
+    : html`<${Frame} class="bu-page ao-bureau" aria-busy="true"><p role="status">${tr('office.mapLoading')}</p></${Frame}>`;
+  return html`<${BureauContent} match=${match} />`;
+}
+
+function BureauContent({ match }) {
+  const [teamUI, setTeamUI] = useState(null);
+  useEffect(() => { import(new URL('./team-office.js' + buildQuery, import.meta.url).href).then(setTeamUI, api.toastError); }, []);
   const lang = useLang();
+  const mobile = usePhone();
+  const [controlsReady,setControlsReady]=useState(!!Button);
+  useEffect(()=>{
+    let alive=true;
+    if(mobile)loadMobileControls().then(()=>{if(alive)setControlsReady(true);},api.toastError);
+    return ()=>{alive=false;};
+  },[mobile]);
   const office = useTopic('office', '/api/v2/views/office');
   const layout = useLayout();
   const status = useStore(services.stream?.status ?? NO_STATUS);
-  const now = useNow(60_000);
+  const now = useNow(1_000);
   const selected = match.query.agent || null;
+  useEffect(() => {
+    if (layout.data && match.query.etage && !floorId(match.query.etage)) services.router.setQuery({ etage: '1' });
+  }, [layout.data, match.query.etage]);
   const [editing, setEditing] = useState(false);
+  const [mobileSheet,setMobileSheet]=useState(null);
+  const [detailTeam,setDetailTeam]=useState(null);
+  const floorTripsRef = useRef(null);
+  const [, setTripsReady] = useState(false);
+  useEffect(() => () => floorTripsRef.current?.destroy(), []);
+  useEffect(() => {
+    if (floorTripsRef.current || !office.data?.occupants?.some(o => o.state === 'idle' && !o.presence && !o.destination)) return;
+    let active = true;
+    import('./floor-trips.js' + buildQuery).then(({ FloorTrips, floorTripRoute }) => {
+      if (!active || floorTripsRef.current) return;
+      floorTripsRef.current = new FloorTrips({ routeFor: (o, home, target) => floorTripRoute(o, home, target, indexManifest(layout.data?.manifest)) });
+      setTripsReady(true);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [office.data, layout.data]);
+  const mobileIsolation=useRef(null);
+  useEffect(() => {
+    if (!mobileSheet) return;
+    const scrim = document.querySelector('.ao-bureau .bu-scrim');
+    if (!scrim) return;
+    const undo = isolate(scrim);
+    let released = false;
+    const release = () => { if (!released) { released = true; undo(); } };
+    mobileIsolation.current = release;
+    return () => {
+      release();
+      if (mobileIsolation.current === release) mobileIsolation.current = null;
+    };
+  }, [mobileSheet]);
+  const closeMobileSheet=()=>{mobileIsolation.current?.();setMobileSheet(null);};
+  const mainScene=useRef(null);
   const [feed, setFeed] = useState('journal');   // the Journal / File tabs below the office
-  const replan = useReplan();
   // A language switch remounts the scene (its labels are set at mount), but never under an open editor's draft.
   const [stageLang, setStageLang] = useState(lang);
   useEffect(() => { if (!editing) setStageLang(lang); }, [lang, editing]);
@@ -179,99 +217,138 @@ export function BureauPage({ match }) {
   if (failed || office.data === undefined || layout.data === undefined) {
     return html`<${BureauWaiting} failed=${!!failed} onRetry=${() => { office.retry(); layout.retry(); }} />`;
   }
-  const vm = office.data;
+  const staleSources = office.meta?.stale ?? [];
+  const vm = { ...office.data, occupants: office.data.occupants.map(o => ({ ...o, sourceStale: staleSources.some(s => o.sessionKey?.startsWith(`rt:${s.split(':')[0]}:`)) || (!staleSources.some(s => s.includes(':')) && staleSources.length > 0) })) };
   const lay = layout.data;
   const occupants = vm.occupants;
-  const seen = seenOccupants(vm, lay, now, config.apiVersion);
-  // office-dev-22: the people the agent talks with are visitors: no desk of their own (they stand, or come to the agent).
-  // office-dev-24: what a visitor shows follows the exchange (visits.js phaseOf): their own state while their message is
-  // the latest; « attend une réponse » while the agent's reply run is active (the conversation's run spans the whole job,
-  // sub-agents included, so the server keeps the person 'working' until it ends); idle and present for LINGER_MS once
-  // it is over; then off the stage (they walk out), still listed as seen.
-  const t0 = Date.now();
-  const track = trackFor(vm, [...occupants, ...seen], t0);
-  const asVisitor = (o) => {
-    if (!isVisitor(o)) return o;
-    const phase = phaseOf(o, track[o.id], t0);
-    if (phase === 'agent') return { ...o, stationUid: null, state: 'waiting' };
-    if (phase === 'linger') return { ...o, stationUid: null, presence: undefined, presenceLabel: undefined, state: 'idle' };
-    return { ...o, stationUid: null, gone: phase == null };
+  const t0 = now;
+  const present = occupants;
+  const visits = vm.visitIntent || null;
+  // The floor registry is canonical and data-driven; only its selected room is mounted below.
+  const presentById = new Map(present.map(o => [o.id, o]));
+  const floors = (vm.rosterFloors || []).map(floor => ({ ...floor,
+    occupants: (floor.occupantIds || []).map(id => presentById.get(id)).filter(Boolean) }));
+  const floorPlan = { floors, occupants: floors.flatMap(floor => floor.occupants), byId: new Map(floors.map(floor => [floor.id, floor])) };
+  const floorPeople = floorPlan.occupants;
+  const tripManager = floorTripsRef.current;
+  tripManager?.update(floorPeople, floorPlan, now);
+  const tripViews = new Map(tripManager ? floorPeople.map(o => [o.id, tripManager.view(o.id, now)]).filter(([,v]) => v) : []);
+  const peopleByFloor = new Map(floorPlan.floors.map(f => [f.id, f.occupants.map(o => {
+    const trip = tripViews.get(o.id);
+    if (!trip) return o;
+    const phase = trip.phase;
+    const point = phase === 'depart' || phase === 'ride' || phase === 'ride-home' ? trip.route.out.at(-1)
+      : phase === 'return' ? trip.route.arrival[0] : trip.route.arrival.at(-1);
+    return trip.floorId === f.id ? { ...o, floorTravel: { phase, point } } : null;
+  }).filter(Boolean)]));
+  const visiblePeople = peopleByFloor.get(floorId(match.query.etage) ?? '1') ?? floorPlan.byId.get('1')?.occupants ?? [];
+  const roster = floorPlan.floors.flatMap(f => f.occupants);
+  const queryFloor = floorId(match.query.etage);
+  const currentFloor = floorPlan.byId.get(queryFloor) ?? floorPlan.byId.get('1');
+  const currentStore = createFloorStore(lay, indexOf(lay.manifest), currentFloor.id, officeApi(), fmtTz.timeZone());
+  const floorData = { ...lay.layout.data, ...currentFloor.layout };
+  const floorLay = { ...lay, layout: { ...lay.layout, data: floorData }, default: lay.default && { ...lay.default, data: floorData }, theme: { ...lay.theme, resolved: resolveTheme(currentFloor.layout.theme, new Date(now), fmtTz.timeZone()) } };
+  const sel = roster.find((o) => o.id === selected) || null;
+  const detailLayout = floorLay;
+  const select = (id,team=null) => {
+    setDetailTeam(id ? team || (mobileSheet?.team ? {...mobileSheet.team,fromSheet:true} : mobileSheet?.conversationIds ? {conversationIds:mobileSheet.conversationIds} : null) : null);
+    closeMobileSheet();
+    const o = roster.find(x => x.id === id);
+    const query = { agent: id };
+    // Closing a selection should leave the viewed floor alone. Selecting a real
+    // occupant still follows their home floor (and omits the default floor 1).
+    if (id) query.etage = o?.floorId && o.floorId !== '1' ? o.floorId : null;
+    services.router.setQuery(query);
   };
-  const base = (seen.length ? [...occupants, ...seen] : occupants).map(asVisitor);
-  const present = [...base, ...lingering(track, base, t0)];
-  const visits = planVisits(present, track, t0);
-  replan(visits.until);
-  // O9: agents without a desk in the office (overflow) go to annex rooms below it (auto layout, same rules and looks);
-  // visitors stay in the office (they have no desk by design).
-  const plan0 = planAnnexes(indexOf(lay.manifest), lay.layout.data, present.filter((o) => !isVisitor(o)));
-  const plan = { ...plan0, office: [...plan0.office, ...present.filter((o) => isVisitor(o) && !o.gone)] };
-  const sel = present.find((o) => o.id === selected) || null;
-  const select = (id) => services.router.setQuery({ agent: id });
-  // The SSE stream is retrying or offline (R27-02, frontend's streamUnconfirmed): what is on screen is the last snapshot
-  // received (guide §2, stale); the scene freezes (dimmed, paused) with « Hors ligne depuis X ».
-  // Freshness (explorer-qa-02 Q02-01): the stream is reconnecting, or the server marks a source stale (the topic's
-  // envelope meta, when the stream exposes it). A disconnected gateway is handled by the headline itself.
+  const backToTeam = () => { services.router.setQuery({agent:null}); setMobileSheet(detailTeam.conversationIds ? {conversationIds:detailTeam.conversationIds} : {team:detailTeam}); };
+  const selectFloor = id => {
+    closeMobileSheet();
+    if (id === currentFloor.id) return;
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.documentElement.classList.add('ao-floor-transition');
+    services.router.setQuery({ etage: id, agent: null });
+    if (!reduced) setTimeout(() => document.documentElement.classList.remove('ao-floor-transition'), 380);
+    else document.documentElement.classList.remove('ao-floor-transition');
+  };
+  // Only stream loss freezes the scene. Secondary source health stays scoped to its own data.
   const down = streamUnconfirmed(status);
-  const stale = down ? { stale: ['stream'], generatedAt: status.lastFrameAt ?? office.meta?.generatedAt ?? null }
-    : office.meta?.stale?.length ? { stale: office.meta.stale, generatedAt: office.meta.generatedAt ?? null } : null;
+  const stale = down ? { stale: ['stream'], generatedAt: status.lastFrameAt ?? office.meta?.generatedAt ?? null } : null;
   const head = headline({ ...vm, occupants: named(vm.occupants) }, { primaryName: primaryName(), now, locale: lang, meta: stale, time: fmt.time, date: (ms) => fmt.dateTime(ms, now) });
   const unconfirmed = !!head.stale;
   const downSince = down ? stale.generatedAt : null;   // the chip's « depuis » (the last frame received)
-  // Layout writes are Store-class commands (api.md §5.0): on a read-only instance the editor and the theme toggle
-  // are not offered (explorer-qa-03 Q03-O02); zoom, selection and reading stay. Same when only the shipped layout exists.
+  // Read-only layouts disable editing and theme writes.
   const caps = (status && status.capabilities) || (services.meta && services.meta.capabilities) || null;
   const canWrite = !lay.readOnly && !(caps && caps.storeWrites === false);
 
-  // office-dev-18 (Owner, after go-live): the original Bureau (O3–O5) on today's data. KPI strip and the office theme
-  // on top; the framed stage (and its annexes) with the agent cards beside it; Journal / File below. The headline stays
-  // as the page's status sentence for assistive technology (and the stale/error kind), not as a visible title.
-  return html`<div class=${'bu-page ao-bureau' + (editing ? ' ao-bureau--editing' : '') + (unconfirmed ? ' ao-bureau--last' : '')} lang=${lang}>
+  // Status and theme above; stage, team and roster together; journal below. The headline stays accessible and hidden.
+  return html`<${Frame} class=${'bu-page ao-bureau ao-bureau--ready' + (editing ? ' ao-bureau--editing' : '') + (unconfirmed ? ' ao-bureau--last' : '')} lang=${lang} head=${html`
     <h2 class="bu-sr-only ao-bureau__lead" id="ao-bureau-lead" data-kind=${head.kind}>${[head.lead, ...head.deck].join(' ')}</h2>
     ${vm.connection.gateway === 'down' ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="wifi-off" />
-      <span class="bu-banner__text">${tr('office.gatewayDown')}${vm.connection.since ? html` <${Ago} at=${vm.connection.since} />` : null}</span></div>` : null}
+      <span class="bu-banner__text">${tr('office.gatewayDown')}${vm.connection.since ? html` <${Ago} at=${vm.connection.since} />` : null}</span>
+      <a class="bu-btn bu-btn--sm" href=${services.router.href('parametres',{}, {onglet:'connexion'})}>${i18n.msg('settings.openConnection')}</a></div>` : null}
     <div class="ao-bureau__top">
-      <${Kpis} kpis=${vm.kpis ?? []} />
-      ${editing ? null : canWrite ? html`<${ThemeToggle} lay=${lay} />`
+      ${mobile ? null : html`<${Kpis} kpis=${vm.kpis ?? []} />`}
+      ${editing ? null : canWrite ? html`<${ThemeToggle} lay=${floorLay} store=${currentStore} />`
         : html`<p class="ao-bureau__ro" id="ao-bureau-ro">${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}
     </div>
     <div class="ao-bureau__editbar" id="ao-bureau-editbar"></div>
+    `}>
     <div class="ao-bureau__main">
       <div class="ao-bureau__stagecol">
         <div class="ao-bureau__stagewrap">
-          <${Stage} key=${stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : plan.office} lay=${lay} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} />
+          ${mobile ? html`<button type="button" class="bu-btn bu-btn--sm ao-floor-mobile-trigger" onClick=${() => setMobileSheet('floors')} aria-haspopup="dialog">${tr('office.floor.picker')}: ${floorLabel(currentFloor)}</button>` : null}
+          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : visiblePeople} lay=${floorLay} store=${currentStore} floor=${currentFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} minimalLabels=${mobile && !editing} />
+          ${editing ? null : html`<button type="button" class="bu-btn bu-btn--sm bu-btn--icon ao-mobile-options" disabled=${mobile&&!controlsReady} aria-label=${i18n.msg('office.mobile.options')} onClick=${() => setMobileSheet('options')}><${Icon} name="plus" /></button>`}
         </div>
-        ${editing || !plan.annexes.length ? null : html`<div class="ao-bureau__annexes">
-          ${plan.annexes.map((a) => html`<${Annex} signals=${vm.journal} key=${a.id + ':' + stageLang} annex=${a} lay=${lay} selected=${selected} onSelect=${select} unconfirmed=${unconfirmed} />`)}
-        </div>`}
+        ${editing || !mobile ? null : html`<${MobileSummary} summary=${vm.rosterSummary} kpis=${vm.kpis || []} unconfirmed=${unconfirmed} />
+          ${controlsReady?html`<${MobileRoster} occupants=${roster} rosterItems=${vm.rosterItems} rosterPreviewItems=${vm.rosterPreviewItems} rosterOverflowCount=${vm.rosterOverflowCount} rosterOverflowLabel=${vm.rosterOverflowLabel} allLabel=${vm.rosterAllLabel} conversationIds=${vm.conversationIds} conversationCount=${vm.conversationCount} conversationLabel=${vm.conversationLabel} selected=${selected} onSelect=${select} onAll=${() => setMobileSheet('roster')} onTeam=${team=>setMobileSheet({team})} onConversations=${ids=>setMobileSheet({conversationIds:ids})} manifest=${lay.manifest} unconfirmed=${unconfirmed} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} roleLabel=${L} label=${L} emptyLabel=${tr('office.empty')} stateTitle=${o=>unconfirmed||o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`:null}`}
+
+        ${editing || mobile ? null : html`<${FloorPicker} floors=${floorPlan.floors} current=${currentFloor.id} onSelect=${selectFloor} />`}
       </div>
       <aside class="ao-bureau__side" aria-label=${editing ? tr('office.customize') : tr('office.rosterLabel')}>
         <div id="ao-bureau-editaside" hidden=${!editing}></div>
-        ${editing ? null : html`<${Roster} occupants=${rosterOf(present, plan)} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} />`}
+        ${editing ? null : html`<${Roster} occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} groupedFloors onJumpFloor=${selectFloor} hostAnnotation=${teamUI?.hostAnnotation} />`}
+        ${!editing && teamUI && html`<${teamUI.TeamOffice} hint=${office.data.orchestratorActivationAvailable} />`}
       </aside>
     </div>
-    ${editing ? null : html`<${Feed} vm=${vm} stale=${stale} tab=${feed} setTab=${setFeed} />`}
-    ${sel && !editing ? html`<${Drawer} o=${sel} lay=${lay} onClose=${() => select(null)} onCustomize=${canWrite ? () => (phone() ? openShop({ onglet: 'personnages', agent: sel.id }) : setEditing({ agent: sel.id })) : null} />` : null}
-  </div>`;
+    ${editing ? null : html`<${Feed} vm=${vm} stale=${stale} tab=${feed} setTab=${setFeed} mobile=${mobile} />`}
+    ${mobileSheet && !editing ? html`<${Modal} size="md" class=${'ao-office-sheet' + (mobileSheet === 'options' ? ' ao-office-options' : '')} title=${mobileSheet?.conversationIds ? i18n.msg('office.mobile.conversationsTitle') : mobileSheet?.team ? i18n.msg('office.mobile.team',{name:mobileSheet.team.name}) : mobileSheet === 'floors' ? tr('office.floor.picker') : mobileSheet === 'roster' ? tr('office.rosterLabel') : i18n.msg('office.mobile.options')} onClose=${closeMobileSheet}
+      footer=${mobileSheet === 'options' ? null : html`<button type="button" class="bu-btn" onClick=${closeMobileSheet}>${tr('office.close')}</button>`}>
+      ${mobileSheet?.conversationIds ? html`<${Roster} all occupants=${roster.filter(o=>mobileSheet.conversationIds.includes(o.id))} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} />`
+        : mobileSheet === 'floors' ? html`<${FloorPicker} floors=${floorPlan.floors} current=${currentFloor.id} onSelect=${selectFloor} mobile />`
+        : mobileSheet?.team ? html`<${Roster} all occupants=${roster.filter(o=>mobileSheet.team.ids.includes(o.id))} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} />`
+        : mobileSheet === 'roster' ? html`<${Roster} all occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} groupedFloors onJumpFloor=${selectFloor} />`
+        : html`
+        <div class="ao-office-options__actions">
+          <${Button} label=${i18n.msg('office.mobile.center')} icon=${html`<${ViewIcon} center />`} onPress=${() => { if(mainScene.current){mainScene.current.cam.user=false;mainScene.current.fit();} }} />
+          <${Button} label=${tr('scene.fullscreen')} icon=${html`<${ViewIcon} />`} onPress=${() => {closeMobileSheet();void mainScene.current?.toggleFullscreen();}} />
+          ${canWrite ? html`<${Button} label=${tr('office.customize')} icon=${html`<${Icon} name="pencil" />`} onPress=${()=>{closeMobileSheet();openShop({onglet:'personnages',etage:currentFloor.id});}} />` : null}
+        </div>
+        ${canWrite ? html`<${ThemeToggle} lay=${floorLay} store=${currentStore} labelId="ao-mobile-theme-label" visibleLabel=${i18n.msg('office.mobile.lighting')} icons />` : html`<p class="ao-bureau__ro">${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}`}
+    </${Modal}>` : null}
+    ${sel && !editing ? html`<${Drawer} o=${sel} lay=${detailLayout} unconfirmed=${unconfirmed} sourceStale=${!!sel.sourceStale} onClose=${() => select(null)} onBack=${mobile&&detailTeam ? backToTeam : null} teamLabel=${detailTeam?.conversationIds ? i18n.msg('office.mobile.backConversations') : detailTeam?.fromSheet ? i18n.msg('office.mobile.backTeam') : i18n.msg('office.mobile.team',{name:detailTeam?.name||''})} onCustomize=${canWrite ? () => (phone() ? openShop({ onglet: 'personnages', agent: sel.id, etage: currentFloor.id }) : setEditing({ agent: sel.id })) : null} />` : null}
+  </${Frame}>`;
 }
 
 /** No usable snapshot yet: the loading sentence, or the unavailable one with a retry (never zero counts). */
 function BureauWaiting({ failed, onRetry }) {
   const head = headline(undefined, { error: failed, locale: locale() });
-  if (failed) return html`<div class="bu-page ao-bureau">
+  if (failed) return html`<${Frame} class="bu-page ao-bureau">
     <div class="bu-banner bu-banner--warning ao-bureau__lead" role="alert" data-kind=${head.kind}><${Icon} name="warning" />
       <span class="bu-banner__text">${head.lead}</span>
       <button type="button" class="bu-btn bu-btn--sm" onClick=${onRetry}>${tr('office.retry')}</button></div>
-  </div>`;
-  return html`<div class="bu-page ao-bureau" aria-busy="true">
+  </${Frame}>`;
+  return html`<${Frame} class="bu-page ao-bureau" aria-busy="true">
     <h2 class="bu-sr-only ao-bureau__lead" data-kind=${head.kind}>${head.lead}</h2>
     <div class="bu-kpis ao-bureau__kpis">${Array.from({ length: 6 }, (_, k) => html`<div key=${k} class="bu-kpi"><${Skeleton} style="width:6rem" /><${Skeleton} kind="title" style="width:3rem" /></div>`)}</div>
     <div class="ao-bureau__main"><div class="ao-bureau__stagecol"><div class="ao-bureau__stagewrap"><div class="bu-stage ao-bureau__stage"><${Skeleton} style="width:100%;height:100%" /></div></div></div>
       <div class="ao-bureau__side">${Array.from({ length: 3 }, (_, k) => html`<div key=${k} class="bu-roster"><${Skeleton} style="width:60%" /></div>`)}</div></div>
-  </div>`;
+  </${Frame}>`;
 }
 
 /** The KPI strip (OfficeVM.kpis): label, value, optional sub-line; values formatted for the UI's locale. */
 function kpiValue(k) {
+  if (k.value == null) return '—';
   if (k.unit === 'percent') return fmt.percent(k.value);
   return fmt.number(k.value);
 }
@@ -286,15 +363,30 @@ function Kpis({ kpis }) {
   </div>`;
 }
 
+/** Mobile shares identities and selection with the full roster, including annex occupants. */
+function MobileSummary({summary,kpis,unconfirmed}) {
+  const active=summary?.activeCount ?? null;
+  const count=summary?.count ?? 0;
+  const summaryKey=unconfirmed?'office.mobile.lastSummary':active==null?'office.mobile.summaryUnknown':'office.mobile.summary';
+  return html`<details class="ao-mobile-summary"><summary><${Icon} name=${unconfirmed ? 'clock' : 'agent'} />${i18n.msg(summaryKey,{n:count,active})}<${Icon} name="arrow-down" /></summary><${Kpis} kpis=${kpis} /></details>`;
+}
+
+function ViewIcon({center=false}) {
+  return html`<svg class="bu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />${center?html`<path d="M12 8v8m-4-4h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />`:null}</svg>`;
+}
+
 /** Journal / File below the office: the recent activity, or the next scheduled tasks; the snapshot's freshness. */
-function Feed({ vm, stale, tab, setTab }) {
+function connectionAge(vm, stale) {
   const up = vm.connection.gateway !== 'down';
-  const fresh = stale ? tr('office.updatedAt', { time: fmt.time(stale.generatedAt) })
+  return stale ? tr('office.updatedAt', { time: fmt.time(stale.generatedAt) })
     : up && vm.connection.since ? tr('office.connectedSince', { time: fmt.dateTime(vm.connection.since) }) : null;
-  return html`<section class="bu-section ao-bureau__feed" aria-labelledby="ao-bureau-feed">
+}
+function Feed({ vm, stale, tab, setTab, mobile }) {
+  const fresh = connectionAge(vm,stale);
+  const content = html`<section class="bu-section ao-bureau__feed" aria-labelledby=${mobile ? undefined : 'ao-bureau-feed'} aria-label=${mobile ? i18n.msg('office.mobile.activity') : undefined}>
     <div class="ao-bureau__feedhead">
-      <h2 class="bu-eyebrow" id="ao-bureau-feed">${tr(tab === 'journal' ? 'office.feed.journal' : 'office.feed.queue')}</h2>
-      ${fresh ? html`<span class="bu-text-tertiary ao-bureau__fresh">${fresh}</span>` : null}
+      ${mobile ? null : html`<h2 class="bu-eyebrow" id="ao-bureau-feed">${tr(tab === 'journal' ? 'office.feed.journal' : 'office.feed.queue')}</h2>`}
+      ${!mobile && fresh ? html`<span class="bu-text-tertiary ao-bureau__fresh">${fresh}</span>` : null}
       <div class="bu-segmented ao-bureau__tabs" role="group" aria-label=${tr('office.feed.show')}>
         <button type="button" class="bu-segmented__opt" aria-pressed=${String(tab === 'journal')} onClick=${() => setTab('journal')}>${tr('office.feed.journal')}</button>
         <button type="button" class="bu-segmented__opt" aria-pressed=${String(tab === 'file')} onClick=${() => setTab('file')}>${tr('office.feed.queue')} <span class="bu-count">${vm.queue.length}</span></button>
@@ -302,6 +394,7 @@ function Feed({ vm, stale, tab, setTab }) {
     </div>
     ${tab === 'journal' ? html`<${Journal} items=${vm.journal} />` : html`<${Queue} items=${vm.queue} />`}
   </section>`;
+  return mobile ? html`<details class="ao-mobile-activity"><summary><${Icon} name="journaux" />${i18n.msg('office.mobile.activity')}<${Icon} name="arrow-down" /></summary>${content}</details>` : content;
 }
 
 function Queue({ items }) {
@@ -311,7 +404,7 @@ function Queue({ items }) {
 }
 
 /** Office theme quick toggle: the layout owns the theme (api-proposal §4). One automatic retry on 409. */
-function ThemeToggle({ lay }) {
+function ThemeToggle({ lay, store = officeApi(), labelId = 'ao-theme-label', visibleLabel, icons=false }) {
   const theme = lay.layout.data.theme;
   const mode = theme.mode === 'fixed' ? theme.fixed : 'auto';
   const [busy, setBusy] = useState(false);
@@ -324,7 +417,7 @@ function ThemeToggle({ lay }) {
       return next;
     };
     setBusy(true);
-    const send = (rev, base) => officeApi().putTheme({ expectedRevision: rev, theme: apply(base) });
+    const send = (rev, base) => store.putTheme({ expectedRevision: rev, theme: apply(base) });
     try {
       try { await send(lay.layout.revision, theme); } catch (err) {
         // One retry, rebased on the conflict's authoritative theme (keeps another device's schedule/season).
@@ -336,77 +429,92 @@ function ThemeToggle({ lay }) {
   }
   const opts = ['auto', 'day', 'night'].map((id) => [id, tr(`office.theme.${id}`)]);
   return html`<div class="ao-bureau__theme">
-    <${SurpriseSetting} />
-    <span class="ao-bureau__themelabel" id="ao-theme-label">${tr('office.margin.theme')}</span>
-    <div class="bu-segmented" role="group" aria-labelledby="ao-theme-label" aria-busy=${busy ? 'true' : undefined}>
-      ${opts.map(([id, text]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(mode === id)} disabled=${busy} onClick=${() => set(id)}>${text}</button>`)}
+    <span class="ao-bureau__themelabel" id=${labelId}>${visibleLabel || tr('office.margin.theme')}</span>
+    <div class="bu-segmented" role="group" aria-labelledby=${labelId} aria-busy=${busy ? 'true' : undefined}>
+      ${opts.map(([id, text]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(mode === id)} disabled=${busy} onClick=${() => set(id)}>${icons?html`<${Icon} name=${id==='auto'?'clock':id==='day'?'sun':'moon'} />`:null}${text}</button>`)}
     </div>
     ${mode === 'auto' ? html`<p class="ao-bureau__themenow">${tr(lay.theme.resolved === 'night' ? 'office.themeNow.night' : 'office.themeNow.day')}</p>` : null}
   </div>`;
 }
 
 /** The scene: one OfficeScene per mount, fed from the VMs; cues from SSE `cue` frames. */
-function Stage({ vm, occupants, lay, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite }) {
+function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, minimalLabels }) {
   const latestOcc = useRef(occupants);
   latestOcc.current = occupants;
   const host = useRef(null);
   const sceneRef = useRef(null);
+  const { dispose, error: sceneError, attempt, retry: retryScene, protect } = useSceneRecovery();
   const editorRef = useRef(null);
   const latest = useRef(vm);
   latest.current = vm;
   const latestLay = useRef(lay);
   latestLay.current = lay;
 
-  // Mount once the layout is known.
   useEffect(() => {
-    const labels = Object.fromEntries(STATES.map((s) => [s, stateLabel(s)]));
-    const scene = new OfficeScene(host.current, {
-      manifest: lay.manifest, layout: lay.layout.data, assetBase: assetBase(), labels,
-      theme: lay.theme.resolved, onSelect: (id) => onSelect(id), primaryName: () => primaryName(), timeZone: () => fmtTz.timeZone(),
+    let scene, removeCue = () => {};
+    const cleanup = () => {
+      const owned = scene; scene = null;
+      dispose.current = null;
+      removeCue(); sceneRef.current = null;
+      if (sceneHandle?.current === owned) sceneHandle.current = null;
+      const editor = editorRef.current; editorRef.current = null;
+      try { editor?.close?.({ saved: false }); } finally { owned?.destroy(); }
+    };
+    dispose.current = cleanup;
+    protect(() => {
+      scene = new OfficeScene(host.current, {
+        manifest: lay.manifest, layout: lay.layout.data, assetBase: assetBase(),
+        theme: lay.theme.resolved, onSelect: (id) => onSelect(id), primaryName: () => primaryName(), timeZone: () => fmtTz.timeZone(),
+      });
+      sceneRef.current = scene;
+      scene.setPrimaryLabels(minimalLabels, floor?.mobileLabelIds ?? []);
+      if(sceneHandle)sceneHandle.current=scene;
+      host.current.aoScene = scene;   // test/QA handle (DevTools, DOM tests): the stage element carries its scene
+      // office-dev-21: on a phone Personnaliser opens the Boutique (catalog + full-screen placement); on desktop the editor.
+      if (canWrite) scene.addControl({ label: tr('office.customize'), text: true, icon: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>', onClick: () => (phone() ? openShop({ etage: floor?.id }) : setEditing(true)) });
+      // SSE cue frames (app.js forwards them to services.cueListeners).
+      const listeners = (services.cueListeners ??= new Set());
+      const onCue = (f) => protect(() => { f.signal ? sceneRef.current?.signal(f.occupantId, f.signal) : sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null }); });
+      listeners.add(onCue);
+      removeCue = () => listeners.delete(onCue);
     });
-    sceneRef.current = scene;
-    host.current.aoScene = scene;   // test/QA handle (DevTools, DOM tests): the stage element carries its scene
-    // office-dev-21: on a phone Personnaliser opens the Boutique (catalog + full-screen placement); on desktop the editor.
-    if (canWrite) scene.addControl({ label: tr('office.customize'), text: true, icon: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>', onClick: () => (phone() ? openShop() : setEditing(true)) });
-    // SSE cue frames (app.js forwards them to services.cueListeners).
-    const listeners = (services.cueListeners ??= new Set());
-    const onCue = (f) => (f.signal ? sceneRef.current?.signal(f.occupantId, f.signal) : sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null }));
-    listeners.add(onCue);
-    return () => { listeners.delete(onCue); editorRef.current?.close?.({ saved: false }); scene.destroy(); sceneRef.current = null; };
-  }, []);
+    return cleanup;
+  }, [attempt]);
+
+  useEffect(() => protect(() => { sceneRef.current?.setPrimaryLabels(minimalLabels, floor?.mobileLabelIds ?? []); }), [minimalLabels, JSON.stringify(floor?.mobileLabelIds ?? []), attempt]);
 
   // Layout changes (another device saved, theme switch at nextChangeAt).
-  useEffect(() => {
+  useEffect(() => protect(() => {
     const s = sceneRef.current;
     if (!s || editorRef.current) return;
     s.setLayout(lay.layout.data);
     s.setTheme(lay.theme.resolved);
-  }, [lay.layout.revision, lay.theme.resolved]);
+  }), [lay.layout.revision, lay.theme.resolved, attempt]);
 
   // Occupants: the same list as the roster and the drawer.
-  useEffect(() => {
+  useEffect(() => protect(() => {
     if (!sceneRef.current || editorRef.current) return;
     sceneRef.current.setOccupants(named(occupants));
-  }, [occupantsKey(occupants)]);
+  }), [occupantsKey(occupants), attempt]);
 
-  useEffect(() => { sceneRef.current?.setSignals(vm.journal); }, [vm.journal]);
-  useEffect(() => { sceneRef.current?.select(selected); }, [selected, vm.occupants]);
+  useEffect(() => protect(() => { sceneRef.current?.setSignals(vm.journal); }), [vm.journal, attempt]);
+  useEffect(() => protect(() => { sceneRef.current?.select(selected); }), [selected, vm.occupants, attempt]);
   // office-dev-22: visitors come to the agent (desk, or the meeting table for a real conversation).
   const visitsKey = JSON.stringify(visits ?? null);
-  useEffect(() => { sceneRef.current?.setVisits(editing ? null : visits); }, [visitsKey, editing]);
+  useEffect(() => protect(() => { sceneRef.current?.setVisits(editing ? null : visits); }), [visitsKey, editing, attempt]);
 
   // Editor (S14c): opened from the stage control or the drawer.
   useEffect(() => {
     if (!editing || editorRef.current || !sceneRef.current) return;
     let alive = true;
-    // The editor (and its panels) loads on first use: it isn't part of the Bureau's first load (F11 budget).
+    // The editor loads on first use.
     import('./editor.js' + buildQuery).then(({ openEditor }) => openEditor({
-      scene: sceneRef.current, store: officeApi(), assetBase: assetBase(), primaryName: primaryName(), timeZone: fmtTz.timeZone(),
+      scene: sceneRef.current, store, assetBase: assetBase(), primaryName: primaryName(), timeZone: fmtTz.timeZone(),
       barHost: document.getElementById('ao-bureau-editbar'), asideHost: document.getElementById('ao-bureau-editaside'),
-      getOccupants: () => latest.current.occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, state: o.state, stateSince: o.stateSince })),
+      getOccupants: () => latest.current.occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, automaticLook: o.automaticLook, state: o.state, stateSince: o.stateSince })),
       toast: (message, level) => toast({ level, message }),
-      onOpenShop: () => openShop(),
-      onExit: (result) => {
+      onOpenShop: () => openShop({ etage: floor?.id }),
+      onExit: (result) => protect(() => {
         editorRef.current = null;
         const s = sceneRef.current;
         if (s) {
@@ -415,20 +523,19 @@ function Stage({ vm, occupants, lay, selected, onSelect, visits, editing, setEdi
           const L = (result?.saved && result.vm) || latestLay.current;
           s.setLayout(L.layout.data);
           s.setTheme(L.theme.resolved);
-          // O6: a saved look shows at once: the occupants are re-resolved against the saved layout with the shared
-          // resolver (the server's OfficeVM uses the same one and confirms it on its next push).
+          // Re-resolve saved looks with the same resolver used by OfficeVM.
           s.setOccupants(named(result?.saved ? withLayout(latestOcc.current, L) : latestOcc.current));
         }
         setEditing(false);
-      },
+      }),
     })).then((ed) => {
       if (!alive) { ed.close({ saved: false }); return; }
       editorRef.current = ed;
       if (editing.agent) { ed.agentSel = editing.agent; ed.setMode('characters'); }
     }, (err) => {
-      // R8-11: loading failed (network, 401/403, 503…): back to browsing, say why; the control stays available.
+    // Failed editor loads return to browsing, explain the error and keep the control available.
       editorRef.current = null;
-      sceneRef.current?.setEditing(false);
+      protect(() => { sceneRef.current?.setEditing(false); });
       if (alive) {
         setEditing(false);
         if (err && err.code === 'unauthorized') return;   // the app's auth flow takes over
@@ -436,91 +543,74 @@ function Stage({ vm, occupants, lay, selected, onSelect, visits, editing, setEdi
       }
     });
     return () => { alive = false; };
-  }, [editing]);
+  }, [editing, attempt]);
 
   // R27-02: not live, the scene freezes (no walks, frame loops or CSS animation) until the stream confirms again.
-  useEffect(() => { sceneRef.current?.setFrozen(unconfirmed); }, [unconfirmed]);
+  useEffect(() => protect(() => { sceneRef.current?.setFrozen(unconfirmed); }), [unconfirmed, attempt]);
 
-  // An unconfirmed state keeps the scene, dimmed and labelled as the last observation (explorer-qa-02 Q02-01). With the
-  // stream down, the chip says for how long: « Hors ligne depuis 3 minutes ».
+  // Keep the last observation visible, with its offline duration.
   const cap = down && downSince ? tr('office.offlineSince', { duration: duration(Math.max(0, now - downSince)) }) : down ? tr('office.offline') : tr('office.stageCaption');
-  return html`<div class=${'bu-stage ao-bureau__stage' + (unconfirmed ? ' ao-bureau__stage--last' : '')} ref=${host} role="region"
+  return html`<div class=${'bu-stage ao-bureau__stage ao-office' + (unconfirmed ? ' ao-bureau__stage--last' : '')} ref=${host} role="region" hidden=${sceneError}
+      data-floor=${floor?.id}
       aria-label=${tr(unconfirmed ? 'office.stageLast' : 'office.stage', { agent: agentName() })}></div>
+    ${sceneError ? html`<${ErrorState} compact error=${{message:tr('office.mapUnavailable')}} onRetry=${retryScene} />` : null}
     ${unconfirmed ? html`<p class=${'ao-bureau__stagecap' + (down ? ' ao-bureau__stagecap--offline' : '')}>${cap}</p>` : null}`;
 }
 
-/** Portrait from the manifest (variant, then character); until sub-agent portraits exist, a head crop of the look's idle pose. */
+/** Base portraits or lightweight Store pack thumbnails; idle head crops for older looks. */
 function Avatar({ o, manifest }) {
-  const ch = manifest?.characters.find((c) => c.id === o.look.character);
-  const v = ch?.variants?.find((x) => x.id === o.look.variant);
-  const portrait = v?.portrait ?? (v ? null : ch?.portrait);
-  const pose = !portrait && (v?.poses?.idle ?? ch?.poses?.idle);
-  const path = portrait ?? (typeof pose === 'string' ? pose : pose?.image);
-  // Head crop from the idle pose's landmarks: the head box fills ~85 % of the avatar.
-  let crop = null;
-  const hb = !portrait && (v?.landmarks?.idle ?? ch?.landmarks?.idle)?.headBox;
-  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : NaN);
-  if (hb && ch && [hb.x, hb.y, hb.w, hb.h, ch.canvas.w].every((v) => Number.isFinite(n(v)))) {
-    // Numbers only reach CSS (style object, never a string built from server data).
-    const k = 85 / Math.max(n(hb.w), n(hb.h));
-    crop = { width: `${(n(ch.canvas.w) * k).toFixed(1)}%`, left: `${(50 - (n(hb.x) + n(hb.w) / 2) * k).toFixed(1)}%`, top: `${(50 - (n(hb.y) + n(hb.h) / 2) * k).toFixed(1)}%` };
-  }
-  return html`<span class="bu-avatar bu-avatar--agent" data-agent-state=${o.state}>
-    ${path ? html`<img src=${resolveUrl(path, assetBase())} alt="" class=${portrait ? '' : 'ao-avatar-pose'} style=${crop} />` : html`<${Icon} name="agent" />`}</span>`;
+  const source = manifest && avatarSource(indexOf(manifest), o.look, assetBase());
+  return html`<${CharacterAvatar} source=${source} state=${o.state} />`;
 }
 
-/** « Les présences » (the button's accessible name is its visible text: name, role, state; the number is hidden, so
- * label and content never diverge, WCAG 2.5.3; frontend-16's axe finding). The agents present as a numbered margin list (the number is the stable roster position, never a
- * rank; decorative, hidden from screen readers). Name, then the state as a line of text; colour never carries it alone. */
-/** O10: past this many agents the roster is grouped by state (errors open, the rest collapsed). */
-export const ROSTER_GROUP_OVER = 12;
-const ROSTER_GROUPS = [
-  { id: 'error', open: true, has: (o) => !o.presence && o.state === 'error' },
-  { id: 'waiting', has: (o) => !o.presence && o.state === 'waiting' },
-  { id: 'active', has: (o) => !o.presence && !['error', 'waiting', 'idle', 'offline'].includes(o.state) },
-  { id: 'inactive', has: () => true },
-];
-
-function Roster({ occupants, selected, onSelect, now, unconfirmed, manifest }) {
+/** Accessible cards render the server-projected order, hierarchy and floor groups. */
+function Roster({ all = false, occupants, rosterFloors = [], selected, onSelect, now, unconfirmed, manifest, groupedFloors = false, onJumpFloor = () => {}, hostAnnotation }) {
   const [eggs,setEggs]=useState({});
   useEffect(()=>{const update=e=>setEggs(prev=>({...prev,[e.detail.id]:e.detail.kind}));document.addEventListener('office-surprise',update);return ()=>document.removeEventListener('office-surprise',update);},[]);
-  // The reader's own open/closed choices per group win over the defaults (errors open; a group holding the selection).
-  const [toggled, setToggled] = useState({});
-  // An agent card (O3): portrait in its state ring, name, role, and the state pill. Its accessible name is its visible
-  // text (WCAG 2.5.3). A seen agent is muted, with « Vu il y a … »; unconfirmed, the pill is the last state, not live.
-  const card = (o) => html`<li key=${o.id}>
-    <button type="button" class=${'bu-roster ao-roster ao-agentcard' + (o.presence ? ' is-seen' : '')} data-presence=${o.presence || undefined}
+  // Accessible names match visible text; seen and unconfirmed cards show their last observation.
+  const card = (o) => html`<li key=${o.id} class=${o.rosterDepth > 0 ? 'ao-roster__child' : undefined}>
+    <button type="button" class=${'bu-roster ao-roster ao-agentcard' + (o.presence ? ' is-seen' : '')} data-occupant=${o.id} data-presence=${o.presence || undefined} data-source-stale=${o.sourceStale || undefined}
       aria-current=${selected === o.id ? 'true' : undefined} onClick=${() => onSelect(o.id)}>
       <${Avatar} o=${o} manifest=${manifest} />
-      <span class="bu-cell-main"><span class="ao-roster__name ao-agentcard__name">${nameOf(o)}</span>
-        <span class="bu-cell-sub">${L(o.roleLabel)}${o.stationUid || isVisitor(o) ? '' : ` · ${tr('office.noStation')}`}</span>
+      <span class="bu-cell-main" data-by=${o.parentName || undefined}><span class="ao-roster__name ao-agentcard__name" title=${nameOf(o)}>${nameOf(o)}</span>
+        <span class="bu-cell-sub ao-roster__summary" title=${o.summary || undefined}>${o.summary && o.summary !== o.name ? o.summary : o.project ? tr('office.inProject', { project: o.project }) : L(o.roleLabel)}${o.stationUid || o.visitPhase || o.summary || o.project ? '' : ` · ${tr('office.noStation')}`}</span>
+        ${hostAnnotation?.(o) ? html`<span class="bu-cell-sub ao-host-annotation" data-host-agent=${o.hostAgentId}>${hostAnnotation(o)}</span>` : null}
         ${o.presence ? html`<span class="ao-agentcard__seen">${o.presenceLabel}</span>` : null}</span>
-      ${eggs[o.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[o.id]}>${tr('egg.'+eggs[o.id])}</span>` : html`<${StateChip} state=${o.state} live=${!unconfirmed && !o.presence} title=${unconfirmed ? tr('office.lastState', { state: stateLabel(o.state) }) : forState(o, now)} />`}
+      ${eggs[o.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[o.id]}>${tr('egg.'+eggs[o.id])}</span>` : html`<${StateChip} state=${o.state} stateLabel=${o.stateLabel} stateActive=${o.stateActive} live=${!unconfirmed && !o.presence && !o.sourceStale} title=${unconfirmed || o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`}
     </button></li>`;
   if (!occupants.length) return html`<p class="bu-text-secondary">${tr('office.empty')}</p>`;
-  if (occupants.length <= ROSTER_GROUP_OVER) return html`<ul class="ao-bureau__roster">${occupants.map(card)}</ul>`;
-  // O10, past 12 agents: grouped by state; each agent in the first group it fits, roster order kept inside a group.
-  const left = new Set(occupants);
-  const groups = ROSTER_GROUPS.map((g) => { const list = [...left].filter(g.has); list.forEach((o) => left.delete(o)); return { ...g, list }; }).filter((g) => g.list.length);
-  return html`<div class="ao-roster-groups">${groups.map((g) => {
-    const open = toggled[g.id] ?? (!!g.open || g.list.some((o) => o.id === selected));
-    return html`<details key=${g.id} class=${'ao-roster-group ao-roster-group--' + g.id} data-group=${g.id} open=${open}
-        onToggle=${(e) => { const v = e.currentTarget.open; if (v !== open) setToggled((s) => ({ ...s, [g.id]: v })); }}>
-      <summary class="ao-roster-group__head">
-        <span class="ao-roster-group__label">${tr('office.group.' + g.id)}</span>
-        <span class="ao-roster-group__count" aria-hidden="true">${g.list.length}</span>
-        <span class="bu-sr-only">${tr('office.group.agents', { n: g.list.length })}</span>
-      </summary>
-      <ul class="ao-bureau__roster">${g.list.map(card)}</ul>
-    </details>`;
-  })}</div>`;
+  if (groupedFloors && rosterFloors.length) {
+    const byId = new Map(occupants.map((o) => [o.id, o]));
+    return html`<div class="ao-floor-roster">${rosterFloors.map(floor => {
+      const floorItems = (floor.items || []).map(item => item.kind === 'team-header'
+        ? html`<li key=${item.id} class="ao-floor-roster__team" data-roster-team-header=${item.id}>${L(item.label)}</li>`
+        : byId.has(item.occupantId) ? card(byId.get(item.occupantId)) : null);
+      return html`<section key=${floor.id} class="ao-floor-roster__group" data-roster-floor=${floor.id}>
+      <button type="button" class="ao-floor-roster__jump" onClick=${() => onJumpFloor(floor.id)}><span>${L(floor.label)}</span><span>${floor.count}</span><${Icon} name="arrow-right" /></button>
+      <ul class="ao-bureau__roster">${floorItems}</ul>
+    </section>`;
+    })}</div>`;
+  }
+  return html`<ul class="ao-bureau__roster">${occupants.map(card)}</ul>`;
+}
+
+function FloorPicker({ floors, current, onSelect, mobile = false }) {
+  return html`<nav class=${'ao-floor-picker' + (mobile ? ' ao-floor-picker--mobile' : '')} aria-label=${tr('office.floor.picker')}>
+    ${floors.map(f => {
+      return html`<button type="button" class="ao-floor-picker__floor" data-floor=${f.id} aria-current=${current === f.id ? 'true' : undefined} onClick=${() => onSelect(f.id)}>
+        <span class="ao-floor-picker__name">${L(f.label)}</span>
+        <span class="ao-floor-picker__count">${L(f.countLabel)}</span>
+        <span class="ao-floor-picker__status">${L(f.statusLabel)}</span>
+      </button>`;
+    })}
+  </nav>`;
 }
 
 /** The state pill (O3): icon and label, the state's colour; « live » pulses only while confirmed and active. */
-function StateChip({ state, live = true, title }) {
-  const on = live && !['idle', 'offline'].includes(state);
+function StateChip({ state, stateLabel: stateRef, stateActive = false, live = true, title }) {
+  const on = live && stateActive;
   return html`<span class=${'bu-state ao-roster__state' + (on ? ' bu-state--live ao-roster__state--live' : '')} data-agent-state=${state} title=${title || undefined}>
-    <${Icon} name=${'state-' + (STATES.includes(state) ? state : 'idle')} />${stateLabel(state)}</span>`;
+    <${Icon} name=${STATES.includes(state) ? 'state-' + state : 'info'} />${L(stateRef)}</span>`;
 }
 
 /** Journal (O3): time, then the event's sentence (it already names its subject, set in bold when it leads); a repeated
@@ -574,7 +664,7 @@ function stationText(o, lay) {
   return generic ? tr('office.drawer.stationAssigned') : name;
 }
 
-function Drawer({ o, lay, onClose, onCustomize }) {
+function Drawer({ o, lay, onClose, onCustomize, onBack, teamLabel, unconfirmed, sourceStale = false }) {
   const manifest = lay.manifest;
   const closeRef = useRef(null);
   const dialogRef = useRef(null);
@@ -595,16 +685,20 @@ function Drawer({ o, lay, onClose, onCustomize }) {
     <aside class="bu-drawer" role="dialog" aria-modal="true" aria-labelledby="ao-drawer-title" aria-describedby="ao-drawer-desc" ref=${dialogRef}>
       <div class="bu-modal__header">
         <${Avatar} o=${o} manifest=${manifest} />
-        <div style="flex:1"><h2 class="bu-modal__title" id="ao-drawer-title">${nameOf(o)}</h2><p class="bu-modal__desc" id="ao-drawer-desc">${tr('office.drawer.desc', { role: L(o.roleLabel), state: stateLabel(o.state).toLocaleLowerCase(locale() === 'en' ? 'en-CA' : 'fr-CA') })}</p></div>
+        <div style="flex:1"><h2 class="bu-modal__title" id="ao-drawer-title">${nameOf(o)}</h2><p class="bu-modal__desc" id="ao-drawer-desc">${tr('office.drawer.desc', { role: L(o.roleLabel), state: stateLabel(o).toLocaleLowerCase(locale() === 'en' ? 'en-CA' : 'fr-CA') })}</p></div>
         <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost" aria-label=${tr('office.close')} ref=${closeRef} onClick=${onClose}><${Icon} name="close" /></button>
       </div>
       <div class="bu-modal__body">
-        <p class="ao-drawer__state" data-agent-state=${o.state}>${o.stateSince && STATES.includes(o.state) ? tr(`office.for.${o.state}`, { duration: duration(Math.max(0, Date.now() - o.stateSince)) }) : stateLabel(o.state)}</p>
+        ${onBack?html`<${Button} variant="ghost" label=${teamLabel} icon=${html`<${Icon} name="arrow-left" />`} onPress=${onBack} />`:null}
+        <p class="ao-drawer__state" data-agent-state=${o.state} data-source-stale=${sourceStale || undefined}>${unconfirmed || sourceStale ? L(o.stateLastLabel) : stateLabel(o)}</p>
+        ${o.summary ? html`<section class="ao-drawer__activity"><h3>${tr('office.what')}</h3><p>${o.summary}</p></section>` : null}
         <dl class="bu-kv">
-          <div class="bu-kv__row"><dt>${tr('office.drawer.lastSeen')}</dt><dd>${o.lastSeenAt ? html`<${Ago} at=${o.lastSeenAt} />` : '—'}</dd></div>
-          <div class="bu-kv__row"><dt>${tr('office.drawer.tokens')}</dt><dd>${fmt.number(o.tokens)}</dd></div>
+          ${o.lastSeenAt ? html`<div class="bu-kv__row"><dt>${tr('office.drawer.lastSeen')}</dt><dd><${Ago} at=${o.lastSeenAt} /></dd></div>` : null}
+          ${o.tokensKnown ? html`<div class="bu-kv__row"><dt>${tr('office.drawer.tokens')}</dt><dd>${fmt.number(o.tokens)}</dd></div>` : null}
+          ${o.startedAt ? html`<div class="bu-kv__row"><dt>${tr('office.since')}</dt><dd><${Ago} at=${o.startedAt} /></dd></div>` : null}
+          ${['project', 'runtime', 'model'].map((k) => o[k] ? html`<div class="bu-kv__row"><dt>${tr('office.' + k)}</dt><dd>${o[k]}</dd></div>` : null)}
           <div class="bu-kv__row"><dt>${tr('office.drawer.station')}</dt><dd>${stationText(o, lay)}</dd></div>
-          <div class="bu-kv__row"><dt>${tr('office.drawer.session')}</dt><dd class="bu-mono">${o.sessionKey ?? '—'}</dd></div>
+          ${o.sessionKey ? html`<details class="ao-drawer__technical"><summary>${tr('office.tech')}</summary><dl><div class="bu-kv__row"><dt>${tr('office.drawer.session')}</dt><dd class="bu-mono">${o.sessionKey}</dd></div></dl></details>` : null}
         </dl>
       </div>
       <div class="bu-modal__footer">

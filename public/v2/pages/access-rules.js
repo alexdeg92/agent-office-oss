@@ -3,6 +3,13 @@
 // presence in the logs never confirms authorization; an unknown value is neither yes nor no.
 import { isRoom } from '../vocab.js';
 
+/** External harnesses take precedence over a model the runtime may never use. */
+export function agentExecution(a) {
+  if (a.runtime) return a.runtime;
+  if (!a.model) return { msg: a.modelSource === 'inherited' ? 'access.agent.defaultModel' : 'editorial.notProvided' };
+  return a.modelSource === 'inherited' ? { msg: 'access.agent.inheritedModel', params: { model: a.model } } : a.model;
+}
+
 /** A channel's display name with exactly one « # » (explorer-qa-03 Q03-F07: some names arrive with it already). */
 export function interlocutorName(i) {
   if (i.name) return isRoom(i) ? '#' + String(i.name).replace(/^#+/, '') : i.name;

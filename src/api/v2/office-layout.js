@@ -11,6 +11,8 @@
  */
 const { ApiError, invalid } = require('./errors');
 const { officeDefaults } = require('./vm/office');
+const { project2x: P2 } = require('./project2x');
+const { redactChatIdentity } = require('../../security/redact-text');
 
 const TZ = 'UTC';   // the fallback only: callers pass the instance time zone (G3a, ADR §12.7)
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -38,11 +40,23 @@ function structural(d) {
   if (!Array.isArray(d.items) || d.items.length > 200 || !d.items.every((i) => obj(i) && typeof i.uid === 'string' && typeof i.asset === 'string'
     && ((Number.isInteger(i.x) && Number.isInteger(i.y)) || (typeof i.wall === 'string' && Number.isInteger(i.offset))))) return 'items';
   if (!Array.isArray(d.agents) || d.agents.length > 200 || !d.agents.every((a) => obj(a) && typeof a.agentId === 'string' && typeof a.character === 'string'
+    && (a.appearance === undefined || ['auto', 'manual'].includes(a.appearance))
     && (a.accessories === undefined || (Array.isArray(a.accessories) && a.accessories.every((x) => typeof x === 'string'))))) return 'agents';
   // office-dev O8 (operations.md §4): presence { seenMinutes: integer 0–1440 }, optional
   if (d.presence !== undefined && !(obj(d.presence) && Object.keys(d.presence).every((k) => k === 'seenMinutes')
     && Number.isInteger(d.presence.seenMinutes) && d.presence.seenMinutes >= 0 && d.presence.seenMinutes <= 1440)) return 'presence';
-  for (const k of Object.keys(d)) if (!['version', 'manifestVersion', 'room', 'theme', 'items', 'agents', 'presence'].includes(k)) return k;
+  if (d.idleRelocationMinutes !== undefined && (!Number.isInteger(d.idleRelocationMinutes) || d.idleRelocationMinutes < 1 || d.idleRelocationMinutes > 1440)) return 'idleRelocationMinutes';
+  if (d.floors !== undefined) {
+    if (!Array.isArray(d.floors) || d.floors.length > 128) return 'floors';
+    for (const f of d.floors) {
+      if (!f || typeof f !== 'object' || Array.isArray(f) || Object.keys(f).some(k => !['id', 'kind', 'layout'].includes(k))
+        || typeof f.id !== 'string' || !['office', 'lobby', 'gym'].includes(f.kind) || !f.layout || typeof f.layout !== 'object' || Array.isArray(f.layout)
+        || Object.keys(f.layout).some(k => !['room', 'theme', 'items'].includes(k)) || typeof f.layout.room !== 'string' || !obj(f.layout.theme)
+        || !Array.isArray(f.layout.items) || f.layout.items.length > 200 || !f.layout.items.every(i => obj(i) && typeof i.uid === 'string' && typeof i.asset === 'string'
+          && ((Number.isInteger(i.x) && Number.isInteger(i.y)) || (typeof i.wall === 'string' && Number.isInteger(i.offset))))) return 'floors';
+    }
+  }
+  for (const k of Object.keys(d)) if (!['version', 'manifestVersion', 'room', 'theme', 'items', 'agents', 'presence', 'idleRelocationMinutes', 'floors'].includes(k)) return k;
   return null;
 }
 
@@ -58,24 +72,32 @@ function asVersion(data, version) {
   return out;
 }
 // agentsSeen rows are stored canonical (R22-04; older rows may be 2.x): served in the caller's names
-const LEGACY_ROLE = { primary: 'main', scheduled: 'cron', direct: 'dm', group: 'channel' };
 function seenAs(x, version) {
   const lr = rulesLib();
-  const id = lr.canonicalRuleId(x.id) || x.id, role = lr.canonicalRole(x.role) || x.role;
-  if (version === 3) return Object.assign({}, x, { id, role });
-  const id2 = id === 'primary' ? 'main' : id.replace(/^([a-z]+):/, (m, r) => (LEGACY_ROLE[r] || r) + ':');
-  return Object.assign({}, x, { id: id2, role: LEGACY_ROLE[role] || role });
+  const id = lr.canonicalRuleId(x.id) || x.id;
+  const role = lr.canonicalRole(x.role) || x.role;
+  const teamAlias = { 'team-host': 'agent', host: 'agent', 'team-member': 'subagent', member: 'subagent' };
+  if (version === 3) {
+    const allowed = new Set(['primary', 'agent', 'subagent', 'scheduled', 'direct', 'group', 'conversation', 'session']);
+    const safeRole = allowed.has(role) ? role : teamAlias[role] || 'agent';
+    const safeId = id.replace(/^([a-z-]+):/, (match, prefix) => (teamAlias[prefix] || prefix) + ':');
+    return Object.assign({}, x, { id: safeId, role: safeRole, name: redactChatIdentity(x.name, { id, role, maxLength: 120 }) || 'Agent' });
+  }
+  return Object.assign({}, x, { id: P2.occupantId(id), role: P2.occupantRole(role), name: redactChatIdentity(x.name, { id, role, maxLength: 120 }) || 'Agent' });
 }
 
-function validate(data) {
+function validate(data, hideAgents = false) {
   const bad = structural(data);
   if (bad) throw invalid(bad, 'invalid');
   const off = officeDefaults();
   let errors;
-  try { errors = off.rules.validateLayout(data, off.index); } catch (_) { throw invalid('data', 'invalid'); }
+  try {
+    errors = off.rules.validateLayout(data, off.index);
+    if (data.floors !== undefined) errors = [...errors, ...require('../../../public/v2/office/floors.js').validateFloors(data, off.index)];
+  } catch (_) { throw invalid('data', 'invalid'); }
   if (errors && errors.length) {
     throw new ApiError('validation_failed', { details: errors.slice(0, 50).map((e) => Object.assign({ issue: String(e.code) },
-      e.uid ? { field: 'items.' + e.uid } : e.agentId ? { field: 'agents.' + e.agentId } : {})) });
+      e.uid ? { field: 'items.' + e.uid } : e.agentId ? { field: hideAgents ? 'agents' : 'agents.' + e.agentId } : {})) });
   }
 }
 
@@ -91,7 +113,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     return {
       layout: { id: l.id, name: l.name, revision: l.revision, updatedAt: l.updatedAt, updatedBy: actorOf(l.updatedBy), data: asVersion(l.data, version) },
       manifest: off.manifest,
-      theme: resolveTheme(l.data.theme, t, timeZone),
+      theme: resolveTheme(l.data.theme, t, typeof timeZone === 'function' ? timeZone() : timeZone),
       default: { data: asVersion(off.layout, version) },
       revisions: store.office.revisions(l.id).map((x) => ({ id: String(x.revision), revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy) })),
       agentsSeen: store.office.seenRecent(t).map((x) => seenAs(x, version)),
@@ -104,7 +126,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
   let themeTimer = null;
   const armTheme = () => {
     clearTimeout(themeTimer);
-    const next = resolveTheme(active().data.theme, now(), timeZone).nextChangeAt;
+    const next = resolveTheme(active().data.theme, now(), typeof timeZone === 'function' ? timeZone() : timeZone).nextChangeAt;
     if (next == null) return;
     themeTimer = setTimeout(() => { topics.invalidate('layout'); topics.invalidate('office'); armTheme(); }, Math.max(1000, Math.min(next - now() + 500, 2 ** 31 - 1)));
     if (themeTimer.unref) themeTimer.unref();
@@ -116,6 +138,8 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
   // R22-06 (api-v3.md D4): a v3 save takes 3.0 names only; a 2.x rule id or match kind is 400 'v2-name' (v2 saves take both)
   const incoming = (req, data) => {
     const bad = structural(data); if (bad) throw invalid(bad, 'invalid');
+    const withheld=req.authorize&&!store.policy.can(req.user,'logs','read');
+    if(withheld&&data.agents.length)throw new ApiError('forbidden',{details:[{field:'agents',issue:'permission-denied'}]});
     if (req.apiVersion === 3) {
       const lr = rulesLib();
       for (const a of data.agents) {
@@ -125,9 +149,14 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
       }
     }
     // O8: a 2.x client never sees presence, so its save keeps the stored value
-    const stored = active().data && active().data.presence;
-    const withPresence = req.apiVersion !== 3 && data.presence === undefined && stored ? Object.assign({}, data, { presence: stored }) : data;
-    return asVersion(withPresence, 3);
+    const stored = active().data;
+    let preserved = data;
+    if (req.apiVersion !== 3 && data.presence === undefined && stored?.presence) preserved = { ...preserved, presence: stored.presence };
+    if (data.idleRelocationMinutes === undefined && stored?.idleRelocationMinutes !== undefined) preserved = { ...preserved, idleRelocationMinutes: stored.idleRelocationMinutes };
+    if (data.floors === undefined && stored?.floors) preserved = { ...preserved, floors: stored.floors };
+    const normalized = asVersion(preserved, 3);
+    // A projected empty array means withheld. Preserve the current private rules on saves/restores.
+    return withheld ? { ...normalized, agents: structuredClone(asVersion(stored, 3).agents) } : normalized;
   };
   const body = (req, allowed) => {
     const b = req.body;
@@ -149,18 +178,18 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     if (!/^\d{1,9}$/.test(req.params.rev)) throw invalid('rev', 'invalid');
     const x = store.office.revision(active().id, n);
     if (!x) throw new ApiError('not_found');
-    ok(res, { revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy), data: asVersion(x.data, req.apiVersion) });
+    ok(res, { revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy), data: asVersion(x.data, req.apiVersion) }, null, 'layoutRevision');
   });
   r.put('/office/layout', authed, guard('store'), (req, res) => {
     const b = body(req, ['expectedRevision', 'data']);
     const data = incoming(req, b.data);
-    validate(data);
+    validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'));
     commit(req, res, data);
   });
   r.put('/office/layout/theme', authed, guard('store'), (req, res) => {
     const b = body(req, ['expectedRevision', 'theme']);
     const data = asVersion(Object.assign({}, active().data, { theme: b.theme }), 3);
-    validate(data);
+    validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'));
     commit(req, res, data);
   });
 
@@ -176,7 +205,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     ok(res, { ok: true, result: store.office.prefs(), revision: null, vm: null });
   });
 
-  return { active, close: () => clearTimeout(themeTimer) };
+  return { active, refreshSettings: armTheme, close: () => clearTimeout(themeTimer) };
 }
 
 module.exports = { mountOfficeLayout, resolveTheme, structural, asVersion };

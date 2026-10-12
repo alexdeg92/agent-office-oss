@@ -2,6 +2,10 @@
 // (ADR-001: en arrives with contract 3.0). Proposed to architect as src/i18n/en.js; this copy then goes away.
 // test/frontend/i18n.test.js fails when a server key has no English here, so the two stay in step.
 export const LABELS_EN = {
+  "office.activity.idle": "On a break",
+  "office.activity.gym": "At the gym",
+  "office.activity.smoke": "On a break",
+  "office.activity.coffee": "Getting coffee",
   "historyKind.session": "{session} · {messages} messages · {tokens} tokens",
   "historyKind.session.noCount": "{session} · {tokens} tokens",
   "historySession.primary": "{agent}",
@@ -121,6 +125,7 @@ export const LABELS_EN = {
   'schedule.unrecognized': 'Unrecognized schedule', 'schedule.weekdays': 'Monday to Friday at {time}', 'schedule.weekly': 'Every {day} at {time}',
   'sessionTitle.acp': 'ACP session', 'sessionTitle.channel': 'Channel {id}', 'sessionTitle.cron': 'Scheduled task', 'sessionTitle.cronNamed': 'Scheduled task · {name}',
   'sessionTitle.dashboard': 'Dashboard', 'sessionTitle.explicit': 'Session {id}', 'sessionTitle.heartbeat': '{title} · heartbeat', 'sessionTitle.main': 'Main session',
+  'sessionTitle.untitled': 'Untitled session', 'sessionTitle.groupUnnamed': 'Unnamed group · {platform}', 'sessionTitle.groupUnnamedPlain': 'Unnamed group',
   'sessionTitle.named': '{name}', 'sessionTitle.subagent': 'Subagent {id}', 'sessionTitle.user': 'User {id}',
   'sessionTarget.isolated': 'Isolated session', 'sessionTarget.main': 'Main session', 'sessionTarget.unrecognized': 'Unknown',
   'wakeMode.next-heartbeat': 'At the next heartbeat', 'wakeMode.now': 'Immediately', 'wakeMode.unrecognized': 'Unknown',

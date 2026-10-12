@@ -1,0 +1,10 @@
+{
+  "event": "settings",
+  "data": {
+    "revision": 2,
+    "changed": [
+      "agents.names"
+    ],
+    "restartRequired": false
+  }
+}

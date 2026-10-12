@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 // Feed every fixture of a scenario through an engine, in a fixed order, as RawEnvelopes.
 const fs = require('fs');
 const path = require('path');

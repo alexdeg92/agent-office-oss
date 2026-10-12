@@ -197,14 +197,83 @@ describe('R14-16 · the active KPI: « au repos » only when nobody is busy', ()
     gateway: () => ({ connected: state !== 'offline', since: 1 }),
     sessions: () => [{ key: 'agent:main:main', updatedAt: 1, usage: { total: 0 }, interactive: false, displayName: null,
       class: { kind: 'primary', agentId: 'main', heartbeatOf: null, channel: null },
-      run: { status: state === 'working' ? 'running' : state === 'error' ? 'failed' : 'idle', endedAt: state === 'error' ? 99999 : null } }],
+      run: { status: state === 'working' ? 'running' : state === 'error' ? 'failed' : 'idle', evidence: 'status-field', endedAt: state === 'error' ? 99999 : null } }],
     agents: () => [{ id: 'main', name: 'Agent', isPrimary: true, mainSessionKey: 'agent:main:main' }],
     session: () => null, cronJobs: () => [], host: () => null, liveEvents: () => [],
   });
   for (const [state, key] of [['working', 'kpi.onStage'], ['error', 'kpi.onStage'], ['offline', 'kpi.idle'], ['idle', 'kpi.idle']]) {
     it('a sole primary ' + state + ' → ' + key, () => {
-      const vm = buildOfficeVM({ engine: engineWith(state), now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+      const vm = buildOfficeVM({ engine: engineWith(state), canReadSessions: true, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
       assert.equal(vm.kpis.find((k) => k.id === 'active').sub.key, key);
     });
   }
+  it('keeps unknown distinct from live transcript state and retains observed confidence in the OfficeVM', () => {
+    const engine = engineWith('idle');
+    const sessions = engine.sessions();
+    sessions[0].run.evidence = 'none';
+    engine.sessions = () => sessions;
+    engine.primaryAgent = () => ({ id: 'main' });
+    let vm = buildOfficeVM({ engine, canReadSessions: true, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+    assert.equal(vm.occupants[0].state, 'unknown');
+    assert.deepEqual(vm.occupants[0].execution, { status: 'unknown', evidence: { level: 'unknown', observedAt: null, expiresAt: null } });
+
+    engine.activity = () => ({ kind: 'working', source: 'transcript', since: 99000, expiresAt: 129000 });
+    vm = buildOfficeVM({ engine, canReadSessions: true, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+    assert.equal(vm.occupants[0].state, 'working', 'a live transcript-backed open turn is plainly presented as Working');
+    assert.deepEqual(vm.occupants[0].execution, { status: 'running', evidence: { level: 'observed', observedAt: 99000, expiresAt: 129000 } });
+  });
+  it('does not disclose transcript evidence timestamps to Office callers without sessions.read', () => {
+    const engine = engineWith('idle');
+    engine.activity = () => ({ kind: 'working', source: 'transcript', since: 99000, expiresAt: 129000 });
+    const vm = buildOfficeVM({ engine, canReadSessions: false, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+    assert.equal(vm.occupants[0].state, 'working', 'limited callers retain the permitted presentation state');
+    assert.deepEqual(vm.occupants[0].execution.evidence, { level: 'unknown', observedAt: null, expiresAt: null });
+    assert.equal(JSON.stringify(vm).includes('99000'), false);
+    assert.equal(JSON.stringify(vm).includes('129000'), false);
+  });
+  it('does not disclose verified session outcomes to Office callers without sessions.read', () => {
+    for (const status of ['succeeded', 'failed']) {
+      const engine = engineWith('idle');
+      engine.sessions()[0].run = { status, evidence: 'status-field', endedAt: 100000 };
+      const vm = buildOfficeVM({ engine, canReadSessions: false, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+      assert.equal(vm.occupants[0].execution.status, 'unknown', `${status} must not escape the limited projection`);
+      assert.deepEqual(vm.occupants[0].execution.evidence, { level: 'unknown', observedAt: null, expiresAt: null });
+    }
+  });
+  it('recent transcript activity does not overwrite a verified terminal outcome for that session', () => {
+    for (const status of ['succeeded', 'failed']) {
+      const engine = engineWith('idle'), session = engine.sessions()[0];
+      session.run = { status, evidence: 'status-field', endedAt: 100000 };
+      engine.sessions = () => [session]; engine.session = key => key === session.key ? session : null;
+      engine.activity = () => ({ sessionKey: session.key, kind: 'working', source: 'transcript', since: 99000, expiresAt: 129000 });
+      engine.primaryAgent = () => ({ id: 'main' });
+      const vm = buildOfficeVM({ engine, canReadSessions: true, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+      assert.equal(vm.occupants[0].execution.status, status);
+      assert.equal(vm.occupants[0].execution.evidence.level, 'verified');
+    }
+  });
+  it('unknown activity is not counted as known active or known running', () => {
+    const engine = engineWith('idle'), sessions = engine.sessions();
+    sessions[0].run = { status: 'running', evidence: 'none', evidenceLevel: 'unknown' };
+    engine.sessions = () => sessions; engine.primaryAgent = () => ({ id: 'main' });
+    const vm = buildOfficeVM({ engine, canReadSessions: true, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+    const active = vm.kpis.find(k => k.id === 'active');
+    assert.equal(active.value, null); assert.deepEqual(active.sub,{key:'kpi.stateUnknown'});
+    assert.equal(vm.kpis.find(k => k.id === 'runs').value,0);
+  });
+  it('a named second agent without activity support stays idle until its verified run starts', () => {
+    const engine = engineWith('idle'), sessions = engine.sessions(), agents = engine.agents();
+    const secondary = { ...sessions[0], key: 'agent:scribe:explicit', class: { ...sessions[0].class, kind: 'explicit', agentId: 'scribe' }, run: { status: 'idle', evidence: 'status-field', endedAt: null } };
+    sessions.push(secondary); agents.push({ id: 'scribe', name: 'Scribe', isPrimary: false });
+    engine.sessions = () => sessions; engine.agents = () => agents; engine.primaryAgent = () => agents[0];
+    assert.equal(engine.activity, undefined);
+    const build = () => buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { scribe: 'Scribe' }, now: 100000, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'Système' }) });
+    let vm = build();
+    assert.deepEqual(vm.occupants.map(o => [o.id, o.state]), [['main', 'idle'], ['agent:scribe', 'idle']]);
+    assert.equal(vm.kpis.find(k => k.id === 'active').value, 0);
+    secondary.run.status = 'running'; vm = build();
+    assert.deepEqual(vm.occupants.map(o => [o.id, o.state]), [['main', 'idle'], ['agent:scribe', 'working']]);
+    assert.equal(vm.kpis.find(k => k.id === 'active').value, 1);
+    assert.equal(vm.kpis.find(k => k.id === 'active').sub.key, 'kpi.onStage');
+  });
 });

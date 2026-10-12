@@ -25,23 +25,32 @@ function fingerprint(files, env) {
   }
   return hash.digest('hex');
 }
-function createSetupIntegrations({ env, paths, dataDir, now = Date.now, beforeMutation = () => {} }) {
-  const plans = new Map();
+function createSetupIntegrations({ env, paths, dataDir, now = Date.now, beforeMutation = () => {}, afterMutation = () => {} }) {
+  const plans = new Map(), resolved = new Map();
+  function descriptor({ runtime, agentId, locale = 'fr', target = null }) {
+    const adapter = adapterById(runtime), I = adapter.projectTag?.();
+    const adapterPaths = adapter.paths?.(env) || paths;
+    const local = adapter.setup?.integrationTargets?.({ paths: adapterPaths, env }) || [];
+    target = local.find(a => a.id === agentId) || target || resolved.get(runtime + ':' + agentId);
+    if (!I || !target?.workspace) return { status: I ? 'absent' : 'unsupported', target: null, I, files: [] };
+    target = { ...target, workspace: checked(target.workspace, env) };
+    const want = I.expected(target.workspace, locale);
+    const files = [...Object.keys(want.files).map(f => path.join(want.dir, f)), path.join(target.workspace, 'AGENTS.md')];
+    return { status: I.inspect(target, { locale }).status, target, I, files };
+  }
   async function plan({ runtime, agents = [], locale = 'fr' }) {
     if (!['fr', 'en'].includes(locale)) throw Object.assign(new Error('invalid locale'), { code: 'EINVAL' });
     const adapter = adapterById(runtime);
     const I = adapter.projectTag?.();
-    const discovered = I ? await adapter.setup.integrationAgents({ paths, agents }) : [];
+    const discovered = I ? await adapter.setup.integrationAgents({ paths: adapter.paths?.(env) || paths, agents, env }) : [];
     const targets = (discovered || []).filter(a => a && typeof a.id === 'string' && AGENT_ID.test(a.id) && typeof a.workspace === 'string');
+    for (const target of targets) resolved.set(runtime + ':' + target.id, target);
     const rows = (agents.length ? agents : targets).map(a => {
       const found = targets.find(x => x.id === a.id);
-      const target = found ? { ...found, workspace: checked(found.workspace, env) } : null;
-      if (!I || !target?.workspace) return { id: a.id, status: 'unsupported', files: [] };
-      checked(target.workspace, env);
-      const want = I.expected(target.workspace, locale);
-      const files = [...Object.keys(want.files).map(f => path.join(want.dir, f)), path.join(target.workspace, 'AGENTS.md')];
+      const d = descriptor({ runtime, agentId: a.id, locale, target: found });
+      const { target, files, status } = d;
+      if (!I || !target) return { id: a.id, status: 'unsupported', files: [] };
       const before = fingerprint(files, env);
-      const status = I.inspect(target, { locale }).status;
       const dry = I.install(target, { locale, dryRun: true });
       const changed = files.filter(f => f.endsWith('AGENTS.md') ? dry.done.includes('block') : dry.done.includes('skill'));
       return { id: a.id, status, files: changed, allFiles: files, target, before };
@@ -54,21 +63,21 @@ function createSetupIntegrations({ env, paths, dataDir, now = Date.now, beforeMu
   }
   function apply({ planId, agentIds, confirmed, action = 'install' }) {
     const p = plans.get(planId);
-    if (!p || p.expires < now()) throw Object.assign(new Error('expired plan'), { code: 'EPLAN' });
+    if (!p || p.expires <= now()) throw Object.assign(new Error('expired plan'), { code: 'EPLAN' });
     if (confirmed !== true || !Array.isArray(agentIds) || !agentIds.length || new Set(agentIds).size !== agentIds.length || !['install', 'uninstall'].includes(action)) throw Object.assign(new Error('confirmation required'), { code: 'ECONFIRM' });
     const rows = agentIds.map(id => p.rows.find(a => a.id === id));
     if (rows.some(a => !a || a.status === 'unsupported')) throw Object.assign(new Error('unsupported target'), { code: 'EPLAN' });
     // Check every target before the first write, including changes to symlinked parents.
     for (const a of rows) if (fingerprint(a.allFiles, env) !== a.before) throw Object.assign(new Error('files changed; review a new plan'), { code: 'ESTALEPLAN' });
-    const results = require('./safe-fs').transaction(rows.flatMap(a => a.allFiles), path.join(dataDir, 'integrations', 'backups'), () => rows.map(a => {
+    const results = require('./safe-fs').transaction(rows.flatMap(a => a.allFiles), path.join(dataDir, 'integrations', 'backups'), () => { const results = rows.map(a => {
       beforeMutation();
       const r = p.I[action](a.target, { locale: p.locale, backupDir: dataDir ? path.join(dataDir, 'integrations', 'backups') : null });
       if (r.status === 'conflict' || r.status === 'failed') throw Object.assign(new Error('selected installation refused'), { code: 'ECONFLICT' });
       a.before = fingerprint(a.allFiles, env); a.status = p.I.inspect(a.target, { locale: p.locale }).status;
       return { id: a.id, status: a.status, changed: r.done, backup: r.backup || null, reason: r.refused || null };
-    }));
+    }); afterMutation(); return results; });
     return { agents: results };
   }
-  return { plan, apply, invalidate: () => plans.clear() };
+  return { plan, apply, descriptor, invalidate: () => plans.clear() };
 }
 module.exports = { createSetupIntegrations };

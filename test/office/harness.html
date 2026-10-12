@@ -40,7 +40,9 @@ window.H = {
   release(i) { const h = held[i]; h.res(); h.done = true; },
   releaseAll() { for (const h of held) if (!h.done) { h.res(); h.done = true; } },
   restoreDecodes() { HTMLImageElement.prototype.decode = realDecode; held.length = 0; },
-  occupants(list) { return resolveOccupants(layout, index, list).map((r, i) => ({ ...list[i], ...r })); },
+  occupants(list) { return resolveOccupants(layout, index, list).map((r, i) => ({ ...list[i], ...r,
+    stateLabelText: list[i].stateLabelText || ({ error: 'Erreur', working: 'Travaille', idle: 'Inactif', offline: 'Hors ligne' }[list[i].state] || list[i].state),
+    stateLastLabelText: list[i].stateLastLabelText || ({ error: 'Dernier état : Erreur', working: 'Dernier état : Travaille', idle: 'Dernier état : Inactif' }[list[i].state] || list[i].state) })); },
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   /** Resolves with cond()'s first truthy value (polled every 10 ms); rejects naming the condition after `ms`.
    *  Tests wait on what they assert next, never on the clock, so a loaded run only takes longer (no flake). */

@@ -30,20 +30,24 @@ const { Session: SessionContract } = require('./model/session');
 // PM audit (B): canonical values are stored as entity instances (frozen, validated, explicit nulls)
 const M = require('../model');
 const { resolvePrimaryAgent } = require('./derive/primary-agent');
+const { createHealthChecks } = require('./health-checks');
+const { resolveRunIdentity } = require('./run-identity');
 
 // Vocabulary for the diagnostics privacy rule (quarantine.js): every field name declared by a raw or
 // canonical schema, plus the '$.canonical.<type>' prefixes.
 function declaredVocabulary(schemas) {
   const names = schemaDsl.declaredNames(Object.values(schemas).map((d) => d.schema).concat(Object.values(C), [SessionContract]));
-  for (const t of ['canonical', 'agent', 'cronJob', 'cronRun', 'skill', 'skillInfo', 'channel', 'transcript', 'config', 'session']) names.add(t);
+  for (const t of ['canonical', 'agent', 'host', 'orchestrator', 'hostAgent', 'identityLink', 'team', 'teamMember', 'task', 'review', 'teamMessage',
+    'cronJob', 'cronRun', 'skill', 'skillInfo', 'channel', 'transcript', 'config', 'session']) names.add(t);
   return names;
 }
 
 // Store tables whose rows are validated on read; an invalid row is reported as store.invalid on these (S5).
-const STORE_CHANNELS = ['store.quarantine', 'store.interlocutor_cache', 'store.audit_log', 'store.office_agents_seen', 'config.primary',
+const STORE_CHANNELS = ['store.quarantine', 'store.interlocutor_cache', 'store.audit_log', 'store.office_agents_seen', 'store.runtime_aliases', 'config.primary',
+  'core:vm.health', // legacy channel used by pre-canonical HealthVM validation reports
   // PM audit (B): a VM that failed its runtime check (vm/check.js); one channel per VM
   ...['meta', 'me', 'office', 'chat', 'flows', 'flow', 'access', 'interlocutor', 'logs', 'session', 'skills', 'skill', 'health', 'projects', 'project',
-    'history', 'candidates', 'layout', 'prefs'].flatMap((n) => ['vm.' + n, 'vm.v3.' + n])];   // G5: 'vm.v3.<name>' for contract 3.0
+    'history', 'candidates', 'layout', 'prefs', 'settings'].flatMap((n) => ['vm.' + n, 'vm.v3.' + n])];   // G5: 'vm.v3.<name>' for contract 3.0
 // G2 (§12.4): canonical ingestion. An adapter whose runtime already returns structured objects (and the fake core
 // adapter in tests) hands the engine CANONICAL values; they're validated against the canonical contracts, not raw
 // schemas, and recorded under the channel 'canonical.<op>'.
@@ -67,7 +71,20 @@ const OVERRIDE_ALIASES = { cronJobs: 'flows', cronRuns: 'flowRuns' };
 // `normalise` is injectable so tests can prove the canonical goldens catch a corrupted normaliser.
 // `overrides` replaces S4 normalisers by name (agents, cronJobs, cronRuns, skills, skillInfo, channels,
 // transcript, config): tests use it to prove the canonical goldens catch a corrupted normaliser.
-function createEngine({ adapter, schemas, now = () => Date.now(), normalise, overrides = {}, primary = null, agentNames = {}, senderContext = () => ({}) } = {}) {
+// A connector's mark as the adapter declares it; otherwise derive a contrast-safe monogram.
+const { normaliseLineage } = require('./model/lineage');
+function markOf(adapter) {
+  const m = adapter.mark, ok = m && typeof m.monogram === 'string' && /^\S{1,3}$/.test(m.monogram) && /^#[0-9a-f]{6}$/i.test(m.color || '');
+  if (ok) return { monogram: m.monogram, color: m.color.toLowerCase(), ...(typeof m.logo === 'string' ? { logo: m.logo } : {}), ...(typeof m.logoDark === 'string' ? { logoDark: m.logoDark } : {}), ...(typeof m.providerName === 'string' ? { providerName: m.providerName } : {}) };
+  const name = String(adapter.name || adapter.id || '?');
+  const monogram = (name.match(/[A-Za-z0-9]+/g) || ['?']).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  // a stable hue from the adapter id, dark enough that white text keeps ≥ 4.5:1 on every hue (WCAG AA)
+  let h = 0; for (const c of String(adapter.id || name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360, l = 0.30, a = 0.5 * Math.min(l, 1 - l), f = (n) => { const k = (n + hue / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
+  return { monogram, color: '#' + [f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, '0')).join('') };
+}
+
+function createEngine({ adapter, schemas, now = () => Date.now(), normalise, overrides = {}, primary = null, agentNames = {}, hiddenAgents = [], configuredAgents = null, senderContext = () => ({}), runtimeId = null, onHealthAudit = () => {}, autoAddedAgents = [], excludedAgents = [], autoAddManaged = false, onAutoAddAgent = null } = {}) {
   adapter = adapter || defaultAdapter().definition;
   schemas = schemas || schemasOf(adapter);
   const N = Object.assign({}, adapter.normalise);
@@ -79,6 +96,9 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   const quarantine = createQuarantine({ now, vocab: { declared, channels: new Set(Object.keys(schemas).concat(STORE_CHANNELS, CANONICAL_OPS.map((op) => 'canonical.' + op))),
     events: () => advertisedEvents, eventPrefix: adapter.eventPrefix } });
   const registry = new Map();     // channel(+request key) → { value, at }
+  // Adapter-private cross-source identifiers, keyed by canonical session key.
+  // They are deliberately kept outside canonical entities and VM projections.
+  const identitySessionRefs = new Map();
   const ev = new EventEmitter();
   let openclawVersion = null;
 
@@ -113,7 +133,13 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   }
 
   // ---- canonical sessions (S3, S3.1: snapshots, descriptions, contract) ----------------------
-  const reg = createSessionsRegistry({ now, normalise: normalise || N.session, classify: adapter.classifySession });
+  const validateIdentity = (type, item, rec) => {
+    const issue = runtimeId && require('./runtime-identities').identityIssue(type, item);
+    if (issue) rec({ code: 'shape.invalid', severity: 'error', path: '$.canonical.' + type + issue });
+    return !issue;
+  };
+  const reg = createSessionsRegistry({ now, normalise: normalise || N.session, classify: adapter.classifySession,
+    validate: (item, rec) => validateIdentity('session', item, rec) });
   // ---- other canonical types (S4) -------------------------------------------------------------
   // Each hook normalises, then validates against the canonical contract (model/canonical.js); an
   // invalid object is quarantined under '$.canonical.<type>' and left out. A hook may return the value
@@ -122,15 +148,78 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     cronRuns: new Map(), skillInfo: new Map(), transcripts: new Map() };
   // architect-54: transcripts are kept for the views (at most TRANSCRIPTS_MAX, the least recently read go first: a view
   // reads a missing one again), and the adapter's project hints are taken from each one as it is admitted
-  const TRANSCRIPTS_MAX = 200, HINT_SESSIONS_MAX = 2000;
+  const TRANSCRIPTS_MAX = adapter.transcriptBounds?.sessions || 200, HINT_SESSIONS_MAX = 2000;
+  const observed = new Map();
+  let runExpiryTimer = null, runExpiryAt = null, engineClosed = false;
+  const notifiedRunExpiries = new Map();
+  const transcriptBudget = require('./transcript-budget'), transcriptKeys = new Map();
+  const forgetTranscript = (key, { activity = false } = {}) => {
+    canon.transcripts.delete(key); fullTranscripts.delete(key); conversationCounts.delete(key);
+    lastJson.delete('canonical.transcript#' + key); outcomes.delete('transcript#' + key);
+    registry.delete('canonical.transcript#' + key); if (activity) { observed.delete(key); scheduleRunExpiry(); }
+    transcriptBudget.release(transcriptKeys.get(key)); transcriptKeys.delete(key);
+  };
+  function setObservedActivity(key, value) {
+    if (!reg.get(key) || !value || value.kind !== 'working' || value.source !== 'transcript' || !Number.isSafeInteger(value.since)
+      || !Number.isSafeInteger(value.expiresAt) || value.expiresAt <= value.since || value.expiresAt - value.since > 30000) return false;
+    observed.set(key, { sessionKey: key, ...value });
+    for (const [k, v] of observed) if (!reg.get(k) || v.expiresAt <= now()) observed.delete(k);
+    if (observed.size > 2000) observed.delete(observed.keys().next().value);
+    scheduleRunExpiry();
+    ev.emit('change', { type: 'Activity' }); return true;
+  }
+  function currentActivity(key) {
+    const verified = activityOf(reg.get(key)), lease = observed.get(key);
+    if (lease && (lease.expiresAt <= now() || !reg.get(key))) {
+      observed.delete(key);
+      scheduleRunExpiry();
+      if (lease.expiresAt <= now()) ev.emit('change', { type: 'Activity' });
+    }
+    return verified || (observed.has(key) ? observed.get(key) : null);
+  }
+  function clearExpiredEvidence() {
+    const at = now(); let changed = false;
+    for (const [key, value] of observed) if (value.expiresAt <= at || !reg.get(key)) { observed.delete(key); changed = true; }
+    const current = new Map(reg.list().map(row => [row.key, row.run]));
+    for (const key of notifiedRunExpiries.keys()) if (!current.has(key) || current.get(key)?.evidenceLevel !== 'observed'
+      || current.get(key)?.expiresAt !== notifiedRunExpiries.get(key)) notifiedRunExpiries.delete(key);
+    for (const [key, run] of current) if (run.evidenceLevel === 'observed' && Number.isSafeInteger(run.expiresAt)
+      && run.expiresAt <= at && notifiedRunExpiries.get(key) !== run.expiresAt) {
+      notifiedRunExpiries.set(key, run.expiresAt); changed = true;
+    }
+    if (changed) ev.emit('change', { type: 'Activity' });
+    return changed;
+  }
+  // One timer covers canonical run and transcript-activity leases independently of source traffic.
+  function scheduleRunExpiry(sessions = reg.list()) {
+    let at = sessions.reduce((earliest, row) => row.run.evidenceLevel === 'observed' && Number.isSafeInteger(row.run.expiresAt)
+      && row.run.expiresAt > now() ? Math.min(earliest, row.run.expiresAt) : earliest, Infinity);
+    for (const value of observed.values()) if (value.expiresAt > now()) at = Math.min(at, value.expiresAt);
+    if (at === runExpiryAt && runExpiryTimer) return;
+    if (runExpiryTimer) clearTimeout(runExpiryTimer);
+    runExpiryTimer = null; runExpiryAt = null;
+    if (engineClosed || at === Infinity) return;
+    runExpiryAt = at;
+    runExpiryTimer = setTimeout(() => {
+      runExpiryTimer = null; runExpiryAt = null;
+      clearExpiredEvidence();
+      scheduleRunExpiry();
+    }, Math.max(0, at - now()));
+    if (runExpiryTimer.unref) runExpiryTimer.unref();
+  }
   const projectHints = new Map();   // sessionKey → [{ id, at, slug, status, statusIssue, note }]
   const fullTranscripts = new Set(); // opened conversations retain all turns until their cached transcript is evicted
   const conversationCounts = new Map(); // raw user/assistant counts before tail-window clipping; no tool results
   function keepTranscript(key, t) {
     canon.transcripts.delete(key); canon.transcripts.set(key, t);
-    while (canon.transcripts.size > TRANSCRIPTS_MAX) {
+    const bytes = () => [...canon.transcripts.values()].reduce((n, v) => n + Buffer.byteLength(JSON.stringify(v)), 0);
+    while (canon.transcripts.size > TRANSCRIPTS_MAX || adapter.transcriptBounds?.bytes && bytes() > adapter.transcriptBounds.bytes) {
       const oldest = canon.transcripts.keys().next().value;
-      canon.transcripts.delete(oldest); fullTranscripts.delete(oldest); conversationCounts.delete(oldest);
+      forgetTranscript(oldest);
+    }
+    if (adapter.transcriptBounds && canon.transcripts.has(key)) {
+      if (!transcriptKeys.has(key)) transcriptKeys.set(key, {});
+      transcriptBudget.reserve(transcriptKeys.get(key), Buffer.byteLength(JSON.stringify(t)), () => forgetTranscript(key));
     }
     if (typeof adapter.projectHints !== 'function') return;
     let hints = []; try { hints = adapter.projectHints(t) || []; } catch (_) { hints = []; }
@@ -181,17 +270,23 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   // transitions into LiveEvents (R6-06). A session first seen already running after the initial
   // snapshot counts as a start; first sightings during the initial snapshot emit nothing.
   let sessionsJson = null;
-  const runStatus = new Map();   // key → last run.status
+  const runStatus = new Map();   // session key → { identity, status }; bounded to the current session inventory
   let sessionsSeeded = false;
   function afterSessions() {
     const list = reg.list();
+    scheduleRunExpiry(list);
     for (const x of list) {
-      const prev = runStatus.get(x.key), cur = x.run.status;
-      runStatus.set(x.key, cur);
+      const cur = x.run.status;
+      const previous = runStatus.get(x.key);
+      const resolved = resolveRunIdentity(previous?.identity, x);
+      const prev = resolved.same ? previous.status : undefined;
+      runStatus.set(x.key, { identity: resolved.identity, status: cur });
       if (prev === cur || (prev === undefined && !sessionsSeeded)) continue;
       const kind = cur === 'running' ? 'run.started' : prev === 'running' && cur === 'succeeded' ? 'run.succeeded' : prev === 'running' && cur === 'failed' ? 'run.failed' : null;
       if (kind) pushLive({ kind, actor: { kind: 'system', component: 'engine' }, sessionKey: x.key, occupantId: occupantIdOf(x) });
     }
+    const currentKeys = new Set(list.map(x => x.key));
+    for (const key of runStatus.keys()) if (!currentKeys.has(key)) runStatus.delete(key);
     sessionsSeeded = true;
     const j = JSON.stringify(list);
     if (j !== sessionsJson) { sessionsJson = j; ev.emit('change', { type: 'Session' }); }
@@ -200,36 +295,63 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   const issueFn = (rec) => (code, severity, path, detail, sample) => rec({ code, severity, path, detail, sample });
   // → the entity instance (frozen, explicit nulls), or null with the issues quarantined under '$.canonical.<type>'
   function admit(schema, typeName, item, rec) {
+    // T-0062: lineage from any adapter is normalised here (redacted bounded label; an unusable one = no known spawner)
+    if (item && typeof item === 'object' && item.spawnedBy != null) item = { ...item, spawnedBy: normaliseLineage(item.spawnedBy) };
     const E = M.entityOf(schema);
     if (!E) throw new Error('no entity class for ' + typeName);
-    return E.from(item, (i) => rec({ code: 'shape.invalid', severity: 'error', path: '$.canonical.' + typeName + i.path.slice(1), detail: i.detail }));
+    const value = E.from(item, (i) => rec({ code: 'shape.invalid', severity: 'error', path: '$.canonical.' + typeName + i.path.slice(1), detail: i.detail }));
+    return value && validateIdentity(typeName, value, rec) ? value : null;
   }
   const admitAll = (schema, typeName, list, rec) => list.map((x) => admit(schema, typeName, x, rec)).filter(Boolean);
+  const admitSnapshot = (schema, typeName, list, rec, previous) => {
+    const out = list.map(x => admit(schema,typeName,x,rec));
+    return runtimeId && !out.every(Boolean) ? previous : out.filter(Boolean);
+  };
 
   // Canonical operations (the adapter's routes map raw channels onto them; `x` is the route-prepared value).
-  const namedAgents = (rows) => Array.isArray(rows) ? rows.map(a => a && Object.hasOwn(agentNames, a.id) && typeof agentNames[a.id] === 'string' ? { ...a, name: agentNames[a.id] } : a) : rows;
+  let rawAgents = [];
+  let autoAdded = new Set(autoAddedAgents), excluded = excludedAgents, managedAutoAdd = autoAddManaged;
+  const selectedAgents = () => new Set([...(configuredAgents || []), ...autoAdded]);
+  function rememberDiscovered(rows) {
+    if (!managedAutoAdd || typeof onAutoAddAgent !== 'function' || !Array.isArray(rows)) return;
+    for (const row of rows) {
+      const id=row?.id;
+      if (typeof id!=='string' || hiddenAgents.includes(id) || excluded.includes(id) || (configuredAgents || []).includes(id) || autoAdded.has(id)) continue;
+      try { if (onAutoAddAgent(id)) autoAdded.add(id); } catch { /* fail closed: the row remains outside the managed roster */ }
+    }
+  }
+  function namedAgents(rows) {
+    if (!Array.isArray(rows)) return rows;
+    const all = rows.slice();
+    const selected=selectedAgents();
+    for (const id of selected) if (!all.some(a => a?.id === id)) all.push({ id, name: agentNames[id] || id, workspace: null, model: null, fallbackModels: [], isPrimary: id === primary, mainSessionKey: null });
+    return all.filter(a => !hiddenAgents.includes(a?.id) && !excluded.includes(a?.id) && ((!configuredAgents && !managedAutoAdd) || selected.has(a?.id)))
+      // agent-identity-1: the owner's name wins over any adapter-supplied display name (title, gateway name)
+      .map(a => a && ({ ...a, hostObservations: Array.isArray(a.hostObservations) ? a.hostObservations : [],
+        ...(Object.hasOwn(agentNames, a.id) && typeof agentNames[a.id] === 'string' ? { name: agentNames[a.id], displayName: agentNames[a.id] } : {}) }));
+  }
   const ACCEPT = {
     'sessions.page': (x, rec, env, issues) => {
       const rowsDropped = issues.some((i) => i.code === 'shape.item-dropped');
-      reg.acceptPage(x.page, x.offset, rec, { rowsDropped });
+      reg.acceptPage(x.page, x.offset, rec, { rowsDropped, acquisitionGeneration: env.context?.acquisitionGeneration, sourceOrder: env.context?.sourceOrder });
       afterSessions();
     },
-    'sessions.describe': (row, rec) => { reg.acceptDescription(row, rec); afterSessions(); },
+    'sessions.describe': (row, rec, env) => { reg.acceptDescription(row, rec, { sourceOrder: env.context?.sourceOrder }); afterSessions(); },
     // S7b: a catalog-only event (key null) carries no session row
-    'sessions.changed': (row, rec) => { if (!row.key) return; reg.acceptChanged(row, rec); afterSessions(); },
-    sessionGroups: (v, rec) => { canon.sessionGroups = admitAll(C.SessionGroup, 'sessionGroup', N.sessionGroups(v), rec); },
-    agents: (v, rec) => { canon.agents = admitAll(C.Agent, 'agent', namedAgents(N.agents(v)), rec); updatePrimary(); },
-    flows: (v, rec) => { canon.cronJobs = admitAll(C.CronJob, 'cronJob', N.flows(v, issueFn(rec)), rec); },
+    'sessions.changed': (row, rec, env) => { if (!row.key) return; reg.acceptChanged(row, rec, { sourceOrder: env.context?.sourceOrder }); afterSessions(); },
+    sessionGroups: (v, rec) => { canon.sessionGroups = admitSnapshot(C.SessionGroup, 'sessionGroup', N.sessionGroups(v), rec, canon.sessionGroups); },
+    agents: (v, rec) => { const rows=N.agents(v);rememberDiscovered(rows);canon.agents = admitSnapshot(C.Agent, 'agent', namedAgents(rawAgents = rows), rec, canon.agents); updatePrimary(); },
+    flows: (v, rec) => { canon.cronJobs = admitSnapshot(C.CronJob, 'cronJob', N.flows(v, issueFn(rec)), rec, canon.cronJobs); },
     flowRuns: (v, rec, env, issues, key) => {
       if (!key) return;
       canon.cronRuns.set(key, { fetchedAt: now(), runs: admitAll(C.CronRun, 'cronRun', N.flowRuns(v, key, issueFn(rec)), rec) });
     },
-    skills: (v, rec) => { canon.skills = admitAll(C.Skill, 'skill', N.skills(v, issueFn(rec)), rec); },
+    skills: (v, rec) => { canon.skills = admitSnapshot(C.Skill, 'skill', N.skills(v, issueFn(rec)), rec, canon.skills); },
     skillInfo: (v, rec, env, issues, key) => {
       const info = N.skillInfo(v, issueFn(rec));
       const e = admit(C.SkillInfo, 'skillInfo', info, rec); if (e) canon.skillInfo.set(key, e);
     },
-    channels: (v, rec) => { canon.channelsRaw = v; canon.channels = admitAll(C.Channel, 'channel', N.channels(v, issueFn(rec), canon.config), rec); },
+    channels: (v, rec) => { canon.channelsRaw = v; canon.channels = admitSnapshot(C.Channel, 'channel', N.channels(v, issueFn(rec), canon.config), rec, canon.channels); },
     transcript: (v, rec, env, issues, key) => {
       if (!key) return;
       const session = reg.get(key);
@@ -305,12 +427,18 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     ev.emit('change', { channel: 'gateway.connection' });
   }
   // The one runtime projection VMs read (no VM reads a raw channel, §12.4).
+  // T-0058: the connector that owns a session (one engine = one connector instance); adapter-declared mark
+  function connectorOf() { return { id: runtimeId || 'legacy', adapter: adapter.id, name: adapter.name, mark: markOf(adapter) }; }
   function runtime() {
-    return { adapterId: adapter.id, name: adapter.name, gatewayLabel: adapter.gatewayLabel || adapter.name, gatewayLabels: adapter.gatewayLabels || null, version: gateway.version, protocol: runtimeState.protocol,
+    return { adapterId: adapter.id, name: adapter.name, mark: markOf(adapter), gatewayLabel: adapter.gatewayLabel || adapter.name, gatewayLabels: adapter.gatewayLabels || null, version: gateway.version, protocol: runtimeState.protocol,
       state: runtimeState.notConfigured ? 'not-configured' : gateway.connected ? 'connected' : 'disconnected',
       reason: runtimeState.notConfigured, connected: gateway.connected, since: gateway.since,
       capabilities: typeof adapter.capabilities === 'function' ? adapter.capabilities() : {} };   // G5: MetaVM.runtime.capabilities (3.0)
   }
+  const healthChecks = createHealthChecks({ adapterId: adapter.id || 'adapter', adapter,
+    context: () => ({ adapterId: adapter.id || 'adapter', runtime: runtime(), sources: sourceList(), sessions: reg.list(), now: now() }), now,
+    onChange: () => ev.emit('change', { type: 'HealthCheck' }), onAudit: onHealthAudit });
+  const notifyHealth = () => ev.emit('change', { type: 'HealthCheck' });
 
   // ---- canonical ingestion (§12.4) -------------------------------------------------------------
   const isStrList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -318,17 +446,17 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   const allAdmitted = (schema, typeName, list, rec) => { const out = list.map((x) => admit(schema, typeName, x, rec)); return out.every(Boolean) ? out : null; };
   const CANON = {
     // A complete snapshot (deletes what's absent) and a single upsert. Rows go through the registry with the
-    // adapter's session normaliser, which for a canonical adapter is the identity; the registry validates Session.
+    // canonical input path, without applying the adapter's native normaliser again; the registry validates Session.
     // R13-03: rows are validated BEFORE the registry sees them. A rejected row is left out (its last good row stays) and
     // makes the snapshot incomplete, so no absence in it counts as deletion evidence.
     'sessions.snapshot': (list, rec) => {
       const good = list.map((row) => admit(SessionContract, 'session', row, rec)).filter(Boolean);
-      reg.acceptPage({ sessions: good, hasMore: false, totalCount: list.length }, 0, rec, { rowsDropped: good.length !== list.length });
+      reg.acceptPage({ sessions: good, hasMore: false, totalCount: list.length }, 0, rec, { rowsDropped: good.length !== list.length, canonical:true });
       afterSessions();
     },
-    'sessions.upsert': (row, rec) => { const e = admit(SessionContract, 'session', row, rec); if (!e) return; reg.acceptChanged(e, rec); afterSessions(); },
+    'sessions.upsert': (row, rec) => { const e = admit(SessionContract, 'session', row, rec); if (!e) return; reg.acceptChanged(e, rec, {canonical:true}); afterSessions(); },
     // Lists replace the previous one only when EVERY item is admitted (all-or-nothing: the last good list stays).
-    agents: (v, rec) => { const l = allAdmitted(C.Agent, 'agent', namedAgents(v), rec); if (l) { canon.agents = l; updatePrimary(); } },
+    agents: (v, rec) => { rememberDiscovered(v);const l = allAdmitted(C.Agent, 'agent', namedAgents(rawAgents = v), rec); if (l) { canon.agents = l; updatePrimary(); } },
     flows: (v, rec) => { const l = allAdmitted(C.CronJob, 'cronJob', v, rec); if (l) canon.cronJobs = l; },
     flowRuns: (v, rec, key) => { const l = allAdmitted(C.CronRun, 'cronRun', v, rec); if (l) canon.cronRuns.set(key, { fetchedAt: now(), runs: l }); },
     skills: (v, rec) => { const l = allAdmitted(C.Skill, 'skill', v, rec); if (l) canon.skills = l; },
@@ -348,11 +476,11 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     if (!Object.prototype.hasOwnProperty.call(CANON, op)) throw new Error('ingestCanonical: unknown op ' + JSON.stringify(String(op)));
     const channel = 'canonical.' + op, source = adapter.id || 'runtime';
     const issues = [];
-    const rec = (i) => { const full = Object.assign({ source, channel, openclawVersion, schema: null }, i); quarantine.record(full); issues.push(full); };
+    const rec = (i) => { const { incrementCount = true, ...issue } = i; const full = Object.assign({ source, channel, openclawVersion, schema: null }, issue); quarantine.record(full, { increment: incrementCount }); issues.push(full); };
     const env = { source, channel, receivedAt: now(), context: { key } };
     const done = (okFlag) => { checkStatus(); ev.emit('ingested', { env, ok: okFlag, issues }); return { ok: okFlag, issues }; };
     const needsList = op === 'sessions.snapshot' || ['agents', 'flows', 'flowRuns', 'skills', 'channels', 'sessionGroups'].includes(op);
-    if ((KEYED_OPS.has(op) && (typeof key !== 'string' || !key)) || (needsList ? !Array.isArray(value) : (value == null || typeof value !== 'object'))) {
+    if ((KEYED_OPS.has(op) && (typeof key !== 'string' || !key || runtimeId && !require('../runtime-ids').validNativeId(key))) || (needsList ? !Array.isArray(value) : (value == null || typeof value !== 'object'))) {
       rec({ code: 'shape.invalid', severity: 'error', path: '$.canonical', detail: 'not a canonical value' });
       fail(source, channel, 'payload-rejected');
       recordOutcome(op, key, false, 'payload-rejected');
@@ -371,7 +499,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     }
     if (!issues.length) quarantine.markClean(channel);
     const regKey = channel + (key ? '#' + key : '');
-    const j = JSON.stringify(value);
+    const j = require('node:crypto').createHash('sha256').update(JSON.stringify(value)).digest('hex');
     if (lastJson.get(regKey) !== j) { lastJson.set(regKey, j); ev.emit('change', { channel }); }
     ok(source, channel);
     recordOutcome(op, key, true, null);
@@ -484,7 +612,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     const def = Object.prototype.hasOwnProperty.call(schemas, env.channel) ? schemas[env.channel] : null;
     const route = routeOf(env.channel);
     const issues = [];
-    const rec = (i) => { const full = Object.assign({}, base, { schema: def ? { id: def.id, version: def.version } : null }, i); quarantine.record(full); issues.push(full); };
+    const rec = (i) => { const { incrementCount = true, ...issue } = i; const full = Object.assign({}, base, { schema: def ? { id: def.id, version: def.version } : null }, issue); quarantine.record(full, { increment: incrementCount }); issues.push(full); };
     const done = (okFlag, value, category = 'payload-rejected') => {
       if (route) {
         const rejected = !okFlag || issues.some((i) => i.severity === 'error' && i.path && String(i.path).startsWith('$.canonical'));
@@ -538,17 +666,57 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
       const j = JSON.stringify(stored);
       if (lastJson.get(regKey) !== j) { lastJson.set(regKey, j); ev.emit('change', { channel: env.channel }); }
     }
-    ok(env.source, env.channel);
+    if (runtimeId && issues.some(i=>i.severity==='error' && i.path?.startsWith('$.canonical'))) fail(env.source,env.channel,'payload-rejected');
+    else ok(env.source, env.channel);
     return done(true, r.value);
   }
 
   return {
-    ingest, ingestCanonical, setReads, request, setOpenclawVersion, setSourceDown, setGatewayConnected, setRuntimeNotConfigured, runtime, quarantine, on: ev.on.bind(ev), removeListener: ev.removeListener.bind(ev),
+    ingest, ingestCanonical, setReads, request, setOpenclawVersion, setSourceDown, setGatewayConnected, setRuntimeNotConfigured, runtime, connectorOf, quarantine, on: ev.on.bind(ev), removeListener: ev.removeListener.bind(ev),
     // api.md §5.3: → the new state, null for an unknown id; throws code 'error-not-mutable' for an error issue
     setIssueMuted(fp, muted) { const st = quarantine.setMuted(fp, muted); checkStatus(); return st; },
     gateway: () => Object.assign({}, gateway),
     senderPeople: () => senderContext().people || [],
     agents: () => canon.agents,
+    // Private reconciliation input for trusted local host adapters. Raw stable
+    // runtime references never enter canonical Agent rows or public VMs.
+    identityAgents: (hostId) => typeof hostId === 'string' ? canon.agents.filter(a => typeof a.mainSessionKey === 'string' && a.mainSessionKey)
+      .map(a => ({ id: a.id, hostId, runtimeKind: adapter.id || 'generic', sessionRef: a.mainSessionKey })) : [],
+    // Private adapter reconciliation input. Native session IDs never enter public canonical rows or VMs.
+    identitySessions: (hostId) => {
+      if (typeof hostId !== 'string') return [];
+      const rows = reg.list().filter(s => !hiddenAgents.includes(s.class.agentId))
+        .filter(s => s.class?.kind === 'conversation' && typeof s.sessionId === 'string' && s.sessionId);
+      const byKey = new Map(rows.map(s => [s.key, s]));
+      const keys = new Set([...identitySessionRefs.keys(), ...byKey.keys()]);
+      return [...keys].flatMap(sessionKey => {
+        const session = byKey.get(sessionKey), privateRef = identitySessionRefs.get(sessionKey);
+        const sessionRef = privateRef?.sessionRef || session?.sessionId;
+        if (!sessionRef) return [];
+        return [{ id: sessionKey, sessionKey, ...(session?.class?.agentId || privateRef?.agentId ? { agentId: session?.class?.agentId || privateRef.agentId } : {}),
+          hostId, runtimeKind: adapter.id || 'generic', sessionRef }];
+      });
+    },
+    // Trusted adapters provide private stable source references for exact identity
+    // reconciliation. The references never enter public canonical rows or VMs.
+    setIdentitySessionRefs(rows = []) {
+      const next = new Map();
+      for (const row of rows) if (row && typeof row.sessionKey === 'string' && row.sessionKey && typeof row.sessionRef === 'string' && row.sessionRef && row.sessionRef.length <= 256) next.set(row.sessionKey, { sessionRef: row.sessionRef,
+        ...(typeof row.agentId === 'string' && row.agentId ? { agentId: row.agentId } : {}) });
+      identitySessionRefs.clear(); for (const [key, ref] of next) identitySessionRefs.set(key, ref);
+      // Candidate references let private team/session joins find exact adapter
+      // identities outside the public recent-session window. They carry no
+      // transcript or public entity data.
+      return true;
+    },
+    detectedAgents: () => rawAgents,
+    updateAgents({ names = {}, hidden = [], primary: configuredPrimary = null, configured = null, autoAdded: autoAddedIds, excluded: excludedIds, manageAutoAdd }) {
+      agentNames = names; hiddenAgents = hidden; primary = configuredPrimary; configuredAgents = configured;
+      if (autoAddedIds !== undefined) autoAdded = new Set(autoAddedIds); if (excludedIds !== undefined) excluded = excludedIds;
+      if (manageAutoAdd !== undefined) managedAutoAdd = manageAutoAdd;
+      canon.agents = admitSnapshot(C.Agent, 'agent', namedAgents(rawAgents), i=>quarantine.record({channel:'canonical.agents',...i}), canon.agents);
+      updatePrimary(); ev.emit('change', { type: 'Agent' });
+    },
     primaryAgent,
     // more schema field names that issue paths may name (e.g. the VM schemas: their checks report schema paths, value-free)
     declareFields(names) { for (const n of names) declared.add(n); },
@@ -566,14 +734,25 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     host: () => canon.host,
     liveEvents: () => liveEvents.slice(),
     health: engineHealth,
+    healthChecks: healthChecks.list,
+    runHealthRemedy: healthChecks.run,
+    healthAudit: healthChecks.audit,
+    startHealthLoop: healthChecks.start,
+    notifyHealth,
     get openclawVersion() { return openclawVersion; },
     registryKeys: () => [...registry.keys()].sort(),
     latest: (channel, key) => registry.get(channel + (key ? '#' + key : '')),
     sources: sourceList,
-    sessions: () => reg.list(),
+    sessions: () => reg.list().filter(row => { const id=row.class.agentId,selected=selectedAgents();return !hiddenAgents.includes(id)&&!excluded.includes(id)&&((!configuredAgents&&!managedAutoAdd)||selected.has(id)); }),
     // Activity (data-model §3): run-state only on 2026.9.8 (R6-05).
-    activity: (key) => activityOf(reg.get(key)),
-    activities: () => reg.list().map(activityOf).filter(Boolean),
+    activity: currentActivity,
+    activities: () => reg.list().map(row => currentActivity(row.key)).filter(Boolean),
+    setObservedActivity,
+    agentPresence: () => adapter.presence === 'agents',
+    forgetTranscript,
+    close() { engineClosed = true; if (runExpiryTimer) clearTimeout(runExpiryTimer); runExpiryTimer = null; runExpiryAt = null;
+      healthChecks.close(); for (const key of [...transcriptKeys.keys()]) forgetTranscript(key); observed.clear(); },
+    expireObservedActivity() { const changed = clearExpiredEvidence(); scheduleRunExpiry(); return changed; },
     session: (key) => reg.get(key),
     sessionsMeta: () => reg.meta(),
     // Classification for any key: registry row when known; a heartbeat of a known base uses the base.

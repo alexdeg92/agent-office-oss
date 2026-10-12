@@ -428,7 +428,8 @@ async function runExec(exec, argv) {
   let result;
   try {
     result = await exec(argv);
-  } catch {
+  } catch (e) {
+    if(e instanceof require('../api/v2/errors').ApiError)throw e;
     throw new ProjectError('upstream_failed', 'GitHub est indisponible.');
   }
   if (!result || result.code !== 0) throw new ProjectError('upstream_failed', 'GitHub est indisponible.');
@@ -480,10 +481,13 @@ function listGitDirs(root, ignoreNames) {
   return found.sort();
 }
 
-async function collectWorkspaceFolders({ root, exec, listDirs = listGitDirs, ignoreNames, rootId }) {
+async function collectWorkspaceFolders({ root, exec, listDirs = listGitDirs, ignoreNames, rootId, authorize=()=>{} }) {
+  authorize();
   const dirs = await listDirs(root, ignoreNames);
+  authorize();
   const folders = [];
   for (const rel of dirs) {
+    authorize();
     if (isIgnoredPath(rel, ignoreNames)) continue;
     let abs;
     try {
@@ -503,14 +507,16 @@ async function collectWorkspaceFolders({ root, exec, listDirs = listGitDirs, ign
       if (remoteRun && remoteRun.code === 0) {
         remote = stripRemoteCredentials(String(remoteRun.stdout || '')).trim() || null;
       }
-    } catch { /* keep going; one folder must not abort the scan */ }
+    } catch (e) { if(e instanceof require('../api/v2/errors').ApiError)throw e; /* one folder failure does not abort the scan */ }
+    authorize();
     try {
       const logRun = await exec(['git', '-C', abs, 'log', '-1', '--format=%aI'], scrubGitEnv(process.env));
       if (logRun && logRun.code === 0) {
         const at = Date.parse(String(logRun.stdout || '').trim());
         if (Number.isInteger(at)) lastCommitAt = at;
       }
-    } catch { /* same */ }
+    } catch (e) { if(e instanceof require('../api/v2/errors').ApiError)throw e; }
+    authorize();
     const folder = { path: rel, remote, lastCommitAt };
     if (rootId) folder.rootId = rootId;
     folders.push(folder);

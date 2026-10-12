@@ -12,6 +12,10 @@ const lvl = (v, t) => (v == null ? 'ok' : v >= t.alert ? 'alert' : v >= t.warn ?
 const GB = 1e9;
 const SERIES_MAX = 1440;          // 24 h at one point per minute
 const STEP_MS = 60000;
+// Health is visible to users who may not have session/transcript read permission. Targets
+// are canonical labels, never paths, filenames, session ids, or adapter supplied free text.
+const HEALTH_TARGETS = new Set(['transcript', 'conversation', 'session', 'configuration', 'runtime']);
+const safeTarget = value => typeof value === 'string' && HEALTH_TARGETS.has(value) ? value : null;
 
 // One CPU/memory point per minute, from the engine's latest host metrics (canonical host).
 function createHealthSeries({ engine, now = () => Date.now() }) {
@@ -31,7 +35,7 @@ function createHealthSeries({ engine, now = () => Date.now() }) {
 function buildHealthVM({ engine, series, P = P2 }) {
   const h = engine.health();
   const gw = h.gateway, host = h.host;
-  const protocol = engine.runtime().protocol;   // G2: the runtime projection, never a raw channel
+  const protocol = engine.runtime()?.protocol;   // G2: the runtime projection, never a raw channel
   const unknown = { key: 'healthValue.unknown' };
   const el = gw.eventLoop;
   const cards = [
@@ -61,7 +65,10 @@ function buildHealthVM({ engine, series, P = P2 }) {
   const q = engine.dataQuality();
   const issues = q.issues.map((i) => ({ id: i.fingerprint, code: i.code, severity: i.severity, channel: i.channel, path: i.path, count: i.count,
     firstSeenAt: i.firstSeenAt, lastSeenAt: i.lastSeenAt, state: i.state, mutable: i.severity !== 'error' }));
-  return { level: h.level, cards, channels, sources, dataQuality: { open: q.open, issues }, series: series ? series.get() : { cpu: [], mem: [], at0: 0, stepMs: STEP_MS } };
+  const healthChecks = (engine.healthChecks?.() || []).map(c => ({ id: c.id, adapter: c.adapter, severity: c.severity, causeCode: c.causeCode, textKey: c.textKey,
+    impactKey: c.impactKey, remedy: c.remedy, active: c.active, actionId: c.actionId, guidedPath: c.guidedPath, target: safeTarget(c.target), changedAt: c.changedAt, resolvedAt: c.resolvedAt || null }));
+  const healthAudit = (engine.healthAudit?.() || []).map(a => ({ checkId: a.checkId, actionId: a.actionId, at: a.at, outcome: a.outcome, attempts: a.attempts }));
+  return { level: h.level, cards, channels, sources, healthChecks, healthAudit, dataQuality: { open: q.open, issues }, series: series ? series.get() : { cpu: [], mem: [], at0: 0, stepMs: STEP_MS } };
 }
 
 module.exports = { buildHealthVM, createHealthSeries };

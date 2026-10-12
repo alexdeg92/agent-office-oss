@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * Contract shape checker (api.md §7, contract 2.1; PM decision on review-07; strict since S6.2, review R8-08/09).
  * No dependencies.
@@ -158,21 +159,30 @@ function atPath(spec, p, fn) {
 function compareShape(example, actual, opts = {}) {
   const o = { opaque: new Set(opts.opaque || []), records: new Set(opts.records || []), types: opts.types || {} };
   const spec = build(example, '$', o);
+  // Consumers may delegate a subtree to its semantic validator. Sidecar details below
+  // that opaque root must not be applied to a spec that deliberately omits them.
+  const delegated = p => [...o.opaque].some(root => p.startsWith(root + '.') || p.startsWith(root + '[]'));
   // sidecar `variants`: extra example values merged at a path (union members a singleton example can't show)
   for (const [p, values] of Object.entries(opts.variants || {})) {
+    if (delegated(p)) continue;
     atPath(spec, p, (node) => { const merged = values.map((v) => build(v, p, o)).reduce(merge, Object.assign({}, node)); for (const k of Object.keys(node)) delete node[k]; Object.assign(node, merged); });
   }
   // sidecar `additional` (architect-55): an OPTIONAL field the example doesn't show, declared by an example value; its
   // parent must be in the example (e.g. OccupantVM.exchanges, present only for conversation occupants)
   for (const [p, value] of Object.entries(opts.additional || {})) {
+    if (delegated(p)) continue;
     const at = p.lastIndexOf('.');
     atPath(spec, p.slice(0, at) || '$', (node) => {
-      if (!node.fields) throw new Error('sidecar additional: no object at ' + p.slice(0, at));
-      node.fields[p.slice(at + 1)] = Object.assign(build(value, p, o), { optional: true });
+      function add(n) {
+        if (n.k === 'union') { n.alts.forEach(add); return; }
+        if (!n.fields) throw new Error('sidecar additional: no object at ' + p.slice(0, at));
+        n.fields[p.slice(at + 1)] = Object.assign(build(value, p, o), { optional: true });
+      }
+      add(node);
     });
   }
-  for (const p of opts.nullable || []) atPath(spec, p, (node) => { node.nullable = true; });
-  for (const p of opts.optional || []) atPath(spec, p, (node) => { node.optional = true; });
+  for (const p of opts.nullable || []) if (!delegated(p)) atPath(spec, p, (node) => { node.nullable = true; });
+  for (const p of opts.optional || []) if (!delegated(p)) atPath(spec, p, (node) => { node.optional = true; });
   const out = [];
   check(spec, actual, '$', out, opts.strict !== false);
   return out;
@@ -207,7 +217,13 @@ function compareExample(name, actual, { envelope = false, version = 2 } = {}) {
 // frontend-07: every *url / *Url string field of a payload, as [path, value] (VM URLs must be absolute).
 function urlFields(v, p = '$', out = []) {
   if (Array.isArray(v)) v.forEach((x) => urlFields(x, p + '[]', out));
-  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { if (/url$/i.test(k) && typeof x === 'string') out.push([p + '.' + k, x]); urlFields(x, p + '.' + k, out); }
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) {
+    // MetaVM labels are a record of translated copy, not URL fields: a label key may describe a URL input.
+    // Only flat string dictionaries qualify; labels arrays/objects containing real URL fields still recurse.
+    if (k === 'labels' && x && !Array.isArray(x) && typeof x === 'object' && Object.values(x).every(value => typeof value === 'string')) continue;
+    if (/url$/i.test(k) && typeof x === 'string') out.push([p + '.' + k, x]);
+    urlFields(x, p + '.' + k, out);
+  }
   return out;
 }
 

@@ -184,3 +184,20 @@ test('F9: server error messages stay French until G5, so in English the UI says 
     assert.equal(new api.ApiError({ code: 'quelque-chose', message: 'Texte serveur.' }).message, 'Texte serveur.', 'an unknown code keeps the server text');
   } finally { setLang('fr'); }
 });
+
+test('shared requests preserve cancellation before dispatch and after a deferred response body',async()=>{
+ const api=await fresh(),controller=new AbortController();let calls=0,finish;
+ globalThis.fetch=async(_,options)=>{
+  calls++;assert.equal(options.signal,controller.signal);assert.equal(options.cache,'no-store');
+  return {ok:true,headers:{get:()=>null},json:()=>new Promise(resolve=>{finish=resolve;})};
+ };
+ const pending=api.get('/api/v2/meta',{quiet:true,cache:'no-store',signal:controller.signal});
+ await new Promise(resolve=>setImmediate(resolve));controller.abort();finish({data:{bootId:'late'}});
+ await assert.rejects(pending,e=>e.name==='AbortError');
+ await assert.rejects(api.get('/api/v2/meta',{signal:controller.signal}),e=>e.name==='AbortError');
+ assert.equal(calls,1,'an already-aborted operation never reaches the network');
+ const transport=new AbortController();
+ globalThis.fetch=async(_,options)=>new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}));
+ const aborted=api.get('/api/v2/meta',{quiet:true,signal:transport.signal});transport.abort();
+ await assert.rejects(aborted,e=>e.name==='AbortError','fetch cancellation retains its identity rather than becoming a network failure');
+});

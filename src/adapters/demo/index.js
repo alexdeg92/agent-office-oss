@@ -56,6 +56,7 @@ const CONVERSATIONS = [['telegram', 'direct', 'alice', 'nova'], ['slack', 'group
 const definition = {
   id: 'demo',
   name: 'Demo',
+  mark: { monogram: 'DM', color: '#6e56cf' },
   testedWith: null,
   schemas: {}, routes: {}, eventPrefix: 'demo.event.',
   gatewayLabel: 'Runtime de démonstration',
@@ -85,7 +86,7 @@ function createDemoTeam({ seed = 1, locale = 'en', now = () => Date.now() } = {}
   const runs = new Map();           // jobId → [CronRun]
   const flowState = [];
 
-  const idle = () => ({ status: 'idle', endReason: null, evidence: 'none', startedAt: null, endedAt: null, hasActiveSubagentRun: false, runtimeMs: null, lastRunId: null, lastError: null });
+  const idle = () => ({ status: 'idle', endReason: null, evidence: 'status-field', evidenceLevel: 'verified', observedAt: t0, expiresAt: null, startedAt: null, endedAt: null, hasActiveSubagentRun: false, runtimeMs: null, lastRunId: null, lastError: null });
   const agentOf = (id) => AGENTS.find((a) => a.id === id);
   function addSession(key, cls, extra = {}) {
     const a = agentOf(cls.agentId);
@@ -101,10 +102,10 @@ function createDemoTeam({ seed = 1, locale = 'en', now = () => Date.now() } = {}
       : kind === 'tool' ? { kind, text, at } : { kind, text, at, sender: null });
     if (list.length > 40) list.shift();
   }
-  function start(s) { s.run = Object.assign(idle(), { status: 'running', evidence: 'status-field', startedAt: now(), lastRunId: 'r' + tick }); s.updatedAt = now(); }
+  function start(s) { s.run = Object.assign(idle(), { status: 'running', evidence: 'status-field', evidenceLevel: 'verified', observedAt: now(), startedAt: now(), lastRunId: 'r' + tick }); s.updatedAt = now(); }
   function finish(s, ok = true) {
     const started = s.run.startedAt || now();
-    s.run = Object.assign(idle(), { status: ok ? 'succeeded' : 'failed', endReason: ok ? null : 'error', evidence: 'status-field', startedAt: started, endedAt: now(),
+    s.run = Object.assign(idle(), { status: ok ? 'succeeded' : 'failed', endReason: ok ? null : 'error', evidence: 'status-field', evidenceLevel: 'verified', observedAt: now(), startedAt: started, endedAt: now(),
       runtimeMs: Math.max(0, now() - started), lastRunId: s.run.lastRunId, lastError: ok ? null : T.error });
     s.total += 200 + Math.floor(rnd() * 1800); s.updatedAt = now();
   }
@@ -177,7 +178,7 @@ function createDemoTeam({ seed = 1, locale = 'en', now = () => Date.now() } = {}
       cwd: null, messageCount: transcripts.get(s.key).length, interactive: s.interactive, group: null,
     }));
   }
-  const agents = () => AGENTS.map((a) => ({ id: a.id, name: a.name, workspace: null, model: { primary: a.model, provider: PROVIDER }, fallbackModels: [], isPrimary: a.primary,
+  const agents = () => AGENTS.map((a) => ({ id: a.id, name: a.name, workspace: null, model: { primary: a.model, provider: PROVIDER }, modelSource: 'explicit', runtime: null, fallbackModels: [], isPrimary: a.primary,
     mainSessionKey: 'demo:' + a.id + ':primary' }));
   const flows = () => flowState.map((f) => ({ id: f.id, name: f.name, description: f.description, enabled: f.enabled, schedule: { kind: 'cron', expr: `*/${f.every} * * * *`, tz: null },
     agentId: f.agentId, sessionTarget: 'isolated', wakeMode: 'now',
@@ -247,9 +248,11 @@ function createRuntime(cfg) {
 // G11: `agent-office doctor`: a synthesised team has no runtime to check
 const doctor = async (ctx) => ctx.add('runtime', 'runtime.demo', 'info', 'runtime.demo');
 
-const setup = { connect: true,
+const setup = { connect: true, capabilities: { brand: { mark: 'D', color: '#966d1f', foreground: '#ffffff' } },
   env: ({ runtime }) => runtime.demo ? { AO_DEMO_SEED: String(runtime.demo.seed) } : {},
   configSchema: setupSchema.object({ adapter: setupSchema.literal('demo'), demo: setupSchema.object({ seed: setupSchema.int().min(0).max(999999999) }, { extra: 'reject' }).optional() }, { extra: 'reject' }), name: 'Démo', fields: [], defaultGatewayUrl: null, config: () => ({ adapter: definition.id, demo: { seed: 1 } }),
   agents: () => AGENTS.map((a) => ({ id: a.id, name: a.name, nameSource: 'demo', isPrimary: a.primary, model: a.model })) };
 setup.discover = async () => setup.agents();
+setup.settings = { optional:true, fields: [], envKeys: {}, values: () => ({}), resolve: () => ({ adapter: 'demo' }),
+  probe: async () => ({ status: 'connected', protocol: null, latencyMs: null, gw: null }), secret: () => null, detectedValues: () => ({}) };
 module.exports = { definition, createRuntime, createDemoTeam, AGENTS, TICK_MS, doctor, setup };

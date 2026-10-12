@@ -76,6 +76,19 @@ describe('Bureau headline', () => {
     for (const locale of ['fr', 'en']) assert.ok(headline(example, { now: NOW, locale }).lead.endsWith('.'));
   });
 
+  it('does not call an unknown execution idle, in either locale', async () => {
+    const [{ headline }] = await load();
+    const v = vm([main({ state: 'unknown' })]);
+    const fr = headline(v, { now: NOW, locale: 'fr' });
+    const en = headline(v, { now: NOW, locale: 'en' });
+    assert.equal(fr.kind, 'unknown');
+    assert.equal(fr.lead, 'L’état actuel du bureau reste à confirmer.');
+    assert.deepEqual(fr.deck, []);
+    assert.equal(en.kind, 'unknown');
+    assert.equal(en.lead, 'The office’s current state is unconfirmed.');
+    assert.deepEqual(en.deck, []);
+  });
+
   it('R14-16: a sole primary agent is described by its own state (working, error, offline, idle), never by the occupant count', async () => {
     const [{ headline }] = await load();
     // The KPI strip the server sends (sub kpi.idle chosen from the count) is not an input: only occupant states are.

@@ -1,0 +1,290 @@
+
+Sombre: 127/127 paires conformes. Les plus serrées :
+  ok   4.71:1 (min 4.5)  danger sur danger-bg
+  ok   4.71:1 (min 4.5)  state-error sur state-error-bg
+  ok   3.19:1 (min 3)  state-offline sur state-offline-bg
+  ok   3.21:1 (min 3)  accent sur surface-overlay
+  ok   4.82:1 (min 4.5)  text-on-accent sur danger-fill
+  ok   4.83:1 (min 4.5)  state-idle sur state-idle-bg
+  ok   4.89:1 (min 4.5)  text-on-accent sur accent
+  ok   3.29:1 (min 3)  accent sur surface-raised
+  ok  17.08 text-primary / bg
+  ok  17.54 text-primary / bg-sunken
+  ok  15.40 text-primary / surface
+  ok  14.41 text-primary / surface-raised
+  ok  14.07 text-primary / surface-overlay
+  ok  12.29 text-primary / surface-hover
+  ok  12.13 text-primary / surface-selected
+  ok  12.01 text-secondary / bg
+  ok  12.33 text-secondary / bg-sunken
+  ok  10.83 text-secondary / surface
+  ok  10.13 text-secondary / surface-raised
+  ok  9.89 text-secondary / surface-overlay
+  ok  8.64 text-secondary / surface-hover
+  ok  8.53 text-secondary / surface-selected
+  ok  7.83 text-tertiary / bg
+  ok  8.04 text-tertiary / bg-sunken
+  ok  7.06 text-tertiary / surface
+  ok  6.60 text-tertiary / surface-raised
+  ok  6.45 text-tertiary / surface-overlay
+  ok  5.63 text-tertiary / surface-hover
+  ok  5.56 text-tertiary / surface-selected
+  ok  11.38 accent-text / bg
+  ok  11.69 accent-text / bg-sunken
+  ok  10.26 accent-text / surface
+  ok  9.60 accent-text / surface-raised
+  ok  9.38 accent-text / surface-overlay
+  ok  8.19 accent-text / surface-hover
+  ok  8.08 accent-text / surface-selected
+  ok  12.33 text-primary / accent-subtle
+  ok  8.67 text-secondary / accent-subtle
+  ok  5.65 text-tertiary / accent-subtle
+  ok  8.21 accent-text / accent-subtle
+  ok  4.89 text-on-accent / accent
+  ok  6.10 text-on-accent / accent-hover
+  ok  7.44 text-on-accent / accent-pressed
+  ok  4.82 text-on-accent / danger-fill
+  ok  10.77 success / bg
+  ok  9.71 success / surface
+  ok  9.09 success / surface-raised
+  ok  8.87 success / surface-overlay
+  ok  7.48 success / success-bg
+  ok  11.86 text-primary / success-bg
+  ok  10.24 warning / bg
+  ok  9.23 warning / surface
+  ok  8.64 warning / surface-raised
+  ok  8.43 warning / surface-overlay
+  ok  7.14 warning / warning-bg
+  ok  11.92 text-primary / warning-bg
+  ok  6.12 danger / bg
+  ok  5.51 danger / surface
+  ok  5.16 danger / surface-raised
+  ok  5.04 danger / surface-overlay
+  ok  4.71 danger / danger-bg
+  ok  13.16 text-primary / danger-bg
+  ok  7.33 info / bg
+  ok  6.61 info / surface
+  ok  6.19 info / surface-raised
+  ok  6.04 info / surface-overlay
+  ok  5.41 info / info-bg
+  ok  12.60 text-primary / info-bg
+  ok  6.48 state-idle / bg
+  ok  5.84 state-idle / surface
+  ok  5.46 state-idle / surface-raised
+  ok  4.83 state-idle / state-idle-bg
+  ok  7.09 state-thinking / bg
+  ok  6.40 state-thinking / surface
+  ok  5.99 state-thinking / surface-raised
+  ok  5.24 state-thinking / state-thinking-bg
+  ok  10.77 state-working / bg
+  ok  9.71 state-working / surface
+  ok  9.09 state-working / surface-raised
+  ok  7.48 state-working / state-working-bg
+  ok  8.85 state-researching / bg
+  ok  7.98 state-researching / surface
+  ok  7.47 state-researching / surface-raised
+  ok  6.32 state-researching / state-researching-bg
+  ok  8.30 state-writing / bg
+  ok  7.49 state-writing / surface
+  ok  7.01 state-writing / surface-raised
+  ok  6.02 state-writing / state-writing-bg
+  ok  7.33 state-calling / bg
+  ok  6.61 state-calling / surface
+  ok  6.19 state-calling / surface-raised
+  ok  5.41 state-calling / state-calling-bg
+  ok  10.24 state-waiting / bg
+  ok  9.23 state-waiting / surface
+  ok  8.64 state-waiting / surface-raised
+  ok  7.14 state-waiting / state-waiting-bg
+  ok  6.12 state-error / bg
+  ok  5.51 state-error / surface
+  ok  5.16 state-error / surface-raised
+  ok  4.71 state-error / state-error-bg
+  ok  3.61 state-offline / surface
+  ok  3.38 state-offline / surface-raised
+  ok  3.19 state-offline / state-offline-bg
+  ok  6.24 text-tertiary / state-offline-bg
+  ok  7.59 label-slate / surface
+  ok  7.10 label-slate / surface-raised
+  ok  6.02 label-slate / label-slate-bg
+  ok  7.71 label-indigo / surface
+  ok  7.21 label-indigo / surface-raised
+  ok  6.10 label-indigo / label-indigo-bg
+  ok  9.39 label-teal / surface
+  ok  8.79 label-teal / surface-raised
+  ok  7.22 label-teal / label-teal-bg
+  ok  10.05 label-amber / surface
+  ok  9.41 label-amber / surface-raised
+  ok  7.67 label-amber / label-amber-bg
+  ok  7.77 label-rose / surface
+  ok  7.27 label-rose / surface-raised
+  ok  6.20 label-rose / label-rose-bg
+  ok  10.03 label-green / surface
+  ok  9.39 label-green / surface-raised
+  ok  7.64 label-green / label-green-bg
+  ok  4.95 border-control / bg
+  ok  5.08 border-control / bg-sunken
+  ok  4.46 border-control / surface
+  ok  4.17 border-control / surface-raised
+  ok  4.07 border-control / surface-overlay
+  ok  9.91 focus-ring / bg
+  ok  3.90 accent / bg
+  ok  8.93 focus-ring / surface
+  ok  3.51 accent / surface
+  ok  8.36 focus-ring / surface-raised
+  ok  3.29 accent / surface-raised
+  ok  8.16 focus-ring / surface-overlay
+  ok  3.21 accent / surface-overlay
+  Luminosité OKLab des états : offline 0.56 · idle 0.67 · error 0.68 · calling 0.71 · thinking 0.71 · researching 0.75 · writing 0.76 · working 0.80 · waiting 0.81
+  ok  ΔL 0.12 (min 0.08)  success ↔ danger
+  ok  ΔL 0.13 (min 0.08)  warning ↔ danger
+  ok  ΔL 0.12 (min 0.08)  state-working ↔ state-error
+  ok  ΔL 0.13 (min 0.08)  state-waiting ↔ state-error
+  ok  ΔL 0.12 (min 0.08)  state-idle ↔ state-offline
+  ok  ΔL 0.08 (min 0.08)  state-thinking ↔ state-working
+
+Clair: 127/127 paires conformes. Les plus serrées :
+  ok   4.60:1 (min 4.5)  state-thinking sur state-thinking-bg
+  ok   4.64:1 (min 4.5)  state-idle sur state-idle-bg
+  ok   4.65:1 (min 4.5)  state-researching sur state-researching-bg
+  ok   3.13:1 (min 3)  state-offline sur state-offline-bg
+  ok   4.78:1 (min 4.5)  danger sur danger-bg
+  ok   4.78:1 (min 4.5)  state-error sur state-error-bg
+  ok   4.82:1 (min 4.5)  state-thinking sur bg
+  ok   4.84:1 (min 4.5)  state-idle sur bg
+  ok  14.77 text-primary / bg
+  ok  13.93 text-primary / bg-sunken
+  ok  16.10 text-primary / surface
+  ok  15.35 text-primary / surface-raised
+  ok  16.10 text-primary / surface-overlay
+  ok  13.93 text-primary / surface-hover
+  ok  13.65 text-primary / surface-selected
+  ok  8.08 text-secondary / bg
+  ok  7.63 text-secondary / bg-sunken
+  ok  8.81 text-secondary / surface
+  ok  8.40 text-secondary / surface-raised
+  ok  8.81 text-secondary / surface-overlay
+  ok  7.63 text-secondary / surface-hover
+  ok  7.47 text-secondary / surface-selected
+  ok  5.91 text-tertiary / bg
+  ok  5.58 text-tertiary / bg-sunken
+  ok  6.44 text-tertiary / surface
+  ok  6.14 text-tertiary / surface-raised
+  ok  6.44 text-tertiary / surface-overlay
+  ok  5.58 text-tertiary / surface-hover
+  ok  5.46 text-tertiary / surface-selected
+  ok  5.58 accent-text / bg
+  ok  5.26 accent-text / bg-sunken
+  ok  6.08 accent-text / surface
+  ok  5.80 accent-text / surface-raised
+  ok  6.08 accent-text / surface-overlay
+  ok  5.26 accent-text / surface-hover
+  ok  5.16 accent-text / surface-selected
+  ok  13.65 text-primary / accent-subtle
+  ok  7.47 text-secondary / accent-subtle
+  ok  5.46 text-tertiary / accent-subtle
+  ok  5.16 accent-text / accent-subtle
+  ok  6.08 text-on-accent / accent
+  ok  7.89 text-on-accent / accent-hover
+  ok  9.53 text-on-accent / accent-pressed
+  ok  5.55 text-on-accent / danger-fill
+  ok  6.92 success / bg
+  ok  7.55 success / surface
+  ok  7.19 success / surface-raised
+  ok  7.55 success / surface-overlay
+  ok  6.45 success / success-bg
+  ok  13.76 text-primary / success-bg
+  ok  7.29 warning / bg
+  ok  7.95 warning / surface
+  ok  7.58 warning / surface-raised
+  ok  7.95 warning / surface-overlay
+  ok  6.81 warning / warning-bg
+  ok  13.80 text-primary / warning-bg
+  ok  5.09 danger / bg
+  ok  5.55 danger / surface
+  ok  5.29 danger / surface-raised
+  ok  5.55 danger / surface-overlay
+  ok  4.78 danger / danger-bg
+  ok  13.87 text-primary / danger-bg
+  ok  5.20 info / bg
+  ok  5.67 info / surface
+  ok  5.41 info / surface-raised
+  ok  5.67 info / surface-overlay
+  ok  4.91 info / info-bg
+  ok  13.95 text-primary / info-bg
+  ok  4.84 state-idle / bg
+  ok  5.28 state-idle / surface
+  ok  5.03 state-idle / surface-raised
+  ok  4.64 state-idle / state-idle-bg
+  ok  4.82 state-thinking / bg
+  ok  5.26 state-thinking / surface
+  ok  5.01 state-thinking / surface-raised
+  ok  4.60 state-thinking / state-thinking-bg
+  ok  6.92 state-working / bg
+  ok  7.55 state-working / surface
+  ok  7.19 state-working / surface-raised
+  ok  6.45 state-working / state-working-bg
+  ok  4.90 state-researching / bg
+  ok  5.34 state-researching / surface
+  ok  5.10 state-researching / surface-raised
+  ok  4.65 state-researching / state-researching-bg
+  ok  5.18 state-writing / bg
+  ok  5.64 state-writing / surface
+  ok  5.38 state-writing / surface-raised
+  ok  4.87 state-writing / state-writing-bg
+  ok  5.20 state-calling / bg
+  ok  5.67 state-calling / surface
+  ok  5.41 state-calling / surface-raised
+  ok  4.91 state-calling / state-calling-bg
+  ok  7.29 state-waiting / bg
+  ok  7.95 state-waiting / surface
+  ok  7.58 state-waiting / surface-raised
+  ok  6.81 state-waiting / state-waiting-bg
+  ok  5.09 state-error / bg
+  ok  5.55 state-error / surface
+  ok  5.29 state-error / surface-raised
+  ok  4.78 state-error / state-error-bg
+  ok  3.47 state-offline / surface
+  ok  3.31 state-offline / surface-raised
+  ok  3.13 state-offline / state-offline-bg
+  ok  5.81 text-tertiary / state-offline-bg
+  ok  7.16 label-slate / surface
+  ok  6.83 label-slate / surface-raised
+  ok  6.17 label-slate / label-slate-bg
+  ok  6.80 label-indigo / surface
+  ok  6.48 label-indigo / surface-raised
+  ok  5.86 label-indigo / label-indigo-bg
+  ok  5.97 label-teal / surface
+  ok  5.69 label-teal / surface-raised
+  ok  5.19 label-teal / label-teal-bg
+  ok  6.85 label-amber / surface
+  ok  6.53 label-amber / surface-raised
+  ok  5.92 label-amber / label-amber-bg
+  ok  6.27 label-rose / surface
+  ok  5.98 label-rose / surface-raised
+  ok  5.40 label-rose / label-rose-bg
+  ok  6.67 label-green / surface
+  ok  6.36 label-green / surface-raised
+  ok  5.74 label-green / label-green-bg
+  ok  3.90 border-control / bg
+  ok  3.68 border-control / bg-sunken
+  ok  4.26 border-control / surface
+  ok  4.06 border-control / surface-raised
+  ok  4.26 border-control / surface-overlay
+  ok  5.58 focus-ring / bg
+  ok  5.58 accent / bg
+  ok  6.08 focus-ring / surface
+  ok  6.08 accent / surface
+  ok  5.80 focus-ring / surface-raised
+  ok  5.80 accent / surface-raised
+  ok  6.08 focus-ring / surface-overlay
+  ok  6.08 accent / surface-overlay
+  Luminosité OKLab des états : working 0.44 · waiting 0.44 · researching 0.52 · calling 0.52 · idle 0.53 · writing 0.54 · error 0.54 · thinking 0.55 · offline 0.63
+  ok  ΔL 0.10 (min 0.08)  success ↔ danger
+  ok  ΔL 0.10 (min 0.08)  warning ↔ danger
+  ok  ΔL 0.10 (min 0.08)  state-working ↔ state-error
+  ok  ΔL 0.10 (min 0.08)  state-waiting ↔ state-error
+  ok  ΔL 0.10 (min 0.08)  state-idle ↔ state-offline
+  ok  ΔL 0.12 (min 0.08)  state-thinking ↔ state-working
+
+Toutes les paires respectent WCAG AA.

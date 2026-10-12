@@ -178,7 +178,7 @@ describe('packaged first run', () => {
   });
 
   after(async () => {
-    for (const name of leftovers.containers) run('docker', ['rm', '-f', name]);
+    for (const name of leftovers.containers) run('docker', ['rm', '-fv', name]);
     for (const child of leftovers.children) {
       try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
     }
@@ -232,7 +232,7 @@ describe('packaged first run', () => {
       return `${out.stdout || ''}${out.stderr || ''}`;
     };
     const stop = async (proc) => {
-      run('docker', ['rm', '-f', proc.name]);
+      run('docker', ['rm', '-fv', proc.name]);
       leftovers.containers.delete(proc.name);
     };
 

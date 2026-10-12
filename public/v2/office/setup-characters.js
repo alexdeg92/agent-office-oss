@@ -58,12 +58,21 @@ export const Figure = ({ index, look, pose, assetBase, label, cls, thumbnail = f
     let live = true;
     const controller = new AbortController();
     const c = index.characters.get(look.character);
-    if (!thumbnail && c?.packManifest && !c.packLoaded) {
-      import('./character-pack-loader.js' + buildQuery).then(m => m.ensureCharacterPack(index, look.character, assetBase, { signal: controller.signal }))
-        .then(() => { if (live) refresh(n => n + 1); }).catch(() => {});
-    }
+    if (!thumbnail) (async () => {
+      if (c?.packManifest && !c.packLoaded) {
+        const m = await import('./character-pack-loader.js' + buildQuery);
+        await m.ensureCharacterPack(index, look.character, assetBase, { signal: controller.signal });
+        if (live) refresh(n => n + 1);
+      }
+      if (look.accessories?.some(id => index.accessories.get(id)?.packManifest)) {
+        const m = await import('./accessory-pack-loader.js' + buildQuery);
+        const body = poseImage(index.characters.get(look.character),look.variant,pose);
+        await m.prepareAccessoryLayers(index,look,body.pose,assetBase,{signal:controller.signal});
+        if (live) refresh(n => n + 1);
+      }
+    })().catch(() => {});
     return () => { live = false; controller.abort(); };
-  }, [index, look.character, assetBase, thumbnail]);
+  }, [index, look.character, look.variant, JSON.stringify(look.accessories), pose, assetBase, thumbnail]);
   const ch = index.characters.get(look.character), v = ch?.variants?.find(v => v.id === look.variant);
   const thumb = v?.thumbnail ?? ch?.thumbnail;
   const paths = thumbnail && thumb ? [thumb] : lookLayers(index, look, pose);

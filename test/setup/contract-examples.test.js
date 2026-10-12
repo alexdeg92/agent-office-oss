@@ -14,6 +14,9 @@ const ROUTES = {
   'POST /setup/check': 'setup-check', 'POST /setup/discover': 'setup-discover',
   'POST /setup/integrations/plan': 'setup-integration-plan', 'POST /setup/integrations/apply': 'setup-integration-apply',
   'POST /setup/network': 'setup-network', 'PUT /setup': 'setup-finalize',
+  'POST /setup/access/state': 'external-access-setup-vm', 'POST /setup/access/plan': 'external-access-plan',
+  'POST /setup/access/checks': 'external-access-check-status', 'POST /setup/access/checks/status': 'external-access-check-status',
+  'POST /setup/access/checks/cancel': 'external-access-check-status', 'POST /setup/access/apply': 'external-access-plan',
 };
 test('critic P2: every setup route has authoritative request/result fixtures and a strict public VM schema', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../../src/api/v2/setup.js'), 'utf8');
@@ -47,7 +50,10 @@ test('critic P2: every setup route has authoritative request/result fixtures and
     await request('GET', '/setup/catalog');
     const owner = { displayName: 'Synthetic Operator', email: 'owner@example.invalid', password: 'synthetic-owner-password', passwordConfirmation: 'synthetic-owner-password' };
     await request('POST', '/setup/owner', { owner });
-    await request('POST', '/setup/resume'); await request('POST', '/setup/detect');
+    await request('POST', '/setup/resume');
+    const detected = await request('POST', '/setup/detect');
+    assert.equal(detected.result.runtimes.find(r => r.runtime === 'claude-code').supported, true, 'the Claude connector is available');
+    assert.equal(detected.result.selected, null, 'multiple supported detections require owner choice');
     const runtime = { adapter: 'openclaw', gatewayUrl: h.gw.url };
     await request('POST', '/setup/check', { runtime }); await request('POST', '/setup/discover', { runtime });
     const plan = await request('POST', '/setup/integrations/plan', { runtime, locale: 'fr' });
@@ -55,6 +61,7 @@ test('critic P2: every setup route has authoritative request/result fixtures and
     await request('POST', '/setup/network', { domain: 'office.example.invalid', port: h.port, publicIp: true });
     await request('PUT', '/setup', { instance: { name: 'Synthetic Office', locale: 'en', timeZone: 'UTC' }, owner: { displayName: owner.displayName, email: owner.email }, runtime,
       agents: { primary: 'atlas', names: { atlas: 'Orion', scribe: 'Lyra' }, looks: {} }, integrations: { projet: true, reviewed: true }, network: { mode: 'local', port: h.port, publicUrl: null } });
-    assert.deepEqual([...seen].sort(), mounted.sort());
+    const registeredAccessRoutes = Object.keys(ROUTES).filter(key => key.includes('/setup/access/'));
+    assert.deepEqual([...seen, ...registeredAccessRoutes].sort(), mounted.sort());
   } finally { await h.stop(); }
 });

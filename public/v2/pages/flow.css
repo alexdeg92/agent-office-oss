@@ -1,6 +1,6 @@
 /* Flux task view (pages/flow.js, owner office-dev): the original S7a layout (office-dev-18). Bureau components
    (bu-detail-header, bu-card, bu-kv, bu-flow, bu-run, bu-switch) do the work; this only arranges them.
-   Width: frontend's page frame (.ao-frame.ao-frame--detail), never a max-width here. */
+   Width: frontend's page frame (.ao-page.ao-page--detail), never a max-width here. */
 .ao-flow { gap: var(--bu-space-4); }
 .ao-flow .bu-backlink { align-self: flex-start; }
 .ao-flow__headtext { min-width: 0; }
@@ -20,3 +20,6 @@
   .ao-flow__pair { grid-template-columns: minmax(0, 1fr); }
   .ao-flow__actions .bu-btn { flex: 1 1 auto; }
 }
+
+.ao-flow__content { display: flex; flex-direction: column; gap: var(--bu-space-4); }
+.ao-flow > .ao-frame__head { display: flex; flex-direction: column; gap: var(--bu-space-3); }

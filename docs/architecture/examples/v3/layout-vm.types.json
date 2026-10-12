@@ -4,7 +4,8 @@
     "$.manifest"
   ],
   "nullable": [
-    "$.theme.nextChangeAt"
+    "$.theme.nextChangeAt",
+    "$.agentsSeen[].automaticLook.variant"
   ],
   "types": {
     "$.layout.updatedBy.avatarUrl": "string",
@@ -28,6 +29,17 @@
     ]
   },
   "optional": [
-    "$.layout.data.presence"
-  ]
+    "$.layout.data.presence",
+    "$.layout.data.agents[].appearance",
+    "$.default.data.agents[].appearance"
+  ],
+  "additional": {
+    "$.agentsSeen[].automaticLook": {
+      "character": "fen",
+      "variant": "moss",
+      "accessories": [
+        "scarf"
+      ]
+    }
+  }
 }

@@ -65,7 +65,14 @@ class RoomActor {
   position(p) {this.point=p;this.actor.style.left=(p.x-this.anchor.x*this.k)+'px';this.actor.style.top=(p.y-this.anchor.y*this.k)+'px';}
   async setPose(pose) {
     const version=this.version=(this.version??0)+1,look=this.c.occ.look,ch=this.scene.index.characters.get(look.character)??this.c.ch;
-    const body=poseImage(ch,look.variant,pose),acc=accessoryLayers(this.scene.index,ch.id,look.accessories,body.pose,look.variant,{legacy:this.scene.legacyAccessories});
+    const body=poseImage(ch,look.variant,pose),mode=this.scene.stage.dataset.officeTheme==='night'?'night':'day';
+    this.accessoryMode=mode;
+    if(look.accessories?.some(id=>this.scene.index.accessories.get(id)?.packManifest)) {
+      const m=await import('./accessory-pack-loader.js'+buildQuery);
+      await m.prepareAccessoryLayers(this.scene.index,look,body.pose,this.scene.assetBase,{mode}).catch(()=>{});
+      if(this.disposed || version!==this.version)return;
+    }
+    const acc=accessoryLayers(this.scene.index,ch.id,look.accessories,body.pose,look.variant,{legacy:this.scene.legacyAccessories,mode});
     const group=node('div','ao-break-pose');group.dataset.pose=body.pose;const imgs=[];
     for(const [role,paths] of [['back',acc.back.map(a=>a.path)],['body',[body.path??body.frames?.[0]]],['front',acc.front.map(a=>a.path)]]) for(const path of paths.filter(Boolean)) {
       const img=node('img','');img.dataset.layer=role;img.alt='';img.draggable=false;img.src=resolveUrl(path,this.scene.assetBase);group.append(img);imgs.push(img);
@@ -77,7 +84,9 @@ class RoomActor {
     group.style.width=body.canvas.w+'px';group.style.height=body.canvas.h+'px';
   }
   tick(now) {
-    this.host.sync();if(this.pendingStep && now>=this.pendingStep.at){const pending=this.pendingStep;this.pendingStep=null;this.point=pending.point;this.applyStep(pending.step,now);}
+    this.host.sync();
+    if(this.pose && this.accessoryMode!==this.root.dataset.theme)void this.setPose(this.pose.pose).catch(()=>{});
+    if(this.pendingStep && now>=this.pendingStep.at){const pending=this.pendingStep;this.pendingStep=null;this.point=pending.point;this.applyStep(pending.step,now);}
     if(this.step?.loopMs && !this.scene.reducedMotion) {
       const i=Math.floor((now-this.since)/this.step.loopMs)%this.step.poses.length;
       if(i!==this.frame) {this.frame=i;this.setPose(this.step.poses[i]);}

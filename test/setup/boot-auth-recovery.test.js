@@ -13,11 +13,11 @@ async function publish(home, { missingSecrets = false } = {}) {
   const store = openStore({ dir: path.join(home, 'data'), instance: 'test', ownerName: 'Synthetic Owner' });
   try { store.users.createOwner({ email: 'synthetic-owner@example.invalid', passwordHash: await hashPassword('synthetic-owner-password'), personId: store.owner.id }); }
   finally { store.close(); }
-  const config = { version: IC.VERSION, instance: { name: 'Synthetic Office', locale: 'fr', timeZone: 'UTC' },
+  const config = { version: 2, instance: { name: 'Synthetic Office', locale: 'fr', timeZone: 'UTC' },
     owner: { displayName: 'Synthetic Owner', email: 'synthetic-owner@example.invalid', authSource: 'database' },
     runtime: { adapter: 'demo', demo: { seed: 1 } }, agents: { primary: null, looks: {} } };
   const paths = IC.configPaths({ HOME: home });
-  IC.writeInstanceConfig(paths, config, { version: IC.VERSION, sessionSecret: 's'.repeat(48), runtimeToken: null });
+  IC.writeInstanceConfig(paths, config, { version: 2, sessionSecret: 's'.repeat(48), runtimeToken: null });
   if (missingSecrets) fs.unlinkSync(paths.secrets);
 }
 test('critic-05 P0: a partial LOGIN_ENV is a named private boot error and preserves DB auth files', async () => {

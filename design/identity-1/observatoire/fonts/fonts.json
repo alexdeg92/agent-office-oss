@@ -1,0 +1,32 @@
+{
+  "fonts": [
+    {
+      "family": "IBM Plex Sans",
+      "subset": "full",
+      "file": "IBMPlexSans[wdth,wght].ttf",
+      "unicodeRange": "U+0000-10FFFF",
+      "weights": [
+        100,
+        700
+      ],
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans%5Bwdth%2Cwght%5D.ttf",
+      "licence": "OFL-ibmplexsans.txt",
+      "bytes": 537244,
+      "sha256": "3b031aa4216174205bd8471f88a49b91f093169e9e87bd5262242bc5967fe2e3"
+    },
+    {
+      "family": "IBM Plex Mono",
+      "subset": "full",
+      "file": "IBMPlexMono-Regular.ttf",
+      "unicodeRange": "U+0000-10FFFF",
+      "weights": [
+        400,
+        400
+      ],
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf",
+      "licence": "OFL-ibmplexmono.txt",
+      "bytes": 135580,
+      "sha256": "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46"
+    }
+  ]
+}

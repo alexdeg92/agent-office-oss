@@ -47,9 +47,10 @@ describe('G3b · conversation titles use known names and an honest unknown-perso
     assert.deepEqual(sessionTitle(direct, { interlocutorName: () => 'Mira', senderName: () => 'Jules' }), { key: 'sessionTitle.named', params: { name: 'Mira' } });
     assert.deepEqual(sessionTitle(direct, { senderName: () => 'Jules' }), { key: 'sessionTitle.named', params: { name: 'Jules' } });
   });
-  it('unknown rooms retain their bounded identifiers', () => {
-    assert.deepEqual(sessionTitle(s('conversation-group', 'discord-channel:100000000000000099')), { key: 'sessionTitle.channel', params: { id: '000099' } });
-    assert.deepEqual(sessionTitle(s('conversation-group', 'slack-room:C0ACME')), { key: 'sessionTitle.channel', params: { id: 'C0ACME' } });
-    assert.equal(sessionTitle(s('conversation-group', 'matrix-room:!' + 'x'.repeat(40) + ':example.org')).params.id.length, 24);
+  // T-0058 (owner): an unnamed room reads « Groupe sans nom » with its platform, never an identifier
+  it('unknown rooms are an unnamed group on their platform, with no identifier', () => {
+    assert.deepEqual(sessionTitle(s('conversation-group', 'discord-channel:100000000000000099')), { key: 'sessionTitle.groupUnnamed', params: { platform: { key: 'channel.discord' } } });
+    assert.deepEqual(sessionTitle(s('conversation-group', 'slack-room:C0ACME')), { key: 'sessionTitle.groupUnnamed', params: { platform: { key: 'channel.slack' } } });
+    assert.ok(!JSON.stringify(sessionTitle(s('conversation-group', 'matrix-room:!' + 'x'.repeat(40) + ':example.org'))).includes('xxxx'));
   });
 });

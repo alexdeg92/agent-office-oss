@@ -20,10 +20,10 @@ test('migration 014: owner hash, unique owner/email, person link and persistence
   const tmp = fixture(); let s;
   try {
     s = openStore({ dir: tmp, instance: 'test', ownerName: 'Operator' });
-    assert.equal(s.version, 15);
+    assert.equal(s.version, require('../../src/store/db').listMigrations().at(-1).version);
     const hash = await hashPassword('synthetic-owner-password');
     const owner = s.users.createOwner({ email: 'OWNER@example.invalid', passwordHash: hash, personId: s.owner.id });
-    assert.equal(owner.role, 'owner'); assert.equal(owner.person_id, s.owner.id);
+    assert.equal(owner.role_id, 'rol_admin'); assert.equal(owner.person_id, s.owner.id);
     assert.equal(await verifyPassword('synthetic-owner-password', owner.password_hash), true);
     assert.throws(() => s.users.createOwner({ email: 'other@example.invalid', passwordHash: hash, personId: s.owner.id }), { code: 'EOWNER' });
     s.close(); s = openStore({ dir: tmp, instance: 'test' });
@@ -78,9 +78,12 @@ test('adapter installation: exact per-agent plans, one confirmation, idempotence
     assert.throws(() => I.apply({ planId: stale.planId, agentIds: ['atlas', 'scribe'], confirmed: true }), { code: 'ESTALEPLAN' });
     assert.ok(!fs.existsSync(path.join(agents[0].workspace, 'skills', 'projet')), 'all targets checked before first write');
     fs.symlinkSync(agents[0].workspace, path.join(tmp, 'linked-workspace'));
-    await assert.rejects(I.plan({ runtime: 'openclaw', agents: [{ id: 'linked', workspace: path.join(tmp, 'linked-workspace') }] }), { code: 'EUNSAFEPATH' });
+    const localConfig = path.join(tmp, '.openclaw', 'openclaw.json');
+    fs.writeFileSync(localConfig, JSON.stringify({ agents: { list: [{ id: 'linked', workspace: path.join(tmp, 'linked-workspace') }] } }));
+    await assert.rejects(I.plan({ runtime: 'openclaw', agents: [{ id: 'linked' }] }), { code: 'EUNSAFEPATH' });
     fs.symlinkSync(path.join(tmp, 'missing-target'), path.join(tmp, 'dangling-workspace'));
-    await assert.rejects(I.plan({ runtime: 'openclaw', agents: [{ id: 'dangling', workspace: path.join(tmp, 'dangling-workspace') }] }), { code: 'EUNSAFEPATH' });
+    fs.writeFileSync(localConfig, JSON.stringify({ agents: { list: [{ id: 'dangling', workspace: path.join(tmp, 'dangling-workspace') }] } }));
+    await assert.rejects(I.plan({ runtime: 'openclaw', agents: [{ id: 'dangling' }] }), { code: 'EUNSAFEPATH' });
     assert.equal((await I.plan({ runtime: 'demo', agents: [{ id: 'a' }] })).agents[0].status, 'unsupported');
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
@@ -163,10 +166,11 @@ test('new HTTP onboarding: DB owner, hidden detected token, names/styles, networ
     const post = (p, b = {}) => h.post('/api/v2/setup/' + p, { setupCode: code, ...b });
     assert.equal((await post('owner', { owner: { ...owner, passwordConfirmation: 'different' } })).status, 400);
     assert.equal((await post('owner', { owner })).status, 200);
-    h.withStore(db => { const row = db.prepare('SELECT * FROM users').get(); assert.equal(row.role, 'owner'); assert.match(row.password_hash, /^scrypt:/); assert.ok(!JSON.stringify(row).includes(owner.password)); });
+    h.withStore(db => { const row = db.prepare('SELECT * FROM users').get(); assert.equal(row.role_id, 'rol_admin'); assert.match(row.password_hash, /^scrypt:/); assert.ok(!JSON.stringify(row).includes(owner.password)); });
     const detection = await post('detect'); assert.equal(detection.status, 200, detection.text);
     assert.ok(!detection.text.includes(TOKEN)); assert.ok(!detection.text.includes(h.tmp), 'no private workspace paths in detection');
-    const runtime = { adapter: detection.json.data.result.selected, gatewayUrl: h.gw.url };
+    assert.equal(detection.json.data.result.selected, null, 'several connectable runtimes require a choice');
+    const runtime = { adapter: 'openclaw', gatewayUrl: h.gw.url };
     assert.equal((await post('check', { runtime })).json.data.result.ok, true);
     assert.equal((await post('discover', { runtime })).json.data.result.agents[0].name, 'Orion');
     const plan = (await post('integrations/plan', { runtime })).json.data.result;
@@ -185,11 +189,11 @@ test('new HTTP onboarding: DB owner, hidden detected token, names/styles, networ
     await waitFor(async () => (await h.get('/api/v2/meta')).json.data.primaryAgent?.name === 'Orion');
     const layout = (await h.get('/api/v3/office/layout')).json.data;
     assert.equal(layout.layout.data.agents.find(a => a.agentId === 'primary').character, 'fen');
-    assert.equal(layout.layout.data.agents.find(a => a.agentId === 'agent:scribe').name, 'Lyra');
+    assert.equal(layout.layout.data.agents.find(a => a.agentId === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).name, 'Lyra');
     const bureau = (await h.get('/api/v3/views/office')).json.data;
-    assert.equal(bureau.occupants.find(o => o.id === 'agent:scribe').name, 'Lyra');
-    assert.equal(bureau.occupants.find(o => o.id === 'agent:scribe').look.character, body.agents.looks.scribe.character);
-    assert.ok(bureau.occupants.find(o => o.id === 'agent:scribe').stationUid, 'selected agent already placed');
+    assert.equal(bureau.occupants.find(o => o.id === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).name, 'Lyra');
+    assert.equal(bureau.occupants.find(o => o.id === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).look.character, body.agents.looks.scribe.character);
+    assert.ok(bureau.occupants.find(o => o.id === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).stationUid, 'selected agent already placed');
     const cfgFile = path.join(h.tmp, '.config', 'agent-office', 'config.json');
     const secFile = path.join(path.dirname(cfgFile), 'secrets.json');
     const config = JSON.parse(fs.readFileSync(cfgFile)), secrets = JSON.parse(fs.readFileSync(secFile));

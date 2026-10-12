@@ -4,25 +4,37 @@
       "id": "main",
       "name": "Timmy",
       "workspace": "/srv/fake/workspace-main",
+      "displayName": "Timmy",
+      "summary": null,
+      "spawnedBy": null,
       "model": {
         "primary": "provider-a/model-a",
         "provider": "provider-a"
       },
+      "modelSource": null,
+      "runtime": null,
       "fallbackModels": [],
       "isPrimary": true,
-      "mainSessionKey": null
+      "mainSessionKey": null,
+      "hostObservations": []
     },
     {
       "id": "scout",
       "name": "Scout",
       "workspace": "/srv/fake/workspace-scout",
+      "displayName": "Scout",
+      "summary": null,
+      "spawnedBy": null,
       "model": {
         "primary": "provider-b/model-b",
         "provider": "provider-b"
       },
+      "modelSource": null,
+      "runtime": null,
       "fallbackModels": [],
       "isPrimary": false,
-      "mainSessionKey": null
+      "mainSessionKey": null,
+      "hostObservations": []
     }
   ],
   "cronJobs": [

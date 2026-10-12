@@ -6,9 +6,13 @@ import { html, useEffect, useRef, useState } from '../lib.js';
 import { useTopic, useCapability } from '../hooks.js';
 import { services } from '../services.js';
 import { t, label, msg } from '../i18n.js';
+import { registerMessages } from '../messages.js';
+import * as healthMessages from '../messages/health.js';
 import * as fmt from '../fmt.js';
-import { put } from '../api.js';
+import { put, post } from '../api.js';
 import { Icon, EmptyState, ErrorState, Ago, Sparkline, Skeleton } from '../components/ui.js';
+
+registerMessages(healthMessages);
 
 const LEVEL_TONE = { ok: 'success', warn: 'warning', alert: 'danger' };
 const LEVEL_ICON = { ok: 'success', warn: 'warning', alert: 'alert' };
@@ -20,27 +24,37 @@ const SOURCE_ICON = { fresh: 'success', stale: 'clock', down: 'alert' };
 const SEV_TONE = { error: 'danger', warn: 'warning', info: 'info' };
 const SEV_ICON = { error: 'error', warn: 'warning', info: 'info' };
 const FILTERS = [['', 'open'], ['error', 'error'], ['warn', 'warn'], ['info', 'info'], ['sourdine', 'muted']];
+const ISSUE_TEXT = Object.fromEntries(['rpc.failed','cli.failed','cli.not-ok','parse.failed','shape.invalid','shape.extra-field','shape.item-dropped','enum.unmapped',
+  'session.unclassified','activity.unmapped','event.unknown','version.untested','store.invalid','schema.missing','quarantine.overflow','vm.invalid',
+  'config.primary-invalid','config.primary-guessed','store.unindexed'].map(code => [code, `healthIssue.${code}`]));
+const readableCause = value => (value || '').replace(/<undeclared>/g, msg('health.issue.unknownField')).replace(/^\$\.?/, '').replace(/\[\]/g, '').replace(/[.:[\]{}_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+const CAUSE_TEXT = { 'skills list': 'health.cause.skillsList' };
+const localizedCause = value => CAUSE_TEXT[value] ? msg(CAUSE_TEXT[value]) : value;
+const readableSource = value => {
+  const parts = (value || '').replace(/^legacy:/, '').split(/[.:]+/).filter(Boolean);
+  return parts[0] === 'gw' ? msg('health.source.gateway') : parts[0] === 'core' || parts[0] === 'vm' ? msg('health.source.health') : msg('health.source.runtime');
+};
+const readableChannelCause = value => (value || '').replace(/^legacy:/, '').split(/[.:]+/).filter(part => !['gw','core','vm','v3','legacy','rpc','cli','event'].includes(part)).map(part => part.replace(/-/g, ' ')).join(' ');
 
 const Chip = ({ tone, icon, children, small }) => html`<span class=${'bu-chip' + (tone ? ' bu-chip--' + tone : '') + (small ? ' bu-chip--sm' : '')}>${icon ? html`<${Icon} name=${icon} />` : null}${children}</span>`;
 
 export function HealthPage({ match }) {
   const vm = useTopic('health', '/api/v2/views/health');
-  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-frame"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
+  if (vm.data === undefined && vm.error) return html`<div class="bu-page ao-page"><${ErrorState} error=${vm.error} onRetry=${vm.retry} /></div>`;
   if (vm.data === undefined) return html`<${HealthSkeleton} />`;
   const h = vm.data;
-  const isEmpty = !h.cards.length && !h.channels.length && !h.sources.length && !h.dataQuality.issues.length;
+  const dataQuality=h.dataQuality||null;
+  const isEmpty = !h.cards.length && !h.channels.length && !h.sources.length && !(dataQuality?.issues||[]).length && !(h.healthChecks || []).length;
   const notFresh = h.sources.filter((s) => s.state !== 'fresh');
 
-  return html`<div class="bu-page ao-frame ao-health" aria-busy=${vm.resyncing ? 'true' : undefined}>
+  return html`<div class="bu-page ao-page ao-health" aria-busy=${vm.resyncing ? 'true' : undefined}>
     ${vm.error ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('common.updateFailed', { error: vm.error.message })} ${msg('health.maybeOld')}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('common.retry')}</button></div>` : null}
     ${isEmpty ? html`<${EmptyState} icon="sante" title=${msg('health.empty.title')} text=${msg('health.empty.text')} />` : html`
       <${Summary} h=${h} notFresh=${notFresh} />
       <${Cards} h=${h} />
-      <div class="bu-grid--2 ao-health__pair">
-        <${Channels} channels=${h.channels} />
-        <${Sources} sources=${h.sources} />
-      </div>
-      <${DataQuality} dq=${h.dataQuality} query=${match.query} />`}
+      <${Channels} channels=${h.channels} />
+      <${HealthChecks} checks=${h.healthChecks || []} audit=${h.healthAudit || []} />
+      ${dataQuality?html`<${DataQuality} dq=${dataQuality} query=${match.query} />`:null}`}
   </div>`;
 }
 
@@ -54,7 +68,7 @@ function Summary({ h, notFresh }) {
     <${Chip} tone=${LEVEL_TONE[h.level]} icon=${LEVEL_ICON[h.level]}>${t('healthLevel.' + h.level)}</${Chip}>
     <span class="bu-text-secondary">${text}</span>
     <span class="bu-sr-only" aria-live="polite">${announce}</span>
-    ${notFresh.length ? html`<span class="bu-chip bu-chip--warning" title=${notFresh.map((s) => t('source.' + s.id)).join(', ')}><${Icon} name="clock" />${msg('health.cached', { n: notFresh.length })}</span>` : null}
+    ${notFresh.length ? html`<span class="bu-chip bu-chip--warning"><${Icon} name="clock" />${msg('health.cached', { n: notFresh.length })}</span>` : null}
   </div>`;
 }
 
@@ -95,27 +109,48 @@ function Channels({ channels }) {
       ${channels.map((c) => html`<li key=${c.id} class="bu-row">
         <span class="bu-icon-tile"><${Icon} name="canal" /></span>
         <span class="bu-row__main"><span class="bu-row__title">${c.label}</span>
-          <span class="bu-row__sub">${c.lastError ? c.lastError : msg('health.accounts', { n: c.accounts || 0 })}</span></span>
+          <span class="bu-row__sub">${c.lastError ? t('sourceError.' + c.lastError) : msg('health.accounts', { n: c.accounts || 0 })}</span></span>
         <${Chip} tone=${CHANNEL_TONE[c.health]} icon=${CHANNEL_ICON[c.health]}>${t('channelHealth.' + c.health)}</${Chip}>
       </li>`)}
     </ul>` : html`<div class="bu-card bu-card--sunken"><${EmptyState} compact icon="canal" title=${msg('health.channels.none')} text=${msg('health.channels.none.text')} /></div>`}
   </section>`;
 }
 
-function Sources({ sources }) {
-  return html`<section class="bu-section" id="sante-sources-section" aria-labelledby="sante-sources">
-    <h2 class="bu-eyebrow" id="sante-sources">${msg('health.sources')}</h2>
-    ${sources.length ? html`<ul class="bu-list">
-      ${sources.map((s) => {
-        const failing = s.channels.filter((c) => c.state !== 'fresh');
-        return html`<li key=${s.id} class="bu-row ao-source-row">
-        <span class="bu-row__main"><span class="bu-row__title">${t('source.' + s.id)}</span>
-          <span class="bu-row__sub">${s.state === 'fresh' ? html`${msg('health.source.updated')} <${Ago} at=${s.lastOkAt} />`
-            : html`${s.lastError ? t('sourceError.' + s.lastError) + ' · ' : ''}${msg('health.source.lastOk')} ${s.lastOkAt ? html`<${Ago} at=${s.lastOkAt} />` : msg('health.source.never')}`}</span>
-          ${failing.length ? html`<span class="ao-source-row__channels">${failing.map((c) => html`<span key=${c.channel} class="bu-tag" title=${c.lastError ? t('sourceError.' + c.lastError) : ''}>${c.channel}</span>`)}</span>` : null}</span>
-        <${Chip} tone=${SOURCE_TONE[s.state]} icon=${SOURCE_ICON[s.state]}>${t('sourceState.' + s.state)}</${Chip}>
-      </li>`; })}
-    </ul>` : html`<div class="bu-card bu-card--sunken"><${EmptyState} compact icon="database" title=${msg('health.sources.none')} /></div>`}
+function HealthChecks({ checks, audit }) {
+  const writable = useCapability('storeWrites');
+  const active = checks.filter(c => c.active);
+  const resolved = checks.filter(c => !c.active && c.resolvedAt).slice(0, 12);
+  const safe = active.filter(c => ['auto', 'one-click'].includes(c.remedy));
+  const [busy, setBusy] = useState(false);
+  async function fix(id) {
+    if (busy || !writable) return;
+    setBusy(true);
+    try { await post(id ? `/api/v2/health/checks/${encodeURIComponent(id)}/fix` : '/api/v2/health/fix-all', {}); }
+    catch { /* surfaced by the shared API client */ }
+    finally { setBusy(false); }
+  }
+  const card = c => {
+    const latest = audit.find(a => a.checkId === c.id);
+    return html`<li key=${c.id} class="bu-card ao-health-check">
+      <div class="ao-health-check__head"><${Chip} tone=${SEV_TONE[c.severity]} icon=${SEV_ICON[c.severity]}>${t('issueSeverity.' + c.severity)}</${Chip}>
+        <strong>${msg(c.textKey)}</strong></div>
+      <p>${msg(c.impactKey)}</p>
+      <p class="bu-caption bu-text-secondary">${latest ? msg(latest.outcome === 'completed' ? 'health.remedy.done' : 'health.remedy.failed')
+        : !c.active ? msg('health.remedy.resolved') : msg(c.remedy === 'auto' ? 'health.remedy.auto' : 'health.remedy.next')}</p>
+      ${latest && latest.outcome !== 'completed' && c.target ? html`<p class="bu-caption"><strong>${msg('health.target.' + c.target)}</strong><br />${msg('health.remedy.manual')}</p>` : null}
+      ${!latest && c.target ? html`<p class="bu-caption"><strong>${msg('health.target.' + c.target)}</strong><br />${msg('health.remedy.manual')}</p>` : null}
+      <div class="ao-health-check__actions">
+        ${c.remedy === 'one-click' ? html`<button type="button" class="bu-btn bu-btn--sm bu-btn--primary" disabled=${!writable || busy} onClick=${() => fix(c.id)}>${msg('health.fix')}</button>` : null}
+        ${c.active && c.remedy === 'guided' && c.guidedPath ? html`<a class="bu-btn bu-btn--sm" href=${c.guidedPath}>${msg('health.openSettings')}</a>` : null}
+      </div>
+      ${!c.active && c.resolvedAt ? html`<span class="bu-caption bu-text-tertiary">${msg('health.resolvedAt')} <${Ago} at=${c.resolvedAt} /></span>` : null}
+    </li>`;
+  };
+  return html`<section class="bu-section" aria-labelledby="sante-verifications">
+    <div class="ao-section-head"><h2 class="bu-eyebrow" id="sante-verifications">${msg('health.checks')}</h2>
+      ${safe.length ? html`<button class="bu-btn bu-btn--sm bu-btn--primary" disabled=${!writable || busy} onClick=${() => fix(null)}>${msg('health.fixAll')}</button>` : null}</div>
+    ${active.length ? html`<ul class="bu-list">${active.map(card)}</ul>` : html`<div class="bu-card bu-card--sunken"><${EmptyState} compact icon="success" title=${msg('health.checks.clear')} /></div>`}
+    ${resolved.length ? html`<h3 class="bu-eyebrow">${msg('health.resolved')}</h3><ul class="bu-list">${resolved.map(card)}</ul>` : null}
   </section>`;
 }
 
@@ -162,8 +197,8 @@ function Issue({ issue: i, open, writes = true }) {
     <div class="ao-issue__head">
       <${Chip} tone=${SEV_TONE[i.severity]} icon=${SEV_ICON[i.severity]}>${t('issueSeverity.' + i.severity)}</${Chip}>
       <span class="ao-issue__title">
-        <span class="bu-heading-sm">${t('issueCode.' + i.code)}</span>
-        <span class="bu-caption bu-text-secondary bu-mono-sm">${i.channel}${i.path ? ' · ' + i.path : ''}</span>
+        <span class="bu-heading-sm">${msg(ISSUE_TEXT[i.code] || 'healthIssue.generic')}</span>
+        <span class="bu-caption bu-text-secondary">${msg('health.issue.source')}: ${readableSource(i.channel)} · ${msg('health.issue.cause')}: ${localizedCause(readableCause(i.path) || readableChannelCause(i.channel) || msg(ISSUE_TEXT[i.code] || 'healthIssue.generic'))}</span>
       </span>
       <span class="ao-issue__meta bu-caption bu-text-tertiary"><span class="bu-num">×${fmt.number(i.count)}</span> · <${Ago} at=${i.lastSeenAt} /></span>
     </div>
@@ -176,8 +211,8 @@ function Issue({ issue: i, open, writes = true }) {
     </div>
     ${open ? html`<div id=${panelId} class="ao-issue__detail">
       <dl class="bu-kv">
-        <div class="bu-kv__row"><dt>${msg('bulletin.issue.code')}</dt><dd class="bu-mono-sm">${i.code}</dd></div>
-        ${i.path ? html`<div class="bu-kv__row"><dt>${msg('bulletin.issue.path')}</dt><dd class="bu-mono-sm">${i.path}</dd></div>` : null}
+        <div class="bu-kv__row"><dt>${msg('health.issue.source')}</dt><dd>${readableSource(i.channel)}</dd></div>
+        <div class="bu-kv__row"><dt>${msg('health.issue.cause')}</dt><dd>${localizedCause(readableCause(i.path) || readableChannelCause(i.channel) || msg(ISSUE_TEXT[i.code] || 'healthIssue.generic'))}</dd></div>
         <div class="bu-kv__row"><dt>${msg('bulletin.issue.first')}</dt><dd>${fmt.dateTime(i.firstSeenAt)}</dd></div>
         <div class="bu-kv__row"><dt>${msg('bulletin.issue.last')}</dt><dd>${fmt.dateTime(i.lastSeenAt)}</dd></div>
         <div class="bu-kv__row"><dt>${msg('bulletin.issue.state')}</dt><dd>${t('issueState.' + i.state)}</dd></div>
@@ -188,7 +223,7 @@ function Issue({ issue: i, open, writes = true }) {
 }
 
 function HealthSkeleton() {
-  return html`<div class="bu-page ao-frame ao-health" aria-busy="true" aria-label=${msg('health.loading')}>
+  return html`<div class="bu-page ao-page ao-health" aria-busy="true" aria-label=${msg('health.loading')}>
     <${Skeleton} kind="title" />
     <div class="ao-health__cards">${Array.from({ length: 8 }, (_, k) => html`<div key=${k} class="bu-stat"><${Skeleton} w="40" /><${Skeleton} kind="title" /><${Skeleton} w="60" /></div>`)}</div>
     <div class="bu-grid--2 ao-health__pair"><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div>

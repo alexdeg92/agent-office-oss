@@ -1,1990 +1,2249 @@
 [
- {
-  "file": "src/projects/constants.js",
-  "token": "Timmy",
-  "line": "/** History Timmy may append. Status moves go through setStatus, not this list. */",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "src/projects/plan.js",
-  "token": "Timmy",
-  "line": "if (!TIMMY_HISTORY_KINDS.includes(input.kind)) throw validation('Cet événement n’est pas ouvert à Timmy.', 'kind');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "src/projects/service.js",
-  "token": "Timmy",
-  "line": "buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, atRisk, involvesTimmy,",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "src/projects/service.js",
-  "token": "Timmy",
-  "line": "const timmyOn = (project) => onBoard(project) && involvesTimmy(project, people, timmy);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "src/projects/vm.js",
-  "token": "Timmy",
-  "line": "function involvesTimmy(project, persons, timmyPersonId, agentId) {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "src/projects/vm.js",
-  "token": "Timmy",
-  "line": "if (agentFilter) return involvesTimmy(project, persons, options.timmyPersonId, options.primaryAgentId || undefined);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "src/projects/vm.js",
-  "token": "Timmy",
-  "line": "atRisk, involvesTimmy,",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "public/v2/mock/access.js",
-  "token": "Timmy",
-  "line": "{ id: 'main', name: 'Timmy', model: 'claude-opus-5-5', isPrimary: true },",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/candidates.js",
-  "token": "Timmy",
-  "line": "'Timmy a préparé un plan de formation en 3 séances, pas encore donné.', ['interne', 'formation'],",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/board-vm.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "Timmy",
-  "line": "\"summary\": \"Refonte du tableau de bord de Timmy : moteur typé, API v2 et nouveau bureau illustré.\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"owner\": \"alexdeg92\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"owner\": \"alexdeg92\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/history-page.json",
-  "token": "Timmy",
-  "line": "\"person\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "Timmy",
-  "line": "\"summary\": \"Refonte du tableau de bord de Timmy : moteur typé, API v2 et nouveau bureau illustré.\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"owner\": \"alexdeg92\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"owner\": \"alexdeg92\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "America/Toronto",
-  "line": "const TZS = (() => { try { return new Set(Intl.supportedValuesOf('timeZone')); } catch { return new Set(['America/Toronto', 'UTC', 'Europe/Paris']); } })();",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "America/Toronto",
-  "line": "if (b.tz !== undefined && (typeof b.tz !== 'string' || !TZS.has(b.tz))) return invalid('tz', 'unknown-tz', 'Fuseau horaire inconnu. Utilisez un nom IANA, par exemple « America/Toronto ».');",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "America/Toronto",
-  "line": "add('ffffffff-0c01-4000-8000-000000000001', 'Veille hebdomadaire', 'Résumé des nouveautés des concurrents suivis.', '0 9 * * 1', 'America/Toronto',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "America/Toronto",
-  "line": "add('ffffffff-0c01-4000-8000-000000000002', 'Résumé du matin', 'Les messages de la nuit et l’agenda du jour.', '30 7 * * *', 'America/Toronto',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "America/Toronto",
-  "line": "add('ffffffff-0c01-4000-8000-000000000003', 'Factures mensuelles', 'Générer les factures le premier du mois.', '0 8 1 * *', 'America/Toronto',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "America/Toronto",
-  "line": "add('ffffffff-0c01-4000-8000-000000000004', 'Audit SEO nocturne', 'Vérifier les balises et les liens morts du site vitrine.', '0 2 * * 1-5', 'America/Toronto',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/flows.js",
-  "token": "Timmy",
-  "line": "add('ffffffff-0c01-4000-8000-000000000006', 'Battement de Timmy', 'Vérification régulière de la session principale.', '', null, '', { kind: 'every', payload: 'heartbeat', created: 60 * D, runs: [] });",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/logs.js",
-  "token": "Timmy",
-  "line": "add('agent:main:main', 'main', null, 'Session principale de Timmy', MODELS[1], 412_380, 2 * MIN, { live: true });",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/logs.js",
-  "token": "Timmy",
-  "line": "if (row.kind === 'cron' || row.kind === 'subagent') events.push(ev({ kind: 'system', at: at(0), text: row.kind === 'cron' ? `Exécution planifiée : ${row.label}.` : 'Sous-agent lancé par Timmy avec un objectif délimité.', truncated: false }));",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/meta.js",
-  "token": "Timmy",
-  "line": "export const PROPOSED_AGENT = { id: 'main', name: 'Timmy', avatarUrl: assetUrl('bureau/assets/Characters/timmy/portrait.png') };",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/projects.js",
-  "token": "Timmy",
-  "line": "['per_timmy', { id: 'per_timmy', kind: 'agent', name: 'Timmy', avatarUrl: assetUrl('bureau/assets/Characters/timmy/portrait.png'), links: { agentId: 'main' } }],",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/projects.js",
-  "token": "Timmy",
-  "line": "summary: 'Nouvelle version du portail où les clients suivent leurs commandes et téléchargent leurs factures.\\n\\nLe parcours de connexion est terminé ; Timmy prépare la page de suivi. Le déploiement en préproduction échoue depuis hier soir à cause d’un test de bout en bout instable.',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/projects.js",
-  "token": "Timmy",
-  "line": "summary: 'Timmy génère les factures mensuelles à partir des feuilles de temps et les envoie après validation. Le flux du 1er octobre a échoué sur deux clients sans adresse de facturation.',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/projects.js",
-  "token": "Timmy",
-  "line": "summary: 'Chaque lundi, Scout parcourt les sites de cinq concurrents et Timmy rédige une synthèse de deux pages.',",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/projects.js",
-  "token": "Timmy",
-  "line": "summary: 'Guide de 12 pages rédigé avec Timmy à partir des notes d’équipe.', summaryMeta: { author: Owner, at: ago(18 * D) },",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/projects.js",
-  "token": "Timmy",
-  "line": "/** Timmy moves a project by himself (the later agent API), so the board shows a live move from someone else. */",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/server.js",
-  "token": "Timmy",
-  "line": "// ?agent=<name>: another instance's agent name (platform direction: the UI must never assume « Timmy »).",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/mock/server.js",
-  "token": "Timmy",
-  "line": "// Every 30 s Timmy moves the weekly-watch project, so the board shows a live move by someone else.",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "public/v2/office/README.md",
-  "token": "America/Toronto",
-  "line": "| `theme.js` | Jour / Nuit / Automatique (19:00–07:00, America/Toronto) (pure) |",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "public/v2/office/README.md",
-  "token": "Timmy",
-  "line": "- **Accessibility:** the world is `aria-hidden`; each occupant has a real `<button class=\"bu-nameplate\">` with `aria-label=\"Timmy, Exécute\"`, in roster order, plus a polite live region announcing state changes. The viewport is focusable: arrows pan (Maj = faster), `+`/`−` zoom, `0` refits. Furniture tooltips (`title`) are decorative.",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "public/v2/office/demo.js",
-  "token": "Timmy",
-  "line": "const occupants = [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'working', stateSince: t0 }];",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "public/v2/office/headline.js",
-  "token": "Timmy",
-  "line": "/** « Au dernier relevé, Timmy travaillait. » — past tense, no duration (it can't be confirmed to continue). */",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "public/v2/office/mock-office.js",
-  "token": "Timmy",
-  "line": "export function createOfficeMock({ manifest, layout, scenario = '1', now = () => Date.now(), mainName = 'Timmy', timeZone = undefined, version = 2 }) {",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "public/v2/office/setup-dev.js",
-  "token": "Timmy",
-  "line": "// Synthetic runtime agents (names are data; never « Timmy » assumed, never `main` as the primary).",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/api/agent-token.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(vm.summaryMeta.author.name, 'Timmy', 'the summary is the agent\\'s');",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/api/agent-token.test.js",
-  "token": "Timmy",
-  "line": "assert.ok(vm.recentHistory.filter((e) => e.kind === 'status-changed' || e.kind === 'summary-edited').every((e) => e.actor.name === 'Timmy'));",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/api/commands-v2.test.js",
-  "token": "America/Toronto",
-  "line": "const r = await h.request('POST', '/api/v2/flows', { name: '-Veille', cron: '0  9 * * 1', tz: 'America/Toronto', message: '--help\\n1. Lire' });",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/api/commands-v2.test.js",
-  "token": "America/Toronto",
-  "line": "assert.deepEqual(last('add'), ['cron', 'add', '--name=-Veille', '--cron=0 9 * * 1', '--tz=America/Toronto', '--message=--help\\n1. Lire', '--agent=main', '--session=isolated', '--json']);",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/api/i18n-en.test.js",
-  "token": "Timmy",
-  "line": "const leaks = Object.entries(L).filter(([k, v]) => /OpenClaw|Timmy/.test(v) && !/^(channel|source\\.github|discordChannelType)\\./.test(k)).map(([k]) => k);",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/api/layout-v2.test.js",
-  "token": "America/Toronto",
-  "line": "assert.deepEqual(resolveTheme(auto, at('2026-10-06T16:00:00Z'), 'America/Toronto'), { resolved: 'day', mode: 'auto', nextChangeAt: at('2026-10-06T23:00:00Z'), season: 'hiver' });   // 12:00 EDT",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/api/layout-v2.test.js",
-  "token": "America/Toronto",
-  "line": "assert.deepEqual(resolveTheme(auto, at('2026-10-07T02:30:00Z'), 'America/Toronto'), { resolved: 'night', mode: 'auto', nextChangeAt: at('2026-10-07T11:00:00Z'), season: 'hiver' });   // 22:30 EDT",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/api/layout-v2.test.js",
-  "token": "America/Toronto",
-  "line": "assert.equal(resolveTheme({ mode: 'auto', nightFrom: '01:00', nightTo: '05:00' }, at('2026-10-06T07:00:00Z'), 'America/Toronto').resolved, 'night');",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/api/layout-v2.test.js",
-  "token": "America/Toronto",
-  "line": "assert.equal(resolveTheme(auto, at('2026-10-06T20:00:00Z'), 'America/Toronto').resolved, 'day', 'the same instant is 16:00 in Toronto');",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/api/projects-v2.test.js",
-  "token": "alexdeg92",
-  "line": "const r = await h.request('POST', '/api/v2/projects', { name: 'Agent Office', status: 'todo', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/api/projects-v2.test.js",
-  "token": "Timmy",
-  "line": "it('« Régénérer le résumé »: 202 with a turnId; the reply lands as Timmy\\'s summary-edited; a second call while pending is 409', async () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/api/projects-v2.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(p.summaryMeta.author.name, 'Timmy');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/api/projects-v2.test.js",
-  "token": "Timmy",
-  "line": "assert.ok(ev, 'summary-edited in the history'); assert.equal(ev.actor.name, 'Timmy');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/api/review15.test.js",
-  "token": "Timmy",
-  "line": "assert.ok(ev); assert.equal(ev.actor.name, 'Timmy');",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/api/topology.test.js",
-  "token": "alexdeg92",
-  "line": "const created = await call('POST', '/backend/api/v2/projects', { name: 'URL check', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/core/boundary.test.js",
-  "token": "alexdeg92",
-  "line": "const hits = files.filter(({ text }) => /\\/home\\/Owner\\b|alexdeg92/.test(text)).map((f) => f.file);",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/core/g3a.test.js",
-  "token": "America/Toronto",
-  "line": "it('America/Toronto is gone from src/', () => {",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/core/g3a.test.js",
-  "token": "America/Toronto",
-  "line": "const hits = walk(path.join(__dirname, '..', '..', 'src')).filter((f) => fs.readFileSync(f, 'utf8').includes('America/Toronto'));",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/engine/canonical-s4.test.js",
-  "token": "Timmy",
-  "line": "const agents = { agents: [{ id: 'main', name: 'Timmy' }] };",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/engine/canonical-s4.test.js",
-  "token": "Timmy",
-  "line": "e.ingest(env('gw.rpc.agents.list', { agents: [{ id: 'main', name: 'Timmy 2' }] }));",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/engine/s41.test.js",
-  "token": "America/Toronto",
-  "line": "const job = (o) => Object.assign({ id: 'j', name: 'n', enabled: true, schedule: { kind: 'cron', expr: '0 9 * * 1', tz: 'America/Toronto' } }, o);",
-  "count": 1,
-  "reason": "a deliberate real IANA zone in a time-zone or schedule test"
- },
- {
-  "file": "test/fixtures/gw/rpc/agents.list/2026.9.8/synthetic-basic.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/fixtures/gw/rpc/cron.list/2026.9.8/synthetic-basic.json",
-  "token": "America/Toronto",
-  "line": "\"tz\": \"America/Toronto\"",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/fixtures/gw/rpc/cron.list/2026.9.8/synthetic-basic.json",
-  "token": "America/Toronto",
-  "line": "\"tz\": \"America/Toronto\"",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/fixtures/gw/rpc/sessions.get/2026.9.8/synthetic-basic-3.json",
-  "token": "Timmy",
-  "line": "\"content\": \"Salut Timmy\",",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/frontend/fmt.test.js",
-  "token": "America/Toronto",
-  "line": "fmt.setTimeZone('America/Toronto');",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "test/frontend/fmt.test.js",
-  "token": "America/Toronto",
-  "line": "fmt.setTimeZone('America/Toronto');",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "test/frontend/i18n.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(label({ key: 'historyKind.flow-run.failed', params: { job: 'Factures', actor: 'Timmy', duration: 'PT45S' } }), `Flux Factures exécuté par Timmy : échec après 45${NB}s.`);",
-  "count": 2,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "test/frontend/platform.test.js",
-  "token": "Timmy",
-  "line": "// shell, router) must not contain « Timmy »; mocks and the office (office-dev) are out of scope here.",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "test/frontend/platform.test.js",
-  "token": "Timmy",
-  "line": "test('no « Timmy » literal in /v2 UI code', () => {",
-  "count": 1,
-  "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
- },
- {
-  "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
-  "token": "Timmy",
-  "line": "\"name\": \"Timmy\",",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
-  "token": "America/Toronto",
-  "line": "\"tz\": \"America/Toronto\"",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
-  "token": "America/Toronto",
-  "line": "\"tz\": \"America/Toronto\"",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
-  "token": "Timmy",
-  "line": "\"text\": \"Salut Timmy\",",
-  "count": 1,
-  "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
- },
- {
-  "file": "test/helpers/harness.js",
-  "token": "America/Toronto",
-  "line": "HOME: tmp, TZ: 'America/Toronto', LANG: 'C.UTF-8',",
-  "count": 1,
-  "reason": "the harness defaults model the home instance (synthetic-basic); foreign-instance tests override them"
- },
- {
-  "file": "test/helpers/harness.js",
-  "token": "alexdeg92",
-  "line": "AO_PROJECTS_OWNERS: 'alexdeg92',",
-  "count": 1,
-  "reason": "the harness defaults model the home instance (synthetic-basic); foreign-instance tests override them"
- },
- {
-  "file": "test/office/bureau-locale.dom.test.js",
-  "token": "Timmy",
-  "line": "const DATA = /Timmy|Scout|Plume|Atlas|Veille hebdomadaire|Résumé du matin|Tâche planifiée [^.]* (started|déclenchée)/g;",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/headline.test.js",
-  "token": "Timmy",
-  "line": "for (const [lang, d] of Object.entries(STRINGS)) for (const [k, v] of Object.entries(d)) assert.doesNotMatch(v, /Timmy|OpenClaw|\\bmain:|« ?main ?»|\\{main\\}/, `${lang} ${k}`);",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/manifest.test.js",
-  "token": "America/Toronto",
-  "line": "const TZ = 'America/Toronto';",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/mock-office.test.js",
-  "token": "Timmy",
-  "line": "it('scenarios: vide = Timmy alone and idle; panne = gateway down, everyone offline', async () => {",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/names.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(displayName({ id: 'main', role: 'main', name: 'main' }, { primaryName: 'Timmy' }), 'Timmy');",
-  "count": 2,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/names.test.js",
-  "token": "Timmy",
-  "line": "for (const n of ['Timmy', 'Agent principal', 'Main Street bot']) assert.equal(isRawId(n, { role: 'main' }), false, n);",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "window.src = [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'working', stateSince: Date.now() }];",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "// Timmy works seated (Batch 6): an error swivels him to face the camera.",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(r.a.length, 3, 'Timmy types on three frames');",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "const occ = H.occupants([{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'calling', stateSince: Date.now() }]);",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "assert.match(r.batch, /^3 changements\\. Timmy : réfléchit\\. Scout : erreur|^3 changements\\./);",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(r.before, 1, 'Timmy types');",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "assert.match(first, /^Timmy, /);",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "window.src = [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'working', stateSince: Date.now() }];",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "sc.setOccupants(H.occupants([{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'error', stateSince: Date.now() }]));",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "const ed = await H.openEditor({ scene: sc, store, assetBase: H.assetBase, barHost: document.getElementById('bar'), asideHost: document.getElementById('aside'), getOccupants: () => [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'idle', stateSince: Date.now() }] });",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "Timmy",
-  "line": "assert.ok(names.includes('Timmy'), `${url}: the mock primary agent shows its data name`);",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/scene.dom.test.js",
-  "token": "America/Toronto",
-  "line": "out.tokyo = mk('Asia/Tokyo'); out.toronto = mk(() => 'America/Toronto');",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/theme-dst.test.js",
-  "token": "America/Toronto",
-  "line": "// on the agreed local time across both DST transitions; checked in America/Toronto and in zones without DST.",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/office/theme-dst.test.js",
-  "token": "America/Toronto",
-  "line": "const TOR = 'America/Toronto';",
-  "count": 1,
-  "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
- },
- {
-  "file": "test/packaging/release.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(text, /alexdeg92\\/homebrew-tap/);",
-  "count": 1,
-  "reason": "release coordinates: the GitHub owner that publishes this repo (packaging/release, PM)"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "project('prj_other', [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'other' } }], {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', name: 'other', sha: 'def5678', at: AT + 6, branch: 'dev' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', name: 'foreign', sha: 'fff9999', at: AT + 7, branch: 'main' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "const repo = { owner: 'alexdeg92', name: 'demo', defaultBranch: 'main', commits: [commit] };",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "project('prj_a', [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }], { repo }),",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "alexdeg92",
-  "line": "project('prj_b', [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }], { repo }),",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "Timmy",
-  "line": "it('suggests Timmy, subagents, and Discord humans from linked sessions', () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "Timmy",
-  "line": "agents: [{ id: 'main', name: 'Timmy', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'agent:main:main' }],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/activity.test.js",
-  "token": "Timmy",
-  "line": "{ kind: 'agent', name: 'Timmy', links: { agentId: 'main' }, sessionKeys: ['agent:main:main', 'chat-Owner', 'chat-room'] },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'Demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' }, addedAt: AT, addedBy: { kind: 'human', personId: 'per_alexowner000000' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/commands.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92', name: 'demo', repo: { url: 'http://example.invalid/demo' }, authors: [],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "owners: ['alexdeg92'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'demo', name: 'demo', description: 'Site web du client Acme', topics: ['personal'], pushedAt: new Date(AT - 2 * DAY).toISOString() },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ path: 'sites/demo', remote: 'git@github.com:alexdeg92/demo.git', lastCommitAt: AT - DAY },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "const demo = candidates.find((c) => c.key === 'gh:alexdeg92/demo');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "owners: ['alexdeg92'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'demo', name: 'demo', pushedAt: new Date(AT).toISOString() },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'demo-web', name: 'demo-web', pushedAt: new Date(AT).toISOString() },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "owners: ['alexdeg92'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'ancient', name: 'ancient', pushedAt: new Date(AT - 200 * DAY).toISOString() },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'boxed', name: 'boxed', archived: true, pushedAt: new Date(AT - DAY).toISOString() },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'empty', name: 'empty' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "if (argv[3] === 'remote') return { code: 0, stdout: 'https://github.com/alexdeg92/demo.git\\n', stderr: '' };",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "const github = await discovery.collectGithubRepos({ exec, owner: 'alexdeg92' });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(folders[0].remote, 'https://github.com/alexdeg92/demo.git');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "const listed = discovery.proposeCandidates({ now: AT, owners: ['alexdeg92'], github, workspaces: folders });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(listed.find((c) => c.key === 'gh:alexdeg92/demo').sources.some((s) => s.kind === 'workspace'), true);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "owners: ['alexdeg92'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92', repo: 'demo', name: 'demo',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "workspaces: [{ path: 'sites/demo', remote: 'https://github.com/alexdeg92/demo', lastCommitAt: AT - 2 * DAY }],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "assert.deepEqual(notice.sources.find((s) => s.kind === 'github').ref, { owner: 'alexdeg92', repo: 'demo' });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "Timmy",
-  "line": "it('lets Timmy append a history event and refuses a status event on that path', () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "owners: ['alexdeg92'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'pivot', name: 'pivot', pushedAt: new Date(AT - 2 * DAY).toISOString() },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "{ path: 'pivot', remote: 'git@github.com:alexdeg92/pivot.git', lastCommitAt: AT - 2 * DAY },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "const pivot = candidates.find((c) => c.key === 'gh:alexdeg92/pivot');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(pivotVm.sources.some((s) => s.label === 'alexdeg92/pivot'), true);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "assert.deepEqual(pivotVm.sources.find((s) => s.kind === 'github').ref, { owner: 'alexdeg92', repo: 'pivot' });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/discovery.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(table, /alexdeg92\\/demo/);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/commits.json",
-  "token": "alexdeg92",
-  "line": "\"author\": { \"login\": \"alexdeg92\" }",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/repo-list.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://github.com/alexdeg92/demo\",",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/repo-list.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://github.com/alexdeg92/old-tool\",",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/repo.json",
-  "token": "alexdeg92",
-  "line": "\"full_name\": \"alexdeg92/demo\",",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/repo.json",
-  "token": "alexdeg92",
-  "line": "\"html_url\": \"https://github.com/alexdeg92/demo\",",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/repo.json",
-  "token": "alexdeg92",
-  "line": "\"owner\": { \"login\": \"alexdeg92\" }",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/runs-failure.json",
-  "token": "alexdeg92",
-  "line": "\"html_url\": \"https://github.com/alexdeg92/demo/actions/runs/42\",",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/fixtures/github/runs-success.json",
-  "token": "alexdeg92",
-  "line": "\"html_url\": \"https://github.com/alexdeg92/demo/actions/runs/43\",",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/flags.test.js",
-  "token": "alexdeg92",
-  "line": "const id = link(repo, [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }]);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/flags.test.js",
-  "token": "alexdeg92",
-  "line": "repo.putRepoCache({ owner: 'alexdeg92', name: 'demo', repo: built.repo, authors: built.authors });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/flags.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(result.flags.find((flag) => flag.key === 'billing').source, 'alexdeg92/demo/flags.json');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/flags.test.js",
-  "token": "alexdeg92",
-  "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/foreign-instance.test.js",
-  "token": "alexdeg92",
-  "line": "const BANNED = /Timmy|Owner|alexdeg92|discord/;",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/foreign-instance.test.js",
-  "token": "Timmy",
-  "line": "const BANNED = /Timmy|Owner|alexdeg92|discord/;",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/foreign-instance.test.js",
-  "token": "alexdeg92",
-  "line": "{ owner: 'alexdeg92', repo: 'secret', name: 'Secret', description: '', pushedAt: new Date(AT).toISOString(), archived: false, topics: [] },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/foreign-instance.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(found.some((row) => JSON.stringify(row).includes('alexdeg92')), false);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/helpers.js",
-  "token": "Timmy",
-  "line": "name: 'Timmy',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/helpers.js",
-  "token": "alexdeg92",
-  "line": "githubOwners: options.githubOwners === undefined ? ['alexdeg92'] : options.githubOwners,",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/people.test.js",
-  "token": "Timmy",
-  "line": "it('adds a discord human and Timmy from a session group, and honours a hide', () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/portability.test.js",
-  "token": "alexdeg92",
-  "line": "const hits = files.filter((file) => fs.readFileSync(file, 'utf8').includes('alexdeg92'));",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/portability.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const first = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const again = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 60 * 1000 });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const cleared = await passing.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + REPO_FRESH_MS });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const failed = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const soon = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 2 * 60 * 1000 });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const later = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 15 * 60 * 1000 });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const failed = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const early = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 59 * 1000 });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const retry = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 60 * 1000 });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const one = flight.cache.refresh(flight.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const first = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const again = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + REPO_FRESH_MS });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "const later = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + REPO_FRESH_MS + SCREENSHOT_FRESH_MS });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "await refresher.refresh(row.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "await dnsRefresh.refresh(dnsRow.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repo-refresh.test.js",
-  "token": "alexdeg92",
-  "line": "await credRefresh.refresh(credRow.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "url: 'https://github.com/alexdeg92/demo',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "image: { kind: 'opengraph', url: 'https://github.com/alexdeg92/demo.png' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "githubOwners: options.githubOwners || ['alexdeg92'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(await repo.findActiveByGithub('alexdeg92', 'demo'), null);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "Timmy",
-  "line": "it('lets Timmy append an activity event without a new revision', async () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92', name: 'demo', repo: { url: 'http://example.invalid/demo' }, authors: [],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92', name: 'demo', repo: repoPayload(),",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "await repo.recordRepoFailure({ owner: 'alexdeg92', name: 'demo', at: AT + 4, error: 'timeout' });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/demo/actions/runs/1' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT + 20, url: 'https://github.com/alexdeg92/demo/actions/runs/2' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "key: 'gh:alexdeg92/demo',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "key: 'gh:alexdeg92/demo',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/repository-contract.test.js",
-  "token": "alexdeg92",
-  "line": "keys: ['gh:alexdeg92/demo', 'missing'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/risks.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/demo/actions/runs/1' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/risks.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT + 1000, url: 'https://github.com/alexdeg92/demo/actions/runs/9' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/risks.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'passing', at: AT + 2000, url: 'https://github.com/alexdeg92/demo/actions/runs/10' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/risks.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/demo/actions/runs/1' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/risks.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT + 3, url: 'https://github.com/alexdeg92/demo/actions/runs/2' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/service.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/service.test.js",
-  "token": "Timmy",
-  "line": "description: 'Tableau de bord de Timmy.',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/service.test.js",
-  "token": "alexdeg92",
-  "line": "keys: ['gh:alexdeg92/agent-office', 'sg:discord-user:100000000000000001'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/service.test.js",
-  "token": "alexdeg92",
-  "line": "keys: ['gh:alexdeg92/demo'],",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/service.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "const snap = await source.fetch({ owner: 'alexdeg92', repo: 'demo' }, { fetchedAt: AT });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "assert.deepEqual(calls[0], ['gh', 'api', 'repos/alexdeg92/demo']);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(calls[1][2], 'repos/alexdeg92/demo/commits?sha=main&per_page=10');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(calls[2][2], 'repos/alexdeg92/demo/actions/runs?branch=main&per_page=1');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(snap.repo.image.url, /^https:\\/\\/opengraph\\.githubassets\\.com\\/[a-f0-9]{16}\\/alexdeg92\\/demo$/);",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "html_url: 'https://github.com/alexdeg92/demo/actions/runs/9', updated_at: '2026-10-02T08:00:00Z',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "await assert.rejects(() => source.fetch({ owner: 'alexdeg92', repo: 'demo' }), (e) => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "repo.putRepoCache({ owner: 'alexdeg92', name: 'demo', repo: built.repo, authors: built.authors });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/sources.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/timmy-cli.test.js",
-  "token": "Timmy",
-  "line": "describe('Timmy projets CLI', () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "Timmy",
-  "line": "{ id: timmyId, kind: 'agent', name: 'Timmy', avatarUrl: null, links: { agentId: 'main' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "Timmy",
-  "line": "summary: 'Tableau de bord de Timmy.',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(page.items.find((e) => e.kind === 'people-override').text.params.person, 'Timmy');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "Timmy",
-  "line": "it('filters the board by risk and by Timmy', () => {",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "alexdeg92",
-  "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92', name: 'demo',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "alexdeg92",
-  "line": "url: 'https://github.com/alexdeg92/demo',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "alexdeg92",
-  "line": "owner: 'alexdeg92', name: 'demo', defaultBranch: 'main',",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "alexdeg92",
-  "line": "image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/alexdeg92/demo' },",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/projects/vm.test.js",
-  "token": "alexdeg92",
-  "line": "assert.equal(card.thumb.repoLabel, 'alexdeg92/demo');",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/store/projects-repository.test.js",
-  "token": "alexdeg92",
-  "line": "const open = (dir) => { const h = openDatabase({ dir, instance: 'test' }); return { h, repo: createProjectsRepository(h.db, { persons: [Owner(), timmy()], ownerPersonId: Owner().id, timmyPersonId: timmy().id, githubOwners: ['alexdeg92'], now: () => AT }) }; };",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/store/projects-repository.test.js",
-  "token": "alexdeg92",
-  "line": "const p = repo.createProject({ name: 'Agent Office', actor: 'owner', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });",
-  "count": 1,
-  "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
- },
- {
-  "file": "test/store/store.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(st2.persons.ensureAgent('main', 'Timmy').created, true);",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/store/store.test.js",
-  "token": "Timmy",
-  "line": "assert.equal(st2.persons.ensureAgent('main', 'Timmy').created, false);",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/store/store.test.js",
-  "token": "Timmy",
-  "line": "e.ingest({ source: 'gateway', channel: 'gw.rpc.agents.list', receivedAt: NOW, body: { kind: 'json', value: { defaultId: 'main', agents: [{ id: 'main', name: 'Timmy' }, { id: 'helper' }] } } });",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/store/store.test.js",
-  "token": "Timmy",
-  "line": "assert.deepEqual(st.persons.list().filter((p) => p.kind === 'agent').map((p) => [p.links.agentId, p.name]), [['main', 'Timmy'], ['helper', 'helper']]);",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/unit/capture-dryrun.test.js",
-  "token": "Timmy",
-  "line": "const handlers = { 'agents.list': { agents: [{ id: 'main', name: 'Timmy', workspace: '/home/someone/.openclaw/workspace', model: { primary: 'p/m' } }] },",
-  "count": 1,
-  "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
- },
- {
-  "file": "test/unit/fixture-redact.test.js",
-  "token": "America/Toronto",
-  "line": "const out = r.redact({ status: 'running', name: 'web_search', schedule: { kind: 'cron', expr: '0 9 * * 1', tz: 'America/Toronto' }, description: 'Texte libre' });",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/unit/fixture-redact.test.js",
-  "token": "America/Toronto",
-  "line": "const out = r.redact({ status: 'Alice owes', kind: 'direct', reason: 'tremblay', domain: 'clientx.ca', version: '2026.9.8', tz: 'America/Toronto', expr: 'Projet Lune' });",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/unit/fixture-redact.test.js",
-  "token": "America/Toronto",
-  "line": "assert.equal(out.kind, 'direct'); assert.equal(out.version, '2026.9.8'); assert.equal(out.tz, 'America/Toronto');",
-  "count": 1,
-  "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
- },
- {
-  "file": "test/packaging/bin.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(src, /registry\\.npmjs\\.org\\/@alexdeg92\\/agent-office\\/-\\/agent-office-/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/release.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(next, /registry\\.npmjs\\.org\\/@alexdeg92\\/agent-office\\/-\\/agent-office-1\\.2\\.3\\.tgz/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/release.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(text, /npm publish dist\\/alexdeg92-agent-office-1\\.2\\.3\\.tgz/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/check-pack.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(release, /repository: alexdeg92\\/homebrew-tap/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/check-pack.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(release, /if: github\\.repository == 'alexdeg92\\/agent-office-oss'/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/release.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(text, /gh release create v1\\.2\\.3.*--repo alexdeg92\\/agent-office-oss/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/release.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(text, /docker tag agent-office:1\\.2\\.3 ghcr\\.io\\/alexdeg92\\/agent-office-oss:1\\.2\\.3/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "test/packaging/release.test.js",
-  "token": "alexdeg92",
-  "line": "assert.match(text, /docker push ghcr\\.io\\/alexdeg92\\/agent-office-oss:1\\.2\\.3/);",
-  "count": 1,
-  "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
- },
- {
-  "file": "public/v2/mock/examples/board-vm.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/board-vm.json",
-  "token": "alexdeg92",
-  "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/candidates-vm.json",
-  "token": "alexdeg92",
-  "line": "{ \"id\": \"gh:alexdeg92/agent-office-oss\", \"key\": \"gh:alexdeg92/agent-office-oss\", \"name\": \"Agent Office\", \"summary\": \"Tableau de bord de Timmy.\",",
-  "count": 2,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/candidates-vm.json",
-  "token": "Timmy",
-  "line": "{ \"id\": \"gh:alexdeg92/agent-office-oss\", \"key\": \"gh:alexdeg92/agent-office-oss\", \"name\": \"Agent Office\", \"summary\": \"Tableau de bord de Timmy.\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/candidates-vm.json",
-  "token": "alexdeg92",
-  "line": "{ \"kind\": \"github\", \"label\": \"alexdeg92/agent-office-oss\", \"ref\": { \"owner\": \"alexdeg92\", \"repo\": \"agent-office-oss\" } },",
-  "count": 2,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"label\": \"alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/error-409-project.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss/actions/runs/1\"",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/import-result.json",
-  "token": "alexdeg92",
-  "line": "\"created\": [ { \"key\": \"gh:alexdeg92/agent-office-oss\", \"id\": \"prj_k3v9q2m8x1c4d7fz\" }, { \"key\": \"sg:group:Automations\", \"id\": \"prj_m2n4p6q8r1s3t5v7\" } ],",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"label\": \"alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "public/v2/mock/examples/project-vm.json",
-  "token": "alexdeg92",
-  "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss/actions/runs/1\"",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "{ id: 'src_gh', kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' }, addedAt: AT - 4 },",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "url: 'https://github.com/alexdeg92/agent-office-oss',",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss' },",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/agent-office-oss/actions/runs/1' },",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "key: 'gh:alexdeg92/agent-office-oss',",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } },",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "key: 'gh:alexdeg92/agent-office-oss',",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } }],",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- },
- {
-  "file": "test/projects/vm-shape.test.js",
-  "token": "alexdeg92",
-  "line": "keys: ['gh:alexdeg92/agent-office-oss', 'sg:discord-user:100000000000000001'],",
-  "count": 1,
-  "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
- }
+  {
+    "file": "public/v2/mock/access.js",
+    "token": "Timmy",
+    "line": "{ id: 'main', name: 'Timmy', model: 'claude-opus-5-5', modelSource: 'inherited', runtime: null, isPrimary: true },",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/candidates.js",
+    "tokenB64": "YWxleA==",
+    "line": "const actor = { kind: 'human', personId: 'per_alex' };",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/candidates.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [{ personId: 'per_alex', role: null, origin: 'manual', liveState: null, commitCount: null }],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/candidates.js",
+    "token": "Timmy",
+    "line": "'Timmy a préparé un plan de formation en 3 séances, pas encore donné.', ['interne', 'formation'],",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/board-vm.json",
+    "tokenB64": "YWxleA==",
+    "line": "\"id\": \"per_alex00000000000\",",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/examples/board-vm.json",
+    "token": "alexdeg92",
+    "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/board-vm.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/board-vm.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/candidates-vm.json",
+    "token": "alexdeg92",
+    "line": "{ \"id\": \"gh:alexdeg92/agent-office-oss\", \"key\": \"gh:alexdeg92/agent-office-oss\", \"name\": \"Agent Office\", \"summary\": \"Tableau de bord de Timmy.\",",
+    "count": 2,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/candidates-vm.json",
+    "token": "alexdeg92",
+    "line": "{ \"kind\": \"github\", \"label\": \"alexdeg92/agent-office-oss\", \"ref\": { \"owner\": \"alexdeg92\", \"repo\": \"agent-office-oss\" } },",
+    "count": 2,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/candidates-vm.json",
+    "token": "Timmy",
+    "line": "{ \"id\": \"gh:alexdeg92/agent-office-oss\", \"key\": \"gh:alexdeg92/agent-office-oss\", \"name\": \"Agent Office\", \"summary\": \"Tableau de bord de Timmy.\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/comment-thread-vm.json",
+    "tokenB64": "YWxleA==",
+    "line": "\"id\": \"per_alex00000000000\",",
+    "count": 4,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "tokenB64": "YWxleA==",
+    "line": "\"id\": \"per_alex00000000000\",",
+    "count": 3,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"label\": \"alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"owner\": \"alexdeg92\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"owner\": \"alexdeg92\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss/actions/runs/1\"",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/error-409-project.json",
+    "token": "Timmy",
+    "line": "\"summary\": \"Refonte du tableau de bord de Timmy : moteur typé, API v2 et nouveau bureau illustré.\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/history-page.json",
+    "tokenB64": "YWxleA==",
+    "line": "\"id\": \"per_alex00000000000\",",
+    "count": 3,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/examples/history-page.json",
+    "token": "Timmy",
+    "line": "\"person\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/import-result.json",
+    "token": "alexdeg92",
+    "line": "\"created\": [ { \"key\": \"gh:alexdeg92/agent-office-oss\", \"id\": \"prj_k3v9q2m8x1c4d7fz\" }, { \"key\": \"sg:group:Automations\", \"id\": \"prj_m2n4p6q8r1s3t5v7\" } ],",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "tokenB64": "YWxleA==",
+    "line": "\"id\": \"per_alex00000000000\",",
+    "count": 3,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"label\": \"alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"owner\": \"alexdeg92\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"owner\": \"alexdeg92\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss/actions/runs/1\"",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/examples/project-vm.json",
+    "token": "Timmy",
+    "line": "\"summary\": \"Refonte du tableau de bord de Timmy : moteur typé, API v2 et nouveau bureau illustré.\",",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "America/Toronto",
+    "line": "add('ffffffff-0c01-4000-8000-000000000001', 'Veille hebdomadaire', 'Résumé des nouveautés des concurrents suivis.', '0 9 * * 1', 'America/Toronto',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "America/Toronto",
+    "line": "add('ffffffff-0c01-4000-8000-000000000002', 'Résumé du matin', 'Les messages de la nuit et l’agenda du jour.', '30 7 * * *', 'America/Toronto',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "America/Toronto",
+    "line": "add('ffffffff-0c01-4000-8000-000000000003', 'Factures mensuelles', 'Générer les factures le premier du mois.', '0 8 1 * *', 'America/Toronto',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "America/Toronto",
+    "line": "add('ffffffff-0c01-4000-8000-000000000004', 'Audit SEO nocturne', 'Vérifier les balises et les liens morts du site vitrine.', '0 2 * * 1-5', 'America/Toronto',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "America/Toronto",
+    "line": "const TZS = (() => { try { return new Set(Intl.supportedValuesOf('timeZone')); } catch { return new Set(['America/Toronto', 'UTC', 'Europe/Paris']); } })();",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "America/Toronto",
+    "line": "if (b.tz !== undefined && (typeof b.tz !== 'string' || !TZS.has(b.tz))) return invalid('tz', 'unknown-tz', 'Fuseau horaire inconnu. Utilisez un nom IANA, par exemple « America/Toronto ».');",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/flows.js",
+    "token": "Timmy",
+    "line": "add('ffffffff-0c01-4000-8000-000000000006', 'Battement de Timmy', 'Vérification régulière de la session principale.', '', null, '', { kind: 'every', payload: 'heartbeat', created: 60 * D, runs: [] });",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/logs.js",
+    "token": "Timmy",
+    "line": "add('agent:main:main', 'main', null, 'Session principale de Timmy', MODELS[1], 412_380, 2 * MIN, { live: true });",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/logs.js",
+    "token": "Timmy",
+    "line": "if (row.kind === 'cron' || row.kind === 'subagent') events.push(ev({ kind: 'system', at: at(0), text: row.kind === 'cron' ? `Exécution planifiée : ${row.label}.` : 'Sous-agent lancé par Timmy avec un objectif délimité.', truncated: false }));",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/meta.js",
+    "token": "Timmy",
+    "line": "export const PROPOSED_AGENT = { id: 'main', name: 'Timmy', avatarUrl: assetUrl('bureau/assets/Characters/timmy/portrait.png') };",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "['per_alex', { id: 'per_alex', kind: 'human', name: 'Owner', avatarUrl: null, links: { isOwner: true } }],",
+    "count": 2,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "const c = commentItem({ kind:'event', text:{key:'projectThread.event.summary-requested',params:{actor:chipOf('per_alex').name}}, delivery:[{agentId:'main',status:'pending',reason:null}], deletable:false });",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "const Owner = { kind: 'human', personId: 'per_alex' };",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "db.comments.set(id, p ? [commentItem({ id: 'cmt_'+id, at: p.lastActivityAt - 60000, author: chipOf('per_alex'), body: getLang() === 'en' ? 'The project is ready for the next step.' : 'Le projet est prêt pour la prochaine étape.', editable: true, deletable: true })] : []);",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "flags: [label('client'), label('communication')], people: [person('per_alex', null, 'manual'), person('per_julie', 'Relecture')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "flags: [label('client')], people: [person('per_alex', null, 'manual'), person('per_marc', 'Client')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "flags: [label('interne')], people: [person('per_alex', null, 'manual'), person('per_timmy', 'Rédaction')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "if(c.author.id!==chipOf('per_alex').id)return {error:[403,'forbidden','Ce message appartient à une autre personne.']};",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_alex', 'Responsable', 'manual'), person('per_marc', 'Client'), person('per_kev', null, 'derived', 1)],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_alex', 'Responsable', 'manual'), person('per_marc', 'Client'), person('per_timmy', 'Développement'), person('per_scout', 'Recherche'), person('per_rose', null, 'derived', 14), person('per_kev', null, 'derived', 3)],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_alex', 'Responsable', 'manual'), person('per_timmy', 'Scripts')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_alex', 'Validation', 'manual'), person('per_timmy', 'Exécution'), person('per_julie', 'Comptabilité')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_alex', null, 'manual')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_scout', 'Analyse'), person('per_timmy', 'Correctifs'), person('per_alex', null, 'manual'), person('per_rose', null, 'derived', 6)],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "people: [person('per_timmy', 'Synthèse'), person('per_scout', 'Recherche'), person('per_alex', 'Lecture', 'manual')],",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "tokenB64": "YWxleA==",
+    "line": "return { id: nextId('cmt'), kind: 'comment', at: Date.now(), author: chipOf('per_alex'), body: null, text: null, mentions: [], replyTo: null, delivery: [], editedAt: null, deleted: false, editable: false, deletable: true, ...fields };",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "token": "Timmy",
+    "line": "['per_timmy', { id: 'per_timmy', kind: 'agent', name: 'Timmy', avatarUrl: assetUrl('bureau/assets/Characters/timmy/portrait.png'), links: { agentId: 'main' } }],",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "token": "Timmy",
+    "line": "/** Timmy moves a project by himself (the later agent API), so the board shows a live move from someone else. */",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "token": "Timmy",
+    "line": "summary: 'Chaque lundi, Scout parcourt les sites de cinq concurrents et Timmy rédige une synthèse de deux pages.',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "token": "Timmy",
+    "line": "summary: 'Guide de 12 pages rédigé avec Timmy à partir des notes d’équipe.', summaryMeta: { author: Owner, at: ago(18 * D) },",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "token": "Timmy",
+    "line": "summary: 'Nouvelle version du portail où les clients suivent leurs commandes et téléchargent leurs factures.\\n\\nLe parcours de connexion est terminé ; Timmy prépare la page de suivi. Le déploiement en préproduction échoue depuis hier soir à cause d’un test de bout en bout instable.',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/projects.js",
+    "token": "Timmy",
+    "line": "summary: 'Timmy génère les factures mensuelles à partir des feuilles de temps et les envoie après validation. Le flux du 1er octobre a échoué sur deux clients sans adresse de facturation.',",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/server.js",
+    "token": "Timmy",
+    "line": "// ?agent=<name>: another instance's agent name (platform direction: the UI must never assume « Timmy »).",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/mock/server.js",
+    "token": "Timmy",
+    "line": "// Every 30 s Timmy moves the weekly-watch project, so the board shows a live move by someone else.",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "public/v2/office/demo.js",
+    "token": "Timmy",
+    "line": "const occupants = [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'working', stateSince: t0 }];",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "public/v2/office/headline.js",
+    "token": "Timmy",
+    "line": "/** « Au dernier relevé, Timmy travaillait. » — past tense, no duration (it can't be confirmed to continue). */",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "public/v2/office/mock-store.js",
+    "tokenB64": "YWxleA==",
+    "line": "const Owner = { id: 'per_alex00000000000', kind: 'human', name: 'Owner', avatarUrl: null, state: null };   // PersonChip",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "public/v2/office/README.md",
+    "token": "America/Toronto",
+    "line": "| `theme.js` | Jour / Nuit / Automatique (19:00–07:00, America/Toronto) (pure) |",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "public/v2/office/README.md",
+    "token": "Timmy",
+    "line": "- **Accessibility:** the world is `aria-hidden`; each occupant has a real `<button class=\"bu-nameplate\">` with `aria-label=\"Timmy, Exécute\"`, in roster order, plus a polite live region announcing state changes. The viewport is focusable: arrows pan (Maj = faster), `+`/`−` zoom, `0` refits. Furniture tooltips (`title`) are decorative.",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "public/v2/office/setup-dev.js",
+    "token": "Timmy",
+    "line": "// Synthetic runtime agents (names are data; never « Timmy » assumed, never `main` as the primary).",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "src/projects/constants.js",
+    "token": "Timmy",
+    "line": "/** History Timmy may append. Status moves go through setStatus, not this list. */",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "src/projects/plan.js",
+    "token": "Timmy",
+    "line": "if (!TIMMY_HISTORY_KINDS.includes(input.kind)) throw validation('Cet événement n’est pas ouvert à Timmy.', 'kind');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "src/projects/service.js",
+    "token": "Timmy",
+    "line": "buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, atRisk, involvesTimmy,",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "src/projects/service.js",
+    "token": "Timmy",
+    "line": "const timmyOn = (project) => onBoard(project) && involvesTimmy(project, people, timmy);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "src/projects/vm.js",
+    "token": "Timmy",
+    "line": "atRisk, involvesTimmy,",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "src/projects/vm.js",
+    "token": "Timmy",
+    "line": "function involvesTimmy(project, persons, timmyPersonId, agentId) {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "src/projects/vm.js",
+    "token": "Timmy",
+    "line": "if (agentFilter) return involvesTimmy(project, persons, options.timmyPersonId, options.primaryAgentId || undefined);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/api/agent-token.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(vm.summaryMeta.author.name, 'Timmy', 'the summary is the agent\\'s');",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/api/agent-token.test.js",
+    "token": "Timmy",
+    "line": "assert.ok(vm.recentHistory.filter((e) => e.kind === 'status-changed' || e.kind === 'summary-edited').every((e) => e.actor.name === 'Timmy'));",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/api/commands-v2.test.js",
+    "token": "America/Toronto",
+    "line": "assert.deepEqual(last('add'), ['cron', 'add', '--name=-Veille', '--cron=0 9 * * 1', '--tz=America/Toronto', '--message=--help\\n1. Lire', '--agent=main', '--session=isolated', '--json']);",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/api/commands-v2.test.js",
+    "token": "America/Toronto",
+    "line": "const r = await h.request('POST', '/api/v2/flows', { name: '-Veille', cron: '0  9 * * 1', tz: 'America/Toronto', message: '--help\\n1. Lire' });",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/api/i18n-en.test.js",
+    "token": "Timmy",
+    "line": "const leaks = Object.entries(L).filter(([k, v]) => /OpenClaw|Timmy/.test(v) && !/^(channel|source\\.github|discordChannelType)\\./.test(k)).map(([k]) => k);",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  },
+  {
+    "file": "test/api/layout-v2.test.js",
+    "token": "America/Toronto",
+    "line": "assert.deepEqual(resolveTheme(auto, at('2026-10-06T16:00:00Z'), 'America/Toronto'), { resolved: 'day', mode: 'auto', nextChangeAt: at('2026-10-06T23:00:00Z'), season: 'hiver' });   // 12:00 EDT",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/api/layout-v2.test.js",
+    "token": "America/Toronto",
+    "line": "assert.deepEqual(resolveTheme(auto, at('2026-10-07T02:30:00Z'), 'America/Toronto'), { resolved: 'night', mode: 'auto', nextChangeAt: at('2026-10-07T11:00:00Z'), season: 'hiver' });   // 22:30 EDT",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/api/layout-v2.test.js",
+    "token": "America/Toronto",
+    "line": "assert.equal(resolveTheme({ mode: 'auto', nightFrom: '01:00', nightTo: '05:00' }, at('2026-10-06T07:00:00Z'), 'America/Toronto').resolved, 'night');",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/api/layout-v2.test.js",
+    "token": "America/Toronto",
+    "line": "assert.equal(resolveTheme(auto, at('2026-10-06T20:00:00Z'), 'America/Toronto').resolved, 'day', 'the same instant is 16:00 in Toronto');",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/api/projects-v2.test.js",
+    "token": "alexdeg92",
+    "line": "const r = await h.request('POST', '/api/v2/projects', { name: 'Agent Office', status: 'todo', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/api/projects-v2.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(p.summaryMeta.author.name, 'Timmy');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/api/projects-v2.test.js",
+    "token": "Timmy",
+    "line": "assert.ok(ev, 'summary-edited in the history'); assert.equal(ev.actor.name, 'Timmy');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/api/projects-v2.test.js",
+    "token": "Timmy",
+    "line": "it('« Régénérer le résumé »: 202 with a turnId; the reply lands as Timmy\\'s summary-edited; a second call while pending is 409', async () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/api/review15.test.js",
+    "token": "Timmy",
+    "line": "assert.ok(ev); assert.equal(ev.actor.name, 'Timmy');",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/api/topology.test.js",
+    "token": "alexdeg92",
+    "line": "const created = await call('POST', '/backend/api/v2/projects', { name: 'URL check', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/core/boundary.test.js",
+    "token": "alexdeg92",
+    "line": "const hits = files.filter(({ text }) => /\\/home\\/Owner\\b|alexdeg92/.test(text)).map((f) => f.file);",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  },
+  {
+    "file": "test/core/g3a.test.js",
+    "token": "America/Toronto",
+    "line": "const hits = walk(path.join(__dirname, '..', '..', 'src')).filter((f) => fs.readFileSync(f, 'utf8').includes('America/Toronto'));",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  },
+  {
+    "file": "test/core/g3a.test.js",
+    "token": "America/Toronto",
+    "line": "it('America/Toronto is gone from src/', () => {",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  },
+  {
+    "file": "test/engine/canonical-s4.test.js",
+    "token": "Timmy",
+    "line": "const agents = { agents: [{ id: 'main', name: 'Timmy' }] };",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/engine/canonical-s4.test.js",
+    "token": "Timmy",
+    "line": "e.ingest(env('gw.rpc.agents.list', { agents: [{ id: 'main', name: 'Timmy 2' }] }));",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/engine/s41.test.js",
+    "token": "America/Toronto",
+    "line": "const job = (o) => Object.assign({ id: 'j', name: 'n', enabled: true, schedule: { kind: 'cron', expr: '0 9 * * 1', tz: 'America/Toronto' } }, o);",
+    "count": 1,
+    "reason": "a deliberate real IANA zone in a time-zone or schedule test"
+  },
+  {
+    "file": "test/fixtures/gw/rpc/agents.list/2026.9.8/synthetic-basic.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/fixtures/gw/rpc/cron.list/2026.9.8/synthetic-basic.json",
+    "token": "America/Toronto",
+    "line": "\"tz\": \"America/Toronto\"",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/fixtures/gw/rpc/cron.list/2026.9.8/synthetic-basic.json",
+    "token": "America/Toronto",
+    "line": "\"tz\": \"America/Toronto\"",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/fixtures/gw/rpc/sessions.get/2026.9.8/synthetic-basic-3.json",
+    "token": "Timmy",
+    "line": "\"content\": \"Salut Timmy\",",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/frontend/fmt.test.js",
+    "token": "America/Toronto",
+    "line": "fmt.setTimeZone('America/Toronto');",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "test/frontend/fmt.test.js",
+    "token": "America/Toronto",
+    "line": "fmt.setTimeZone('America/Toronto');",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "test/frontend/i18n.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(label({ key: 'historyKind.flow-run.failed', params: { job: 'Factures', actor: 'Timmy', duration: 'PT45S' } }), `Flux Factures exécuté par Timmy : échec après 45${NB}s.`);",
+    "count": 2,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "test/frontend/platform.test.js",
+    "token": "Timmy",
+    "line": "// shell, router) must not contain « Timmy »; mocks and the office (office-dev) are out of scope here.",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "test/frontend/platform.test.js",
+    "token": "Timmy",
+    "line": "test('no « Timmy » literal in /v2 UI code', () => {",
+    "count": 1,
+    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
+  },
+  {
+    "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
+    "token": "America/Toronto",
+    "line": "\"tz\": \"America/Toronto\"",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
+    "token": "America/Toronto",
+    "line": "\"tz\": \"America/Toronto\"",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
+    "token": "Timmy",
+    "line": "\"displayName\": \"Timmy\",",
+    "count": 1,
+    "reason": "engine (owner: engine): synthetic-basic displayName mirrors its deliberately home-instance name; foreign-instance is its counterpart"
+  },
+  {
+    "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
+    "token": "Timmy",
+    "line": "\"name\": \"Timmy\",",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/golden/engine-canonical/synthetic-basic/canonical.json",
+    "token": "Timmy",
+    "line": "\"text\": \"Salut Timmy\",",
+    "count": 1,
+    "reason": "synthetic-basic models the home instance on purpose (foreign-instance is its counterpart)"
+  },
+  {
+    "file": "test/helpers/harness.js",
+    "token": "alexdeg92",
+    "line": "AO_PROJECTS_OWNERS: 'alexdeg92',",
+    "count": 1,
+    "reason": "the harness defaults model the home instance (synthetic-basic); foreign-instance tests override them"
+  },
+  {
+    "file": "test/helpers/harness.js",
+    "token": "America/Toronto",
+    "line": "HOME: tmp, TZ: 'America/Toronto', LANG: 'C.UTF-8',",
+    "count": 1,
+    "reason": "the harness defaults model the home instance (synthetic-basic); foreign-instance tests override them"
+  },
+  {
+    "file": "test/office/bureau-locale.dom.test.js",
+    "token": "Timmy",
+    "line": "const DATA = /Timmy|Scout|Plume|Atlas|Veille hebdomadaire|Résumé du matin|Tâche planifiée [^.]* (started|déclenchée)/g;",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/headline.test.js",
+    "token": "Timmy",
+    "line": "for (const [lang, d] of Object.entries(STRINGS)) for (const [k, v] of Object.entries(d)) assert.doesNotMatch(v, /Timmy|OpenClaw|\\bmain:|« ?main ?»|\\{main\\}/, `${lang} ${k}`);",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/manifest.test.js",
+    "token": "America/Toronto",
+    "line": "const TZ = 'America/Toronto';",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/mock-office.test.js",
+    "token": "Timmy",
+    "line": "it('scenarios: vide = Timmy alone and idle; panne = gateway down, everyone offline', async () => {",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/names.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(displayName({ id: 'main', role: 'main', name: 'main' }, { primaryName: 'Timmy' }), 'Timmy');",
+    "count": 2,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/names.test.js",
+    "token": "Timmy",
+    "line": "for (const n of ['Timmy', 'Agent principal', 'Main Street bot']) assert.equal(isRawId(n, { role: 'main' }), false, n);",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "America/Toronto",
+    "line": "out.tokyo = mk('Asia/Tokyo'); out.toronto = mk(() => 'America/Toronto');",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "// Timmy works seated (Batch 6): an error swivels him to face the camera.",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(r.a.length, 3, 'Timmy types on three frames');",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(r.before, 1, 'Timmy types');",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "assert.match(first, /^Timmy, /);",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "assert.match(r.batch, /^3 changements\\. Timmy : réfléchit\\. Scout : erreur|^3 changements\\./);",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "assert.ok(names.includes('Timmy'), `${url}: the mock primary agent shows its data name`);",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "const ed = await H.openEditor({ scene: sc, store, assetBase: H.assetBase, barHost: document.getElementById('bar'), asideHost: document.getElementById('aside'), getOccupants: () => [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'idle', stateSince: Date.now() }] });",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "const occ = H.occupants([{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'calling', stateSince: Date.now() }]);",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "sc.setOccupants(H.occupants([{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'error', stateSince: Date.now() }]));",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "window.src = [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'working', stateSince: Date.now() }];",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/scene.dom.test.js",
+    "token": "Timmy",
+    "line": "window.src = [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'working', stateSince: Date.now() }];",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/theme-dst.test.js",
+    "token": "America/Toronto",
+    "line": "// on the agreed local time across both DST transitions; checked in America/Toronto and in zones without DST.",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/office/theme-dst.test.js",
+    "token": "America/Toronto",
+    "line": "const TOR = 'America/Toronto';",
+    "count": 1,
+    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
+  },
+  {
+    "file": "test/packaging/bin.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(src, /registry\\.npmjs\\.org\\/@alexdeg92\\/agent-office\\/-\\/agent-office-/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/check-pack.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(release, /if: github\\.repository == 'alexdeg92\\/agent-office-oss'/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/check-pack.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(release, /repository: alexdeg92\\/homebrew-tap/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/image-release.test.js",
+    "token": "alexdeg92",
+    "line": "const repo = 'ghcr.io/alexdeg92/agent-office-oss';",
+    "count": 1,
+    "reason": "packaging (owner: packaging): published release identity; promotion deliberately rejects any other repository"
+  },
+  {
+    "file": "test/packaging/release.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(next, /registry\\.npmjs\\.org\\/@alexdeg92\\/agent-office\\/-\\/agent-office-1\\.2\\.3\\.tgz/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/release.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(text, /alexdeg92\\/homebrew-tap/);",
+    "count": 1,
+    "reason": "release coordinates: the GitHub owner that publishes this repo (packaging/release, PM)"
+  },
+  {
+    "file": "test/packaging/release.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(text, /docker push ghcr\\.io\\/alexdeg92\\/agent-office-oss:1\\.2\\.3/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/release.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(text, /docker tag sha256:f{64} ghcr\\.io\\/alexdeg92\\/agent-office-oss:1\\.2\\.3/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/release.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(text, /gh release create v1\\.2\\.3.*--repo alexdeg92\\/agent-office-oss/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/packaging/release.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(text, /npm publish dist\\/alexdeg92-agent-office-1\\.2\\.3\\.tgz/);",
+    "count": 1,
+    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', name: 'foreign', sha: 'fff9999', at: AT + 7, branch: 'main' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', name: 'other', sha: 'def5678', at: AT + 6, branch: 'dev' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "const repo = { owner: 'alexdeg92', name: 'demo', defaultBranch: 'main', commits: [commit] };",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "project('prj_a', [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }], { repo }),",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "project('prj_b', [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }], { repo }),",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "alexdeg92",
+    "line": "project('prj_other', [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'other' } }], {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "Timmy",
+    "line": "{ kind: 'agent', name: 'Timmy', links: { agentId: 'main' }, sessionKeys: ['agent:main:main', 'chat-Owner', 'chat-room'] },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "Timmy",
+    "line": "agents: [{ id: 'main', name: 'Timmy', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'agent:main:main' }],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/activity.test.js",
+    "token": "Timmy",
+    "line": "it('suggests Timmy, subagents, and Discord humans from linked sessions', () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.equal(history[0].actor.personId, 'per_alexowner000000');",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' }, addedAt: AT, addedBy: { kind: 'human', personId: 'per_alexowner000000' } },",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92', name: 'demo', repo: { url: 'http://example.invalid/demo' }, authors: [],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'Demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/commands.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' }, addedAt: AT, addedBy: { kind: 'human', personId: 'per_alexowner000000' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.equal(created.actor.personId, 'per_alexowner000000');",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'ancient', name: 'ancient', pushedAt: new Date(AT - 200 * DAY).toISOString() },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'boxed', name: 'boxed', archived: true, pushedAt: new Date(AT - DAY).toISOString() },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'demo-web', name: 'demo-web', pushedAt: new Date(AT).toISOString() },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'demo', name: 'demo', description: 'Site web du client Acme', topics: ['personal'], pushedAt: new Date(AT - 2 * DAY).toISOString() },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'demo', name: 'demo', pushedAt: new Date(AT).toISOString() },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'empty', name: 'empty' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'pivot', name: 'pivot', pushedAt: new Date(AT - 2 * DAY).toISOString() },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ path: 'pivot', remote: 'git@github.com:alexdeg92/pivot.git', lastCommitAt: AT - 2 * DAY },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "{ path: 'sites/demo', remote: 'git@github.com:alexdeg92/demo.git', lastCommitAt: AT - DAY },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "assert.deepEqual(notice.sources.find((s) => s.kind === 'github').ref, { owner: 'alexdeg92', repo: 'demo' });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "assert.deepEqual(pivotVm.sources.find((s) => s.kind === 'github').ref, { owner: 'alexdeg92', repo: 'pivot' });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(folders[0].remote, 'https://github.com/alexdeg92/demo.git');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(listed.find((c) => c.key === 'gh:alexdeg92/demo').sources.some((s) => s.kind === 'workspace'), true);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(pivotVm.sources.some((s) => s.label === 'alexdeg92/pivot'), true);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(table, /alexdeg92\\/demo/);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "const demo = candidates.find((c) => c.key === 'gh:alexdeg92/demo');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "const github = await discovery.collectGithubRepos({ exec, owner: 'alexdeg92' });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "const listed = discovery.proposeCandidates({ now: AT, owners: ['alexdeg92'], github, workspaces: folders });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "const pivot = candidates.find((c) => c.key === 'gh:alexdeg92/pivot');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "if (argv[3] === 'remote') return { code: 0, stdout: 'https://github.com/alexdeg92/demo.git\\n', stderr: '' };",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92', repo: 'demo', name: 'demo',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "owners: ['alexdeg92'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "owners: ['alexdeg92'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "owners: ['alexdeg92'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "owners: ['alexdeg92'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "owners: ['alexdeg92'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "alexdeg92",
+    "line": "workspaces: [{ path: 'sites/demo', remote: 'https://github.com/alexdeg92/demo', lastCommitAt: AT - 2 * DAY }],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/discovery.test.js",
+    "token": "Timmy",
+    "line": "it('lets Timmy append a history event and refuses a status event on that path', () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/commits.json",
+    "token": "alexdeg92",
+    "line": "\"author\": { \"login\": \"alexdeg92\" }",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/repo-list.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://github.com/alexdeg92/demo\",",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/repo-list.json",
+    "token": "alexdeg92",
+    "line": "\"url\": \"https://github.com/alexdeg92/old-tool\",",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/repo.json",
+    "token": "alexdeg92",
+    "line": "\"full_name\": \"alexdeg92/demo\",",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/repo.json",
+    "token": "alexdeg92",
+    "line": "\"html_url\": \"https://github.com/alexdeg92/demo\",",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/repo.json",
+    "token": "alexdeg92",
+    "line": "\"owner\": { \"login\": \"alexdeg92\" }",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/runs-failure.json",
+    "token": "alexdeg92",
+    "line": "\"html_url\": \"https://github.com/alexdeg92/demo/actions/runs/42\",",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/fixtures/github/runs-success.json",
+    "token": "alexdeg92",
+    "line": "\"html_url\": \"https://github.com/alexdeg92/demo/actions/runs/43\",",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/flags.test.js",
+    "token": "alexdeg92",
+    "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/flags.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(result.flags.find((flag) => flag.key === 'billing').source, 'alexdeg92/demo/flags.json');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/flags.test.js",
+    "token": "alexdeg92",
+    "line": "const id = link(repo, [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }]);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/flags.test.js",
+    "token": "alexdeg92",
+    "line": "repo.putRepoCache({ owner: 'alexdeg92', name: 'demo', repo: built.repo, authors: built.authors });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/foreign-instance.test.js",
+    "token": "alexdeg92",
+    "line": "{ owner: 'alexdeg92', repo: 'secret', name: 'Secret', description: '', pushedAt: new Date(AT).toISOString(), archived: false, topics: [] },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/foreign-instance.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(found.some((row) => JSON.stringify(row).includes('alexdeg92')), false);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/foreign-instance.test.js",
+    "token": "alexdeg92",
+    "line": "const BANNED = /Timmy|Owner|alexdeg92|discord/;",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/foreign-instance.test.js",
+    "token": "Timmy",
+    "line": "const BANNED = /Timmy|Owner|alexdeg92|discord/;",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/helpers.js",
+    "tokenB64": "YWxleA==",
+    "line": "id: 'per_alexowner000000',",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/helpers.js",
+    "token": "alexdeg92",
+    "line": "githubOwners: options.githubOwners === undefined ? ['alexdeg92'] : options.githubOwners,",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/helpers.js",
+    "token": "Timmy",
+    "line": "name: 'Timmy',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/people.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.deepEqual(shown.people.map((p) => p.personId).sort(), ['per_alexowner000000', 'per_timmymain000000']);",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/people.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.equal(people.filter((p) => p.personId === 'per_alexowner000000').length, 1);",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/people.test.js",
+    "token": "Timmy",
+    "line": "it('adds a discord human and Timmy from a session group, and honours a hide', () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/portability.test.js",
+    "token": "alexdeg92",
+    "line": "const hits = files.filter((file) => fs.readFileSync(file, 'utf8').includes('alexdeg92'));",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/portability.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "await credRefresh.refresh(credRow.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "await dnsRefresh.refresh(dnsRow.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "await refresher.refresh(row.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const again = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 60 * 1000 });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const again = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + REPO_FRESH_MS });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const cleared = await passing.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + REPO_FRESH_MS });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const early = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 59 * 1000 });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const failed = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const failed = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const first = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const first = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const later = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 15 * 60 * 1000 });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const later = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + REPO_FRESH_MS + SCREENSHOT_FRESH_MS });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const one = flight.cache.refresh(flight.repo, { owner: 'alexdeg92', name: 'demo', at: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const retry = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 60 * 1000 });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "const soon = await cache.refresh(repo, { owner: 'alexdeg92', name: 'demo', at: AT + 2 * 60 * 1000 });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repo-refresh.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.equal(created.actor.personId, 'per_alexowner000000');",
+    "count": 2,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.equal(project.summaryMeta.author.personId, 'per_alexowner000000');",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(await repo.findActiveByGithub('alexdeg92', 'demo'), null);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "await repo.recordRepoFailure({ owner: 'alexdeg92', name: 'demo', at: AT + 4, error: 'timeout' });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT + 20, url: 'https://github.com/alexdeg92/demo/actions/runs/2' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/demo/actions/runs/1' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "githubOwners: options.githubOwners || ['alexdeg92'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "image: { kind: 'opengraph', url: 'https://github.com/alexdeg92/demo.png' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "key: 'gh:alexdeg92/demo',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "key: 'gh:alexdeg92/demo',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "keys: ['gh:alexdeg92/demo', 'missing'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92', name: 'demo', repo: { url: 'http://example.invalid/demo' }, authors: [],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92', name: 'demo', repo: repoPayload(),",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } }],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "alexdeg92",
+    "line": "url: 'https://github.com/alexdeg92/demo',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/repository-contract.test.js",
+    "token": "Timmy",
+    "line": "it('lets Timmy append an activity event without a new revision', async () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "ack: { by: { kind: 'human', personId: 'per_alexowner000000' }, at: AT },",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "ack: { by: { kind: 'human', personId: 'per_alexowner000000' }, at: AT + 10 },",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT + 1000, url: 'https://github.com/alexdeg92/demo/actions/runs/9' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT + 3, url: 'https://github.com/alexdeg92/demo/actions/runs/2' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/demo/actions/runs/1' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/demo/actions/runs/1' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/risks.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'passing', at: AT + 2000, url: 'https://github.com/alexdeg92/demo/actions/runs/10' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/service.test.js",
+    "token": "alexdeg92",
+    "line": "keys: ['gh:alexdeg92/agent-office', 'sg:discord-user:100000000000000001'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/service.test.js",
+    "token": "alexdeg92",
+    "line": "keys: ['gh:alexdeg92/demo'],",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/service.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/service.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/service.test.js",
+    "token": "Timmy",
+    "line": "description: 'Tableau de bord de Timmy.',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "assert.deepEqual(calls[0], ['gh', 'api', 'repos/alexdeg92/demo']);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(calls[1][2], 'repos/alexdeg92/demo/commits?sha=main&per_page=10');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(calls[2][2], 'repos/alexdeg92/demo/actions/runs?branch=main&per_page=1');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "assert.match(snap.repo.image.url, /^https:\\/\\/opengraph\\.githubassets\\.com\\/[a-f0-9]{16}\\/alexdeg92\\/demo$/);",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "await assert.rejects(() => source.fetch({ owner: 'alexdeg92', repo: 'demo' }), (e) => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "const snap = await source.fetch({ owner: 'alexdeg92', repo: 'demo' }, { fetchedAt: AT });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "html_url: 'https://github.com/alexdeg92/demo/actions/runs/9', updated_at: '2026-10-02T08:00:00Z',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "repo.putRepoCache({ owner: 'alexdeg92', name: 'demo', repo: built.repo, authors: built.authors });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/sources.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/timmy-cli.test.js",
+    "token": "Timmy",
+    "line": "describe('Timmy projets CLI', () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "const ownerId = 'per_alex00000000000';",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "{ id: 'src_gh', kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' }, addedAt: AT - 4 },",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } },",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/agent-office-oss/actions/runs/1' },",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss' },",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "key: 'gh:alexdeg92/agent-office-oss',",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "key: 'gh:alexdeg92/agent-office-oss',",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "keys: ['gh:alexdeg92/agent-office-oss', 'sg:discord-user:100000000000000001'],",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } }],",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "alexdeg92",
+    "line": "url: 'https://github.com/alexdeg92/agent-office-oss',",
+    "count": 1,
+    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "Timmy",
+    "line": "{ id: timmyId, kind: 'agent', name: 'Timmy', avatarUrl: null, links: { agentId: 'main' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(page.items.find((e) => e.kind === 'people-override').text.params.person, 'Timmy');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm-shape.test.js",
+    "token": "Timmy",
+    "line": "summary: 'Tableau de bord de Timmy.',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "tokenB64": "YWxleA==",
+    "line": "assert.equal(detail.people.some((p) => p.id === 'per_alexowner000000' && p.commitCount === 1), true);",
+    "count": 1,
+    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "alexdeg92",
+    "line": "assert.equal(card.thumb.repoLabel, 'alexdeg92/demo');",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "alexdeg92",
+    "line": "image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/alexdeg92/demo' },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92', name: 'demo',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "alexdeg92",
+    "line": "owner: 'alexdeg92', name: 'demo', defaultBranch: 'main',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "alexdeg92",
+    "line": "source: { kind: 'github', ref: { owner: 'alexdeg92', repo: 'demo' } },",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "alexdeg92",
+    "line": "url: 'https://github.com/alexdeg92/demo',",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/projects/vm.test.js",
+    "token": "Timmy",
+    "line": "it('filters the board by risk and by Timmy', () => {",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/store/projects-repository.test.js",
+    "token": "alexdeg92",
+    "line": "const open = (dir) => { const h = openDatabase({ dir, instance: 'test' }); return { h, repo: createProjectsRepository(h.db, { persons: [Owner(), timmy()], ownerPersonId: Owner().id, timmyPersonId: timmy().id, githubOwners: ['alexdeg92'], now: () => AT }) }; };",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/store/projects-repository.test.js",
+    "token": "alexdeg92",
+    "line": "const p = repo.createProject({ name: 'Agent Office', actor: 'owner', sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office' } }] });",
+    "count": 1,
+    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
+  },
+  {
+    "file": "test/store/store.test.js",
+    "token": "Timmy",
+    "line": "assert.deepEqual(st.persons.list().filter((p) => p.kind === 'agent').map((p) => [p.links.agentId, p.name]), [['main', 'Timmy'], ['helper', 'helper']]);",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/store/store.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(st2.persons.ensureAgent('main', 'Timmy').created, false);",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/store/store.test.js",
+    "token": "Timmy",
+    "line": "assert.equal(st2.persons.ensureAgent('main', 'Timmy').created, true);",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/store/store.test.js",
+    "token": "Timmy",
+    "line": "e.ingest({ source: 'gateway', channel: 'gw.rpc.agents.list', receivedAt: NOW, body: { kind: 'json', value: { defaultId: 'main', agents: [{ id: 'main', name: 'Timmy' }, { id: 'helper' }] } } });",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/unit/capture-dryrun.test.js",
+    "token": "Timmy",
+    "line": "const handlers = { 'agents.list': { agents: [{ id: 'main', name: 'Timmy', workspace: '/home/someone/.openclaw/workspace', model: { primary: 'p/m' } }] },",
+    "count": 1,
+    "reason": "home-instance test data (agent main « Timmy », owner alexdeg92), as in synthetic-basic"
+  },
+  {
+    "file": "test/unit/fixture-redact.test.js",
+    "token": "America/Toronto",
+    "line": "assert.equal(out.kind, 'direct'); assert.equal(out.version, '2026.9.8'); assert.equal(out.tz, 'America/Toronto');",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  },
+  {
+    "file": "test/unit/fixture-redact.test.js",
+    "token": "America/Toronto",
+    "line": "const out = r.redact({ status: 'Alice owes', kind: 'direct', reason: 'tremblay', domain: 'clientx.ca', version: '2026.9.8', tz: 'America/Toronto', expr: 'Projet Lune' });",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  },
+  {
+    "file": "test/unit/fixture-redact.test.js",
+    "token": "America/Toronto",
+    "line": "const out = r.redact({ status: 'running', name: 'web_search', schedule: { kind: 'cron', expr: '0 9 * * 1', tz: 'America/Toronto' }, description: 'Texte libre' });",
+    "count": 1,
+    "reason": "a guard test: asserts the token is absent or redacted, so it must name it"
+  }
 ]

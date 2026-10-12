@@ -35,7 +35,8 @@ function buildAccessVM({ agents, sessions, config, peek, primaryId = null, P = P
   const dc = (config && config.discord) || null;
   const chans = dc && dc.channels ? Object.values(dc.channels) : [];
   return {
-    agents: agents.map((a) => ({ id: a.id, name: a.name || a.id, model: a.model ? a.model.primary : null, isPrimary: primaryId != null ? a.id === primaryId : a.isPrimary })),
+    agents: agents.map((a) => ({ id: a.id, name: a.name || a.id, model: a.model ? a.model.primary : null,
+      modelSource: a.modelSource ?? null, runtime: a.runtime ?? null, isPrimary: primaryId != null ? a.id === primaryId : a.isPrimary })),
     interlocutors: deriveInterlocutors(sessions).filter((i) => P.interlocutorVisible(i.id)).map((i) => {
       const { resolution, profile } = peek(i.id);
       return Object.assign({ id: i.id, kind: P.interlocutorKind(i.id) }, channelOf(P, i.id), { name: nameOf(i.id, profile),

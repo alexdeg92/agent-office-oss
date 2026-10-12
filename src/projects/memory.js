@@ -1,6 +1,6 @@
 'use strict';
 
-const { ProjectError, notFound, validation } = require('./errors');
+const { ProjectError, notFound, validation, conflict } = require('./errors');
 const { mint: mintId } = require('./ids');
 const { parse, projectSchema, projectSchemaWithRootIds, historySchema, personSchema, repoSchema, refKeyOf } = require('./validate');
 const { normalizeWorkspaceRoots } = require('./roots');
@@ -14,6 +14,7 @@ const { HISTORY_PAGE, SOURCE_ERROR_CATEGORIES } = require('./constants');
 
 const REPOSITORY_METHODS = Object.freeze([
   'getProject', 'listProjects', 'getHistory', 'findActiveByGithub', 'sourceStats',
+  'getSummaryTurn', 'claimSummary', 'completeSummary', 'abandonSummary',
   'createProject', 'rename', 'setStatus', 'reorder', 'setPriority', 'editSummary', 'edit',
   'addLabel', 'addFlag', 'removeFlag', 'setBlocked', 'ackRisk', 'linkSource', 'unlinkSource',
   'setArchived', 'setPersonOverride', 'applyRisks', 'applyProjectRisks', 'ingestActivity',
@@ -67,6 +68,7 @@ class MemoryRepository {
     this.caches = new Map();
     this.workspaces = new Map();
     this.sessionSnaps = new Map();
+    this.summaryTurns = new Map();    // internal; never part of the public project schema
     this.tagSlugs = new Map();           // architect-55: slug → { projectId, at } (a tag's slug creates a project once)
     this.liveStates = { ...(options.liveStates || {}) };
     this.ownerPersonId = options.ownerPersonId || null;
@@ -326,7 +328,43 @@ class MemoryRepository {
     return this.getProject(patch.row.id);
   }
 
-  edit(input) { return this._run(input.id, input, plan.edit); }
+  getSummaryTurn(id) { this._ctx(id); return this.summaryTurns.get(id) || null; }
+
+  claimSummary({ id, expectedRevision, turnId, mintTurn }) {
+    const { row } = this._ctx(id);
+    if (!Number.isInteger(expectedRevision)) throw validation('La révision est requise.', 'expectedRevision');
+    if (expectedRevision !== row.revision) throw conflict(row.revision);
+    if (this.summaryTurns.get(id)) throw new ProjectError('conflict', 'Une régénération est déjà en cours.', {
+      revision: row.revision, details: [{ field: 'summary', issue: 'turn-pending' }],
+    });
+    if (mintTurn) turnId = mintTurn();
+    if (typeof turnId !== 'string' || !turnId) throw validation('Tour invalide.', 'turnId');
+    this.summaryTurns.set(id, turnId);
+    return { project: this.getProject(id), turnId };
+  }
+
+  completeSummary(input) {
+    const { row } = this._ctx(input.id);
+    if (!input.turnId || this.summaryTurns.get(input.id) !== input.turnId || row.revision !== input.expectedRevision) {
+      return { applied: false, project: this.getProject(input.id) };
+    }
+    // Bypass manual edit cancellation. A child fallback keeps the same turn until the parent settles.
+    const project = this._run(input.id, input, plan.edit);
+    if (!input.keepPending) this.summaryTurns.delete(input.id);
+    return { applied: true, project };
+  }
+
+  abandonSummary({ id, turnId }) {
+    this._ctx(id);
+    if (turnId && this.summaryTurns.get(id) === turnId) this.summaryTurns.delete(id);
+  }
+
+  edit(input) {
+    const before = this._ctx(input.id).row.summary;
+    const project = this._run(input.id, input, plan.edit);
+    if (before !== project.summary) this.summaryTurns.delete(input.id);
+    return project;
+  }
   rename(input) { return this.edit(input); }
   setPriority(input) { return this.edit(input); }
   editSummary(input) { return this.edit(input); }

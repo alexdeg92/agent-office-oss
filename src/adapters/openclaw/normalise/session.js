@@ -10,16 +10,25 @@ const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 // The status is ALWAYS checked against the table (own properties only, R2-03), even when a gateway
 // flag decides the state, so an unknown status is reported whatever the precedence.
 // → { run, unmappedStatus? }
-function runStateOf(r) {
+function runStateOf(r, opts = {}) {
+  // A bounded inferred-activity lease is anchored to our local receipt time. Provider
+  // updatedAt remains useful for ordering, but its clock is not trusted as evidence.
+  const observedAt = Number.isInteger(opts.observedAt) ? opts.observedAt : null;
   const base = { startedAt: r.startedAt || null, endedAt: r.endedAt || null, hasActiveSubagentRun: r.hasActiveSubagentRun === true,
-    runtimeMs: Number.isInteger(r.runtimeMs) ? r.runtimeMs : null, lastRunId: r.lastRunId || null, lastError: r.lastRunError || null };
+    runtimeMs: Number.isInteger(r.runtimeMs) ? r.runtimeMs : null, lastRunId: r.lastRunId || null, lastError: r.lastRunError || null,
+    observedAt, expiresAt: null };
   const raw = r.status != null ? String(r.status) : undefined;
+  const summaryState = typeof r.activitySummary?.state === 'string' ? r.activitySummary.state : undefined;
+  const summaryMapped = summaryState !== undefined && own(RUN_STATUS, summaryState) ? RUN_STATUS[summaryState] : undefined;
   const mapped = raw !== undefined && own(RUN_STATUS, raw) ? RUN_STATUS[raw] : undefined;
   const unmappedStatus = raw !== undefined && !mapped ? raw : undefined;
-  if (r.hasActiveRun === true || r.hasActiveSubagentRun === true) return { run: Object.assign(base, { status: 'running', endReason: null, evidence: 'gateway-flag' }), unmappedStatus };
-  if (mapped) return { run: Object.assign(base, { status: mapped.status, endReason: mapped.endReason, evidence: 'status-field' }) };
-  if (r.startedAt && !r.endedAt) return { run: Object.assign(base, { status: 'running', endReason: null, evidence: 'start-without-end' }), unmappedStatus };
-  return { run: Object.assign(base, { status: 'idle', endReason: null, evidence: 'none' }), unmappedStatus };
+  if (r.hasActiveRun === true || r.hasActiveSubagentRun === true) return { run: Object.assign(base, { status: 'running', endReason: null, evidence: 'gateway-flag', evidenceLevel: 'verified' }), unmappedStatus };
+  if (mapped) return { run: Object.assign(base, { status: mapped.status, endReason: mapped.endReason, evidence: 'status-field', evidenceLevel: 'verified' }) };
+  if (r.hasActiveRun === false && r.hasActiveSubagentRun !== true) return { run: Object.assign(base, { status: 'idle', endReason: null, evidence: 'gateway-flag', evidenceLevel: 'verified' }), unmappedStatus };
+  if (summaryMapped) return { run: Object.assign(base, { status: summaryMapped.status, endReason: summaryMapped.endReason,
+    evidence: 'live-activity', evidenceLevel: 'observed', expiresAt: summaryMapped.status === 'running' && observedAt != null ? observedAt + 30000 : null }) };
+  if (r.startedAt && !r.endedAt && observedAt != null) return { run: Object.assign(base, { status: 'running', endReason: null, evidence: 'start-without-end', evidenceLevel: 'observed', expiresAt: observedAt + 30000 }), unmappedStatus };
+  return { run: Object.assign(base, { status: 'unknown', endReason: null, evidence: 'none', evidenceLevel: 'unknown' }), unmappedStatus };
 }
 
 // 2.1 (PM): the session's working directory: raw workspaceDir, else spawnedCwd. Normalised: absolute POSIX paths
@@ -51,20 +60,25 @@ function goalOf(g) {
  */
 function normaliseSession(r, opts = {}) {
   const cls = classifySession(r.key, r, { baseRow: opts.baseRow });
-  const { run, unmappedStatus } = runStateOf(r);
+  const { run, unmappedStatus } = runStateOf(r, opts);
+  const parentSessionKey = r.parentSessionKey || r.spawnedBy || null;
+  const spawnedBy = typeof parentSessionKey === 'string' && parentSessionKey.length > 0 && parentSessionKey.length <= 16532
+    ? { agentId: null, sessionKey: parentSessionKey, via: 'runtime', label: null } : null;
   const session = {
     key: r.key,
     sessionId: r.sessionId || null,
+    spawnedBy,
     class: cls,
     displayName: r.displayName || null,
     // model requires an id (R2-07); a provider without a model is kept on its own
     model: r.model ? { id: r.model, provider: r.modelProvider || null } : null,
     provider: r.modelProvider || null,
     usage: { total: r.totalTokens || 0, input: Number.isInteger(r.inputTokens) ? r.inputTokens : null, output: Number.isInteger(r.outputTokens) ? r.outputTokens : null },
+    tokensKnown: Number.isInteger(r.totalTokens),
     updatedAt: r.updatedAt || null,
     run,
     costUsd: typeof r.estimatedCostUsd === 'number' ? r.estimatedCostUsd : null,
-    parentKey: r.parentSessionKey || r.spawnedBy || null,
+    parentKey: parentSessionKey,
     childKeys: Array.isArray(r.childSessions) ? r.childSessions.slice() : [],
     goal: goalOf(r.goal),
     cwd: cwdOf(r),

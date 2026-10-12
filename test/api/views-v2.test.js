@@ -120,7 +120,7 @@ describe('S7b builders', () => {
     assert.deepEqual(buildLogsPage(all, { kind: 'main' }).items.map((x) => [x.id, x.kind]), [['a', 'main']], 'G3b: a 2.x kind filter selects the canonical kind; rows carry the 2.x kind');
     assert.deepEqual(buildLogsPage(all, { kind: 'subagent' }).items.map((x) => x.label), ['Sous-agent abcd', 'Sous-agent ffff']);
     assert.equal(sessionLabel(all[1]), 'Session principale · battement');
-    assert.deepEqual(parseLogsQuery({ kind: 'cron', heartbeat: 'include', limit: '10' }), { kind: 'cron', heartbeat: true, offset: 0, limit: 10 });
+    assert.deepEqual(parseLogsQuery({ kind: 'cron', heartbeat: 'include', limit: '10' }), { kind: 'cron', heartbeat: true, connector: null, agent: null, offset: 0, limit: 10 });
     assert.deepEqual(parseLogsQuery({ limit: '201' }).error, { field: 'limit', issue: 'invalid' });
   });
 

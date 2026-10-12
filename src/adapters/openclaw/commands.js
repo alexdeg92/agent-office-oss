@@ -13,7 +13,11 @@ const failure = (r) => ({ failed: r && r.refused ? (r.refused === 'readonly' ? '
 // → { ok: true } | { failed: category } (never the CLI's text)
 const outcome = (x) => (x.ok ? { ok: true } : { failed: x.failed });
 
-function bind(cli, { gw = null, restartService = null, readonly = false } = {}) {
+function restartableUrl(value) {
+  if (value == null) return false;
+  try { const u=new URL(value); return ['ws:','wss:'].includes(u.protocol) && ['localhost','127.0.0.1','[::1]'].includes(u.hostname) && !u.username && !u.password; } catch { return false; }
+}
+function bind(cli, { gw = null, readonly = false, gatewayUrl = null } = {}) {
   // R15-08: a zero exit is not enough: an explicit JSON refusal ({ok:false}) is a failure too
   const run = async (argv, timeoutMs) => {
     const r = await cli.run(argv, timeoutMs);
@@ -25,9 +29,26 @@ function bind(cli, { gw = null, restartService = null, readonly = false } = {}) 
 
   return {
     // → { text, meta: { model, provider, tokens, durationMs } | null } or { failed: category }
-    async agentTurn({ agentId, text, sessionRef, timeoutMs = 150000, signal }) {
-      const argv = ['agent', '--message=' + String(text), '--agent=' + String(agentId), '--json', '--timeout=' + String(Math.ceil(timeoutMs / 1000))];
-      if (sessionRef) argv.push('--session-key=' + String(sessionRef));
+    async agentTurn({ agentId, text, sessionRef, timeoutMs = 150000, signal, canDispatch }) {
+      if (!/^[a-zA-Z0-9_-]{1,80}$/.test(String(agentId))) return { failed: 'invalid-agent' };
+      const ref = sessionRef ? String(sessionRef) : 'agent:' + agentId + ':ao-internal';
+      const key = ref.startsWith('agent:') ? ref : 'agent:' + agentId + ':explicit:' + ref;
+      if (!key.startsWith('agent:' + agentId + ':') || /[\r\n]/.test(key)) return { failed: 'invalid-session' };
+      if (readonly) return { failed: 'readonly' };
+      // Persistent session policy also fences recovery of old AO sessions which
+      // already inherited an external route. Refuse dispatch without its receipt.
+      const policy = await cli.run(['gateway', 'call', 'sessions.patch', '--params=' + JSON.stringify({ key, sendPolicy: 'deny' }), '--json'], Math.min(timeoutMs, 15000), { signal });
+      if (!policy?.ok || policy.refused) return failure(policy);
+      const receipt = cli.parseJson(policy.out);
+      if (receipt?.ok !== true || receipt.key !== key || receipt.entry?.sendPolicy !== 'deny') return { failed: 'delivery-policy-unconfirmed' };
+      if (signal?.aborted) return { failed: 'killed-or-timeout' };
+      if (canDispatch && !canDispatch()) return { failed: 'wrong-runtime' };
+      // AO owns these replies. An omitted channel can inherit the owner's last
+      // route when OpenClaw resumes an interrupted turn. Pin both ingress and
+      // reply routing to OpenClaw's supported internal, transcript-only channel.
+      const argv = ['agent', '--message=' + String(text), '--agent=' + String(agentId), '--json', '--timeout=' + String(Math.ceil(timeoutMs / 1000)), '--channel=webchat', '--reply-channel=webchat'];
+      // Use the exact fenced key, avoiding implicit aliases/default-agent routing.
+      argv.push('--session-key=' + key);
       const r = await cli.run(argv, timeoutMs + 20000, { signal });
       // R13-06: a failed, refused or timed-out process is a failure whatever it printed; then the envelope must be a reply
       if (!r || r.refused) return { failed: r && r.refused === 'readonly' ? 'readonly' : (r && r.refused) || 'error' };
@@ -70,16 +91,20 @@ function bind(cli, { gw = null, restartService = null, readonly = false } = {}) 
     // The toggle takes effect after a gateway restart (needsRestart).
     skillSetEnabled: (name, enabled) => run(['config', 'set', 'skills.entries.' + name + '.enabled', enabled ? 'true' : 'false'], 60000).then(outcome),
 
-    // The gateway restart: the gateway's own RPC first, else the service manager (when one is configured).
+    // Restart only the bound local gateway through its RPC. No service binding is declared.
     async restartGateway() {
       // R15-02: the write policy holds at the adapter boundary too (RPC and service writes, not only the CLI's)
       if (readonly) return { failed: 'readonly' };
-      if (gw) { try { await gw.call('gateway.restart.request', { reason: 'portal' }); return { ok: true, via: 'rpc' }; } catch (_) { /* fall through */ } }
-      if (!restartService) return { failed: 'unavailable' };
-      const r = await restartService();
-      return r.ok ? { ok: true, via: 'systemctl' } : { failed: 'error' };
+      if (gatewayUrl !== null && !restartableUrl(gatewayUrl)) return {failed:'unavailable'};
+      if (gw) { try {
+        const reply=await gw.call('gateway.restart.request', {reason:'portal'});
+        if(reply?.ok===false)return {failed:'unavailable'};
+        return {ok:true,via:'rpc'};
+      } catch { /* the selected gateway refused or is unavailable */ } }
+      // No host-manager fallback, including after a delayed RPC rejection.
+      return {failed:'unavailable'};
     },
   };
 }
 
-module.exports = { bind };
+module.exports = { bind, restartableUrl };

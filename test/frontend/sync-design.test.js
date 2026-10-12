@@ -17,7 +17,7 @@ function offenders(files) {
   return files.map(rel).filter((r) => {
     if (r.startsWith('../')) return false;   // mock/examples: contract examples, not design assets
     if (/^fonts\/([\w-]+\.woff2|OFL-[\w-]+\.txt)$/.test(r)) return false;   // self-hosted fonts and the licence the OFL requires with them
-    if (/^assets\/Characters\/[a-z][a-z0-9-]*\/manifest\.json$/.test(r)) return false;
+    if (/^assets\/(Characters|Decor|Accessories)\/[a-z][a-z0-9-]*\/manifest\.json$/.test(r)) return false;
     if (PROVENANCE.some((re) => re.test(r))) return true;
     return !ALLOWED_OTHER.has(r) && !RUNTIME_EXT.has(extname(r).toLowerCase());
   });
@@ -44,6 +44,38 @@ test('public/v2/bureau on disk holds no provenance file and no local path (/home
   assert.deepEqual(offenders(files), []);
   const leaks = files.filter((f) => readFileSync(f).includes('/home/')).map(rel);
   assert.deepEqual(leaks, [], 'local paths must never ship');
+});
+
+test('décor manifests and referenced images ship only for enabled packs', () => {
+  const manifest=JSON.parse(readFileSync(new URL('../../design/office/manifest.example.json',import.meta.url)));
+  const expected=[...new Set(manifest.furniture.filter(f=>f.packManifest).map(f=>f.packId))].sort();
+  const ids=files=>files.map(rel).flatMap(r=>{const m=/^assets\/Decor\/([a-z][a-z0-9-]*)\/manifest\.json$/.exec(r);return m?[m[1]]:[];}).sort();
+  assert.deepEqual(ids(sync.plan().map(([,d])=>d)),expected);
+  assert.deepEqual(ids(walk(sync.DEST)),expected);
+  for(const id of expected){
+    const prefix='assets/Decor/'+id+'/';
+    const pack=JSON.parse(readFileSync(join(sync.DEST,prefix,'manifest.json')));
+    for(const f of pack.items)for(const file of [f.image,f.thumbnail,...Object.values(f.images)])assert.ok(existsSync(join(sync.DEST,prefix,file)),id+'/'+file);
+  }
+});
+test('accessory manifests ship only enabled shared sources and thumbnails', () => {
+  const manifest=JSON.parse(readFileSync(new URL('../../design/office/manifest.example.json',import.meta.url)));
+  const expected=[...new Set(manifest.accessories.filter(a=>a.packManifest).map(a=>a.packId))].sort();
+  const ids=files=>files.map(rel).flatMap(r=>{const m=/^assets\/Accessories\/([a-z][a-z0-9-]*)\/manifest\.json$/.exec(r);return m?[m[1]]:[];}).sort();
+  assert.deepEqual(ids(sync.plan().map(([,d])=>d)),expected);assert.deepEqual(ids(walk(sync.DEST)),expected);
+  for(const id of expected) {
+    const prefix='assets/Accessories/'+id+'/',pack=JSON.parse(readFileSync(join(sync.DEST,prefix,'manifest.json')));
+    for(const a of pack.items) {
+      assert.ok(existsSync(join(sync.DEST,prefix,a.thumbnail)));
+      for(const v of Object.values(a.views))for(const mode of ['day','night'])assert.ok(existsSync(join(sync.DEST,prefix,v[mode])));
+    }
+    assert.equal(existsSync(join(sync.DEST,prefix,'production-prompts.json')),false);
+  }
+});
+test('served office registry preserves every authored field without shipping formatting bytes', () => {
+  const source=JSON.parse(readFileSync(new URL('../../design/office/manifest.example.json',import.meta.url)));
+  const shipped=readFileSync(join(sync.DEST,'office/manifest.example.json'),'utf8');
+  assert.deepEqual(JSON.parse(shipped),source);assert.equal(shipped,JSON.stringify(source)+'\n');
 });
 
 test('F10: every illustration has a fresh .webp derivative (sources unchanged since derive-illustrations.py), and the UI names only derivatives', async () => {

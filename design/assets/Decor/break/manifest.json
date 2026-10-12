@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-decor-v1",
+  "id": "break",
+  "names": {
+    "fr": "Pause et loisirs",
+    "en": "Break and play"
+  },
+  "artScale": 2,
+  "license": "MIT",
+  "provenance": {
+    "tool": "image_gen.imagegen",
+    "sources": "design/assets/tools/decor-catalog-sources",
+    "export": "crop, alpha endpoint cleanup, positive uniform scale, anchor registration, WebP encoding"
+  },
+  "items": [
+    {
+      "id": "fridge",
+      "names": {
+        "fr": "Réfrigérateur",
+        "en": "Fridge"
+      },
+      "category": "equipement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 68,
+        "y": 270
+      },
+      "size": {
+        "w": 192,
+        "h": 356
+      },
+      "image": "fridge-day.webp",
+      "images": {
+        "sw@night": "fridge-night.webp"
+      },
+      "thumbnail": "thumbnails/fridge.webp",
+      "thumbnailSize": {
+        "w": 50,
+        "h": 96
+      }
+    },
+    {
+      "id": "water-cooler",
+      "names": {
+        "fr": "Distributeur d’eau",
+        "en": "Water cooler"
+      },
+      "category": "equipement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 57,
+        "y": 334
+      },
+      "size": {
+        "w": 161,
+        "h": 404
+      },
+      "image": "water-cooler-day.webp",
+      "images": {
+        "sw@night": "water-cooler-night.webp"
+      },
+      "thumbnail": "thumbnails/water-cooler.webp",
+      "thumbnailSize": {
+        "w": 36,
+        "h": 96
+      }
+    },
+    {
+      "id": "printer",
+      "names": {
+        "fr": "Imprimante",
+        "en": "Printer"
+      },
+      "category": "equipement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 65,
+        "y": 163
+      },
+      "size": {
+        "w": 184,
+        "h": 232
+      },
+      "image": "printer-day.webp",
+      "images": {
+        "sw@night": "printer-night.webp"
+      },
+      "thumbnail": "thumbnails/printer.webp",
+      "thumbnailSize": {
+        "w": 75,
+        "h": 96
+      }
+    },
+    {
+      "id": "charging-dock",
+      "names": {
+        "fr": "Station de recharge",
+        "en": "Robot charging dock"
+      },
+      "category": "equipement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 93,
+        "y": 78
+      },
+      "size": {
+        "w": 186,
+        "h": 157
+      },
+      "image": "charging-dock-day.webp",
+      "images": {
+        "sw@night": "charging-dock-night.webp"
+      },
+      "thumbnail": "thumbnails/charging-dock.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 79
+      }
+    },
+    {
+      "id": "runner-rug",
+      "names": {
+        "fr": "Tapis long",
+        "en": "Runner rug"
+      },
+      "category": "sol",
+      "placement": "decal",
+      "layerBias": -0.1,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 3,
+        "d": 1
+      },
+      "walkable": true,
+      "anchor": {
+        "x": 100,
+        "y": 12
+      },
+      "size": {
+        "w": 384,
+        "h": 211
+      },
+      "image": "runner-rug-day.webp",
+      "images": {
+        "sw@night": "runner-rug-night.webp"
+      },
+      "thumbnail": "thumbnails/runner-rug.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 51
+      }
+    },
+    {
+      "id": "round-rug",
+      "names": {
+        "fr": "Tapis rond",
+        "en": "Round rug"
+      },
+      "category": "sol",
+      "placement": "decal",
+      "layerBias": -0.1,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 2,
+        "d": 2
+      },
+      "walkable": true,
+      "anchor": {
+        "x": 184,
+        "y": 10
+      },
+      "size": {
+        "w": 368,
+        "h": 167
+      },
+      "image": "round-rug-day.webp",
+      "images": {
+        "sw@night": "round-rug-night.webp"
+      },
+      "thumbnail": "thumbnails/round-rug.webp",
+      "thumbnailSize": {
+        "w": 96,
+        "h": 41
+      }
+    },
+    {
+      "id": "desk-lamp",
+      "names": {
+        "fr": "Lampe de bureau",
+        "en": "Desk lamp"
+      },
+      "category": "deco",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 44,
+        "y": 123
+      },
+      "size": {
+        "w": 136,
+        "h": 160
+      },
+      "image": "desk-lamp-day.webp",
+      "images": {
+        "sw@night": "desk-lamp-night.webp"
+      },
+      "thumbnail": "thumbnails/desk-lamp.webp",
+      "thumbnailSize": {
+        "w": 80,
+        "h": 96
+      }
+    },
+    {
+      "id": "arcade-cabinet",
+      "names": {
+        "fr": "Borne d’arcade",
+        "en": "Arcade cabinet"
+      },
+      "category": "equipement",
+      "placement": "floor",
+      "layerBias": 0,
+      "orientations": [
+        "sw"
+      ],
+      "footprint": {
+        "w": 1,
+        "d": 1
+      },
+      "anchor": {
+        "x": 68,
+        "y": 271
+      },
+      "size": {
+        "w": 192,
+        "h": 362
+      },
+      "image": "arcade-cabinet-day.webp",
+      "images": {
+        "sw@night": "arcade-cabinet-night.webp"
+      },
+      "thumbnail": "thumbnails/arcade-cabinet.webp",
+      "thumbnailSize": {
+        "w": 49,
+        "h": 96
+      }
+    }
+  ]
+}

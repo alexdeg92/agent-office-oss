@@ -3,12 +3,14 @@
 // validated against it at runtime; a violation is quarantined and the session is not admitted (R2-07).
 const s = require('../../schema');
 const { SESSION_KINDS, CHANNEL_REF, isInterlocutorId } = require('./kinds');
+const { Lineage } = require('./lineage');
 
 const nn = () => s.int().min(0);
 const msOrNull = () => s.ms().nullable();
 
 const Classification = s.object({
   kind: s.enumOf(SESSION_KINDS), ruleId: s.string().min(1), agentId: s.string().nullable(),
+  reason: s.enumOf(['unmatched-key']).optional(),
   channel: s.string().refine((v) => CHANNEL_REF.test(v), 'channel ref').nullable(),   // G3b: an open ChannelRef
   heartbeatOf: s.string().nullable(), background: s.boolean(), rawClassification: s.string().nullable(),
   subagentId: s.string().min(1).optional(), cronJobId: s.string().min(1).optional(),   // PM after R26-01: any length (never hide real activity)   // R24-01: occupant subjects
@@ -18,22 +20,29 @@ const Classification = s.object({
   .refine((c) => c.kind !== 'scheduled' || !!c.cronJobId, 'scheduled has cronJobId');
 
 const RunState = s.object({
-  status: s.enumOf(['idle', 'running', 'succeeded', 'failed']),
+  status: s.enumOf(['unknown', 'idle', 'running', 'succeeded', 'failed']),
   endReason: s.enumOf(['error', 'timeout', 'killed', 'budget-limited']).nullable(),
   evidence: s.enumOf(['gateway-flag', 'status-field', 'start-without-end', 'live-activity', 'none']),
+  evidenceLevel: s.enumOf(['verified', 'observed', 'unknown']).optional(),
+  observedAt: msOrNull().optional(), expiresAt: msOrNull().optional(),
   startedAt: msOrNull(), endedAt: msOrNull(), hasActiveSubagentRun: s.boolean(),
   runtimeMs: nn().nullable(), lastRunId: s.string().nullable(), lastError: s.string().nullable(),
 }, { extra: 'reject' });
 
 const Session = s.object({
-  key: s.string().min(1), sessionId: s.string().nullable(), class: Classification,
+  key: s.string().min(1), sessionId: s.string().nullable(), class: Classification, spawnedBy: Lineage.nullable().optional(),
   displayName: s.string().nullable(),
+  summary: s.string().max(320).nullable().optional(),
+  summarySource: s.enumOf(['transcript', 'runtime']).nullable().optional(),
+  projectLabel: s.string().max(120).nullable().optional(),
+  tokensKnown: s.boolean().optional(),
   model: s.object({ id: s.string().min(1), provider: s.string().nullable() }, { extra: 'reject' }).nullable(),
   provider: s.string().nullable(),
   usage: s.object({ total: nn(), input: nn().nullable(), output: nn().nullable() }, { extra: 'reject' }),
   updatedAt: msOrNull(), run: RunState,
   costUsd: s.number().min(0).nullable(),
   parentKey: s.string().nullable(), childKeys: s.array(s.string()),
+  spawnedBy: Lineage.nullable().optional(),   // T-0062: who created this session (model/lineage.js)
   goal: s.object({ objective: s.string(), status: s.string(), tokensUsed: nn().nullable(), tokenBudget: nn().nullable() }, { extra: 'reject' }).nullable(),
   cwd: s.string().refine((c) => c.startsWith('/'), 'absolute').nullable(), messageCount: nn().nullable(),   // 2.1
   interactive: s.boolean(),

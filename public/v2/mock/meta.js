@@ -6,8 +6,10 @@ import { assetUrl } from '../config.js';
 export const PROPOSED_AGENT = { id: 'main', name: 'Timmy', avatarUrl: assetUrl('bureau/assets/Characters/timmy/portrait.png') };
 
 export const META = {
+  bootId: 'mock-api-boot',
   modelVersion: 1,
   apiVersion: 2,
+  bootId: 'synthetic-mock-boot',
   contractVersion: '2.7',
   serverVersion: 'maquette',
   env: 'dev',
@@ -173,10 +175,11 @@ export const META = {
     'sessionTitle.main': 'Session principale', 'sessionTitle.dashboard': 'Tableau de bord', 'sessionTitle.cron': 'Tâche planifiée',
     'sessionTitle.cronNamed': 'Tâche planifiée · {name}', 'sessionTitle.named': '{name}', 'sessionTitle.heartbeat': '{title} · battement',
     'sessionTitle.subagent': 'Sous-agent {id}', 'sessionTitle.channel': 'Canal {id}', 'sessionTitle.user': 'Utilisateur {id}',
-    'sessionTitle.explicit': 'Session {id}', 'sessionTitle.acp': 'Session ACP',
+    'sessionTitle.explicit': 'Session {id}', 'sessionTitle.acp': 'Session ACP', 'sessionTitle.untitled': 'Session sans titre',
+    'sessionTitle.groupUnnamed': 'Groupe sans nom · {platform}', 'sessionTitle.groupUnnamedPlain': 'Groupe sans nom',
     'sessionKind.main': 'Principale', 'sessionKind.dashboard': 'Tableau de bord', 'sessionKind.subagent': 'Sous-agent',
     'sessionKind.cron': 'Tâche planifiée', 'sessionKind.chat-direct': 'Message direct', 'sessionKind.chat-group': 'Groupe',
-    'sessionKind.acp': 'Agent de code', 'sessionKind.explicit': 'Explicite', 'sessionKind.unrecognized': 'Non classée',
+    'sessionKind.acp': 'Agent de code', 'sessionKind.explicit': 'Explicite', 'sessionKind.conversation': 'Conversation', 'sessionKind.unrecognized': 'Non classée',
     'runStatus.idle': 'Inactive', 'runStatus.running': 'En cours', 'runStatus.succeeded': 'Terminée', 'runStatus.failed': 'En échec',
     'toolKind.search': 'Recherche', 'toolKind.web': 'Web', 'toolKind.browser': 'Navigateur', 'toolKind.exec': 'Commande',
     'toolKind.file-read': 'Lecture de fichier', 'toolKind.file-write': 'Écriture de fichier', 'toolKind.memory': 'Mémoire',
@@ -211,7 +214,7 @@ export const META = {
     'toast.gatewayDown': 'La passerelle OpenClaw ne répond plus.',
     'toast.gatewayUp': 'La passerelle OpenClaw est de retour.',
 
-    'agentState.idle': 'Inactif', 'agentState.thinking': 'Réfléchit', 'agentState.working': 'Exécute',
+    'agentState.idle': 'Inactif', 'agentState.thinking': 'Réfléchit', 'agentState.working': 'Travaille',
     'agentState.researching': 'Recherche', 'agentState.writing': 'Rédige', 'agentState.calling': 'Appel d’outil',
     'agentState.waiting': 'En attente', 'agentState.error': 'Erreur', 'agentState.offline': 'Hors ligne',
     'projectStatus.idea': 'Idée', 'projectStatus.todo': 'À faire', 'projectStatus.in-progress': 'En cours',

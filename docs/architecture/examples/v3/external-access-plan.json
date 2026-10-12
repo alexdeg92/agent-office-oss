@@ -1,0 +1,185 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "planId": "acp_0123456789abcdefghijklmnop",
+      "baseRevision": 12,
+      "configDigest": "40c3c20e57bc0ea630d0d8b3e794b1ba433d7b083d0af8edf97f7be0ccf28ee7",
+      "expiresAt": 1791288900000,
+      "draft": {
+        "mode": "public-split-origin",
+        "apiPublicUrl": "https://api.example.org/backend",
+        "uiOrigins": [
+          "https://office.example.org"
+        ],
+        "domain": "api.example.org",
+        "proxy": "caddy",
+        "security": {
+          "accessTokenMinutes": 10,
+          "refreshIdleHours": 12,
+          "refreshAbsoluteDays": 7,
+          "partitionedCookie": false
+        }
+      },
+      "domains": [
+        {
+          "hostname": "api.example.org",
+          "observedAt": 1791288000000,
+          "provider": {
+            "id": "cloudflare",
+            "confidence": "high",
+            "evidence": [
+              {
+                "resolver": "google",
+                "ns": "ada.ns.cloudflare.com"
+              },
+              {
+                "resolver": "cloudflare",
+                "ns": "ada.ns.cloudflare.com"
+              }
+            ]
+          },
+          "resolvers": [
+            {
+              "id": "google",
+              "state": "answered",
+              "records": {
+                "A": [
+                  {
+                    "name": "api.example.org",
+                    "type": "A",
+                    "value": "198.51.100.8",
+                    "ttl": 300
+                  }
+                ],
+                "AAAA": [],
+                "CNAME": [],
+                "NS": [
+                  {
+                    "name": "api.example.org",
+                    "type": "NS",
+                    "value": "ada.ns.cloudflare.com",
+                    "ttl": 86400
+                  }
+                ]
+              }
+            },
+            {
+              "id": "cloudflare",
+              "state": "answered",
+              "records": {
+                "A": [
+                  {
+                    "name": "api.example.org",
+                    "type": "A",
+                    "value": "198.51.100.8",
+                    "ttl": 300
+                  }
+                ],
+                "AAAA": [],
+                "CNAME": [],
+                "NS": [
+                  {
+                    "name": "api.example.org",
+                    "type": "NS",
+                    "value": "ada.ns.cloudflare.com",
+                    "ttl": 86400
+                  }
+                ]
+              }
+            }
+          ],
+          "records": [
+            {
+              "name": "api.example.org",
+              "type": "A",
+              "value": "198.51.100.8",
+              "ttl": 300
+            }
+          ],
+          "proposals": [
+            {
+              "name": "api",
+              "type": "A",
+              "value": "198.51.100.8",
+              "ttl": 300,
+              "proxied": false,
+              "source": "detected-public-ip"
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "kind": "dns",
+          "target": "api.example.org",
+          "perspective": "server",
+          "state": "passed",
+          "observedAt": 1791288000000,
+          "elapsedMs": 382,
+          "expiresAt": 1791288300000,
+          "reason": null,
+          "fix": null,
+          "evidence": {
+            "resolver": "google",
+            "record": "A",
+            "matched": 2,
+            "expected": 2
+          },
+          "retryAfterMs": null
+        }
+      ],
+      "proxy": {
+        "detected": "caddy",
+        "state": "unknown"
+      },
+      "artifacts": [
+        {
+          "id": "caddy",
+          "kind": "proxy",
+          "filename": "Caddyfile",
+          "contentType": "text/plain; charset=utf-8",
+          "content": "api.example.org {\n  reverse_proxy 127.0.0.1:18789\n}"
+        }
+      ],
+      "securitySummary": {
+        "accessTokenMinutes": 10,
+        "refreshIdleHours": 12,
+        "refreshAbsoluteDays": 7,
+        "partitionedCookie": false
+      },
+      "writes": [
+        {
+          "target": "config",
+          "field": "access.mode",
+          "current": "local",
+          "proposed": "public-split-origin",
+          "source": "config",
+          "editable": true,
+          "requiresRestart": true
+        }
+      ],
+      "externalActions": [
+        {
+          "kind": "dns",
+          "labelKey": "access.action.createDnsRecord",
+          "required": true,
+          "state": "pending",
+          "details": {
+            "provider": "cloudflare",
+            "domain": "api.example.org"
+          }
+        }
+      ],
+      "environmentImposed": [],
+      "restartRequired": true
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791288000000,
+    "stale": []
+  }
+}

@@ -1,0 +1,43 @@
+<!doctype html><html lang="fr" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
+<title>Bureau native tabs — synthetic fixture</title>
+<link rel="stylesheet" href="/bureau/bureau.css"><link rel="stylesheet" href="/components/frame.css">
+<script type="importmap">{"imports":{"preact":"/vendor/preact.mjs","preact/hooks":"/vendor/preact-hooks.mjs","htm":"/vendor/htm.mjs"}}</script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:var(--bu-bg);color:var(--bu-text-primary);font:var(--bu-type-body)}
+#fixture{height:100dvh;max-width:var(--bu-size-prose);margin:auto}h1{margin:0;font:var(--bu-type-title)}
+.tabs-list{display:flex;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;max-width:100%;border-bottom:1px solid var(--bu-border-subtle)}
+.tabs-list>.bu-tab-button{white-space:nowrap;max-width:none}
+</style></head><body><div id="fixture"></div>
+<script type="module">
+import {html,render} from '/lib.js';
+import {Frame} from '/components/ui.js';
+import {TabButton,loadStyles} from '/components/bureau/index.js';
+await loadStyles();
+const state={active:'diagnostic',english:false,long:false,reverse:false,events:[],submits:0};
+const tabs=[['diagnostic','Diagnostic','Diagnostics'],['connection','Connexion','Connection'],['agents','Agents','Agents'],['appearance','Apparence','Appearance'],['account','Compte','Account']];
+const select=(id,event)=>{state.events.push({type:event.type,id:event.currentTarget.id,key:event.key||null});state.active=id;draw();};
+function keydown(event){
+ if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
+ const available=tabs.filter(([id])=>id!=='account').map(([id])=>id);
+ const current=available.indexOf(state.active);
+ const next=event.key==='Home'?available[0]:event.key==='End'?available.at(-1):available[(current+(event.key==='ArrowRight'?1:-1)+available.length)%available.length];
+ event.preventDefault();select(next,event);
+ const trigger=document.getElementById('tab-'+next);trigger.focus();trigger.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+function draw(){
+ const order=state.reverse?[...tabs].reverse():tabs;
+ render(html`<${Frame} tag="form" class="bu-page" bodyLabel=${state.english?'Settings content':'Contenu des paramètres'} onSubmit=${event=>{event.preventDefault();state.submits++;}}
+  head=${html`<h1>${state.english?'Settings':'Paramètres'}</h1>`}
+  bar=${html`<div class="tabs-list" role="tablist" aria-label=${state.english?'Settings sections':'Sections des paramètres'}>
+   ${order.map(([id,fr,en])=>html`<${TabButton} key=${id} id=${'tab-'+id} label=${(state.english?en:fr)+(state.long?' — '+(state.english?'installation configuration':'configuration de l’installation'):'')}
+    selected=${state.active===id} controls="settings-panel" tabIndex=${state.active===id?0:-1} disabled=${id==='account'}
+    onClick=${event=>select(id,event)} onKeyDown=${keydown}
+    onFocus=${event=>state.events.push({type:event.type,id:event.currentTarget.id})}
+    onBlur=${event=>state.events.push({type:event.type,id:event.currentTarget.id})} />`)}
+  </div>`}>
+  <section id="settings-panel" role="tabpanel" aria-labelledby=${'tab-'+state.active}><p>${state.english?'Synthetic content':'Contenu synthétique'}</p></section>
+ </${Frame}>`,document.querySelector('#fixture'));
+}
+window.bureauTabs={state,draw};draw();
+</script></body></html>

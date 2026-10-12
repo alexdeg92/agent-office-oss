@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { configure } from '../../public/v2/config.js';
+import { initMetadata, metadataAuth, refreshMetadata } from '../../public/v2/lang.js';
+import { services } from '../../public/v2/services.js';
+import { agentName, has } from '../../public/v2/i18n.js';
+test('S36-01 session metadata clears synchronously and rejects owner responses arriving after logout',async t=>{
+ configure({basePath:'/',apiBase:'/backend'});
+ const fetchBefore=globalThis.fetch;t.after(()=>{globalThis.fetch=fetchBefore;});
+ const privateMeta={bootId:'stable-boot',apiVersion:3,primaryAgent:{id:'private-id',name:'PRIVATE_CLIENT_SENTINEL'},runtime:{name:'PRIVATE_RUNTIME'},runtimes:[{name:'PRIVATE_RUNTIME'}],instance:{name:'PRIVATE_OFFICE',configured:true},labels:{'agent.private-id':'PRIVATE_CLIENT_SENTINEL','model.private':'PRIVATE_MODEL','safe.label':'Public'},enums:{}};
+ const response=data=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({data})});
+ globalThis.fetch=async()=>response(privateMeta);
+ initMetadata(privateMeta);assert.ok(!JSON.stringify(services.meta).includes('PRIVATE_'));assert.equal(services.meta.bootId,'stable-boot');
+ await metadataAuth(true);assert.equal(agentName(),'PRIVATE_CLIENT_SENTINEL');assert.equal(has('agent.private-id'),true);
+ let finish;globalThis.fetch=()=>new Promise(resolve=>{finish=()=>resolve(response(privateMeta));});
+ const pending=refreshMetadata('en');
+ globalThis.fetch=async()=>{throw new Error('synthetic offline logout');};
+ const clearing=metadataAuth(false);assert.ok(!JSON.stringify(services.meta).includes('PRIVATE_'),'clear occurs before network');assert.equal(has('agent.private-id'),false);
+ await assert.rejects(clearing);finish();await pending;assert.ok(!JSON.stringify(services.meta).includes('PRIVATE_'),'late owner response discarded');assert.equal(services.meta.bootId,'stable-boot');
+ globalThis.fetch=async()=>response(privateMeta);await refreshMetadata();assert.ok(!JSON.stringify(services.meta).includes('PRIVATE_'),'out-of-session refresh cannot enrich labels even if cookie/server state is stale');
+ await metadataAuth(true);assert.equal(agentName(),'PRIVATE_CLIENT_SENTINEL','login refetches owner names');
+});

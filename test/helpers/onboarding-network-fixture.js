@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 const assert = require('node:assert/strict');
 const fs = require('fs'), path = require('path'), os = require('os');
 function networkFixtures(env) {

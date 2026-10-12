@@ -35,7 +35,7 @@ describe('G3a · the primary-agent resolver', () => {
     feed({ defaultId: 'helper', agents: [{ id: 'atlas', name: 'Atlas' }, { id: 'helper', name: 'Helper' }] });
     assert.equal(engine.primaryAgent().id, 'helper');
     assert.ok(engine.liveEvents().some((e) => e.kind === 'agent.primary-changed'));
-    const meta = buildMetaVM({ instance: 'test', readonly: false, readonlyStore: false, timeZone: 'Europe/Paris', instanceLocale: 'fr-CA' }, { engine });
+    const meta = buildMetaVM({ instance: 'test', readonly: false, readonlyStore: false, timeZone: 'Europe/Paris', instanceLocale: 'fr-CA' }, { engine, authenticated: true });
     assert.deepEqual(meta.primaryAgent, { id: 'helper', name: 'Helper', avatarUrl: null });
     assert.deepEqual(meta.instance, { timeZone: 'Europe/Paris', locale: 'fr-CA', configured: true });
   });
@@ -53,7 +53,7 @@ describe('G3a · the 2.x projection is the identity on 2.x values (G3b maps 3.0 
     for (const v of ['subagent', 'chat-direct', 'chat-group', 'explicit']) assert.equal(project2x.sessionKind(v), v);
     assert.deepEqual(['primary', 'scheduled', 'direct', 'group'].map(project2x.occupantRole), ['main', 'cron', 'dm', 'channel']);
     assert.equal(project2x.occupantId('primary'), 'main'); assert.equal(project2x.occupantId('subagent:x'), 'subagent:x');
-    assert.deepEqual(['primary', 'scheduled', 'conversation-direct', 'conversation-group', 'conversation'].map(project2x.sessionKind), ['main', 'cron', 'chat-direct', 'chat-group', 'chat-group']);
+    assert.deepEqual(['primary', 'scheduled', 'conversation-direct', 'conversation-group', 'conversation'].map(project2x.sessionKind), ['main', 'cron', 'chat-direct', 'chat-group', 'conversation']);   // T-0058: generic conversation is not a group
     assert.equal(project2x.occupantId('scheduled:j1'), 'cron:j1'); assert.equal(project2x.occupantId('direct:discord-user:1'), 'dm:discord-user:1');
     assert.equal(project2x.channelId('telegram'), 'unrecognized'); assert.equal(project2x.channelId('discord'), 'discord'); assert.equal(project2x.channelId(null), null);
   });

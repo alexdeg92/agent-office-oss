@@ -42,12 +42,12 @@ describe('visits in the Bureau (office-dev-22, office-dev-24)', { skip, timeout:
     assert.ok(a.dist < 140, `side by side (${a.dist}px)`);
     assert.deepEqual(a.bubbles, ['Camille']);
     assert.deepEqual(a.names.sort(), ['Camille', 'Orion'], 'names stay visible');
-    assert.deepEqual(a.pills, ['Orion:Exécute', 'Camille:Exécute']);
+    assert.deepEqual(a.pills, ['Orion:Travaille', 'Camille:Travaille']);
     // 2. the agent's reply run (still running): his bubble; the person waits for the reply
     const b = await p.eval(`${later(15_000)} ${read}`);
     assert.deepEqual(b.bubbles, ['Orion']);
     assert.deepEqual([b.visitor.talk, b.main.deskTalk], [true, true]);
-    assert.deepEqual(b.pills, ['Orion:Exécute', 'Camille:En attente']);
+    assert.deepEqual(b.pills, ['Orion:Travaille', 'Camille:En attente']);
     // 3. the run is over: no bubble, no talking; the agent back at his desk, the person idle where they stood
     const c = await p.eval(`${later(1000, true)} ${settle} ${read}`);
     assert.deepEqual(c.bubbles, []);

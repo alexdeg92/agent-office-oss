@@ -1,0 +1,8 @@
+{
+  "planId": "fixture-plan-opaque",
+  "agentIds": [
+    "scribe"
+  ],
+  "confirmed": true,
+  "action": "install"
+}

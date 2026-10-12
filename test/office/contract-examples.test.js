@@ -61,4 +61,12 @@ describe('office mocks ↔ docs/architecture/examples (2.1)', () => {
     const r = resolveOccupants(layout, indexManifest(manifest), ex.occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.name })));
     assert.deepEqual(r.map((o) => o.ruleId), ex.occupants.map((o) => o.ruleId));
   });
+
+  it('the v3 example uses the same canonical rule fallback as the shipped layout', () => {
+    const ex = loadExample('office-vm', 3).data;
+    const { resolveOccupants, toVocabulary, canonicalRuleId } = require(path.join(ROOT, 'public/v2/office/layout-rules.js'));
+    const { indexManifest } = require(path.join(ROOT, 'public/v2/office/assets.js'));
+    const r = resolveOccupants(toVocabulary(layout, '3.0'), indexManifest(manifest), ex.occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.name })));
+    assert.deepEqual(r.map((o) => canonicalRuleId(o.ruleId)), ex.occupants.map((o) => canonicalRuleId(o.ruleId)));
+  });
 });

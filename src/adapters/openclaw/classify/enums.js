@@ -3,10 +3,15 @@
 
 // Session run status (capture-20261005: done, complete, failed, active, killed, timeout, budget_limited).
 const RUN_STATUS = {
+  idle: { status: 'idle', endReason: null },
   active: { status: 'running', endReason: null },
   running: { status: 'running', endReason: null },
+  working: { status: 'running', endReason: null },
   done: { status: 'succeeded', endReason: null },
   complete: { status: 'succeeded', endReason: null },
+  completed: { status: 'succeeded', endReason: null },
+  succeeded: { status: 'succeeded', endReason: null },
+  success: { status: 'succeeded', endReason: null },
   failed: { status: 'failed', endReason: 'error' },
   timeout: { status: 'failed', endReason: 'timeout' },
   killed: { status: 'failed', endReason: 'killed' },

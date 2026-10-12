@@ -60,6 +60,17 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
     await p.close();
   });
 
+  it('uses the OfficeVM standingPoint when no station is assigned', async () => {
+    const p = await harness();
+    const target = await p.eval(`
+      const c = sc.chars.get('main');
+      c.occ = { ...c.occ, stationUid: null, standingPoint: { x: 3, y: 4 }, floorId: '2' };
+      return sc._targetFor(c);
+    `);
+    assert.deepEqual(target, { x: 3.5, y: 4.5, uid: 'standing:2', mode: 'stand' });
+    await p.close();
+  });
+
   it('R4-13: a replaced occupant keeps its selection; destroy() cancels pending work', async () => {
     const p = await harness();
     const r = await p.eval(`
@@ -87,7 +98,8 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
     `);
     assert.equal(r.selectedAfter, 'subagent:a');
     assert.equal(r.present, true);
-    assert.equal(r.after, r.before);
+    assert.ok(r.before > 0, 'there was mounted art before destruction');
+    assert.equal(r.after, 0, 'destruction releases mounted art; late decodes append nothing');
     assert.equal(r.raf, 0);
     assert.equal(r.stageEmpty, true);
     assert.deepEqual(p.logs, []);
@@ -175,6 +187,47 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
     assert.deepEqual(new Set(r.seen).size, 1, 'mounted frames stop changing');
     assert.equal(r.seen[0], 'false,true,true', 'frame 0 is held');
     await p.close();
+  });
+
+  for (const width of [390, 360]) it(`T-0077: pending pose decodes keep typing intervals bounded and pause at ${width}px`, async t => {
+    const p = await harness();
+    try {
+      await p.viewport(width, 844); await p.cpu(4);
+      const r = await p.eval(`
+        stage.style.width = '${width}px'; stage.style.height = '480px'; sc.fit();
+        sc._nextLifeCheck = Infinity;
+        const c = await H.until(() => { const c = sc.chars.get('main'); return c.intervals.size === 1 && c; });
+        const counts = [], pending = [], hidden = [], resumed = [];
+        H.holdDecodes();
+        for (let i = 0; i < 16; i++) {
+          src[0].state = i % 2 ? 'working' : 'idle'; push();
+          counts.push(c.intervals.size);
+          pending.push([...c.poseGroups].filter(g => g._cancelDecode).length);
+        }
+        for (let i = 0; i < 3; i++) {
+          Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+          document.dispatchEvent(new Event('visibilitychange'));
+          hidden.push(c.intervals.size);
+          src[0].state = 'idle'; push(); src[0].state = 'working'; push();
+          H.releaseAll(); await H.frames(2);
+          hidden.push(c.intervals.size);
+          H.restoreDecodes();
+          delete document.visibilityState; document.dispatchEvent(new Event('visibilitychange'));
+          await H.until(() => c.intervals.size === 1 && c.displayed === c.poseEl);
+          resumed.push(c.intervals.size);
+          H.holdDecodes();
+        }
+        src[0].state = 'idle'; push(); src[0].state = 'working'; push();
+        sc.destroy(); H.releaseAll(); await H.frames(2); H.restoreDecodes();
+        return { counts, pending, hidden, resumed, destroyed: c.intervals.size, groups: c.poseGroups.size, frames: c.rafs.size, nodes: stage.childElementCount };
+      `);
+      t.diagnostic(JSON.stringify(r));
+      assert.ok(r.counts.every(n => n <= 1), 'one typing interval per character, including pending decodes: ' + r.counts);
+      assert.ok(r.pending.every(n => n <= 1), 'one owned decode request per character');
+      assert.deepEqual(r.hidden, Array(6).fill(0), 'nothing ticks while hidden, even when decoding completes');
+      assert.deepEqual(r.resumed, [1, 1, 1], 'one loop resumes for the winning displayed pose');
+      assert.deepEqual([r.destroyed, r.groups, r.frames, r.nodes], [0, 0, 0, 0], 'late decode completion cannot resurrect destroyed work');
+    } finally { await p.close(); }
   });
 
   it('destination (2.1): the occupant goes to the server rack, then home when it clears', async () => {
@@ -742,13 +795,15 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
       await window.officeBench.until(() => document.querySelector('#ao-drawer-title') && document.activeElement.getAttribute('aria-label') === 'Fermer' && document.querySelector('.ao-plate[aria-current="true"]'));
       const c = [...document.querySelectorAll('.ao-char')].find((e) => e.dataset.occupant === 'subagent:plume');
       return { url: location.search, drawer: document.querySelector('#ao-drawer-title')?.textContent, focus: document.activeElement.getAttribute('aria-label'),
-        current: btn.getAttribute('aria-current'), plate: document.querySelector('.ao-plate[aria-current="true"]')?.getAttribute('aria-label') };
+        current: btn.getAttribute('aria-current'), plate: document.querySelector('.ao-plate[aria-current="true"]')?.getAttribute('aria-label'),
+        bodyParagraphs: [...document.querySelectorAll('.bu-modal__body > p')].map(p => p.textContent.trim()) };
     `);
     assert.match(r.url, /agent=subagent%3Aplume/);
     assert.equal(r.drawer, 'Plume');
     assert.equal(r.focus, 'Fermer');
     assert.equal(r.current, 'true');
     assert.match(r.plate, /^Plume, /);
+    assert.equal(r.bodyParagraphs.length, 1, 'the drawer shows the selected occupant state without appending a fabricated unknown label');
     await p.key('Escape');
     const after = await p.eval(`await window.officeBench.until(() => !document.querySelector('.bu-drawer') && document.activeElement.closest('.ao-roster')); return { drawer: !!document.querySelector('.bu-drawer'), focus: (document.activeElement.querySelector('.ao-roster__name') ?? document.activeElement).textContent.trim(), url: location.search };`);
     assert.deepEqual(after, { drawer: false, focus: 'Plume', url: '?steps=6&tick=600000' });
@@ -787,10 +842,12 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
       [...document.querySelectorAll('.ao-editbar button')].find((b) => b.textContent === 'Annuler').click();
       (await window.officeBench.until(() => [...document.querySelectorAll('.bu-modal button')].find((b) => b.textContent === 'Quitter'))).click();
       await window.officeBench.until(() => !document.querySelector('.ao-editbar') && !document.querySelector('.ao-office').hasAttribute('data-editing'));
-      return { before, during, after: items(), server: window.officeBench.om.layoutVM().layout.data.items.length };
+      const data = window.officeBench.om.layoutVM().layout.data;
+      return { before, during, after: items(), server: data.items.length, serverHasElevator: data.items.some(x => x.asset === 'elevator-door') };
     `);
     assert.equal(r.during, r.before - 1, 'the edit was previewed');
-    assert.equal(r.after, r.server, 'scene restored to the server layout');
+    assert.equal(r.after, r.before, 'scene restored to the layout that was loaded before editing');
+    assert.equal(r.before, r.server + Number(!r.serverHasElevator), 'the selected-floor adapter supplies its local elevator without persisting it in the root layout');
     await p.close();
   });
 
@@ -858,6 +915,7 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
     assert.ok(await tabTo(`a.matches('.ao-controls [data-page-control]')`), 'reach Personnaliser');
     await p.key('Enter');
     await p.eval(`await window.officeBench.until(() => document.querySelector('.ao-editbar'));`);
+    assert.equal(await p.eval(`return !!document.activeElement.closest('.ao-editbar');`), true, 'opening the editor focuses its toolbar');
     assert.ok(await tabTo(`a.matches('.ao-editbar .bu-segmented__opt') && a.textContent === 'Personnages'`), 'reach Personnages');
     await p.key('Enter');
     await p.eval(`await window.officeBench.until(() => document.querySelector('.ao-sc__list'));`);

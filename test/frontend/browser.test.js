@@ -14,8 +14,9 @@ import WebSocket from 'ws';
 import serveFrontend from '../../scripts/serve-frontend.js';
 import firstLoad from '../../scripts/first-load.js';
 import { DEFAULTS } from '../../public/v2/config.js';
+import { STEPS } from '../../public/v2/pages/setup-rules.js';
 
-const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
+const CHROME = process.env.CHROME_BIN || process.env.CHROME || '/usr/bin/google-chrome';
 const skip = process.env.AO_SKIP_BROWSER === '1' || !existsSync(CHROME) ? 'no headless Chrome (set CHROME=… or unset AO_SKIP_BROWSER)' : false;
 const UI_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../public/v2');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,9 +52,11 @@ async function waitFor(expression, timeout = 6000) {
   }
 }
 async function go(path, origin = base) {
+  const marker = 'navigation-' + seq;
+  await evaluate(`window.__testNavigation = ${JSON.stringify(marker)}`);
   await send('Page.navigate', { url: origin + path });
   // An event, not a delay; the deadline only bounds a real failure, so it is generous for a loaded CI machine.
-  await waitFor(`document.readyState === 'complete' && !!document.querySelector('#app > *')`, 20_000);
+  await waitFor(`window.__testNavigation !== ${JSON.stringify(marker)} && location.origin === ${JSON.stringify(origin)} && document.readyState === 'complete' && !!document.querySelector('#app > *')`, 20_000);
 }
 async function key(k, extra = {}) {
   const codes = { Tab: 9, Enter: 13, ' ': 32, ArrowLeft: 37, ArrowRight: 39, Escape: 27 };
@@ -126,6 +129,7 @@ test('auth gate: logged out → /v2/connexion?suite=…; a bad password shows th
   await waitFor(`document.querySelector('.bu-sidebar')`);
   await evaluate(`[...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === 'Se déconnecter').click()`);
   await waitFor(`location.pathname === '/v2/connexion'`);
+  await waitFor(`document.querySelector('.bu-text-input#login-email')`);
   assert.equal(await evaluate('new URLSearchParams(location.search).get("suite")'), '/v2/sante?mock=1');
   await evaluate(`document.getElementById('login-email').focus()`);
   assert.equal(await evaluate('document.activeElement.id'), 'login-email');
@@ -194,12 +198,81 @@ test('R4-09: a failed topic change shows « Reconnexion… », is retried, then 
   assert.ok(await evaluate(`!!document.querySelector('.ao-health:not([aria-busy=true]) .bu-stat, .ao-health:not([aria-busy=true]) .bu-empty')`), 'Santé rendered');
 });
 
+test('Santé resolved checks have a cause-specific label and no stale action in French and English', { skip, timeout: 20_000 }, async () => {
+  await go('/v2/sante?mock=1');
+  await waitFor(`document.querySelector('.ao-health-check')`);
+  const row = '.ao-health-check';
+  assert.match(await evaluate(`document.querySelector('${row} .ao-health-check__head strong').textContent`), /liste des sessions/i);
+  assert.equal(await evaluate(`!!document.querySelector('${row}').querySelector('a')`), false, 'resolved check must not offer settings');
+  assert.equal(await evaluate(`[...document.querySelectorAll('.ao-section-head button')].some(b => b.textContent.includes('Tout corriger'))`), false,
+    'resolved/non-actionable checks do not offer Fix all');
+  assert.match(await evaluate(`document.querySelector('.ao-issue__title').textContent`), /Source: Moteur.*Cause: liste des compétences/i,
+    'data issue shows its source connector and concrete schema cause in the row');
+  await evaluate(`document.querySelector('.ao-lang button[lang="en"]').click()`);
+  await waitFor(`document.documentElement.lang.startsWith('en') && document.querySelector('${row} .ao-health-check__head strong').textContent.toLowerCase().includes('session list')`);
+  assert.match(await evaluate(`document.querySelector('${row} .ao-health-check__head strong').textContent`), /session list could not be refreshed/i);
+  assert.equal(await evaluate(`!!document.querySelector('${row}').querySelector('a')`), false, 'resolved check must not offer settings in English');
+  assert.match(await evaluate(`document.querySelector('.ao-issue__title').textContent`), /Source: Runtime.*Cause: skills list/i,
+    'English data issue shows source and cause');
+  assert.ok(!(await evaluate(`document.querySelector('.ao-issue__title').textContent`)).includes('A data check failed'));
+  if (process.env.AO_HEALTH_CAPTURE_DIR) {
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await evaluate(`document.querySelector('${row}').scrollIntoView({block:'center'})`);
+    await sleep(250);
+    const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    mkdirSync(process.env.AO_HEALTH_CAPTURE_DIR, { recursive: true });
+    writeFileSync(join(process.env.AO_HEALTH_CAPTURE_DIR, 'health-en-checks-390.png'), Buffer.from(shot.data, 'base64'));
+  }
+  await evaluate(`document.querySelector('.ao-lang button[lang="fr"]').click()`);
+  await waitFor(`document.documentElement.lang.startsWith('fr') && document.querySelector('${row} .ao-health-check__head strong').textContent.includes('liste des sessions')`);
+});
+
+test('Santé transcript failure gives terminal bilingual guidance without exposing a path or session ID', { skip, timeout: 30_000 }, async () => {
+  const route = '/v2/sante?mock=transcript-terminal';
+  const row = '.ao-health-check';
+  const states = [
+    { lang: 'fr', theme: 'light', width: 1440, height: 900, file: 'transcript-fr-light-1440.png', heading: /format de cette conversation/i, target: /transcription de conversation/i, guidance: /application source/i },
+    { lang: 'fr', theme: 'dark', width: 1440, height: 900, file: 'transcript-fr-dark-1440.png', heading: /format de cette conversation/i, target: /transcription de conversation/i, guidance: /application source/i },
+    { lang: 'fr', theme: 'light', width: 390, height: 844, file: 'transcript-fr-light-390.png', heading: /format de cette conversation/i, target: /transcription de conversation/i, guidance: /application source/i },
+    { lang: 'fr', theme: 'dark', width: 390, height: 844, file: 'transcript-fr-dark-390.png', heading: /format de cette conversation/i, target: /transcription de conversation/i, guidance: /application source/i },
+    { lang: 'en', theme: 'light', width: 1440, height: 900, file: 'transcript-en-light-1440.png', heading: /conversation format is not recognized/i, target: /conversation transcript/i, guidance: /source app/i },
+    { lang: 'en', theme: 'dark', width: 1440, height: 900, file: 'transcript-en-dark-1440.png', heading: /conversation format is not recognized/i, target: /conversation transcript/i, guidance: /source app/i },
+    { lang: 'en', theme: 'light', width: 390, height: 844, file: 'transcript-en-light-390.png', heading: /conversation format is not recognized/i, target: /conversation transcript/i, guidance: /source app/i },
+    { lang: 'en', theme: 'dark', width: 390, height: 844, file: 'transcript-en-dark-390.png', heading: /conversation format is not recognized/i, target: /conversation transcript/i, guidance: /source app/i },
+  ];
+  for (const state of states) {
+    await evaluate(`localStorage.setItem('ao.locale',${JSON.stringify(state.lang)});localStorage.setItem('ao.uiTheme',${JSON.stringify(state.theme)})`);
+    await send('Emulation.setDeviceMetricsOverride', { width: state.width, height: state.height, deviceScaleFactor: 1, mobile: state.width < 600 });
+    await go(route);
+    await waitFor(`document.querySelector('${row}') && document.querySelector('${row} .ao-health-check__head strong').textContent`);
+    const text = await evaluate(`document.querySelector('${row}').textContent`);
+    assert.match(text, state.heading);
+    assert.match(text, state.target);
+    assert.match(text, state.guidance);
+    assert.equal(await evaluate(`!!document.querySelector('${row} button')`), false, 'a terminal failure offers no automatic retry action');
+    assert.equal(await evaluate(`[...document.querySelectorAll('.ao-section-head button')].some(b => /Tout corriger|Fix all/.test(b.textContent))`), false);
+    assert.ok(!text.includes('private-customer') && !text.includes('synthetic-session-7e3d7'), 'HealthVM UI never includes the private path/session sentinel');
+    if (process.env.AO_HEALTH_CAPTURE_DIR) {
+      await evaluate(`document.querySelector('${row}').scrollIntoView({block:'center'})`);
+      await sleep(200);
+      const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+      mkdirSync(process.env.AO_HEALTH_CAPTURE_DIR, { recursive: true });
+      writeFileSync(join(process.env.AO_HEALTH_CAPTURE_DIR, state.file), Buffer.from(shot.data, 'base64'));
+    }
+  }
+  await evaluate(`localStorage.setItem('ao.locale','fr');localStorage.removeItem('ao.uiTheme')`);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+});
+
 test('Journaux: Enter opens a session; the view switch is in the URL; a live transcript grows over SSE', { skip, timeout: 30_000 }, async () => {
   await go('/v2/journaux?mock=1');
-  await waitFor(`document.querySelector('.ao-logs .bu-table__row')`);
-  await evaluate(`document.querySelector('.ao-logs .bu-table__row').focus()`);
+  // The mock's live trace is the main session's; since T-0070 a newer observed-only Claude row may sort above it
+  const liveRow = `[...document.querySelectorAll('.ao-logs .bu-table__row')].find(a => new URL(a.href).pathname.endsWith('/journaux/agent%3Amain%3Amain'))`;
+  await waitFor(liveRow);
+  const selectedPath = await evaluate(`new URL(${liveRow}.href).pathname`);
+  await evaluate(`${liveRow}.focus()`);
   await key('Enter');
-  await waitFor(`location.pathname === '/v2/journaux/agent%3Amain%3Amain' && document.querySelector('.bu-trace')`);
+  await waitFor(`location.pathname === ${JSON.stringify(selectedPath)} && document.querySelector('.bu-trace')`);
   const before = await evaluate(`document.querySelectorAll('.bu-trace__node, .bu-trace__tools > li, .ao-thinking').length`);
   await waitFor(`document.querySelectorAll('.bu-trace__node, .bu-trace__tools > li, .ao-thinking').length > ${before}`, 8000);
   await evaluate(`[...document.querySelectorAll('.bu-segmented__opt')].find(b => b.textContent.includes('Chronologie')).focus()`);
@@ -333,7 +406,7 @@ for (const [label, origin, mount, apiBase] of [['basePath / with API at /backend
     // every asset of a deep link loads (relative URLs resolve against <base>, not against /projets/)
     const failed = responses.filter((r) => r.status >= 400 && !r.url.includes('/api/'));
     assert.deepEqual(failed, [], 'no asset 404 on a deep link');
-    assert.ok(await evaluate(`getComputedStyle(document.body).fontFamily.length > 0 && !!document.querySelector('link[href="bureau/bundle.css"]').sheet`), 'stylesheets applied');
+    assert.ok(await evaluate(`getComputedStyle(document.body).fontFamily.length > 0 && !!document.querySelector('link[href^="bureau/bundle.css?v="]').sheet`), 'stylesheets applied');
     assert.ok(await evaluate(`[...document.images].filter(i => i.complete && i.src.includes('/bureau/assets/')).every(i => i.naturalWidth > 0)`), 'images decode');
     // the API was asked under apiBase, never under the UI's mount point
     assert.ok(responses.some((r) => new URL(r.url).pathname === apiBase + API + '/meta'), 'meta read at ' + apiBase + API + '/meta');
@@ -353,10 +426,16 @@ for (const [label, origin, mount, apiBase] of [['basePath / with API at /backend
     await evaluate(`[...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === 'Se déconnecter').click()`);
     await waitFor(`location.pathname === '${mount}/connexion'`);
     assert.equal(await evaluate('new URLSearchParams(location.search).get("suite")'), mount + '/journaux?mock=1');
-    // the login art (a CSS background) resolves under the mount point and loads
-    const art = await waitFor(`(getComputedStyle(document.querySelector('.ao-login-stage')).backgroundImage.match(/url\\("(.+)"\\)/) || [])[1]`);
-    assert.equal(new URL(art).pathname.startsWith(mount + '/bureau/assets/Illustrations/login-'), true, art);
-    assert.equal(await evaluate(`fetch(${JSON.stringify(art)}).then(r => r.ok)`), true, 'login art loads');
+    // The login scene loads its manifest/layout through api.getAsset; both stay
+    // under the UI asset base, independent of the configured API base.
+    await waitFor(`!!document.querySelector('.bu-login__scene[data-scene-ready="true"]')`);
+    for (const asset of ['bureau/office/manifest.example.json', 'bureau/office/layout.example.json']) {
+      const pathname = mount + '/' + asset;
+      assert.ok(responses.some(r => new URL(r.url).pathname === pathname && r.status === 200), `login scene asset loaded at ${pathname}`);
+    }
+    const loginAssetFailures = responses.filter(r => r.status >= 400 && !r.url.includes('/api/'));
+    assert.deepEqual(loginAssetFailures, [], 'no login scene asset 404 at either mount point');
+    await waitFor(`document.querySelector('.bu-text-input#login-email')`);
     await evaluate(`(() => { document.getElementById('login-email').value = 'nom@example.invalid'; document.getElementById('login-password').value = 'secret1'; document.getElementById('login-password').focus(); })()`);
     await key('Enter');
     await waitFor(`location.pathname === '${mount}/journaux' && document.querySelector('.bu-sidebar')`);
@@ -375,12 +454,12 @@ test('Carnet reader, traceState (R16-07): stale says the trace is the last good 
 
 test('Q03-F01: switching to English translates the shell and the page in place; filters and URL state stay', { skip, timeout: 20_000 }, async () => {
   await go('/v2/journaux?mock=1&q=menu');
-  await waitFor(`document.querySelector('.ao-logs__matches')`);
+  await waitFor(`document.querySelector('.ao-workspace__count')`);
   await evaluate(`[...document.querySelectorAll('.ao-lang [role=radio]')].find(b => b.lang === 'en').click()`);
   await waitFor(`document.documentElement.lang === 'en-CA' && document.querySelector('.bu-topbar__title').textContent === 'Logs'`);
   const nav = await evaluate(`[...document.querySelectorAll('.bu-nav__item')].map(a => a.textContent.trim())`);
-  assert.deepEqual(nav, ['Office', 'Chat', 'Workflows', 'Projects', 'Access', 'Logs', 'Skills', 'System health', 'Store']);
-  assert.match(await evaluate(`document.querySelector('.ao-logs__matches').textContent`), /loaded sessions? match/);
+  assert.deepEqual(nav, ['Office', 'Chat', 'Workflows', 'Projects', 'Access', 'Logs', 'Skills', 'System health', 'Store', 'Settings']);
+  assert.match(await evaluate(`document.querySelector('.ao-workspace__count').textContent`), /loaded sessions? match/);
   assert.equal(await evaluate(`new URLSearchParams(location.search).get('q')`), 'menu', 'the filter survives the switch');
   assert.equal(await evaluate(`document.querySelector('.ao-logs__search input').value`), 'menu');
   assert.match(await evaluate(`document.querySelector('.bu-live').textContent`), /^(Live|Reconnecting…)$/);
@@ -456,6 +535,7 @@ test('frontend-24 (architect-55): priorities P0–P9: desktop badge tones, picke
     assert.ok(shown.length > 0 && shown.every((p) => Number(p.slice(1)) <= 2), 'only P0 to P2 remain: ' + shown);
     assert.match(await evaluate(`document.querySelector('.ao-projects__matches').textContent`), /projets? en priorité P0 à P2\./);
     await pick('projets-priorite', '');
+    await waitFor(`!new URLSearchParams(location.search).has('priorite') && document.querySelector('[data-card=prj_accueil]')`);
     await pick('projets-tri', 'activite');
     await waitFor(`new URLSearchParams(location.search).get('tri') === 'activite' && document.querySelector('[data-card=prj_accueil]')`);
     assert.ok(await evaluate(`[...document.querySelectorAll('.bu-column')].every((col) => { const t = [...col.querySelectorAll('[data-card] time')].map((x) => Date.parse(x.dateTime));
@@ -469,13 +549,13 @@ test('frontend-24 (architect-55): priorities P0–P9: desktop badge tones, picke
   }
 });
 
-test('Boutique (office-dev-21): a route of its own, last in the mobile Plus list, with a title in the current language', { skip, timeout: 30_000 }, async () => {
+test('Boutique (office-dev-21): a route of its own, in the mobile Plus list before Settings, with a title in the current language', { skip, timeout: 30_000 }, async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   try {
     await go('/v2/plus?mock=1');
     await waitFor(`document.querySelector('.bu-morelist a[href$="/boutique?mock=1"], .bu-morelist a[href$="/boutique"]')`);
-    const items = await evaluate(`[...document.querySelectorAll('.bu-morelist__item')].map((a) => a.textContent.trim())`);
-    assert.deepEqual(items.slice(-2), ['Boutique', 'À propos'], 'Boutique closes the page list, before À propos');
+    const items = await evaluate(`[...document.querySelectorAll('.bu-morelist__item')].map((a) => a.textContent.replace(a.querySelector('.ao-new-release')?.textContent || '', '').trim())`);
+    assert.deepEqual(items.slice(-3), ['Boutique', 'Paramètres', 'À propos'], 'Store and Settings precede About');
     await evaluate(`document.querySelector('.bu-morelist a[href*="/boutique"]').click()`);
     await waitFor(`location.pathname === '/v2/boutique' && document.querySelector('.bu-mtopbar .ao-mtitle')?.textContent === 'Boutique'`, 8000);
     assert.equal(await evaluate(`document.querySelector('.bu-bottombar [aria-current=page]')?.getAttribute('href').split('?')[0]`), '/v2/plus', 'the Plus tab stays current');
@@ -520,16 +600,53 @@ test('R19-05: with a full 50-message window, every reply is announced, the same 
 
 const fill = (id, text) => evaluate(`(() => { const t = document.getElementById(${JSON.stringify(id)}); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
 const submitStep = () => evaluate(`document.querySelector('.ao-setup__nav button[type=submit]').click()`);
-const onStep = (n) => waitFor(`new URLSearchParams(location.search).get('etape') === ${JSON.stringify(String(n))}`, 8000);
+const onStep = (chapter) => waitFor(`new URLSearchParams(location.search).get('etape') === ${JSON.stringify(String(STEPS.indexOf(chapter)))} && document.getElementById('setup-etape')`, 8000);
+const setupReady = () => waitFor(`document.querySelector('.ao-setup__nav button[type=submit]:not(:disabled)')`, 8000);
+const ownerFields = async (code = 'AO-7Q2K-91MX', confirmation = 'mot-de-passe-test') => {
+  await fill('setup-code', code); await fill('setup-owner', 'Camille'); await fill('setup-email', 'camille@example.invalid');
+  await fill('setup-password', 'mot-de-passe-test'); await fill('setup-password2', confirmation); await sleep(80);
+};
+const startSetup = async () => {
+  await ownerFields(); await submitStep(); await onStep('detection');
+  await waitFor(`document.querySelector('.ao-setup__body > [role=status]')`); await setupReady();
+  // Exercise the explicit retry and wait for its actual busy/completion cycle, including when auto-detection is still starting.
+  await evaluate(`document.querySelector('.ao-setup__body > button').click()`);
+  await waitFor(`document.querySelector('.ao-setup__body > button:disabled')`); await setupReady();
+  await submitStep(); await onStep('runtime');
+};
+const setupPress = (label) => evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes(${JSON.stringify(label)})).click()`);
+const toSetupSkills = async () => {
+  await submitStep(); await onStep('identities');
+  await waitFor(`document.querySelectorAll('input[name=setup-primary]').length === 2 && document.querySelectorAll('.ao-sc:not([aria-busy=true]) .ao-sc__look').length === 2`);
+  assert.ok(await evaluate(`document.querySelector('input[name=setup-primary]').checked`), 'runtime primary is suggested');
+  await sleep(100); await submitStep(); await onStep('office');
+  await fill('setup-name', 'Bureau de démonstration'); await fill('setup-zone', 'Europe/Paris'); await sleep(80);
+  await submitStep(); await onStep('skills'); await waitFor(`document.querySelectorAll('[data-skill-agent]').length === 2`); await setupReady();
+};
+// T-0033: the network chapter is the external-access wizard (mode → security → summary → verify); keep the bureau local.
+// e618481c: its Continue lives in the setup frame's fixed footer.
+const ACCESS = '[data-external-access=setup]';
+const accessPress = async (sel, ready) => { await waitFor(`document.querySelector(${JSON.stringify(sel)})`, 8000); await evaluate(`document.querySelector(${JSON.stringify(sel)}).click()`); if (ready) await waitFor(`document.querySelector(${JSON.stringify(ready)})`, 8000); };
+const skillsToReview = async () => {
+  await submitStep();
+  await waitFor(`new URLSearchParams(location.search).get('etape') === ${JSON.stringify(String(STEPS.indexOf('network')))} && document.querySelector('${ACCESS} [data-step=mode]')`, 8000);
+  await accessPress(`${ACCESS} [data-step=mode] input[name="external-access-mode"][value="local"]`);
+  await accessPress(`.ao-setup > .ao-frame__foot .ao-external__footer button[aria-label="Continuer"]`, `${ACCESS} [data-step=security]`);
+  await accessPress(`.ao-setup > .ao-frame__foot .ao-external__footer button[aria-label="Continuer"]`, `${ACCESS} [data-step=review]`);
+  await accessPress(`${ACCESS} [data-step=review] button[aria-label="Préparer le résumé"]`, `${ACCESS} [data-step=review] .ao-external__confirm`);
+  await accessPress(`${ACCESS} [data-step=review] .ao-external__confirm input[type="checkbox"]`);
+  await accessPress(`${ACCESS} [data-step=review] button[aria-label="Préparer pour la publication finale"]`, `${ACCESS} [data-step=verify]`);
+  await accessPress(`${ACCESS} [data-step=verify] button[aria-label="Continuer"]`);
+  await onStep('review');
+};
 
 /**
- * R27-07: the requested route really rendered: the shell's main region, no boot screen, no lazy-page placeholder, and a
- * heading (or the « Plus » list, or a state title) with text. Throws on timeout, naming the route.
+ * R27-07: the requested route really rendered: the shell's main region, no boot screen, no lazy-page placeholder, and a loaded page (or the « Plus » list, or an empty state) with text; the title lives in the shell. Throws on timeout, naming the route.
  */
-const READY = `(() => { const m = document.querySelector('#contenu'); if (!m || document.querySelector('.ao-boot') || m.querySelector(':scope > .bu-page[aria-busy=true]')) return false;
-  const h = m.querySelector('h1, h2, .bu-morelist, .ao-state__title, .bu-empty__title'); return !!h && h.textContent.trim().length > 0; })()`;
+const READY = `(() => { const m = document.querySelector('#contenu'); if (!m || document.querySelector('.ao-boot') || m.querySelector('.bu-page[aria-busy=true]')) return false;
+  const h = m.querySelector('.bu-page, .bu-morelist, .ao-state__title, .bu-empty__title'); return !!h && h.textContent.trim().length > 0; })()`;
 async function routeReady(route, timeout = 10_000) {
-  try { await waitFor(READY, timeout); } catch { throw new Error(`route ${route} did not render (no main content)`); }
+  try { await waitFor(`decodeURIComponent(location.pathname).endsWith(${JSON.stringify('/' + decodeURIComponent(route))}) && (${READY})`, timeout); } catch { throw new Error(`route ${route} did not render (no main content)`); }
   const at = decodeURIComponent(await evaluate('location.pathname'));
   if (!at.endsWith('/' + decodeURIComponent(route))) throw new Error(`route ${route} rendered ${at} instead (a redirect is not the page)`);
 }
@@ -617,7 +734,7 @@ test('F11: a deep link fetches its page chunk with the core (no waterfall); hove
   await send('Network.clearBrowserCache');
   requests.length = 0;
   await go('/v2/journaux/agent%3Amain%3Asubagent%3Ascout-veille?mock=1');
-  await waitFor(`document.querySelector('.ao-session, main h1')`, 10_000);
+  await waitFor(`document.querySelector('.ao-session:not([aria-busy=true])')`, 10_000);
   // Event-based (no wall time): who initiated each module's request. The preload script, i.e. not an import found
   // after the parent module arrived; the page's own module graph would name a module of the chunk instead.
   const by = (m) => requests.filter((r) => new URL(r.url).pathname.endsWith('/v2/' + m)).map((r) => (r.by || r.type || '').split('/').pop().split('?')[0]);
@@ -627,9 +744,10 @@ test('F11: a deep link fetches its page chunk with the core (no waterfall); hove
   const before = await evaluate(`${JSON.stringify(flux)}.filter((m) => document.querySelector('link[rel=modulepreload][href^="' + m + '?v="]')).length`);
   assert.equal(before, 0, 'not preloaded yet');
   await evaluate(`document.querySelector('.bu-sidebar a[href*="/flux"]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`);
+  await waitFor(`${JSON.stringify(flux)}.every((m) => document.querySelector('link[rel=modulepreload][href^="' + m + '?v="]'))`);
   assert.equal(await evaluate(`${JSON.stringify(flux)}.filter((m) => document.querySelector('link[rel=modulepreload][href^="' + m + '?v="]')).length`), flux.length, 'hover preloads the whole chunk');
   await evaluate(`document.querySelector('.bu-sidebar a[href*="/flux"]').click()`);
-  await waitFor(`location.pathname.endsWith('/flux') && document.querySelector('main .bu-ed-masthead, main h1, main h2')`, 8000);
+  await waitFor(`location.pathname.endsWith('/flux') && document.querySelector('main .ao-frame__body .ao-flows:not([aria-busy=true])')`, 8000);
 });
 
 test('artist-15 state spots: only the active theme\'s variant is fetched and shown', { skip, timeout: 60_000 }, async () => {
@@ -705,10 +823,49 @@ test('R27-02: offline, the Bureau shows its last snapshot as stale and frozen, n
 });
 
 test('F13: « À propos » from the user menu (versions, API, notices with their licences); « ? » opens the shortcuts sheet', { skip, timeout: 60_000 }, async () => {
+  const capture = async (name) => writeFileSync(join(dirname(fileURLToPath(import.meta.url)), `../../design/reports/office-dev-64-${name}.png`), Buffer.from((await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })).data, 'base64'));
+  const setTheme = async (mode) => {
+    await evaluate(`document.querySelector('.ao-theme [title="${mode === 'light' ? 'Clair' : 'Sombre'}"]').click()`);
+    await waitFor(`document.documentElement.dataset.theme === '${mode}'`);
+  };
+  const resetSeen = async () => evaluate(`(() => { for (let i=localStorage.length-1;i>=0;i--) { const k=localStorage.key(i); if (k.startsWith('ao.release-notes.v1.')) localStorage.removeItem(k); } window.dispatchEvent(new StorageEvent('storage',{key:'ao.release-notes.v1.reset'})); })()`);
+  const reportDir = join(dirname(fileURLToPath(import.meta.url)), '../../design/reports');
+  mkdirSync(reportDir, { recursive: true });
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await resetSeen();
   await go('/v2/journaux?mock=1');
   await routeReady('journaux');
+  await waitFor(`document.querySelector('.bu-usercard .ao-new-release')`);
+  const badgeOverlap = await evaluate(`(() => { const a=document.querySelector('.bu-usercard .ao-new-release')?.getBoundingClientRect(), b=document.querySelector('.bu-usercard__role')?.getBoundingClientRect(); return !!a&&!!b&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top; })()`);
+  assert.equal(badgeOverlap, false, 'the release badge on the About icon never overlaps the account role');
+  await setTheme('light'); await capture('badge-1440-light');
+  await setTheme('dark'); await capture('badge-1440-dark');
+  await setTheme('light');
+  const releaseRequestStart = requests.length;
   await evaluate(`document.querySelector('.bu-usercard a[href*="/a-propos"]').click()`);
   await routeReady('a-propos');
+  await waitFor(`document.querySelectorAll('.ao-release-notes__item').length === 15`, 6000);
+  await waitFor(`!document.querySelector('.bu-usercard .ao-new-release')`, 6000);
+  const desktopScroll = await evaluate(`(() => { const body=document.querySelector('.ao-frame__body'); return {document:document.scrollingElement.scrollHeight<=innerHeight,frame:body.scrollHeight>body.clientHeight}; })()`);
+  assert.ok(desktopScroll.document && desktopScroll.frame, JSON.stringify(desktopScroll));
+  const releaseRequest = requests.slice(releaseRequestStart).find((request) => new URL(request.url).pathname.endsWith('/releases.json'));
+  assert.ok(releaseRequest, 'release notes load with the About route');
+  assert.equal(new URL(releaseRequest.url).searchParams.get('v'), await evaluate(`document.querySelector('meta[name="ao-build"]').content`), 'release data is pinned to this frontend build');
+  let releasesText = await evaluate(`document.querySelector('.ao-release-notes').innerText`);
+  assert.match(releasesText, /Nouveautés[\s\S]*11 oct\.[\s\S]*01:47 UTC — Suivre les agents délégués[\s\S]*Version 1\.1\.0/);
+  assert.equal(await evaluate(`document.querySelectorAll('.ao-release-notes__latest').length`), 1, 'only newest release is highlighted');
+  assert.equal(await evaluate(`new Set([...document.querySelectorAll('.ao-release-notes__title strong')].map((n) => n.textContent)).size`), 15, 'each release has a distinct identity');
+  assert.match(releasesText, /agents délégués affichent maintenant le nom de l’agent/i);
+  await evaluate(`document.querySelector('.ao-frame__body').scrollTop = 0`);
+  await capture('about-1440-light');
+  await setTheme('dark'); await capture('about-1440-dark'); await setTheme('light');
+  await evaluate(`document.querySelector('.ao-lang button[lang="en"]').click()`);
+  await waitFor(`document.querySelector('.ao-release-notes').innerText.includes('What’s new')`);
+  releasesText = await evaluate(`document.querySelector('.ao-release-notes').innerText`);
+  assert.match(releasesText, /What’s new[\s\S]*Oct 11, 2026[\s\S]*01:47 UTC — Follow delegated agents[\s\S]*Version 1\.1\.0/);
+  assert.match(releasesText, /Latest/);
+  await evaluate(`document.querySelector('.ao-lang button[lang="fr"]').click()`);
+  await waitFor(`document.querySelector('.ao-release-notes').innerText.includes('Nouveautés')`);
   await waitFor(`document.querySelectorAll('.ao-about__notice').length >= 6`, 6000);   // the notices list arrives after the page
   const text = await evaluate(`document.querySelector('.ao-about').innerText`);
   for (const s of ['Cette installation', 'Version du serveur', 'maquette', API, 'Raccourcis clavier', 'Logiciels tiers', 'Preact', 'htm', 'Lucide', 'Inter', 'Sora', 'JetBrains Mono', 'OFL-1.1'])
@@ -726,6 +883,25 @@ test('F13: « À propos » from the user menu (versions, API, notices with their
   await key('Escape');
   await waitFor(`!document.querySelector('[role=dialog]')`, 3000).catch(async () => assert.fail('sheet still open: ' + await evaluate(`document.querySelectorAll('[role=dialog]').length + ' ' + document.activeElement.outerHTML.slice(0, 100)`)));
   await waitFor(`document.activeElement && document.activeElement.classList.contains('ao-about__keysbtn')`, 3000);   // focus returns to where it was
+  for (const width of [390, 375]) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: true });
+    await resetSeen(); await go('/v2/plus?mock=1'); await routeReady('plus');
+    await waitFor(`document.querySelector('.bu-morelist .ao-new-release')`);
+    await setTheme('light'); await capture(`badge-${width}-light`);
+    await setTheme('dark'); await capture(`badge-${width}-dark`);
+    await setTheme('light');
+    await evaluate(`document.querySelector('.bu-morelist a[href*="/a-propos"]').click()`);
+    await routeReady('a-propos'); await waitFor(`document.querySelectorAll('.ao-release-notes__item').length === 15`);
+    await waitFor(`!document.querySelector('.bu-morelist .ao-new-release')`);
+    const mobileNotes = await evaluate(`(() => { const body=document.querySelector('.ao-frame__body'); return {width:document.documentElement.clientWidth, page:document.querySelector('.ao-release-notes').getBoundingClientRect().width, title:document.querySelector('#about-releases').textContent, document:document.scrollingElement.scrollHeight<=innerHeight, frame:body.scrollHeight>body.clientHeight}; })()`);
+    assert.equal(mobileNotes.width, width);
+    assert.ok(mobileNotes.page <= mobileNotes.width && mobileNotes.title === 'Nouveautés' && mobileNotes.document && mobileNotes.frame, JSON.stringify(mobileNotes));
+    await evaluate(`document.querySelector('.ao-frame__body').scrollTop = 0`);
+    await capture(`about-${width}-light`);
+    await setTheme('dark'); await capture(`about-${width}-dark`);
+    await setTheme('light');
+  }
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await go('/v2/discuter?mock=1');
   await routeReady('discuter');
   await waitFor(`document.querySelector('main textarea')`, 8000);
@@ -770,155 +946,110 @@ test('R20-02: a late check or discovery never validates a connection changed mea
   await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
   await go('/v2/?mock=installation&setup-lent=2000');
   await waitFor(`document.getElementById('setup-code')`);
-  await fill('setup-code', 'AO-7Q2K-91MX'); await sleep(80); await submitStep(); await onStep(1);
-  await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-a'); await sleep(80); await submitStep(); await onStep(2);
+  await startSetup();
+  await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-a'); await sleep(80); await submitStep(); await onStep('gateway');
   await press('Tester');                                   // gateway A, answered in 2 s
-  await sleep(150); await back(); await onStep(1);
+  await sleep(150); await back(); await onStep('runtime');
   await fill('setup-url', 'ws://127.0.0.1:18790'); await sleep(2600);   // gateway B; A's success lands meanwhile
-  await ready(); await submitStep(); await onStep(2);
+  await ready(); await submitStep(); await onStep('gateway');
   assert.doesNotMatch(await status(), /connectée/, 'A’s answer is not shown beside B');
   await submitStep(); await sleep(200);
-  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), '2', 'B still has to be checked');
+  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), String(STEPS.indexOf('gateway')), 'B still has to be checked');
 
   await press('Tester'); await waitFor(`document.querySelector('.ao-setup__status')?.textContent.includes('connectée')`, 6000);
-  await submitStep(); await onStep(3);
+  await submitStep(); await onStep('agents');
   await press('Rechercher');                               // discovery through B, answered in 2 s
-  await sleep(150); await back(); await onStep(2); await back(); await onStep(1);
+  await sleep(150); await back(); await onStep('gateway'); await back(); await onStep('runtime');
   await fill('setup-token', 'jeton-c'); await sleep(2600);   // B's agents land meanwhile
-  await ready(); await submitStep(); await onStep(2);
+  await ready(); await submitStep(); await onStep('gateway');
   await press('Tester'); await waitFor(`document.querySelector('.ao-setup__status')?.textContent.includes('connectée')`, 6000);
-  await submitStep(); await onStep(3);
+  await submitStep(); await onStep('agents');
   assert.doesNotMatch(await status(), /2 agents/, 'the old discovery’s agents are not restored');
   await submitStep(); await sleep(200);
-  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), '3', 'a new discovery is required');
+  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), String(STEPS.indexOf('agents')), 'a new discovery is required');
 });
 
-test('frontend-25 (architect-56): at 360 px the project-tag opt-out fits, unchecking sends integrations.projet false, and the result says « Ignorée »', { skip, timeout: 60_000 }, async () => {
+test('frontend-25: at 360 px the skills opt-out fits, leaves workspaces unchanged, and is preserved in review and save', { skip, timeout: 60_000 }, async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 1, mobile: true });
   try {
     await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
-    await go('/v2/?mock=installation&installation=etiquette-deja');
-    await waitFor(`document.getElementById('setup-code')`);
-    await fill('setup-code', 'AO-7Q2K-91MX'); await sleep(80); await submitStep(); await onStep(1);
-    await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-de-test'); await sleep(80); await submitStep(); await onStep(2);
-    await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester')).click()`);
-    await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('connectée')`, 6000);
-    await submitStep(); await onStep(3);
-    await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Rechercher')).click()`);
-    await waitFor(`document.querySelector('[data-project-tag=installed]')`, 6000);
-    await submitStep(); await onStep(4);
-    await submitStep(); await onStep(5);
-    await fill('setup-name', 'Bureau test'); await fill('setup-owner', 'Camille'); await fill('setup-email', 'camille@example.invalid'); await fill('setup-zone', 'Europe/Paris');
-    await fill('setup-password', 'mot-de-passe-test'); await fill('setup-password2', 'mot-de-passe-test');
-    await sleep(80); await submitStep(); await onStep(6);
-    assert.equal(await evaluate(`document.getElementById('setup-projet-aide').textContent`), 'Déjà installée chez Orion : rien ne changera.');
-    assert.ok(await evaluate(`(() => { const c = document.querySelector('.ao-setup__integration').getBoundingClientRect(); return c.left >= 0 && c.right <= innerWidth && document.scrollingElement.scrollWidth <= innerWidth; })()`), 'the box fits at 360 px');
-    await evaluate(`document.getElementById('setup-projet').click()`);
-    assert.equal(await evaluate(`document.getElementById('setup-projet').checked`), false);
-    await submitStep(); await onStep(7);
-    assert.deepEqual(await evaluate(`[...document.querySelector('[data-tag-result=skipped]').children].map((c) => c.textContent)`),
-      ['Ignorée', 'Étiquette projet ignorée, comme demandé. Vous pourrez l’installer plus tard avec agent-office integrations install.']);
+    await go('/v2/?mock=installation&installation=etiquette-deja'); await waitFor(`document.getElementById('setup-code')`);
+    await startSetup(); await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-de-test'); await sleep(80);
+    await submitStep(); await onStep('gateway'); await setupPress('Tester');
+    await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('connectée')`);
+    await submitStep(); await onStep('agents'); await setupPress('Rechercher'); await waitFor(`document.querySelector('[data-project-tag=installed]')`);
+    await toSetupSkills();
+    assert.match(await evaluate(`document.querySelector('[data-skill-agent=atelier-agent] [role=status]').textContent`), /^Installée$/);
+    assert.ok(await evaluate(`(() => { const c = document.querySelector('[data-skill-agent]').getBoundingClientRect(); const footer=document.querySelector('.ao-setup__footer').getBoundingClientRect(); return c.left >= 0 && c.right <= innerWidth && document.scrollingElement.scrollWidth <= innerWidth && document.scrollingElement.scrollHeight <= innerHeight && footer.bottom <= innerHeight; })()`), 'skills and anchored footer fit at 360 px without document scroll');
+    for (const id of ['atelier-agent', 'code-agent']) {
+      await evaluate(`document.querySelector('[data-skill-agent="${id}"] input').click()`);
+      await waitFor(`!document.querySelector('[data-skill-agent="${id}"] input').checked`); await sleep(80);
+    }
+    assert.equal(await evaluate(`document.querySelectorAll('[data-skill-agent] input:checked').length`), 0);
+    assert.ok(await evaluate(`document.getElementById('setup-install').disabled`));
+    await skillsToReview();
+    assert.match(await evaluate(`document.querySelector('.ao-setup__review').textContent`), /Orion : Installée, Lyra : À installer/);
+    const planned = await evaluate(`(async()=>{const {post}=await import('/v2/api.js?v='+document.querySelector('meta[name=ao-build]').content);return (await post('/api/v2/setup/integrations/plan',{setupCode:'AO-7Q2K-91MX',runtime:{adapter:'openclaw',gatewayUrl:'ws://127.0.0.1:18789'},locale:'fr'},{quiet:true})).data.result.agents.map(a=>[a.id,a.status]);})()`);
+    assert.deepEqual(planned,[['atelier-agent','installed'],['code-agent','absent']], 'opt-out leaves both agent workspace statuses unchanged');
+    await submitStep(); await onStep('done');
+    assert.equal(await evaluate(`document.querySelector('[data-tag-result]')`), null, 'save does not claim an automatic installation after explicit skill review');
+    assert.match(await evaluate(`document.querySelector('.ao-setup h2').textContent`), /bureau est prêt/);
   } finally {
     await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
     await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   }
 });
 
-test('F8 first-run setup: code → runtime → check → agents → identities → office → review (no secret) → saved → the app', { skip, timeout: 60_000 }, async () => {
+test('F8 first-run setup: owner → detection → runtime → check → agents → identities → office → skills → network → review (no secret) → saved', { skip, timeout: 60_000 }, async () => {
   await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
-  await go('/v2/?mock=installation&installation=injoignable');
-  await waitFor(`document.querySelector('.ao-setup') && document.getElementById('setup-code')`);
-  assert.ok(await evaluate(`!document.querySelector('.bu-sidebar')`), 'no shell before the instance is configured');
-  await fill('setup-code', 'AO-7Q2K-91MX'); await sleep(80); await submitStep(); await onStep(1);
-  await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-secret-de-test'); await sleep(80); await submitStep(); await onStep(2);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester')).click()`);
-  await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('injoignable')`, 6000);
+  await go('/v2/?mock=installation&installation=injoignable'); await waitFor(`document.getElementById('setup-code')`);
+  assert.ok(await evaluate(`!document.querySelector('.bu-sidebar')`), 'no shell before configuration');
+  await startSetup(); await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-secret-de-test'); await sleep(80);
+  await submitStep(); await onStep('gateway'); await setupPress('Tester');
+  await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('injoignable')`);
   await submitStep(); await sleep(200);
-  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), '2', 'an unreachable gateway blocks the next step');
+  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), String(STEPS.indexOf('gateway')), 'unreachable gateway blocks next');
   assert.match(await evaluate(`document.getElementById('setup-erreur').textContent`), /doit répondre/);
 
-  await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
-  await go('/v2/?mock=installation');
-  await waitFor(`document.getElementById('setup-code')`);
-  await fill('setup-code', 'MAUVAIS'); await sleep(80); await submitStep(); await onStep(1);
-  await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-secret-de-test'); await sleep(80); await submitStep(); await onStep(2);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester')).click()`);
-  await waitFor(`new URLSearchParams(location.search).get('etape') === null && document.getElementById('setup-erreur') && document.getElementById('setup-code')`, 6000);
-  assert.match(await evaluate(`document.getElementById('setup-erreur')?.textContent || ''`), /code d’installation n’est pas valide/, 'a wrong code sends back to the start');
-  await fill('setup-code', 'AO-7Q2K-91MX'); await sleep(80); await submitStep(); await onStep(1);
-  await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-secret-de-test'); await sleep(80); await submitStep(); await onStep(2);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester')).click()`);
-  await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('connectée')`, 6000);
-  await submitStep(); await onStep(3);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Rechercher')).click()`);
-  await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('2 agents')`, 6000);
-  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.ao-setup__agents [data-project-tag]')].map((c) => c.dataset.projectTag + ':' + c.textContent)`),
-    ['absent:Sans étiquette projet', 'outdated:Étiquette projet à mettre à jour'], 'architect-56: each agent’s project-tag status');
-  await submitStep(); await onStep(4);
-  await waitFor(`document.querySelectorAll('input[name=setup-primary]').length === 2`);
-  assert.ok(await evaluate(`document.querySelector('input[name=setup-primary]').checked`), 'the runtime’s primary is suggested');
-  await submitStep(); await onStep(5);
-  await fill('setup-name', 'Bureau de démonstration'); await fill('setup-owner', 'Camille'); await fill('setup-email', 'camille@example.invalid'); await fill('setup-zone', 'Europe/Paris');
-  await fill('setup-password', 'mot-de-passe-test'); await fill('setup-password2', 'mot-de-passe-tesT');
-  await sleep(80); await submitStep();
-  assert.match(await evaluate(`document.getElementById('setup-erreur')?.textContent || ''`), /ne correspondent pas/, 'the confirmation must match');
-  await fill('setup-password2', 'mot-de-passe-test');
-  await sleep(80); await submitStep(); await onStep(6);
-  const review = await evaluate(`document.querySelector('.ao-setup__review').textContent`);
-  assert.match(review, /Fourni \(non affiché\)/);
-  assert.ok(!review.includes('jeton-secret-de-test') && !(await evaluate(`location.href + JSON.stringify(localStorage) + JSON.stringify(sessionStorage)`)).includes('jeton-secret-de-test'), 'the token never shows, nor reaches the URL or storage');
-  assert.ok(!(review + await evaluate(`location.href + JSON.stringify(localStorage) + JSON.stringify(sessionStorage)`)).includes('mot-de-passe-test'), 'nor the password');
-  assert.deepEqual(await evaluate(`[document.getElementById('setup-projet').checked, document.querySelector('.ao-setup__check').textContent]`),
-    [true, 'Installer l’étiquette projet chez l’agent principal (Orion)'], 'architect-56: the project tag is on by default');
-  await submitStep(); await onStep(7);
-  assert.match(await evaluate(`document.querySelector('.ao-setup h2').textContent`), /bureau est prêt/);
-  assert.deepEqual(await evaluate(`[...document.querySelector('[data-tag-result=installed]').children].map((c) => c.textContent)`), ['Installée', 'Étiquette projet installée chez Orion.']);
-  await evaluate(`document.querySelector('.ao-setup .bu-btn--primary').click()`);
-  await waitFor(`document.querySelector('.bu-sidebar')`, 8000);
+  await go('/v2/?mock=installation'); await waitFor(`document.getElementById('setup-code')`);
+  await ownerFields('MAUVAIS'); await submitStep();
+  await waitFor(`document.getElementById('setup-erreur')?.textContent.includes('code d’installation n’est pas valide')`);
+  assert.equal(await evaluate(`new URLSearchParams(location.search).get('etape')`), null, 'wrong code cannot create an owner or leave welcome');
+  await ownerFields('AO-7Q2K-91MX', 'mot-de-passe-tesT'); await submitStep();
+  await waitFor(`document.getElementById('setup-erreur')?.textContent.includes('ne correspondent pas')`);
+  await startSetup();
+  await fill('setup-url', 'ws://127.0.0.1:18789'); await fill('setup-token', 'jeton-secret-de-test'); await sleep(80);
+  await submitStep(); await onStep('gateway'); await setupPress('Tester'); await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('connectée')`);
+  await submitStep(); await onStep('agents'); await setupPress('Rechercher'); await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('2 agents')`);
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.ao-setup__agents [data-project-tag]')].map(c=>c.dataset.projectTag+':'+c.textContent)`), ['absent:Sans étiquette projet','outdated:Étiquette projet à mettre à jour']);
+  await toSetupSkills();
+  assert.ok(await evaluate(`[...document.querySelectorAll('[data-skill-agent] input')].every(c=>c.checked)`), 'supported agents selected by default');
+  assert.ok(await evaluate(`document.getElementById('setup-install').disabled`), 'installation requires explicit confirmation');
+  await evaluate(`document.getElementById('setup-skill-confirm').click()`); await sleep(80); await evaluate(`document.getElementById('setup-install').click()`);
+  await waitFor(`document.querySelector('[data-skill-agent=atelier-agent] [role=status]').textContent === 'Installée'`);
+  await skillsToReview();
+  const review=await evaluate(`document.querySelector('.ao-setup__review').textContent`);
+  assert.match(review,/Fourni \(non affiché\)/); assert.match(review,/Orion : Installée/);
+  const persisted=await evaluate(`location.href+JSON.stringify(localStorage)+JSON.stringify(sessionStorage)`);
+  assert.ok(!(review+persisted).includes('jeton-secret-de-test') && !(review+persisted).includes('mot-de-passe-test'), 'token and password never reach review, URL or storage');
+  await submitStep(); await onStep('done'); assert.match(await evaluate(`document.querySelector('.ao-setup h2').textContent`), /bureau est prêt/);
+  await evaluate(`document.querySelector('.ao-setup .bu-btn--primary').click()`); await waitFor(`document.querySelector('.bu-sidebar')`);
   await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
 
-  // G6: the demo runtime: no gateway field, no token; the check and discovery still run (api.md 2.5 §5.7).
-  await go('/v2/?mock=installation&setup-lent=50');
-  await waitFor(`document.getElementById('setup-code')`);
-  await fill('setup-code', 'AO-7Q2K-91MX'); await sleep(80); await submitStep(); await onStep(1);
-  await evaluate(`(() => { const s = document.getElementById('setup-adapter'); s.value = 'demo'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await go('/v2/?mock=installation&setup-lent=50'); await waitFor(`document.getElementById('setup-code')`); await startSetup();
+  await evaluate(`(() => {const s=document.getElementById('setup-adapter');s.value='demo';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await waitFor(`!document.getElementById('setup-url') && !document.getElementById('setup-token') && document.getElementById('setup-sans-passerelle')`);
-  await submitStep(); await onStep(2);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester')).click()`);
-  await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('aucune connexion nécessaire')`, 6000);
-  await submitStep(); await onStep(3);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Rechercher')).click()`);
-  await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('2 agents')`, 6000);
-
-  await go('/v2/?mock=installation&installation=verrouille');
-  await waitFor(`document.querySelector('.ao-setup__h')`);
-  assert.match(await evaluate(`document.querySelector('.ao-setup__h').textContent`), /déjà configuré/);
-  assert.ok(await evaluate(`!document.getElementById('setup-code')`), 'no form on a locked instance');
-
-  // R20-03: the gates are enforced by the mock like the real G4 routes. A lock that happens mid-flow (403 locked) …
-  await go('/v2/?mock=installation&installation=concurrent');
-  await waitFor(`document.getElementById('setup-code')`);
-  await fill('setup-code', 'AO-7Q2K-91MX'); await sleep(80); await submitStep(); await onStep(1);
-  await fill('setup-url', 'ws://127.0.0.1:18789'); await sleep(80); await submitStep(); await onStep(2);
-  await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester')).click()`);
-  await waitFor(`document.querySelector('.ao-setup__h')?.textContent.includes('déjà configuré')`, 6000);
-  assert.ok(await evaluate(`!document.getElementById('setup-url')`), '… closes the form');
-  // … and wrong codes are throttled: the 7th attempt is a 429 whose Retry-After is shown.
-  await go('/v2/?mock=installation&setup-lent=50');
-  await waitFor(`document.getElementById('setup-code')`);
-  await fill('setup-code', 'MAUVAIS'); await sleep(80); await submitStep(); await onStep(1);
-  await fill('setup-url', 'ws://127.0.0.1:18789'); await sleep(80); await submitStep(); await onStep(2);
-  for (let i = 0; i < 7; i++) {
-    await evaluate(`[...document.querySelectorAll('.ao-setup__body > .bu-btn')].find(b => b.textContent.includes('Tester'))?.click() ?? document.querySelector('.ao-setup__nav button[type=submit]').click()`);
-    await sleep(600);
-    if (i < 6) { await waitFor(`document.getElementById('setup-code')`); await submitStep(); await onStep(1); await submitStep(); await onStep(2); }
+  await submitStep(); await onStep('gateway'); await setupPress('Tester'); await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('aucune connexion nécessaire')`);
+  await submitStep(); await onStep('agents'); await setupPress('Rechercher'); await waitFor(`document.querySelector('.ao-setup__status').textContent.includes('2 agents')`);
+  for(const hook of ['verrouille','concurrent','lecture']) {
+    await go('/v2/?mock=installation&installation='+hook);
+    if(hook==='concurrent') { await waitFor(`document.getElementById('setup-code')`); await ownerFields(); await submitStep(); }
+    await waitFor(`document.querySelector('.ao-setup__h')?.textContent.includes(${JSON.stringify(hook==='lecture'?'lecture seule':'déjà configuré')})`);
+    assert.ok(await evaluate(`!document.getElementById('setup-code') && !document.getElementById('setup-url')`),'locked/read-only state closes form');
   }
-  assert.match(await evaluate(`document.getElementById('setup-erreur')?.textContent || ''`), /Trop de tentatives, réessayez dans 30/);
-
-  await go('/v2/?mock=installation&installation=lecture');
-  await waitFor(`document.querySelector('.ao-setup__h')`);
-  assert.match(await evaluate(`document.querySelector('.ao-setup__h').textContent`), /lecture seule/);
-  assert.ok(await evaluate(`!document.getElementById('setup-code')`), 'no form on a read-only instance');
+  await go('/v2/?mock=installation&setup-lent=50'); await waitFor(`document.getElementById('setup-code')`); await ownerFields('MAUVAIS');
+  for(let i=0;i<7;i++) { await setupReady(); await submitStep(); await sleep(600); await waitFor(`document.getElementById('setup-erreur')`); }
+  assert.match(await evaluate(`document.getElementById('setup-erreur').textContent`), /Trop de tentatives, réessayez dans 30/);
   await evaluate(`sessionStorage.removeItem('ao.mock.configured')`);
 });
 
@@ -1008,7 +1139,7 @@ test('frontend-26: comments autocomplete, live replies and system lines, summary
   }
 });
 
-test('frontend-27: Bureau mobile board/list, sheets, moves, remembered view and compact detail at 360/412', {skip,timeout:120_000},async()=>{
+test('frontend-27: Bureau mobile status list, sheets, moves, legacy URLs and compact detail at 360/412', {skip,timeout:120_000},async()=>{
   const errorsFrom=consoleErrors.length;
   const checkAxe=async()=>{if(!AXE)return;await evaluate(AXE);const issues=await evaluate(`axe.run(document,{rules:{'target-size':{enabled:false}}}).then(r=>r.violations.filter(v=>v.impact==='serious'||v.impact==='critical').map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})))`);assert.deepEqual(issues,[]);};
   const filterButton=`document.querySelector('.ao-projects-mobile__filter')`;
@@ -1017,49 +1148,55 @@ test('frontend-27: Bureau mobile board/list, sheets, moves, remembered view and 
     for(const [width,height] of [[360,780],[412,915]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
       await go('/v2/projets?mock=1&vue=tableau');
-      await waitFor(`document.querySelector('.ao-mobile-board [data-card]') && document.querySelector('[data-card=prj_portail] [data-comment-count]')`);
+      await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]') && document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-comment-count]')`);
       assert.ok(await evaluate(`document.scrollingElement.scrollWidth<=innerWidth`));
       assert.equal(await evaluate(`document.querySelectorAll('.ao-projects--mobile select').length`),0,'filters stay in the sheet');
-      assert.equal(await evaluate(`document.querySelectorAll('.ao-mobile-board .ao-mobile-column').length`),5);
-      assert.equal(await evaluate(`document.querySelectorAll('.ao-mobile-card [data-cover=monogram]').length`),0);
-      assert.ok(await evaluate(`(() => {const b=document.querySelector('.ao-mobile-board'),c=b.querySelector('[data-column="in-progress"]'),n=c.nextElementSibling;return getComputedStyle(b).scrollSnapType==='x mandatory' && Math.abs(c.getBoundingClientRect().width/b.clientWidth-.88)<.02 && n.getBoundingClientRect().left<innerWidth && getComputedStyle(c.querySelector('ul')).overflowY!=='auto';})()`),'one snapping column, next peeking, cards scroll with page');
+      assert.equal(await evaluate(`document.querySelectorAll('[data-project-choice]').length`),6,'All plus every status stays visible');
+      assert.equal(await evaluate(`document.querySelector('[data-project-choice][aria-pressed=true]').dataset.projectChoice`),'all');
+      assert.equal(await evaluate(`document.querySelectorAll('.ao-mobile-card__key,.ao-mobile-board').length`),0,'no internal identifiers or nested board');
+      // 1697031e: the card list is the one scroll body (data-scroll-body); the frame body stays fixed around it
+      assert.ok(await evaluate(`(() => {const b=document.querySelector('.ao-projects--mobile > .ao-frame__body'), l=b.querySelector('.ao-projects-mobile__list');return getComputedStyle(l).overflowY==='auto' && l.hasAttribute('data-scroll-body') && b.scrollHeight<=b.clientHeight+1;})()`),'one vertical body');
       await send('Emulation.setTouchEmulationEnabled',{enabled:true});
-      const swipeY=await evaluate(`document.querySelector('.ao-mobile-board').getBoundingClientRect().top+60`);
-      await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:width-60,y:swipeY}]});
-      for(const x of [width-90,width-140,width-200,55]) {await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:swipeY}]});await sleep(35);}
+      const swipe=await evaluate(`(() => {const r=document.querySelector('.ao-projects-mobile__list').getBoundingClientRect();return {x:r.x+r.width/2,y:r.bottom-30,d:Math.min(r.height-60,220)};})()`);
+      await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:swipe.x,y:swipe.y}]});
+      for(let n=1;n<=10;n++) {await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:swipe.x,y:swipe.y-swipe.d*n/10}]});await sleep(25);}
       await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-      await waitFor(`(() => {const c=document.querySelector('.ao-mobile-board [data-column="in-review"]');return Math.abs(c.getBoundingClientRect().left-16)<3;})()`);
+      await waitFor(`document.querySelector('.ao-projects-mobile__list').scrollTop>40`);
+      assert.equal(await evaluate(`scrollY`),0,'only the body scrolls');
       assert.equal(await evaluate(`document.querySelectorAll('[role=dialog]').length`),0,'swiping does not open the long-press menu');
-      assert.equal(await evaluate(`Number(document.querySelector('[data-card=prj_portail] [data-comment-count]').dataset.commentCount)`),1);
-      await evaluate(`import(new URL('api.js',document.baseURI).href).then(m=>m.post('/api/v2/projects/prj_portail/comments',{body:'Commentaire du tableau mobile'},{quiet:true}))`);
-      await waitFor(`document.querySelector('[data-card=prj_portail] [data-comment-count="2"]')`);
+      await evaluate(`document.querySelector('.ao-projects-mobile__list').scrollTop=0`);
+      assert.equal(await evaluate(`Number(document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-comment-count]').dataset.commentCount)`),1);
+      await evaluate(`import(new URL('api.js?v='+document.querySelector('meta[name=ao-build]').content,document.baseURI).href).then(m=>m.post('/api/v2/projects/prj_portail/comments',{body:'Commentaire du tableau mobile'},{quiet:true}))`);
+      await waitFor(`document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-comment-count="2"]')`);
       await checkAxe();
       await evaluate(`${filterButton}.focus();${filterButton}.click()`);
       await waitFor(`document.getElementById('mobile-project-filters')`);
-      assert.equal(await evaluate(`document.querySelectorAll('#mobile-project-filters select').length`),4);
+      assert.equal(await evaluate(`document.querySelectorAll('#mobile-project-filters select').length`),3);
       await waitFor(`(() => {const r=document.querySelector('[role=dialog]').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&Math.abs(r.bottom-innerHeight)<2;})()`);
       await checkAxe();
       await evaluate(`document.getElementById('mobile-priority').value='P2';document.getElementById('mobile-sort').value='activite';document.getElementById('mobile-project-filters').requestSubmit()`);
       await waitFor(`document.querySelector('[data-active-filters="2"]') && !document.querySelector('[role=dialog]')`);
-      assert.ok(await evaluate(`[...document.querySelectorAll('[data-card] .bu-priority')].every(p=>Number(p.textContent.slice(1))<=2)`));
+      assert.ok(await evaluate(`[...document.querySelectorAll('.ao-mobile-card .bu-priority')].every(p=>Number(p.textContent.slice(1))<=2)`));
       await evaluate(`${filterButton}.focus();${filterButton}.click()`);await waitFor(`document.getElementById('mobile-priority')`);
       assert.equal(await evaluate(`document.getElementById('mobile-priority').value`),'P2','sheet remembers active filters');
       await key('Escape');
       await waitFor(`!document.querySelector('[role=dialog]') && document.activeElement===${filterButton}`);
       await go('/v2/projets?mock=1&vue=liste');
-      await waitFor(`document.querySelectorAll('.ao-mobile-group').length===5`);
-      await evaluate(`document.querySelector('.ao-mobile-group summary').click()`);
-      assert.equal(await evaluate(`document.querySelector('.ao-mobile-group').open`),false);
+      await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]')`);
+      assert.equal(await evaluate(`document.querySelector('[data-project-choice][aria-pressed=true]').dataset.projectChoice`),'all','legacy list URL shows the same complete mobile list');
+      await evaluate(`document.querySelector('.ao-projects-mobile__list').scrollTop=200`);
+      await evaluate(`document.querySelector('[data-project-choice="in-progress"]').click()`);
+      await waitFor(`document.querySelector('[data-project-choice="in-progress"][aria-pressed=true]')`);
+      assert.ok(await evaluate(`[...document.querySelectorAll('.ao-mobile-card [data-project-status]')].every(e=>e.dataset.projectStatus==='in-progress')`),'selected status narrows the list');
+      assert.equal(await evaluate(`document.querySelector('.ao-projects-mobile__list').scrollTop`),0,'status changes reset the list');
       await checkAxe();
-      await evaluate(`document.getElementById('projects-tab-tableau').click()`);
-      await waitFor(`document.querySelector('.ao-mobile-board')`);
-      await evaluate(`document.getElementById('projects-tab-liste').click()`);
-      await waitFor(`localStorage.getItem('ao.projects.view')==='liste'`);
-      await go('/v2/projets?mock=1');await waitFor(`document.querySelector('.ao-mobile-groups')`);
-      await evaluate(`document.querySelector('[data-card=prj_portail]').closest('li').querySelector('button').click()`);
+      await go('/v2/projets?mock=1');await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]')`);
+      await evaluate(`document.querySelector('[data-card=prj_portail]').closest('li').querySelector('.bu-control-menu__trigger').click()`);
+      await waitFor(`document.querySelector('[role=menuitem]')`);
+      await evaluate(`document.querySelector('[role=menuitem]').click()`);
       await waitFor(`document.querySelector('.ao-projects-mobile__destinations')`);
       await evaluate(`document.querySelector('[role=dialog] [data-project-status="in-review"]').closest('button').click()`);
-      await waitFor(`document.querySelector('.ao-mobile-group[data-column="in-review"] [data-card=prj_portail]')`);
+      await waitFor(`document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-project-status="in-review"]')`);
       await evaluate(`document.querySelector('[data-card=prj_portail]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch',clientX:50,clientY:300}))`);
       await waitFor(`document.querySelector('.ao-projects-mobile__destinations')`);
       await key('Escape');
@@ -1076,7 +1213,7 @@ test('frontend-27: Bureau mobile board/list, sheets, moves, remembered view and 
       await checkAxe();
       assert.deepEqual(JSON.parse(await evaluate(`sessionStorage.getItem('ao.csp') || '[]'`)),[],'mobile views and sheets obey CSP');
     }
-    await go('/v2/projets?mock=1&lecture=tout');await waitFor(`document.querySelector('.ao-mobile-groups [data-card]')`);
+    await go('/v2/projets?mock=1&lecture=tout');await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]')`);
     assert.equal(await evaluate(`document.querySelectorAll('.ao-projects-mobile__fab,.ao-mobile-card__more').length`),0,'read-only hides writes');
     assert.deepEqual(consoleErrors.slice(errorsFrom),[]);
     const build=await evaluate(`document.querySelector('meta[name=ao-build]').content`);

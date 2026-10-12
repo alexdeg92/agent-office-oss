@@ -18,6 +18,7 @@ import { createFlows } from './flows.js';
 import { createAccess } from './access.js';
 import { createChat } from './chat.js';
 import { createSetup } from './setup.js';
+import { createExternalAccessMock } from './external-access.js';
 import { createOfficeMock } from '../office/mock-office.js';
 
 let scenario = '1';
@@ -29,6 +30,8 @@ function setLoggedIn(v) { loggedIn = v; try { if (v) sessionStorage.removeItem(S
 const TICK_MS = 3000;
 
 export function configure(opts) {
+  settingsDb=null;
+  externalAccessDb={};
   scenario = opts.scenario || '1';
   standalone = !!opts.standalone;
   // ?agent=<name>: another instance's agent name (platform direction: the UI must never assume « Timmy »).
@@ -132,7 +135,18 @@ async function officeCall(fn) {
 const candidateList = () => candidates || (candidates = seedCandidates());
 
 function healthVM() {
-  if (!vms.has('health')) { vms.set('health', buildHealth(scenario, Date.now(), tick)); revs.set('health', 1); }
+  if (!vms.has('health')) {
+    const now = Date.now();
+    let health = buildHealth(scenario, now, tick);
+    // Explicit synthetic failure state for the terminal transcript-repair browser evidence.
+    // It contains no filesystem path or transcript/session identifier.
+    if (scenario === 'transcript-terminal') health = { ...health,
+      healthChecks: [{ id: 'claude-code|transcript-scan', adapter: 'claude-code', severity: 'error', causeCode: 'format',
+        textKey: 'healthCheck.transcript.format', impactKey: 'healthImpact.transcripts', remedy: 'none', active: true,
+        actionId: null, guidedPath: null, target: 'transcript', changedAt: now, resolvedAt: null }],
+      healthAudit: [{ checkId: 'claude-code|transcript-scan', actionId: 'rescan', at: now, outcome: 'failed', attempts: 3 }] };
+    vms.set('health', health); revs.set('health', 1);
+  }
   return vms.get('health');
 }
 const BOARD_FILTERS = ['all', 'at-risk', 'with-timmy'];
@@ -174,8 +188,8 @@ function build2(topic) {
   if (sk) return skillsDb().detail(decodeURIComponent(sk[1])) || undefined;
   if (topic === 'logs' || topic.startsWith('logs?')) {
     const q = new URLSearchParams(topic.slice(5));
-    for (const k of q.keys()) if (k !== 'kind' && k !== 'heartbeat') return undefined;
-    return logsDb().page(q.get('kind'), null, undefined, { heartbeats: q.get('heartbeat') === 'include' });
+    for (const k of q.keys()) if (!['kind', 'heartbeat', 'connector', 'agent'].includes(k)) return undefined;
+    return logsDb().page(q.get('kind'), null, undefined, { heartbeats: q.get('heartbeat') === 'include', connector: q.get('connector'), agent: q.get('agent') });
   }
   if (topic === 'chat') return chatDb().vm();
   const se = /^session:(.+)$/.exec(topic);
@@ -199,8 +213,33 @@ async function viewDelay() {
 }
 
 const LOG_KINDS_2X = ['main', 'cron', 'chat-direct', 'chat-group', 'dashboard', 'acp', 'explicit'];
+let settingsDb;
+let externalAccessDb={};
+function externalAccessMock(path) {
+  const key=String(path).startsWith('/api/v3/setup/access')?'setup':'settings';
+  return externalAccessDb[key] ||= createExternalAccessMock({setupCode:'AO-7Q2K-91MX',readonly:key==='settings'&&(scenario==='settings-readonly'||scenario==='lecture'),unavailable:scenario==='external-access-unavailable'});
+}
+async function settingsMock() {
+  if (!settingsDb) settingsDb = (async () => {
+    const {createSettingsMock}=await import('./settings.js' + buildQuery);
+    const variant=['settings-fixall','settings-fixall-partial','settings-fixall-delayed'].includes(scenario) ? 'settings-fixall-vm' : ['settings-readonly','settings-env','settings-restart-manual'].includes(scenario) ? scenario + '-vm' : 'settings-vm';
+    const names=[variant,'check-result','integration-plan-result','reauth-request',...(scenario === 'settings-fixall-partial' ? ['fix-all-partial-result'] : [])];
+    const examples=Object.fromEntries(await Promise.all(names.map(async name => [name,await fetch(assetUrl('mock/examples/settings/' + name + '.json')).then(r => r.json())])));
+    return createSettingsMock({vm:examples[variant].data,examples,onChange: event => {
+      // A real SSE frame is its own task, never dispatched inside the HTTP response that caused it.
+      setTimeout(() => { for (const source of sources) source._emit('settings',{type:'settings',...event}); }, 0);
+    }});
+  })().catch(error => { settingsDb=null; throw error; });
+  return settingsDb;
+}
 /** handle(method, path, body) → { status, body }. /api/v3 paths: the 2.5 mock, then the 3.0 projection (mock/v3.js). */
 export async function handle(method, path, body) {
+  if (/^\/api\/v3\/(?:setup|settings)\/access(?:\/|$|\?)/.test(path)) return externalAccessMock(path)(method,path,body);
+  if (/^\/api\/v3\/settings(?:\/|$|\?)/.test(path)) {
+    await sleep(scenario === 'settings-fixall-delayed' && method === 'POST' && path.endsWith('/fix-all') ? 8000 : scenario === 'lent' ? 900 : 50);
+    if (scenario === 'erreur') return fail(503,'upstream_unavailable','Le serveur ne répond pas.');
+    return (await settingsMock()).handle(method,new URL(path,'http://mock').pathname,body);
+  }
   if (!/^\/api\/v3(\/|$)/.test(path)) return handle2(method, path, body);
   const u = new URL(path, 'http://mock');
   const q = u.searchParams;
@@ -274,8 +313,9 @@ async function handle2(method, path, body) {
     const cursor = url.searchParams.get('cursor');
     const err = await viewDelay();
     if (err) return err;
-    if (cursor) { const page = logsDb().page(kind, cursor, undefined, { heartbeats: heartbeat === 'include' }); return page ? ok(page) : fail(400, 'validation_failed', 'Certaines valeurs sont invalides.', [{ field: 'cursor', issue: 'invalid' }]); }
-    const q = new URLSearchParams([...(heartbeat === 'include' ? [['heartbeat', 'include']] : []), ...(kind ? [['kind', kind]] : [])]).toString();
+    const connector = url.searchParams.get('connector'), agent = url.searchParams.get('agent');
+    if (cursor) { const page = logsDb().page(kind, cursor, undefined, { heartbeats: heartbeat === 'include', connector, agent }); return page ? ok(page) : fail(400, 'validation_failed', 'Certaines valeurs sont invalides.', [{ field: 'cursor', issue: 'invalid' }]); }
+    const q = new URLSearchParams([...(agent ? [['agent', agent]] : []), ...(connector ? [['connector', connector]] : []), ...(heartbeat === 'include' ? [['heartbeat', 'include']] : []), ...(kind ? [['kind', kind]] : [])]).toString();
     return read(q ? 'logs?' + q : 'logs');
   }
   if (p === '/api/v2/views/office' || p.startsWith('/api/v2/office/')) {

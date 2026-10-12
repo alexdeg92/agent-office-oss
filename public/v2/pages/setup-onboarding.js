@@ -1,6 +1,7 @@
 // Additional chapters use the existing Bureau cards and the setup page's in-memory state.
 import { html, useState } from '../lib.js';
 import { msg } from '../i18n.js';
+import { networkOptions } from './network-options.js';
 export function DetectionStep({ s, busy, detect }) {
   const found = (s.detections || []).filter(d => d.found);
   return html`<h2 class="bu-title ao-setup__h" id="setup-etape">${msg('onboarding.detect.head')}</h2>
@@ -51,7 +52,7 @@ export function NetworkStep({ s, set, busy, inspect, probe }) {
     <p class="bu-text-secondary">${msg('onboarding.network.text')}</p>
     <div class="bu-field"><label for="setup-network-mode">${msg('onboarding.network.mode')}</label>
       <select class="bu-select" id="setup-network-mode" value=${n.mode} onChange=${e => change({ mode: e.currentTarget.value, publicUrl: '' })}>
-        ${['local', 'lan', 'tailnet', 'public', 'tunnel'].map(mode => html`<option key=${mode} value=${mode}>${msg('onboarding.network.' + mode)}${mode === 'tailnet' && detected?.tailnet ? ' · ' + msg('onboarding.detect.found') : ''}</option>`)}</select></div>
+        ${networkOptions().map(o => html`<option key=${o.value} value=${o.value}>${o.label}${o.value === 'tailnet' && detected?.tailnet ? ' · ' + msg('onboarding.detect.found') : ''}</option>`)}</select></div>
     ${detected?.tailnet ? html`<p class="bu-text-secondary" data-network-suggestion>${msg('onboarding.network.tailSuggestion')}</p>` : null}
     <div class="bu-field"><label for="setup-network-port">${msg('onboarding.network.port')}</label><input class="bu-input" id="setup-network-port" type="number" min="1" max="65535" value=${n.port} onInput=${e => change({ port: Number(e.currentTarget.value) })} /></div>
     ${n.mode !== 'local' ? html`<div class="bu-field"><label for="setup-public-url">${msg('onboarding.network.origin')}</label><input class="bu-input" id="setup-public-url" type="url" placeholder=${n.mode === 'lan' ? 'http://192.168.1.10:18789' : 'https://bureau.example.com'} value=${n.publicUrl || ''} onInput=${e => change({ publicUrl: e.currentTarget.value })} /></div>` : null}

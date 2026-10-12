@@ -8,18 +8,25 @@ const PARAM_KEY = { 'sessions.get': 'key', 'sessions.describe': 'key', 'cron.run
 
 function tapGateway(gw, engine) {
   const call = gw.call.bind(gw);
+  let sourceOrder = 0;
+  const nextSourceOrder = () => ++sourceOrder;
   gw.call = async (method, params, local = undefined) => {   // `local` is ours (never sent): { background }
     if (!INGESTED_RPCS.has(method)) return call(method, params);
     const key = PARAM_KEY[method] && params ? params[PARAM_KEY[method]] : undefined;
     // sessions.list is paginated: the request offset tells the registry where a page belongs (R2-02)
     const offset = method === 'sessions.list' && params && Number.isInteger(params.offset) ? params.offset : 0;
-    const env = { source: 'gateway', channel: 'gw.rpc.' + method, receivedAt: Date.now(), context: { key, offset } };
+    const requestOrder = nextSourceOrder();
+    const acquisitionGeneration = method === 'sessions.list'
+      ? (Number.isSafeInteger(local?.acquisitionGeneration) ? local.acquisitionGeneration : requestOrder) : undefined;
+    const context = { key, offset, sourceOrder: requestOrder };
+    if (acquisitionGeneration !== undefined) context.acquisitionGeneration = acquisitionGeneration;
+    const env = { source: 'gateway', channel: 'gw.rpc.' + method, receivedAt: Date.now(), context };
     try {
       const payload = await call(method, params);
-      safeIngest(engine, Object.assign(env, { body: { kind: 'json', value: payload } }));
+      if (!local?.shouldIngest || local.shouldIngest()) safeIngest(engine, Object.assign(env, { body: { kind: 'json', value: payload } }));
       return payload;
     } catch (e) {
-      if (!(local && local.background)) safeIngest(engine, Object.assign(env, { body: { kind: 'error', message: e.message } }));
+      if (!(local && local.background) && (!local?.shouldIngest || local.shouldIngest())) safeIngest(engine, Object.assign(env, { body: { kind: 'error', message: e.message } }));
       throw e;
     }
   };
@@ -33,8 +40,9 @@ function tapGateway(gw, engine) {
     engine.setOpenclawVersion(hello.server && hello.server.version);
   });
   gw.on('gwevent', (event, payload) => {
-    safeIngest(engine, { source: 'gateway', channel: 'gw.event.' + event, receivedAt: Date.now(), body: { kind: 'json', value: payload } });
+    safeIngest(engine, { source: 'gateway', channel: 'gw.event.' + event, receivedAt: Date.now(), context: { sourceOrder: nextSourceOrder() }, body: { kind: 'json', value: payload } });
   });
+  return { nextSourceOrder };
 }
 
 function tapCli(cli, engine) {

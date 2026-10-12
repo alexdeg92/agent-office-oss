@@ -2,7 +2,7 @@
   "data": {
     "modelVersion": 1,
     "apiVersion": 3,
-    "contractVersion": "3.2",
+    "contractVersion": "3.5",
     "serverVersion": "1.0.0+dev",
     "env": "dev",
     "capabilities": {
@@ -116,7 +116,45 @@
         "error",
         "offline"
       ]
-    }
+    },
+    "bootId": "fixture-process-before-restart",
+    "runtimes": [
+      {
+        "id": "legacy",
+        "adapter": "openclaw",
+        "name": "OpenClaw",
+        "enabled": true,
+        "connection": "connected",
+        "capabilities": {
+          "sessions": true,
+          "transcripts": true,
+          "senderCapture": true,
+          "activity": "run-state",
+          "flows": {
+            "read": true,
+            "write": true,
+            "schedules": [
+              "cron",
+              "every",
+              "at"
+            ],
+            "multiAgent": true
+          },
+          "skills": {
+            "read": true,
+            "toggle": true,
+            "detail": true
+          },
+          "channels": true,
+          "interlocutors": true,
+          "chat": true,
+          "restart": true,
+          "costs": true,
+          "subagents": true,
+          "sessionGroups": true
+        }
+      }
+    ]
   },
   "meta": {
     "modelVersion": 1,

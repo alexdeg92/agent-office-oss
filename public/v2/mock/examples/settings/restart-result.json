@@ -1,0 +1,16 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "accepted": true,
+      "bootId": "fixture-process-before-restart"
+    },
+    "revision": 1,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791586800000,
+    "stale": []
+  }
+}

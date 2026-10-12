@@ -31,7 +31,7 @@ function startSources({ runtime, engine, enrichment = null }) {
   let scanning = false;
   async function scanHints() {
     if (scanning || !runtime.definition || typeof runtime.definition.projectHints !== 'function') return;
-    const caps = (engine.runtime && engine.runtime().capabilities) || {};
+    const caps = engine.runtime?.()?.capabilities || {};
     if (!caps.transcripts) return;
     const since = Date.now() - HINT_SCAN_DAYS * 86400e3;
     const due = engine.sessions().filter((s) => s.updatedAt && !s.class.heartbeatOf && (scanned.has(s.key) ? s.updatedAt > scanned.get(s.key) : s.updatedAt >= since))

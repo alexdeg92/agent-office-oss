@@ -23,7 +23,7 @@ describe('API v2 · envelope, errors, meta, me', () => {
     assert.equal(r.status, 200); assert.match(r.headers.get('x-request-id'), /^req_[0-9a-f]{12}$/); assert.equal(r.headers.get('cache-control'), 'no-store');
     const b = await r.json();
     assert.deepEqual(Object.keys(b).sort(), ['data', 'meta']);
-    assert.equal(b.data.contractVersion, '2.7'); assert.equal(b.data.env, 'dev');
+    assert.equal(b.data.contractVersion, '2.8'); assert.equal(b.data.env, 'dev');
     assert.deepEqual(b.data.capabilities, { openclawWrites: true, storeWrites: true });
     for (const k of ['sourceError.timeout', 'error.unauthorized', 'historyKind.status', 'sessionKind.cron', 'runEnd.timeout', 'healthSub.cores']) assert.ok(b.data.labels[k], k);
     assert.ok(b.data.enums.sessionKind.includes('cron'));
@@ -46,6 +46,15 @@ describe('API v2 · envelope, errors, meta, me', () => {
     assert.equal(r.status, 200); assert.equal(r.json.data.gateway, 'up');
     assert.equal(r.json.data.displayName, 'test', 'default: the e-mail local part (S6.1)');
     assert.ok(Number.isInteger(r.json.data.sessionExpiresAt));
+  });
+
+  it('design-system access is owner-authenticated and returns no instance data', async () => {
+    const guest = await fetch(h.base + '/api/v2/design-system/access');
+    assert.equal(guest.status, 401);
+    const owner = await h.get('/api/v2/design-system/access');
+    assert.equal(owner.status, 200);
+    assert.deepEqual(owner.json.data, { allowed: true });
+    assert.deepEqual(Object.keys(owner.json).sort(), ['data','meta']);
   });
 
   it('health view matches the authoritative example and backs the `health` topic', async () => {
@@ -78,6 +87,40 @@ describe('API v2 · mute (api.md §5.3)', () => {
   });
 });
 
+describe('API v2 · adapter health remediation', () => {
+  let h, failing = true;
+  before(async () => {
+    h = await startServer(sc, { handlers: { 'sessions.list': () => {
+      if (failing) { const error = new Error('gateway request timed out'); error.code = 'ETIMEDOUT'; throw error; }
+      return { sessions: [], hasMore: false };
+    } } });
+  });
+  after(async () => { if (h) await h.stop(); });
+
+  it('exposes canonical categorized failures and runs the adapter safe-retry through the authenticated fix-all route', async () => {
+    await waitFor(async () => (await h.get('/api/v2/views/health')).json.data.healthChecks.some(c => c.active && c.causeCode === 'timeout'), { what: 'active timeout HealthCheck' });
+    const stale = await h.get('/api/v2/views/health');
+    const check = stale.json.data.healthChecks.find(c => c.active && c.causeCode === 'timeout');
+    assert.equal(check.remedy, 'auto');
+    assert.equal(check.adapter, 'openclaw');
+
+    const cookie = h.cookie;
+    h.cookie = '';
+    assert.equal((await h.post('/api/v2/health/fix-all')).status, 401);
+    h.cookie = cookie;
+    const forged = await fetch(h.base + '/api/v2/health/fix-all', { method: 'POST', headers: { origin: 'https://foreign.example.test', 'content-type': 'application/json', cookie, 'x-ao-request': '1' }, body: '{}' });
+    assert.equal(forged.status, 403);
+
+    failing = false;
+    const fixed = await h.post('/api/v2/health/fix-all');
+    assert.equal(fixed.status, 200, fixed.text);
+    assert.ok(fixed.json.data.result.results.some(row => row.id === check.id && row.ok));
+    const current = await h.get('/api/v2/views/health');
+    assert.ok(current.json.data.healthChecks.some(row => row.id === check.id && !row.active && Number.isInteger(row.resolvedAt)));
+    assert.ok(current.json.data.healthAudit.some(row => row.checkId === check.id && row.outcome === 'completed'));
+  });
+});
+
 describe('API v2 · SSE (api.md §4.6)', () => {
   let h;
   before(async () => { h = await startServer(sc); });
@@ -88,7 +131,7 @@ describe('API v2 · SSE (api.md §4.6)', () => {
     const B = openSse(h.base, '/api/v2/stream?topics=health', { cookie: h.cookie });
     try {
       const helloA = await A.next((f) => f.event === 'hello');
-      assert.equal(helloA.data.resumed, false); assert.deepEqual(helloA.data.topics, ['health']); assert.equal(helloA.data.contractVersion, '2.7');
+      assert.equal(helloA.data.resumed, false); assert.deepEqual(helloA.data.topics, ['health']); assert.equal(helloA.data.contractVersion, '2.8');
       assert.match(helloA.id, /^str_[0-9A-Za-z]{22}:1$/);
       const sA = await A.next((f) => f.event === 'snapshot'), sB = await B.next((f) => f.event === 'snapshot');
       assert.equal(sA.id.split(':')[1], '2');

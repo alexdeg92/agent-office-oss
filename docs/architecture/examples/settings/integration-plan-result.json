@@ -1,0 +1,30 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "planId": "fixture-plan-opaque",
+      "agents": [
+        {
+          "id": "scribe",
+          "status": "absent",
+          "files": [
+            "/fixture/agents/scribe/skills/projet/SKILL.md",
+            "/fixture/agents/scribe/AGENTS.md"
+          ],
+          "uninstallFiles": [
+            "/fixture/agents/scribe/skills/projet/SKILL.md",
+            "/fixture/agents/scribe/AGENTS.md"
+          ]
+        }
+      ],
+      "backupDir": "/fixture/data/integrations/backups"
+    },
+    "revision": null,
+    "vm": null
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791586800000,
+    "stale": []
+  }
+}

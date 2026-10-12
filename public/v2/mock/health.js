@@ -78,6 +78,10 @@ export function finish({ cards, channels, sources, issues, cpuSeries, memSeries,
     cards,
     channels,
     sources,
+    // Keep the canonical health-check sample visible in the mock UI. The fixture
+    // owns its shape just like every other mock VM.
+    healthChecks: EXAMPLES.healthVm.data.healthChecks,
+    healthAudit: EXAMPLES.healthVm.data.healthAudit,
     dataQuality: { open, issues },
     series: { cpu: cpuSeries, mem: memSeries, at0: start, stepMs: 60000 },
   });
@@ -89,6 +93,8 @@ function emptyHealth(now) {
     cards: [],
     channels: [],
     sources: [],
+    healthChecks: [],
+    healthAudit: [],
     dataQuality: { open: { error: 0, warn: 0, info: 0 }, issues: [] },
     series: { cpu: [], mem: [], at0: now, stepMs: 60000 },
   };

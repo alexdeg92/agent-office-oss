@@ -4,37 +4,55 @@
       "id": "atlas",
       "name": "Atlas",
       "workspace": "/srv/acme/workspace-atlas",
+      "displayName": "Atlas",
+      "summary": null,
+      "spawnedBy": null,
       "model": {
         "primary": "anthropic/claude-sonnet-5",
         "provider": "anthropic"
       },
+      "modelSource": null,
+      "runtime": null,
       "fallbackModels": [],
       "isPrimary": true,
-      "mainSessionKey": null
+      "mainSessionKey": null,
+      "hostObservations": []
     },
     {
       "id": "scribe",
       "name": "Scribe",
       "workspace": "/srv/acme/workspace-scribe",
+      "displayName": "Scribe",
+      "summary": null,
+      "spawnedBy": null,
       "model": {
         "primary": "mistral/mistral-large-3",
         "provider": "mistral"
       },
+      "modelSource": null,
+      "runtime": null,
       "fallbackModels": [],
       "isPrimary": false,
-      "mainSessionKey": null
+      "mainSessionKey": null,
+      "hostObservations": []
     },
     {
       "id": "reviewer",
       "name": "Aaron",
       "workspace": "/srv/acme/workspace-reviewer",
+      "displayName": "Aaron",
+      "summary": null,
+      "spawnedBy": null,
       "model": {
         "primary": "acme-llm/acme-1",
         "provider": "acme-llm"
       },
+      "modelSource": null,
+      "runtime": null,
       "fallbackModels": [],
       "isPrimary": false,
-      "mainSessionKey": null
+      "mainSessionKey": null,
+      "hostObservations": []
     }
   ],
   "cronJobs": [

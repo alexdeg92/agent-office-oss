@@ -6,7 +6,7 @@
       "revision": 4,
       "updatedAt": 1791200000000,
       "updatedBy": {
-        "id": "per_alex00000000000",
+        "id": "per_owner0000000000",
         "kind": "human",
         "name": "Owner",
         "avatarUrl": null,
@@ -150,7 +150,8 @@
             ],
             "name": null,
             "role": null,
-            "station": "st-timmy"
+            "station": "st-timmy",
+            "appearance": "auto"
           },
           {
             "agentId": "*subagent",
@@ -161,7 +162,8 @@
             "variant": "teal",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*scheduled",
@@ -172,7 +174,8 @@
             "variant": "ochre",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*direct",
@@ -183,7 +186,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*group",
@@ -194,7 +198,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           }
         ],
         "presence": {
@@ -4497,7 +4502,8 @@
             ],
             "name": null,
             "role": null,
-            "station": "st-timmy"
+            "station": "st-timmy",
+            "appearance": "auto"
           },
           {
             "agentId": "*subagent",
@@ -4508,7 +4514,8 @@
             "variant": "teal",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*scheduled",
@@ -4519,7 +4526,8 @@
             "variant": "ochre",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*direct",
@@ -4530,7 +4538,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           },
           {
             "agentId": "*group",
@@ -4541,7 +4550,8 @@
             "variant": "sage",
             "name": null,
             "role": null,
-            "station": "auto"
+            "station": "auto",
+            "appearance": "auto"
           }
         ]
       }
@@ -4552,7 +4562,7 @@
         "revision": 4,
         "updatedAt": 1791200000000,
         "updatedBy": {
-          "id": "per_alex00000000000",
+          "id": "per_owner0000000000",
           "kind": "human",
           "name": "Owner",
           "avatarUrl": null,

@@ -21,16 +21,17 @@ after(async () => { await browser?.close(); await new Promise((r) => (server ? s
 
 async function open(route) {
   const p = await browser.page('/');
+  const ready = route.startsWith('competences/') ? '.ao-skill:not([aria-busy=true]) [data-write-actions]' : route.startsWith('flux/') ? '.ao-flow:not([aria-busy=true]) [data-write-actions]' : '.ao-flows:not([aria-busy=true]) [data-write-actions]';
   await p.eval(`location.href = ${JSON.stringify(origin + '/v2/' + route)};`);
-  await p.waitFor(`location.origin === ${JSON.stringify(origin)} && document.readyState === 'complete' && !!document.querySelector('main h1, main h2')`);
+  await p.waitFor(`location.origin === ${JSON.stringify(origin)} && document.readyState === 'complete' && !!document.querySelector('main .ao-frame__body') && !!document.querySelector(${JSON.stringify(ready)})`);
   // the UI language is stored per origin: set French on the app's own origin, then reload
-  await p.eval(`localStorage.setItem('ao.locale', 'fr'); location.reload();`);
-  await p.waitFor(`document.documentElement?.lang?.startsWith('fr') && document.querySelector('main h1, main h2')`);
+  await p.eval(`localStorage.setItem('ao.locale', 'fr'); window.__registerReload = true; location.reload();`);
+  await p.waitFor(`!window.__registerReload && document.documentElement?.lang?.startsWith('fr') && document.querySelector('main .ao-frame__body') && document.querySelector(${JSON.stringify(ready)})`);
   return p;
 }
 // Write actions: a page marks its actions container with [data-write-actions] (the editorial pages used .ao-lead__actions).
 const read = `return { actions: [...document.querySelectorAll('[data-write-actions] button, [data-write-actions] .bu-switch, .ao-lead__actions button, .ao-lead__actions .bu-switch')].map((b) => b.innerText.trim()), note: document.querySelector('.ao-ro')?.innerText ?? null };`;
-const limit = (caps) => `const { services } = await import('/v2/services.js');
+const limit = (caps) => `const { buildQuery } = await import('/v2/config.js'); const { services } = await import('/v2/services.js' + buildQuery);
   services.meta = { ...services.meta, runtime: { ...(services.meta?.runtime ?? {}), capabilities: ${JSON.stringify(caps)} } };
   services.router.setQuery({ x: '1' }); await new Promise((r) => setTimeout(r, 400));`;
 

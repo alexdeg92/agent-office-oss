@@ -1,0 +1,6 @@
+{
+  "expectedRevision": 1,
+  "mode": "tailnet",
+  "port": 18789,
+  "publicUrl": "https://office.example.test"
+}

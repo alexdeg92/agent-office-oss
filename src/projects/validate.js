@@ -93,7 +93,7 @@ const sessionGroupRef = s.discriminated('by', {
   }, { extra: 'reject' }),
   keys: s.object({
     by: s.literal('keys'),
-    sessionKeys: s.array(s.string().min(1).max(200)).min(1).max(100),
+    sessionKeys: s.array(s.string().min(1).max(5510)).min(1).max(100),
   }, { extra: 'reject' }),
 });
 
@@ -134,8 +134,8 @@ const personSchema = s.object({
   name: s.string().min(1).max(80),
   avatarUrl: httpsUrl.nullable(),
   links: s.object({
-    agentId: s.string().min(1).max(80).optional(),
-    subagentId: s.string().min(1).max(80).optional(),
+    agentId: s.string().min(1).max(5510).optional(),
+    subagentId: s.string().min(1).max(5510).optional(),
     discordUserId: s.snowflake().optional(),
     gitEmailHash: s.string().refine((v) => /^[a-f0-9]{64}$/.test(v), 'sha256').optional(),
     isOwner: s.boolean().optional(),
@@ -219,7 +219,7 @@ function historySchemaFor(kind) {
     projectId,
     at: s.ms(),
     actor: actorSchema,
-    dedupeKey: s.string().min(1).max(200).nullable(),
+    dedupeKey: s.string().min(1).max(6000).nullable(),
     kind: s.literal(kind),
   };
   const extra = {
@@ -230,7 +230,7 @@ function historySchemaFor(kind) {
     'flow-run': runPayload(),
     'cron-run': runPayload(),
     session: {
-      sessionKey: s.string().min(1).max(200),
+      sessionKey: s.string().min(1).max(5510),
       messages: s.int().min(0).nullable(),
       tokens: s.int().min(0),
     },
@@ -268,8 +268,8 @@ function historySchemaFor(kind) {
 
 function runPayload() {
   return {
-    jobId: s.string().min(1).max(120),
-    runId: s.string().min(1).max(200),
+    jobId: s.string().min(1).max(5510),
+    runId: s.string().min(1).max(5510),
     status: s.enumOf(['succeeded', 'failed', 'skipped', 'running', 'unrecognized']),
     durationMs: s.int().min(0).nullable(),
   };

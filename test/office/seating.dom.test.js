@@ -28,6 +28,37 @@ describe('office-dev-25: hip-on-seat chair composition', { skip, timeout: 120_00
     await p.close();
   });
 
+  it('multiple lounge occupants use distinct authored sofa contacts and stable back-to-front layers', async () => {
+    const p = await browser.page('/test/office/harness.html');
+    await p.waitFor('window.H?.ready');
+    const result = await p.eval(`
+      const sc = new H.OfficeScene(stage, { manifest: H.manifest, layout: H.layout, assetBase: H.assetBase, theme: 'day' });
+      sc.setReducedMotion(true);
+      const ago = Date.now() - 3600000;
+      sc.setOccupants(H.occupants([
+        { id: 'main', role: 'main', sourceName: 'Atlas', state: 'idle', stateSince: ago },
+        { id: 'bot-a', role: 'subagent', sourceName: 'Bot A', state: 'idle', stateSince: ago },
+        { id: 'bot-b', role: 'subagent', sourceName: 'Bot B', state: 'idle', stateSince: ago },
+      ]));
+      await H.frames(2);
+      const seated = [...sc.chars.values()].filter(c => c.seatMode === 'sofa').sort((a,b) => a.target.seatIndex - b.target.seatIndex);
+      const expected = seated.map(c => {
+        const p = sc.itemNodes.get(c.target.uid).seatWorlds[c.target.seatIndex];
+        const a = p.sx / (sc.proj.tileWidth / 2), b = p.sy / (sc.proj.tileHeight / 2);
+        return [(a + b) / 2, (b - a) / 2];
+      });
+      const out = { count: seated.length, slots: seated.map(c => c.target.seatIndex), points: seated.map(c => [c.target.x, c.target.y]), expected, z: seated.map(c => Number(c.el.style.zIndex)) };
+      sc.destroy(); return out;
+    `);
+    assert.equal(result.count, 2);
+    assert.deepEqual(result.slots, [0, 1]);
+    assert.equal(new Set(result.points.map(p => p.join(','))).size, 2);
+    result.points.forEach((p, i) => p.forEach((v, axis) => assert.ok(Math.abs(v - result.expected[i][axis]) < .001,
+      `seat ${i} target must match its absolute projected contact`)));
+    assert.ok(result.z[0] < result.z[1], 'the second registered cushion contact draws in front');
+    await p.close();
+  });
+
   it('every shipped look and seated state keeps its hip on the cushion, with the correct foreground backrest and armrest, at 1440 and 360', async () => {
     const p = await browser.page('/test/office/harness.html');
     await p.waitFor('window.H?.ready');

@@ -1,0 +1,401 @@
+{
+  "data": {
+    "ok": true,
+    "result": {
+      "changed": [
+        "runtimes"
+      ],
+      "restartRequired": false
+    },
+    "revision": 2,
+    "vm": {
+      "revision": 2,
+      "readonly": false,
+      "disabledReason": null,
+      "reauth": {
+        "expiresAt": null,
+        "windowMs": 300000
+      },
+      "instance": {
+        "name": {
+          "value": "Atelier",
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "locale": {
+          "value": "fr",
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "timeZone": {
+          "value": "Europe/Paris",
+          "source": "file",
+          "editable": true,
+          "reason": null
+        }
+      },
+      "owner": {
+        "displayName": {
+          "value": "Camille",
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "email": {
+          "value": "owner@example.test",
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "passwordChangeEnabled": true,
+        "reason": null
+      },
+      "network": {
+        "mode": {
+          "value": "local",
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "host": {
+          "value": "127.0.0.1",
+          "source": "file",
+          "editable": false,
+          "reason": {
+            "key": "settings.derivedField"
+          }
+        },
+        "port": {
+          "value": 18789,
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "publicUrl": {
+          "value": null,
+          "source": "file",
+          "editable": true,
+          "reason": null
+        },
+        "cookieSecure": {
+          "value": false,
+          "source": "file",
+          "editable": false,
+          "reason": {
+            "key": "settings.derivedField"
+          }
+        },
+        "active": {
+          "mode": "local",
+          "host": "127.0.0.1",
+          "port": 18789,
+          "publicUrl": null,
+          "cookieSecure": false
+        },
+        "restartRequired": false
+      },
+      "runtimes": [
+        {
+          "id": "legacy",
+          "name": "OpenClaw",
+          "found": true,
+          "supported": true,
+          "selected": true,
+          "confidence": "config",
+          "reason": {
+            "key": "settings.detection.config"
+          },
+          "checkedPaths": [
+            "/fixture/home/.openclaw/openclaw.json"
+          ],
+          "fields": [
+            {
+              "id": "gatewayUrl",
+              "label": {
+                "key": "settings.field.gatewayUrl"
+              },
+              "type": "url",
+              "required": true,
+              "writeOnly": false,
+              "options": []
+            },
+            {
+              "id": "token",
+              "label": {
+                "key": "settings.field.token"
+              },
+              "type": "secret",
+              "required": true,
+              "writeOnly": true,
+              "options": []
+            }
+          ],
+          "values": {
+            "gatewayUrl": {
+              "value": "ws://127.0.0.1:18793",
+              "source": "file",
+              "editable": true,
+              "reason": null
+            },
+            "token": {
+              "value": null,
+              "source": "file",
+              "editable": true,
+              "reason": null,
+              "tokenSet": true
+            }
+          },
+          "connection": {
+            "status": "connected",
+            "protocol": 4,
+            "latencyMs": 12,
+            "checkedAt": 1791586800000
+          },
+          "adapter": "openclaw",
+          "enabled": true,
+          "candidate": false
+        },
+        {
+          "id": "codex",
+          "name": "Codex",
+          "found": true,
+          "supported": false,
+          "selected": false,
+          "confidence": "presence",
+          "reason": {
+            "key": "settings.detection.unsupported"
+          },
+          "checkedPaths": [
+            "/fixture/home/.codex"
+          ],
+          "fields": [],
+          "values": {},
+          "connection": {
+            "status": "unsupported",
+            "protocol": null,
+            "latencyMs": null,
+            "checkedAt": null
+          },
+          "adapter": "codex",
+          "enabled": false,
+          "candidate": true
+        },
+        {
+          "id": "claude",
+          "adapter": "claude-code",
+          "enabled": true,
+          "candidate": false,
+          "name": "Claude Code",
+          "found": true,
+          "supported": true,
+          "selected": true,
+          "confidence": "config",
+          "reason": {
+            "key": "settings.detection.config"
+          },
+          "checkedPaths": [],
+          "fields": [
+            {
+              "id": "home",
+              "label": {
+                "key": "settings.claude.home"
+              },
+              "type": "text",
+              "required": true,
+              "writeOnly": false,
+              "options": []
+            },
+            {
+              "id": "include",
+              "label": {
+                "key": "settings.claude.include"
+              },
+              "type": "textarea",
+              "required": false,
+              "writeOnly": false,
+              "options": []
+            },
+            {
+              "id": "exclude",
+              "label": {
+                "key": "settings.claude.exclude"
+              },
+              "type": "textarea",
+              "required": false,
+              "writeOnly": false,
+              "options": []
+            },
+            {
+              "id": "agentGrouping",
+              "label": {
+                "key": "settings.claude.grouping"
+              },
+              "type": "select",
+              "required": true,
+              "writeOnly": false,
+              "options": [
+                {
+                  "value": "project",
+                  "label": {
+                    "key": "settings.claude.project"
+                  }
+                },
+                {
+                  "value": "runtime",
+                  "label": {
+                    "key": "settings.claude.runtime"
+                  }
+                }
+              ]
+            }
+          ],
+          "values": {
+            "home": {
+              "value": "/tmp/synthetic-claude",
+              "source": "file",
+              "editable": true,
+              "reason": null
+            },
+            "include": {
+              "value": "synthetic-project",
+              "source": "file",
+              "editable": true,
+              "reason": null
+            },
+            "exclude": {
+              "value": "",
+              "source": "file",
+              "editable": true,
+              "reason": null
+            },
+            "agentGrouping": {
+              "value": "project",
+              "source": "file",
+              "editable": true,
+              "reason": null
+            }
+          },
+          "connection": {
+            "status": "connected",
+            "protocol": null,
+            "latencyMs": null,
+            "checkedAt": null
+          }
+        }
+      ],
+      "agents": [
+        {
+          "id": "rt:legacy:agent:YXRsYXM",
+          "agentId": "atlas",
+          "runtime": "legacy",
+          "name": "Atlas",
+          "detectedName": "Atlas",
+          "nameSource": "IDENTITY.md",
+          "configured": true,
+          "hidden": false,
+          "isPrimary": true,
+          "model": null,
+          "lookRoute": "/boutique?onglet=personnages&agent=primary",
+          "integrations": [
+            {
+              "id": "projet",
+              "status": "installed"
+            }
+          ]
+        },
+        {
+          "id": "rt:legacy:agent:c2NyaWJl",
+          "agentId": "scribe",
+          "runtime": "legacy",
+          "name": null,
+          "detectedName": null,
+          "nameSource": null,
+          "configured": false,
+          "hidden": false,
+          "isPrimary": false,
+          "model": null,
+          "lookRoute": "/boutique?onglet=personnages&agent=agent%3Ascribe",
+          "integrations": [
+            {
+              "id": "projet",
+              "status": "missing"
+            }
+          ]
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "runtime:openclaw",
+          "level": "ok",
+          "label": {
+            "key": "settings.diagnostic.connected",
+            "params": {
+              "runtime": "OpenClaw"
+            }
+          },
+          "detail": {
+            "key": "settings.diagnostic.protocol",
+            "params": {
+              "protocol": 4,
+              "latencyMs": 12
+            }
+          },
+          "section": "connection",
+          "fix": null
+        },
+        {
+          "id": "runtime:codex",
+          "level": "info",
+          "label": {
+            "key": "settings.diagnostic.unsupported",
+            "params": {
+              "runtime": "Codex"
+            }
+          },
+          "detail": null,
+          "section": "runtimes",
+          "fix": null
+        },
+        {
+          "id": "permissions",
+          "level": "ok",
+          "label": {
+            "key": "settings.diagnostic.privateFiles"
+          },
+          "detail": null,
+          "section": "diagnostic",
+          "fix": null
+        },
+        {
+          "id": "build",
+          "level": "ok",
+          "label": {
+            "key": "settings.diagnostic.currentBuild"
+          },
+          "detail": null,
+          "section": "diagnostic",
+          "fix": null
+        }
+      ],
+      "restart": {
+        "supported": true,
+        "command": null,
+        "reason": null
+      },
+      "herdr": {
+        "found": false,
+        "enabled": false,
+        "active": false,
+        "status": "not-checked",
+        "checkedAt": null
+      }
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791586800000,
+    "stale": []
+  }
+}

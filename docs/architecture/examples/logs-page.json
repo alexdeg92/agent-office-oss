@@ -17,7 +17,15 @@
         "tokens": 1500,
         "updatedAt": 1791223180000,
         "live": true,
-        "heartbeat": false
+        "heartbeat": false,
+        "execution": {
+          "status": "running",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223180000,
+            "expiresAt": null
+          }
+        }
       },
       {
         "id": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
@@ -35,7 +43,15 @@
         "tokens": 8100,
         "updatedAt": 1791223170000,
         "live": true,
-        "heartbeat": false
+        "heartbeat": false,
+        "execution": {
+          "status": "running",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223170000,
+            "expiresAt": null
+          }
+        }
       },
       {
         "id": "agent:main:discord:direct:100000000000000001",
@@ -53,7 +69,15 @@
         "tokens": 3300,
         "updatedAt": 1791223140000,
         "live": true,
-        "heartbeat": false
+        "heartbeat": false,
+        "execution": {
+          "status": "running",
+          "evidence": {
+            "level": "verified",
+            "observedAt": 1791223140000,
+            "expiresAt": null
+          }
+        }
       }
     ],
     "nextCursor": "eyJvIjozfQ"

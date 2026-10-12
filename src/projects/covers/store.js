@@ -41,6 +41,13 @@ function createCoverStore({ dataDir, writable = true, urlFor = (p) => p }) {
       const url = urlFor('/api/v2/project-covers/' + r.file), thumbUrl = urlFor('/api/v2/project-covers/' + r.thumbFile);
       return url && thumbUrl ? { url, thumbUrl, source: r.source, generatedAt: r.generatedAt } : null;
     },
+    isUploadFile(name) {
+      if(!FILE.test(name))return false;
+      try {return fs.readdirSync(records).some(filename=>{
+        if(!filename.endsWith('.json'))return false;
+        const row=this.get(filename.slice(0,-5));return row?.source==='upload'&&(row.file===name||row.thumbFile===name);
+      });}catch {return false;}
+    },
     read(name) {
       if (!FILE.test(name)) return null;
       let fd;
@@ -56,11 +63,12 @@ function createCoverStore({ dataDir, writable = true, urlFor = (p) => p }) {
     },
   };
 }
-function serveCover(store) {
+function serveCover(store,{authorize=()=>{}}={}) {
   return (req, res, next) => {
+    try {authorize(req);}catch(e){return next(e);}
     const file = store.read(req.params.file);
     if (!file) return next(new (require('../../api/v2/errors').ApiError)('not_found'));
-    res.set({ 'Cache-Control': 'private, max-age=31536000, immutable', ETag: file.etag, 'Content-Type': file.type,
+    res.set({ 'Cache-Control': req.authorize?'private, no-store':'private, max-age=31536000, immutable', ETag: file.etag, 'Content-Type': file.type,
       'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", Vary: 'Cookie' });
     const matches = String(req.headers['if-none-match'] || '').split(',').map((s) => s.trim().replace(/^W\//, ''));
     if (matches.includes(file.etag) || matches.includes('*')) return res.status(304).end();

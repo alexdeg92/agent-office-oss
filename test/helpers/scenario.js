@@ -1,4 +1,5 @@
 'use strict';
+require('./scratch-home.cjs').refuseEntry(__filename);   // T-0073 P0: never runs against the real HOME (test/helpers/scratch-home.cjs)
 /*
  * Scenario = one coherent set of fixtures (one capture, or one hand-written synthetic set).
  * Manifest: <root>/scenarios/<name>.json; every path in it is relative to that root. Two roots:
@@ -28,7 +29,10 @@ const LOCAL_FIXTURES_DIR = path.join(FIXTURES_DIR, 'local');
 
 function readFixture(rel, root = FIXTURES_DIR) { return JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8')); }
 
-const namesIn = (root) => { const d = path.join(root, 'scenarios'); return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, '')) : []; };
+const namesIn = (root) => { const d = path.join(root, 'scenarios'); return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.json')).filter((f) => {
+  // UI-only screenshot provenance is not an engine or gateway scenario.
+  try { return JSON.parse(fs.readFileSync(path.join(d, f), 'utf8')).kind !== 'visual-only'; } catch (_) { return true; }
+}).map((f) => f.replace(/\.json$/, '')) : []; };
 const rootOf = (name) => (fs.existsSync(path.join(FIXTURES_DIR, 'scenarios', name + '.json')) ? FIXTURES_DIR
   : fs.existsSync(path.join(LOCAL_FIXTURES_DIR, 'scenarios', name + '.json')) ? LOCAL_FIXTURES_DIR : null);
 const isLocalScenario = (name) => rootOf(name) === LOCAL_FIXTURES_DIR;

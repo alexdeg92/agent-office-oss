@@ -1,0 +1,58 @@
+<!doctype html><html lang="fr" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
+<title>Bureau compact Diagnostics — synthetic fixture</title>
+<link rel="stylesheet" href="/bureau/bureau.css"><link rel="stylesheet" href="/components/frame.css">
+<script type="importmap">{"imports":{"preact":"/vendor/preact.mjs","preact/hooks":"/vendor/preact-hooks.mjs","htm":"/vendor/htm.mjs"}}</script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:var(--bu-bg);color:var(--bu-text-primary);font:var(--bu-type-body)}
+#fixture{height:100dvh;max-width:var(--bu-size-prose);margin:auto}
+h1{margin:0;font:var(--bu-type-title)}h2{margin:0;font:var(--bu-type-heading)}
+.compact-frame{--ao-frame-gutter:var(--bu-space-4)}
+.compact-summary{display:flex;align-items:center;justify-content:space-between;gap:var(--bu-space-3);padding:var(--bu-space-3) var(--bu-space-4);border-bottom:1px solid var(--bu-border-subtle)}
+.compact-summary p{margin:0;font:var(--bu-type-heading-sm)}
+.compact-summary-actions{display:flex;align-items:center;gap:var(--bu-space-2)}
+.compact-list{background:var(--bu-surface);min-width:0}ul{padding:0;margin:0}
+</style></head><body><div id="fixture"></div>
+<script type="module">
+import {html,render} from '/lib.js';
+import {Frame} from '/components/ui.js';
+import {ListRow,TextAction,CollapsedGroup,Menu,loadStyles} from '/components/bureau/index.js';
+import {SPRITE} from '/icons.js';
+import {setLang} from '/i18n.js';
+document.body.insertAdjacentHTML('afterbegin',SPRITE);
+await loadStyles();
+const state={busy:false,error:null,disabled:false,long:false,english:false,groupLabel:null,calls:[]};
+function draw(){
+ const en=state.english;
+ const action=en?(state.long?'Configure the connection for this desktop automation service':'Configure'):(state.long?'Configurer la connexion de ce service d’automatisation':'Configurer');
+ render(html`<${Frame} tag="main" class="compact-frame" bodyLabel=${en?'Diagnostics':'Diagnostic'}
+  head=${html`<h1>${en?'Settings':'Paramètres'}</h1>`}
+  bar=${html`<h2>${en?'Diagnostics':'Diagnostic'}</h2>`}>
+  <section class="compact-list" aria-label=${en?'Installation status':'État de l’installation'}>
+   <div class="compact-summary"><p>${en?'2 items need attention':'2 éléments à corriger'}</p>
+    <div class="compact-summary-actions"><${TextAction} label=${en?'Fix all':'Tout corriger'} targetName=${en?'installation':'installation'} onPress=${()=>state.calls.push('all')} />
+     <${Menu} label=${en?'Diagnostics actions':'Actions du diagnostic'} items=${[{id:'refresh',label:en?'Refresh':'Actualiser',onSelect:()=>state.calls.push('refresh')}]} />
+    </div>
+   </div>
+   <ul aria-label=${en?'Issues and information':'Points à vérifier et informations'}>
+    <${ListRow} title="Claude Code" meta=${en?'Connection not configured':'Connexion non configurée'} severity="error"
+     actions=${html`<${TextAction} id="configure" label=${action} targetName="Claude Code" busy=${state.busy} disabled=${state.disabled} error=${state.error} onPress=${()=>state.calls.push('configure')} />`} />
+    <${ListRow} title="OpenClaw" meta=${en?'Module missing':'Module manquant'} severity="warn"
+     actions=${html`<${TextAction} label=${en?'Install':'Installer'} targetName="OpenClaw" href="#install" />`} />
+    <${ListRow} title=${en?'External access':'Accès externe'} meta=${en?'Local network only':'Accès limité au réseau local'} severity="info" />
+    <${ListRow} title=${state.long?(en?'A gateway with a very long installation name that must remain readable':'Une passerelle au nom d’installation très long qui doit rester lisible'):(en?'Gateway':'Passerelle')}
+     meta=${en?'Not checked':'Vérification non effectuée'} severity="unknown" />
+   </ul>
+   <${CollapsedGroup} id="healthy-group" label=${state.groupLabel||(en?'3 healthy items':'3 éléments en ordre')}>
+    <ul aria-label=${en?'Healthy items':'Éléments en ordre'}>
+     <${ListRow} title=${en?'Backups':'Sauvegardes'} meta=${en?'Available':'Disponibles'} severity="ok" />
+     <${ListRow} title=${en?'Session':'Session'} meta=${en?'Connected':'Connectée'} severity="ok" />
+     <${ListRow} title=${en?'Agent cache':'Cache des agents'} meta=${en?'Ready':'Prêt'} severity="ok" />
+    </ul>
+   </${CollapsedGroup}>
+  </section>
+  <${CollapsedGroup} id="empty-group" label="Empty" children=${[]} />
+ </${Frame}>`,document.querySelector('#fixture'));
+}
+window.bureauCompact={state,draw,setLang};draw();
+</script></body></html>
