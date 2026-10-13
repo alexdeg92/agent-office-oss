@@ -6,6 +6,7 @@
  * which is how protocol drift shows up on Santé système.
  */
 const s = require('../../../schema');
+const { MAX_SESSION_PAGE_SIZE } = require('../../../engine/session-limits');
 
 const TESTED = ['2026.9.8'];
 const str = () => s.string().optional();
@@ -107,7 +108,7 @@ const schemas = {
   }, { known: ['ownership', 'selectionRequired', 'scope'] }),
 
   'gw.rpc.sessions.list': s.object({
-    sessions: s.array(SessionRow, { perItem: true }),
+    sessions: s.array(SessionRow, { perItem: true, maxItems: MAX_SESSION_PAGE_SIZE }),
     totalCount: int(), count: int(), hasMore: bool(), nextOffset: s.int().nullable().optional(), limitApplied: int(),
   }, { known: ['ts', 'path', 'owners', 'defaults'] }),
 

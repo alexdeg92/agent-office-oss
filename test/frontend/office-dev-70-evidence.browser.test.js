@@ -32,14 +32,24 @@ test('Office evidence labels and neutral/live states render in the actual shell 
         setLang(lang); document.documentElement.lang = lang;
       }, lang);
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+      // Since 0e731fb0 (T-0092) the roster renders the OfficeVM's projected state LabelRefs, not a label derived from
+      // `state` in the browser: an injected state carries the same projection.
       const ids = await page.evaluate(async lang => {
+        const project = (o, state) => {   // the OfficeVM's server projection of a state (src/api/v2/vm/office-roster.js)
+          o.state = state; o.stateActive = !['unknown', 'idle', 'offline'].includes(state);
+          o.stateLabel = { key: 'agentState.' + state }; o.stateDetailLabel = { key: 'agentState.' + state };
+          o.stateLastLabel = { key: 'office.lastState', params: { state: { key: 'agentState.' + state } } };
+        };
         const { services } = await import('/services.js');
         const stream = services.stream;
         const office = structuredClone(stream._topics.get('office').state.data);
         const layout = structuredClone(stream._topics.get('layout').state.data);
         stream.stop(); stream.status.set({ conn: 'open' });
+        // Connected and fresh: drop source staleness a REST load may have left on the topic when it answered after the
+        // stream snapshot (the mock always reports `cli.skills` stale, which would turn every row into « last state »).
+        stream._topics.get('office').meta = null;
         office.occupants.forEach((o, i) => {
-          if (i < 3) o.state = ['unknown', 'observed', 'working'][i];
+          if (i < 3) project(o, ['unknown', 'observed', 'working'][i]);
           // Two conservative states and one verified execution; expose no result or evidence timestamp in the UI.
           o.execution = i === 2
             ? { status: 'running', evidence: { level: 'verified', observedAt: 1791223100000, expiresAt: null } }
@@ -48,6 +58,8 @@ test('Office evidence labels and neutral/live states render in the actual shell 
           o.tokens = 0;
           o.stateSince = 0;
         });
+        // An unknown occupant makes the server's active count unknown (office-roster.js rosterSummary).
+        if (office.rosterSummary) office.rosterSummary.activeCount = null;
         const active = office.kpis.find(k => k.id === 'active');
         if (active) {
           active.value = null;
@@ -93,10 +105,15 @@ test('Office evidence labels and neutral/live states render in the actual shell 
         await drawer.waitFor({ state: 'hidden' });
       }
       await page.evaluate(async id => {
+        const project = (o, state) => {   // the OfficeVM's server projection of a state (src/api/v2/vm/office-roster.js)
+          o.state = state; o.stateActive = !['unknown', 'idle', 'offline'].includes(state);
+          o.stateLabel = { key: 'agentState.' + state }; o.stateDetailLabel = { key: 'agentState.' + state };
+          o.stateLastLabel = { key: 'office.lastState', params: { state: { key: 'agentState.' + state } } };
+        };
         const { services } = await import('/services.js');
         const office = structuredClone(services.stream._topics.get('office').state.data);
         const live = office.occupants.find(o => o.id === id);
-        live.state = 'working'; live.stateSince = Date.now();
+        project(live, 'working'); live.stateSince = Date.now();
         live.execution = { status: 'running', evidence: { level: 'observed', observedAt: Date.now(), expiresAt: Date.now() + 30000 } };
         services.stream.applyVM('office', office);
       }, ids[0]);

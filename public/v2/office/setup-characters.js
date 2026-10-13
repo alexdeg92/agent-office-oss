@@ -1,3 +1,4 @@
+import { loadModule, chunkError } from '../build-update.js';
 import { buildQuery } from '../config.js';
 // First-run setup, « characters » step (O5, office-dev; frontend embeds it in the setup flow, F8). For each agent
 // the runtime discovered: a character, a colour and accessories, with a live preview drawn from the real sprites
@@ -24,7 +25,7 @@ function useCss() {
   useEffect(() => {
     if (document.querySelector('link[data-setup-characters]') || [...document.querySelectorAll('link[rel=stylesheet]')].some((l) => l.href === CSS)) return;
     const l = document.createElement('link');
-    l.rel = 'stylesheet'; l.href = CSS; l.dataset.setupCharacters = '';
+    l.rel = 'stylesheet'; l.href = CSS; l.dataset.setupCharacters = ''; l.onerror = () => chunkError(Error('Character setup stylesheet unavailable'));
     document.head.append(l);
   }, []);
 }
@@ -60,12 +61,12 @@ export const Figure = ({ index, look, pose, assetBase, label, cls, thumbnail = f
     const c = index.characters.get(look.character);
     if (!thumbnail) (async () => {
       if (c?.packManifest && !c.packLoaded) {
-        const m = await import('./character-pack-loader.js' + buildQuery);
+        const m = await loadModule(() => import('./character-pack-loader.js' + buildQuery));
         await m.ensureCharacterPack(index, look.character, assetBase, { signal: controller.signal });
         if (live) refresh(n => n + 1);
       }
       if (look.accessories?.some(id => index.accessories.get(id)?.packManifest)) {
-        const m = await import('./accessory-pack-loader.js' + buildQuery);
+        const m = await loadModule(() => import('./accessory-pack-loader.js' + buildQuery));
         const body = poseImage(index.characters.get(look.character),look.variant,pose);
         await m.prepareAccessoryLayers(index,look,body.pose,assetBase,{signal:controller.signal});
         if (live) refresh(n => n + 1);

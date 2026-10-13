@@ -1,6 +1,7 @@
+import { loadModule } from '../build-update.js';
 // Loaded with the first egg. New rooms supply a bundle, contacts and theme/weather hooks.
 import { buildQuery } from '../config.js';
-const load = () => import('./break-room.js' + buildQuery);
+const load = () => loadModule(() => import('./break-room.js' + buildQuery));
 export const ROOMS = {
   gym: { scene:'gym',edge:'left',arrow:'left',load,assets:{image:'assets/Office/breaks/gym.webp'},
     canvas:{w:1536,h:1024},points:{entry:{x:325,y:770},mat:{x:820,y:720},bench:{x:1330,y:558},benchFloor:{x:1160,y:700}},

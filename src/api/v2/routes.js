@@ -122,8 +122,16 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
         sourceScopes.delete(candidate); sourceScopesByPrincipal.delete(expired?.fingerprint);
       }
       token = require('node:crypto').randomBytes(18).toString('base64url');
-      sourceScopes.set(token, { fingerprint, principal: JSON.parse(JSON.stringify(principal)) });
+      sourceScopes.set(token, { fingerprint, principal: JSON.parse(JSON.stringify(principal)),
+        officeLimited: false });
       sourceScopesByPrincipal.set(fingerprint, token);
+    }
+    // A principal can create the shared scope through /teams or /orchestrators
+    // before requesting Office. Bind this projection choice on every Office
+    // request, never to whichever endpoint happened to mint the token first.
+    if (kind === 'office') {
+      const scope = sourceScopes.get(token);
+      if (scope) scope.officeLimited = !sessionsReadable({ session: req?.session || null, principal });
     }
     return kind + ':' + token;
   };
@@ -176,12 +184,29 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
       { sourceEnabled: true, runtimeBrands: brands });
   } });
   const systemState = () => ({ gateway: engine.gateway().connected ? 'up' : 'down', capabilities: capabilitiesOf(cfg) });
-  // agent-identity-1: who may read session-derived office fields. Today every cookie session is the owner's; a
-  // machine principal or a missing session never is. RBAC (T-0031) replaces this with its logs:read check.
-  const sessionsReadable = readable || (({ session, principal }) => !principal && !!session);
+  // Session-derived Office details follow the current authenticated principal's
+  // Logs grant. Resolve the account on every projection so role/user changes take
+  // effect immediately; scoped Office topics have a principal but no cookie
+  // session argument of their own.
+  const sessionsReadable = readable || (({ session, principal }) => {
+    const userId = principal?.id || session?.userId;
+    const user = userId && store?.users?.byId?.(userId);
+    const identityState = store?.rbac?.state?.();
+    // The policy repository exists even before identity/RBAC is activated. In
+    // that legacy single-owner mode auth verifies the signed env cookie but it
+    // intentionally has no user id to resolve. Once an owner identity exists,
+    // every cookie must resolve to that active user and its current grant.
+    const identityActive = cfg?.rbacEnabled === true || !!identityState?.owner_user_id;
+    if (identityActive) return user?.status === 'active' && !!store?.policy?.can && store.policy.can(user, 'logs', 'read');
+    if (principal) return ['read', 'write'].includes(principal.permissions?.logs);
+    // Without an activated account authority, auth's verified cookie is the
+    // single-owner environment login. Machine principals never inherit it.
+    return !!session;
+  });
   const resolveTopic = (id, session) => {
     const ordinary = officeTopicFor({ session }, sessionsReadable, id);
-    if (ordinary !== id || id !== 'office' || !(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected)) return ordinary;
+    if (id !== 'office' || !['office', 'office?view=limited'].includes(ordinary)
+      || !(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected)) return ordinary;
     try { return 'office-scope:' + sourceTopic({ session }, 'office').slice('office:'.length); }
     catch (_) { return ordinary; }
   };
@@ -308,7 +333,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   });
 
   const views = mountViews({ configuredAgents: cfg.agentNames || {}, r, engine, topics, store, runtime, enrichment, orchestratorTeams,
-    officePrincipalFor: key => sourceScopes.get(key)?.principal || null,
+    officePrincipalFor: key => sourceScopes.get(key)?.principal || null, officeScopeFor: key => sourceScopes.get(key) || null,
   officeTopicFor: req => (orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected) ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : 'office',
     authed, ok, now, sessionsReadable, isSubscribed: (id,version) => version ? hubs[version].isSubscribed(id) : hubs[2].isSubscribed(id) || hubs[3].isSubscribed(id) });
   const commands = mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, views, now, log });

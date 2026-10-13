@@ -19,8 +19,9 @@ const schemaDsl = require('../schema');
 // G2: the session normaliser and the key classifier are the runtime adapter's (injected); this registry is core.
 const { Session: SessionEntity } = require('../model');
 const { sameRun, resolveRunIdentity } = require('./run-identity');
+const { MAX_SESSION_PAGE_SIZE, MAX_SESSION_PAGES, MAX_RUNTIME_SESSIONS } = require('./session-limits');
 
-const MAX_PAGES = 20;
+const MAX_PAGES = MAX_SESSION_PAGES;
 // Run evidence is one coherent observation (R5 Residual D): these fields always come together from the
 // NEWER source, never mixed field by field with an older one (an older hasActiveRun:true must not survive
 // a newer terminal status that simply omits the flag).
@@ -34,12 +35,44 @@ function createSessionsRegistry({ now, normalise, classify, validate = () => tru
   let order = [];                  // display order (last complete snapshot, then new keys appended)
   let sessions = new Map();        // key → canonical Session
   let meta = { totalCount: null, listedAt: null, complete: false };
-  let run = null;                  // { expected, generation, keys: [], seen: Set, valid, pages }
+  let run = null;                  // { expected, generation, keys: [], seen: Set, rows: Map, valid, pages }
   let seq = 0;                     // fallback source order and row arrival order
   const sessionSourceOrder = new Map(); // latest request-start order, scoped to one session key
   let changedHighWater = 0; // events after a snapshot began make all snapshot absences unsafe
   let latestSnapshotGeneration = 0; // only snapshot generations supersede other snapshots
   let unclassifiedReported = false;
+
+  function retainedKeyCount(rows = listRows, descriptions = descRows) {
+    const keys = new Set(rows.keys());
+    for (const key of descriptions.keys()) keys.add(key);
+    return keys.size;
+  }
+
+  function retainPartialRows(snapshot, rec) {
+    const priorRows = new Map(listRows), priorOrder = order, priorSessions = sessions;
+    const priorSourceOrder = new Map(sessionSourceOrder);
+    const next = new Map(listRows);
+    for (const [key, row] of snapshot.rows) {
+      const current = next.get(key);
+      if (!current && retainedKeyCount(next, descRows) >= MAX_RUNTIME_SESSIONS) {
+        rec({ code: 'shape.invalid', severity: 'error', path: '$.sessions', detail: 'retained session inventory exceeds the supported limit' });
+        continue;
+      }
+      if (!current || row.sourceOrder >= (sessionSourceOrder.get(key) || 0)) next.set(key, row);
+    }
+    listRows.clear(); for (const [key, row] of next) listRows.set(key, row);
+    for (const [key, row] of snapshot.rows) if (listRows.has(key)) {
+      sessionSourceOrder.set(key, Math.max(sessionSourceOrder.get(key) || 0, row.sourceOrder || snapshot.generation));
+    }
+    order = [...snapshot.keys, ...[...listRows.keys()].filter(key => !snapshot.seen.has(key))];
+    if (!rebuild(rec)) {
+      snapshot.valid = false;
+      listRows.clear(); for (const [key, row] of priorRows) listRows.set(key, row);
+      order = priorOrder;
+      sessions = priorSessions;
+      sessionSourceOrder.clear(); for (const [key, source] of priorSourceOrder) sessionSourceOrder.set(key, source);
+    }
+  }
 
   const baseKeyOf = (key) => { const m = String(key).match(/^(.*):heartbeat$/); return m ? m[1] : null; };
   function mergedRow(key) {
@@ -93,7 +126,7 @@ function createSessionsRegistry({ now, normalise, classify, validate = () => tru
       }
       next.set(key, e);
     }
-    sessions = next;
+    if (valid) sessions = next;
     return valid;
   }
 
@@ -108,13 +141,21 @@ function createSessionsRegistry({ now, normalise, classify, validate = () => tru
       if (generation < latestSnapshotGeneration) return;
       latestSnapshotGeneration = generation;
       seq = Math.max(seq, generation);
-      run = { expected: 0, generation, keys: [], seen: new Set(), valid: true, pages: 0, totals: new Set() };
+      run = { expected: 0, generation, keys: [], seen: new Set(), rows: new Map(), valid: true, pages: 0, totals: new Set() };
     }
     const wrongGeneration = !!run && externalGeneration != null && externalGeneration !== run.generation;
     // A late continuation from a superseded snapshot is inert. It cannot poison the
     // active run, while malformed pages in the active generation still invalidate it.
     if (!run || wrongGeneration) return;
     if (offset !== run.expected) { run.valid = false; return; }
+    if (!Array.isArray(value?.sessions) || value.sessions.length > (canonical ? MAX_RUNTIME_SESSIONS : MAX_SESSION_PAGE_SIZE)
+      || run.seen.size + value.sessions.filter(row => row && !run.seen.has(row.key)).length > MAX_RUNTIME_SESSIONS) {
+      run.valid = false;
+      rec({ code: 'shape.invalid', severity: 'error', path: '$.sessions', detail: 'session inventory exceeds the supported limit' });
+      meta = Object.assign({}, meta, { listedAt: now(), complete: false });
+      run = null;
+      return;
+    }
     run.pages++;
     // R6-11: every total any page supplies is evidence; they must agree with each other and with the rows.
     if (Number.isInteger(value.totalCount)) run.totals.add(value.totalCount);
@@ -124,38 +165,75 @@ function createSessionsRegistry({ now, normalise, classify, validate = () => tru
     for (const row of value.sessions) {
       const rowOrder = Number.isSafeInteger(sourceOrder) && sourceOrder > 0 ? sourceOrder : run.generation;
       const previousOrder = sessionSourceOrder.get(row.key) || 0;
-      if (rowOrder >= previousOrder) {
-        listRows.set(row.key, { row, at, seq: ++seq, sourceOrder: rowOrder, canonical });
-        sessionSourceOrder.set(row.key, rowOrder);
-      }
+      if (rowOrder >= previousOrder) run.rows.set(row.key, { row, at, seq: ++seq, sourceOrder: rowOrder, canonical });
       if (!run.seen.has(row.key)) { run.seen.add(row.key); run.keys.push(row.key); fresh++; }
-      if (!order.includes(row.key)) order.push(row.key);
     }
-    // Rejected normalized identities cannot justify deleting any other row in
-    // the same raw snapshot. Validate before reconciling its absences.
-    if (!rebuild(rec)) run.valid = false;
     const more = value.hasMore === true;
-    if (more && (fresh === 0 || run.pages >= MAX_PAGES)) run.valid = false;   // stalled / runaway pagination
-    if (more) run.expected = Number.isInteger(value.nextOffset) ? value.nextOffset : offset + value.sessions.length;
+    if (more && fresh === 0) run.valid = false;   // stalled pagination
+    if (more && run.pages >= MAX_PAGES) {
+      run.valid = false;
+      rec({ code: 'shape.invalid', severity: 'error', path: '$.sessions', detail: 'session pagination exceeds the supported limit' });
+      meta = Object.assign({}, meta, { listedAt: at, complete: false });
+      retainPartialRows(run, rec);
+      run = null;
+      return;
+    }
+    if (more) {
+      run.expected = Number.isInteger(value.nextOffset) ? value.nextOffset : offset + value.sessions.length;
+      meta = Object.assign({}, meta, { listedAt: at, complete: false });
+      retainPartialRows(run, rec);
+    }
     if (!more) {
       // a total that contradicts what was received is not a complete snapshot either (Residual C)
       if (run.totals.size > 1 || (run.totals.size === 1 && !run.totals.has(run.keys.length))) run.valid = false;
       if (run.valid) {
+        // A complete snapshot only has deletion authority after every canonical
+        // entity in the proposed replacement has passed validation. Keep the
+        // last accepted state so a rejected row cannot turn an invalid page's
+        // absences into deletions.
+        const priorListRows = new Map(listRows);
+        const priorDescRows = new Map(descRows);
+        const priorOrder = order;
+        const priorSessions = sessions;
+        const priorSourceOrder = new Map(sessionSourceOrder);
+        const priorMeta = meta;
+        const nextRows = new Map(run.rows);
         const mayReconcileAbsence = run.generation >= changedHighWater;
-        if (mayReconcileAbsence) for (const k of [...listRows.keys()]) {
-          const newerPerKeyObservation = (sessionSourceOrder.get(k) || 0) > run.generation;
-          if (!run.seen.has(k) && !newerPerKeyObservation) {
-            listRows.delete(k); sessionSourceOrder.delete(k);
-          }
+        for (const [key, prior] of listRows) {
+          if ((sessionSourceOrder.get(key) || 0) > run.generation || !mayReconcileAbsence && !run.seen.has(key)) nextRows.set(key, prior);
         }
-        order = [...run.keys, ...[...listRows.keys()].filter(k => !run.seen.has(k))];
-        meta = { totalCount: order.length, listedAt: at, complete: true };
+        const nextDescriptions = new Map(descRows);
+        for (const [key, description] of nextDescriptions) {
+          if (!nextRows.has(key) && (description.sourceOrder || 0) <= run.generation) nextDescriptions.delete(key);
+        }
+        if (retainedKeyCount(nextRows, nextDescriptions) <= MAX_RUNTIME_SESSIONS) {
+          listRows.clear();
+          for (const [key, row] of nextRows) listRows.set(key, row);
+          descRows.clear();
+          for (const [key, row] of nextDescriptions) descRows.set(key, row);
+          for (const key of [...sessionSourceOrder.keys()]) if (!listRows.has(key) && !descRows.has(key)) sessionSourceOrder.delete(key);
+          for (const [key, row] of run.rows) sessionSourceOrder.set(key, Math.max(sessionSourceOrder.get(key) || 0, row.sourceOrder || run.generation));
+          order = [...run.keys, ...[...listRows.keys()].filter(k => !run.seen.has(k))];
+          if (!rebuild(rec)) {
+            run.valid = false;
+            listRows.clear(); for (const [key, row] of priorListRows) listRows.set(key, row);
+            descRows.clear(); for (const [key, row] of priorDescRows) descRows.set(key, row);
+            order = priorOrder;
+            sessions = priorSessions;
+            sessionSourceOrder.clear(); for (const [key, source] of priorSourceOrder) sessionSourceOrder.set(key, source);
+            meta = Object.assign({}, priorMeta, { listedAt: at, complete: false });
+          } else meta = { totalCount: order.length, listedAt: at, complete: true };
+        } else {
+          run.valid = false;
+          rec({ code: 'shape.invalid', severity: 'error', path: '$.sessions', detail: 'retained session inventory exceeds the supported limit' });
+          meta = Object.assign({}, meta, { listedAt: at, complete: false });
+        }
       } else {
+        retainPartialRows(run, rec);
         meta = Object.assign({}, meta, { listedAt: at, complete: false });
       }
       run = null;
     }
-    rebuild(() => {});
   }
 
   // A failed or rejected sessions.list page: the current run can no longer justify deletions.
@@ -164,24 +242,48 @@ function createSessionsRegistry({ now, normalise, classify, validate = () => tru
   // sessions.changed (event-driven): upsert one session immediately; never deletes (only complete
   // snapshots delete). The event row is as fresh as a list row.
   function acceptChanged(row, rec, { canonical = false, sourceOrder = null } = {}) {
+    if (!listRows.has(row.key) && !descRows.has(row.key) && retainedKeyCount() >= MAX_RUNTIME_SESSIONS) {
+      rec({ code: 'shape.invalid', severity: 'error', path: '$.session', detail: 'session inventory exceeds the supported limit' });
+      return;
+    }
     const sourceOrderValue = Number.isSafeInteger(sourceOrder) && sourceOrder > 0 ? sourceOrder : seq + 1;
-    seq = Math.max(seq, sourceOrderValue);
     if (sourceOrderValue < (sessionSourceOrder.get(row.key) || 0)) return;
+    const before = { row: listRows.get(row.key), sourceOrder: sessionSourceOrder.get(row.key), order: [...order], seq,
+      changedHighWater, unclassifiedReported, sessions };
+    const restore = () => {
+      if (before.row === undefined) listRows.delete(row.key); else listRows.set(row.key, before.row);
+      if (before.sourceOrder === undefined) sessionSourceOrder.delete(row.key); else sessionSourceOrder.set(row.key, before.sourceOrder);
+      order = before.order; seq = before.seq; changedHighWater = before.changedHighWater;
+      unclassifiedReported = before.unclassifiedReported; sessions = before.sessions;
+    };
+    seq = Math.max(seq, sourceOrderValue);
     const at = now();
     listRows.set(row.key, { row, at, seq: ++seq, sourceOrder: sourceOrderValue, canonical });
     sessionSourceOrder.set(row.key, sourceOrderValue);
     changedHighWater = Math.max(changedHighWater, sourceOrderValue);
     if (!order.includes(row.key)) order.push(row.key);
-    rebuild(rec);
+    try { if (rebuild(rec)) return; } catch (error) { restore(); throw error; }
+    restore();
   }
 
   function acceptDescription(row, rec, { sourceOrder = null } = {}) {
+    if (!descRows.has(row.key) && !listRows.has(row.key) && retainedKeyCount() >= MAX_RUNTIME_SESSIONS) {
+      rec({ code: 'shape.invalid', severity: 'error', path: '$.session', detail: 'session inventory exceeds the supported limit' });
+      return;
+    }
     const sourceOrderValue = Number.isSafeInteger(sourceOrder) && sourceOrder > 0 ? sourceOrder : seq + 1;
-    seq = Math.max(seq, sourceOrderValue);
     if (sourceOrderValue < (sessionSourceOrder.get(row.key) || 0)) return;
+    const before = { row: descRows.get(row.key), sourceOrder: sessionSourceOrder.get(row.key), seq, unclassifiedReported, sessions };
+    const restore = () => {
+      if (before.row === undefined) descRows.delete(row.key); else descRows.set(row.key, before.row);
+      if (before.sourceOrder === undefined) sessionSourceOrder.delete(row.key); else sessionSourceOrder.set(row.key, before.sourceOrder);
+      seq = before.seq; unclassifiedReported = before.unclassifiedReported; sessions = before.sessions;
+    };
+    seq = Math.max(seq, sourceOrderValue);
     descRows.set(row.key, { row, at: now(), seq: ++seq, sourceOrder: sourceOrderValue });
     sessionSourceOrder.set(row.key, sourceOrderValue);
-    rebuild(rec);
+    try { if (rebuild(rec)) return; } catch (error) { restore(); throw error; }
+    restore();
   }
 
   return {

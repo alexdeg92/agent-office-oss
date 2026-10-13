@@ -10,6 +10,8 @@ const { redactChatIdentity } = require('../../security/redact-text');
 
 const KEEP_REVISIONS = 20;
 const SEEN_DAYS = 30, SEEN_MAX = 200;
+const TEAM_HOME_MAX = 128, TEAM_HOME_RETENTION_MS = 7 * 86400000, TEAM_HOME_REFRESH_MS = 3600000;
+const TEAM_HOME_ROW_BYTES_MAX = 8192, TEAM_HOME_BYTES_MAX = TEAM_HOME_MAX * TEAM_HOME_ROW_BYTES_MAX, TEAM_HOME_STATIONS_MAX = 40;
 const SYSTEM = { kind: 'system', component: 'engine' };
 
 function createOfficeRepo(db, { now = () => Date.now() } = {}) {
@@ -29,6 +31,21 @@ function createOfficeRepo(db, { now = () => Date.now() } = {}) {
   const autoGet = db.prepare('SELECT look_json FROM office_automatic_looks WHERE identity_id = ?');
   const autoCounts = db.prepare('SELECT family, count(*) AS n FROM office_automatic_looks GROUP BY family');
   const autoPut = db.prepare('INSERT INTO office_automatic_looks (identity_id, family, look_json, assigned_at) VALUES (?, ?, ?, ?)');
+  // The placement table arrives in migration 029. Keep construction usable by
+  // earlier-schema migration fixtures that exercise unrelated repositories.
+  let teamPlacement = null;
+  function teamPlacementStatements() {
+    if (!teamPlacement) teamPlacement = {
+      get: db.prepare('SELECT team_key, assignments_json, updated_at FROM office_team_home_placements WHERE layout_revision = ? ORDER BY updated_at DESC, team_key ASC LIMIT ?'),
+      getAll: db.prepare('SELECT team_key, assignments_json, updated_at FROM office_team_home_placements WHERE layout_revision = ?'),
+      getOne: db.prepare('SELECT assignments_json, updated_at FROM office_team_home_placements WHERE layout_revision = ? AND team_key = ?'),
+      upsert: db.prepare(`INSERT INTO office_team_home_placements (layout_revision, team_key, assignments_json, updated_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(layout_revision, team_key) DO UPDATE SET assignments_json = excluded.assignments_json, updated_at = excluded.updated_at`),
+      prune: db.prepare('DELETE FROM office_team_home_placements WHERE layout_revision < ?'),
+      deleteOne: db.prepare('DELETE FROM office_team_home_placements WHERE layout_revision = ? AND team_key = ?'),
+    };
+    return teamPlacement;
+  }
 
   const toLayout = (r) => ({ id: r.id, name: r.name, revision: r.revision, updatedAt: r.updated_at, updatedBy: JSON.parse(r.updated_by_json), data: JSON.parse(r.data_json) });
   const tx = (fn) => { if (db.isTransaction) return fn(); db.exec('BEGIN IMMEDIATE'); try { const v = fn(); db.exec('COMMIT'); return v; } catch (e) { if (db.isTransaction) db.exec('ROLLBACK'); throw e; } };
@@ -67,6 +84,82 @@ function createOfficeRepo(db, { now = () => Date.now() } = {}) {
         r = active.get();
       }
       return r ? toLayout(r) : null;
+    },
+    // Stable office placement is private persisted state, separate from the owner's
+    // editable layout. Revision-scoping makes an explicit layout save the reset point.
+    teamHomeAssignments(layoutRevision) {
+      if (!Number.isSafeInteger(layoutRevision) || layoutRevision < 1) return {};
+      const statements = teamPlacementStatements();
+      const out = {};
+      for (const row of statements.get.all(layoutRevision, TEAM_HOME_MAX)) {
+        try {
+          const value = JSON.parse(row.assignments_json);
+          if (!value || typeof value !== 'object' || Array.isArray(value)
+            || typeof value.floorId !== 'string' || !value.stations || typeof value.stations !== 'object' || Array.isArray(value.stations)) continue;
+          out[row.team_key] = { floorId: value.floorId,
+            stations: Object.fromEntries(Object.entries(value.stations).filter(([key, station]) => /^[a-f0-9]{64}$/.test(key) && typeof station === 'string' && station.length <= 96)
+              .sort(([a], [b]) => a.localeCompare(b)).slice(0, TEAM_HOME_STATIONS_MAX)) };
+        } catch (_) { /* a malformed placement row is ignored; next projection repairs it */ }
+      }
+      return out;
+    },
+    rememberTeamHomeAssignments(layoutRevision, assignments) {
+      if (!Number.isSafeInteger(layoutRevision) || layoutRevision < 1 || !assignments || typeof assignments !== 'object') return 0;
+      const statements = teamPlacementStatements();
+      const valid = Object.entries(assignments).filter(([teamKey, next]) => /^[a-f0-9]{64}$/.test(teamKey) && next
+        && typeof next.floorId === 'string' && /^(?:[1-9]\d{0,3}|10000)$/.test(next.floorId)
+        && next.stations && typeof next.stations === 'object' && !Array.isArray(next.stations))
+        .sort(([a], [b]) => a.localeCompare(b)).slice(0, TEAM_HOME_MAX);
+      const stable = value => JSON.stringify({ floorId: value.floorId, stations: Object.fromEntries(Object.entries(value.stations || {}).sort(([a], [b]) => a.localeCompare(b))) });
+      const at = now(), existingRows = statements.getAll.all(layoutRevision), existing = new Map(existingRows.map(row => [row.team_key, row]));
+      const liveKeys = new Set(valid.map(([key]) => key));
+      const changes = valid.some(([teamKey, next]) => {
+        const row = existing.get(teamKey); let current = null;
+        try { current = row && JSON.parse(row.assignments_json); } catch (_) { /* replace invalid persisted row */ }
+        if (current?.floorId !== next.floorId) return true;
+        const stations = { ...(current?.stations || {}), ...next.stations };
+        return stable({ floorId: next.floorId, stations }) !== stable(current) || !row || at - row.updated_at >= TEAM_HOME_REFRESH_MS;
+      });
+      const expired = existingRows.some(row => !liveKeys.has(row.team_key) && at - row.updated_at >= TEAM_HOME_RETENTION_MS);
+      const retainedCount = existingRows.filter(row => liveKeys.has(row.team_key) || at - row.updated_at < TEAM_HOME_RETENTION_MS).length;
+      const needsEviction = retainedCount + valid.filter(([key]) => !existing.has(key)).length > TEAM_HOME_MAX
+        || existingRows.reduce((sum, row) => sum + Buffer.byteLength(row.assignments_json), 0) > TEAM_HOME_BYTES_MAX;
+      if (!changes && !expired && !needsEviction) return 0;
+      return tx(() => {
+        let stored = 0;
+        for (const [teamKey, next] of valid) {
+          const currentRow = statements.getOne.get(layoutRevision, teamKey);
+          let current = null;
+          try { current = currentRow && JSON.parse(currentRow.assignments_json); } catch (_) { /* replace corrupt row */ }
+          const sameFloor = current?.floorId === next.floorId;
+          const stations = sameFloor ? { ...(current?.stations || {}), ...next.stations } : { ...next.stations };
+          const boundedStations = Object.fromEntries(Object.entries(stations).filter(([key, station]) => /^[a-f0-9]{64}$/.test(key) && typeof station === 'string' && station.length <= 96)
+            .sort(([a], [b]) => a.localeCompare(b)).slice(0, TEAM_HOME_STATIONS_MAX));
+          const json = JSON.stringify({ floorId: next.floorId, stations: boundedStations });
+          if (Buffer.byteLength(json) > TEAM_HOME_ROW_BYTES_MAX) continue;
+          if (current && stable({ floorId: next.floorId, stations: boundedStations }) === stable(current)
+            && at - currentRow.updated_at < TEAM_HOME_REFRESH_MS) continue;
+          statements.upsert.run(layoutRevision, teamKey, json, now()); stored++;
+        }
+        const rows = statements.getAll.all(layoutRevision);
+        for (const row of rows) if (!liveKeys.has(row.team_key) && at - row.updated_at >= TEAM_HOME_RETENTION_MS) {
+          statements.deleteOne.run(layoutRevision, row.team_key);
+        }
+        const retained = statements.getAll.all(layoutRevision);
+        let retainedBytes = retained.reduce((sum, row) => sum + Buffer.byteLength(row.assignments_json), 0);
+        if (retained.length > TEAM_HOME_MAX || retainedBytes > TEAM_HOME_BYTES_MAX) {
+          const inactive = retained.filter(row => !liveKeys.has(row.team_key))
+            .sort((a, b) => a.updated_at - b.updated_at || a.team_key.localeCompare(b.team_key));
+          for (const row of inactive) {
+            if (retained.length <= TEAM_HOME_MAX && retainedBytes <= TEAM_HOME_BYTES_MAX) break;
+            statements.deleteOne.run(layoutRevision, row.team_key);
+            retainedBytes -= Buffer.byteLength(row.assignments_json);
+            retained.pop();
+          }
+        }
+        statements.prune.run(Math.max(1, layoutRevision - KEEP_REVISIONS + 1));
+        return stored;
+      });
     },
     // → { ok: true, layout } | { ok: false, current } (stale expectedRevision)
     save({ expectedRevision, data, actor }) {
@@ -120,4 +213,4 @@ function createOfficeRepo(db, { now = () => Date.now() } = {}) {
   };
 }
 
-module.exports = { createOfficeRepo, KEEP_REVISIONS, SEEN_MAX };
+module.exports = { createOfficeRepo, KEEP_REVISIONS, SEEN_MAX, TEAM_HOME_MAX, TEAM_HOME_RETENTION_MS, TEAM_HOME_REFRESH_MS, TEAM_HOME_ROW_BYTES_MAX, TEAM_HOME_BYTES_MAX };

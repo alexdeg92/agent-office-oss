@@ -191,7 +191,7 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
   const upstream = apiProxy ? parseUpstream(apiProxy) : null;
   root = fs.realpathSync(path.resolve(root));   // containment is checked on real paths (R13-13)
   const readBuild = require('../src/api/ui-build').createBuildReader(root);
-  let source, indexBuf, indexTag, csp;
+  let source, indexBuf, indexTag, csp, currentBuild = null;
   const refreshShell = () => {
     const deployed = readBuild();
     if (!deployed.source) throw new Error('UI shell unavailable');
@@ -202,15 +202,24 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
       indexTag = '"i-' + crypto.createHash('sha256').update(indexBuf).digest('base64url').slice(0, 16) + '"';
       csp = contentSecurityPolicy(index, { apiBase: cfg.apiBase });
     }
+    currentBuild = deployed.buildId;
     return deployed.buildId;
   };
   refreshShell();
   const configJson = JSON.stringify(cfg);
   const routeBase = cfg.basePath.slice(0, -1);   // '' or '/v2'
 
-  const headers = (type, file, req) => ({
+  // A ?v= URL of the current release never changes content (another release answers 410), so it is cached for good:
+  // the route prewarm (route-preload.js → api.js prewarm) fills the HTTP cache with fetch(), and the page's imports must
+  // then load from it without one revalidation round trip per module level (F11 no waterfall; T-0106 replaced modulepreload).
+  const releaseAsset = (req) => {
+    const v = req && req.url && req.url.includes('?') ? new URL(req.url, 'http://x').searchParams.get('v') : null;
+    return !!v && v === currentBuild;
+  };
+  const headers = (type, file, req, asset = false) => ({
     'content-type': type,
-    'cache-control': NO_CACHE.test(file) ? 'no-cache, must-revalidate' : 'public, max-age=3600',
+    'cache-control': asset && file !== 'index.html' && releaseAsset(req) ? 'public, max-age=31536000, immutable'
+      : NO_CACHE.test(file) ? 'no-cache, must-revalidate' : 'public, max-age=3600',
     ...securityHeadersForPolicy(csp, isHttps(req)),
   });
   const gz = new Map();   // key → Buffer (gzip)
@@ -226,7 +235,7 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
   const acceptsGzip = (req) => gzipAccepted(req.headers['accept-encoding']);
   /** A body with its validator: 304 when the client already has it, gzip when it helps. */
   const sendBody = (req, res, type, file, buf, tag, head) => {
-    const h = { ...headers(type, file, req), etag: tag };
+    const h = { ...headers(type, file, req, true), etag: tag };
     if (COMPRESSIBLE.test(file)) h.vary = 'accept-encoding';
     if (String(req.headers['if-none-match'] || '').split(/\s*,\s*/).includes(tag)) { res.writeHead(304, h); return res.end(); }
     let body = buf;
@@ -238,7 +247,8 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
   const send = (res, status, type, body, file = '.txt', head = false) => {
     if (res.headersSent) return res.destroy();
     const h = headers(type, file, res.req);
-    if (status === 410 || file === 'build.json') h['cache-control'] = 'no-store';
+    // An error is never cached (T-0106): a cached 404/410/5xx for a release URL would replay to every retry.
+    if (status < 200 || status >= 300 || file === 'build.json') h['cache-control'] = 'no-store';
     res.writeHead(status, h);
     res.end(head ? undefined : body);
   };
@@ -324,7 +334,7 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
           if (String(req.headers['if-none-match'] || '').split(/\s*,\s*/).includes(tag)) return sendBody(req, res, type, real, null, tag, head);
           return fs.readFile(real, (err3, buf) => (err3 ? send(res, 404, 'text/plain; charset=utf-8', 'Not found', '.txt', head) : sendBody(req, res, type, real, buf, tag, head)));
         }
-        res.writeHead(200, { ...headers(type, real, req), etag: tag, 'content-length': st.size });
+        res.writeHead(200, { ...headers(type, real, req, true), etag: tag, 'content-length': st.size });
         if (head) return res.end();
         fs.createReadStream(real).on('error', () => res.destroy()).pipe(res);
       });

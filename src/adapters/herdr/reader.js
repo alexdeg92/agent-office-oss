@@ -15,7 +15,7 @@ const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const MIN_POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_INTERVAL_MS = 30_000;
 const ALLOWED_ENV = new Set(['HOME', 'XDG_RUNTIME_DIR', 'PATH', 'TMPDIR']);
-const STATUSES = new Set(['working', 'blocked', 'done', 'idle']);
+const STATUSES = new Set(['working', 'blocked', 'done', 'idle', 'waiting']);
 
 class HerdrReadError extends Error {
   constructor(code) { super(code); this.name = 'HerdrReadError'; this.code = code; }

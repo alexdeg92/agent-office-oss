@@ -1,8 +1,10 @@
 'use strict';
 
+const { MAX_SESSION_PAGE_SIZE, MAX_SESSION_PAGES } = require('../../engine/session-limits');
+
 // A superseded snapshot may still have an RPC in flight. Fence its result and
 // ingestion tap before allowing the next walk to start.
-function createSessionWalker({ gw, nextAcquisitionGeneration = null, onFailure = () => {}, onSuccess = () => {}, pageSize = 300, maxPages = 20 }) {
+function createSessionWalker({ gw, nextAcquisitionGeneration = null, onFailure = () => {}, onSuccess = () => {}, pageSize = MAX_SESSION_PAGE_SIZE, maxPages = MAX_SESSION_PAGES }) {
   let generation = 0;
   async function walk({ signal } = {}) {
     const own = ++generation;

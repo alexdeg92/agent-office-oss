@@ -1,3 +1,4 @@
+import { loadModule } from '../build-update.js';
 import { html, useEffect, useState } from '../lib.js';
 import { buildQuery } from '../config.js';
 import { Icon } from '../components/ui.js';
@@ -20,7 +21,7 @@ export function CharacterAvatar(props) {
   useEffect(() => {
     if (!props.source) return;
     let live = true;
-    import('./avatar-framing.js' + buildQuery).then(m => { if (live) setAvatar(() => m.DecodedAvatar); }).catch(() => {});
+    loadModule(() => import('./avatar-framing.js' + buildQuery)).then(m => { if (live) setAvatar(() => m.DecodedAvatar); }).catch(() => {});
     return () => { live = false; };
   }, [!!props.source]);
   if (Avatar) return html`<${Avatar} ...${props} />`;

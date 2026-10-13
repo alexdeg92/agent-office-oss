@@ -1,3 +1,4 @@
+import { chunkError } from '../build-update.js';
 import { html, useEffect, useState } from '../lib.js';
 import { registerMessages } from '../messages.js';
 import * as dictionary from '../messages/access-management.js';
@@ -15,7 +16,7 @@ export function loadStyles(){
   if(!globalThis.document)return Promise.resolve();
   return styles ||= new Promise((resolve,reject)=>{
     const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href=new URL('./settings-access.css'+buildQuery,import.meta.url).href;
-    sheet.onload=resolve;sheet.onerror=()=>{sheet.remove();styles=null;reject(Error('Settings access stylesheet unavailable'));};
+    sheet.onload=resolve;sheet.onerror=()=>{sheet.remove();styles=null;reject(chunkError(Error('Settings access stylesheet unavailable')));};
     document.head.append(sheet);
   }).catch(error=>{styles=null;throw error;});
 }

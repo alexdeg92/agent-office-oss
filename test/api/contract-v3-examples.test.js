@@ -10,7 +10,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { compareShape } = require('../helpers/contract-shape');
+const { compareShape, compareExample } = require('../helpers/contract-shape');
 const { TOKENS } = require('../portability/personal-literals');
 const CONTRACT_PERSONAL_TOKENS = [...TOKENS, ['al', 'ex'].join('')];
 
@@ -83,6 +83,15 @@ describe('G5 · contract 3.0 examples', () => {
       const r = sch.validate(VM_SCHEMAS_V3[NAME[n]], v3(n).data);
       assert.deepEqual(r.ok ? [] : r.issues.filter((i) => i.severity === 'error').map((i) => i.path + ' ' + i.detail), [], n);
     }
+  });
+
+  it('office example enumerates the rich state labels as required map entries', () => {
+    const office = v3('office-vm').data;
+    assert.deepEqual(office.stateLabels.executing, { key: 'agentState.executing' });
+    assert.deepEqual(office.stateLabels.blocked, { key: 'agentState.blocked' });
+    assert.deepEqual(compareExample('office-vm', office, { version: 3 }), []);
+    const missing = structuredClone(office); delete missing.stateLabels.executing;
+    assert.ok(compareExample('office-vm', missing, { version: 3 }).some(issue => issue === '$.stateLabels.executing: missing'));
   });
 
   it('3. no personal value: no portability token, no "main" id or role, no with-timmy', () => {

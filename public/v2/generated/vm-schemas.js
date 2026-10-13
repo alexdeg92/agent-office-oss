@@ -70,9 +70,10 @@ const s = {
   // Deliberately opaque subtree we pass through without inspecting (documented at each use).
   unknown: () => new Schema('unknown', (v) => ({ ok: true, value: v })),
 
-  array(item, { perItem = false } = {}) {
+  array(item, { perItem = false, maxItems = null } = {}) {
     const sch = new Schema('array<' + item.describe() + '>', (v, p, ctx) => {
       if (!Array.isArray(v)) return bad(ctx, p, 'array', v);
+      if (Number.isSafeInteger(maxItems) && maxItems >= 0 && v.length > maxItems) return bad(ctx, p, `array with at most ${maxItems} items`, v);
       const out = [];
       for (let i = 0; i < v.length; i++) {
         const before = ctx.issues.length;
@@ -83,7 +84,7 @@ const s = {
       }
       return { ok: true, value: out };
     });
-    sch.item = item; sch.perItem = perItem;
+    sch.item = item; sch.perItem = perItem; sch.maxItems = maxItems;
     return sch;
   },
 
@@ -324,6 +325,7 @@ __defs["vm-schemas"] = function (module, exports) {
  */
 const { safeExternalUrl } = __require("url-policy");
 const s = __require("schema");
+const MAX_OFFICE_OCCUPANTS = 64;
 
 const R = { extra: 'reject' };
 const str = () => s.string();
@@ -350,7 +352,7 @@ function paramsOk(p, depth = 0) {
 const LabelRef = obj({ key: s.string().min(1), params: s.unknown().refine(paramsOk, 'label params').optional() });
 const LabelRefN = () => LabelRef.nullable();
 
-const AGENT_STATE = ['unknown', 'observed', 'idle', 'thinking', 'working', 'researching', 'writing', 'calling', 'waiting', 'error', 'offline'];
+const AGENT_STATE = ['unknown', 'observed', 'idle', 'thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting', 'blocked', 'error', 'offline'];
 const ExecutionEvidenceVM = obj({ level: oneOf('verified', 'observed', 'unknown'), observedAt: msN(), expiresAt: msN() });
 const ExecutionVM = obj({ status: oneOf('unknown', 'idle', 'running', 'succeeded', 'failed'), evidence: ExecutionEvidenceVM });
 const PersonChip = obj({ id: str(), kind: oneOf('human', 'agent', 'git'), name: str(), avatarUrl: strN(), state: s.enumOf(AGENT_STATE).nullable() });
@@ -411,7 +413,7 @@ const LIVE_KIND = ['gateway.connected', 'gateway.disconnected', 'activity', 'run
 const OfficeVM = obj({
   connection: obj({ gateway: oneOf('up', 'down'), since: msN() }),
   orchestratorActivationAvailable: bool().optional(),
-  kpis: collection(Kpi), occupants: collection(OccupantVM), rosterGroups: collection(RosterGroup), rosterItems: collection(RosterItem), rosterPreviewItems: collection(RosterItem), rosterOverflowCount: nn(), rosterSummary: RosterSummary, rosterAllLabel: LabelRef, rosterOverflowLabel: LabelRef, conversationIds: arr(str()), conversationCount: nn(), conversationLabel: LabelRef, stateLabels: s.record(LabelRef), visitIntent: VisitIntent.optional(), rosterFloors: collection(RosterFloor), unseatedTeams: collection(UnseatedTeam),
+  kpis: collection(Kpi), occupants: collection(OccupantVM).max(MAX_OFFICE_OCCUPANTS), occupantOverflowCount: nn().optional(), rosterGroups: collection(RosterGroup), rosterItems: collection(RosterItem), rosterPreviewItems: collection(RosterItem), rosterOverflowCount: nn(), rosterSummary: RosterSummary, rosterAllLabel: LabelRef, rosterOverflowLabel: LabelRef, conversationIds: arr(str()), conversationCount: nn(), conversationLabel: LabelRef, stateLabels: s.record(LabelRef), visitIntent: VisitIntent.optional(), rosterFloors: collection(RosterFloor), unseatedTeams: collection(UnseatedTeam),
   journal: collection(obj({ id: str(), at: ms(), count: s.int().min(1), actor: ActorVM, text: LabelRef, kind: s.enumOf(LIVE_KIND) })),
   layoutRevision: nn(),
   queue: collection(obj({ id: str(), name: str(), schedule: LabelRef })),
@@ -643,9 +645,9 @@ const OfficeVM3 = obj({
     summary: str().max(320).optional(), model: str().optional(), project: str().optional(), runtime: str().optional(), startedAt: ms().optional(), lastActivityAt: ms().optional(), tokensKnown: bool().optional(), execution: ExecutionVM, parentId: strN() /* T-0062 */,
     parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef, visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(), standingPoint: obj({ x: nn(), y: nn() }).nullable(),
     homeTarget: OfficeTarget.nullable().optional(), sceneTarget: OfficeTarget.nullable().optional(), activity: OfficeActivity.nullable().optional(), sceneTravel: SceneTravel.nullable().optional(),
-    hostAgentId: str().optional(), hostRole: oneOf('primary', 'delegate', 'unknown').optional(), hostStatus: oneOf('working', 'blocked', 'done', 'idle', 'unknown').optional() }))),
-  rosterGroups: collection(RosterGroup), rosterItems: collection(RosterItem), rosterPreviewItems: collection(RosterItem), rosterOverflowCount: nn(), rosterSummary: RosterSummary, rosterAllLabel: LabelRef, rosterOverflowLabel: LabelRef, conversationIds: arr(str()), conversationCount: nn(), conversationLabel: LabelRef, stateLabels: s.record(LabelRef), visitIntent: VisitIntent.optional(), rosterFloors: collection(RosterFloor), unseatedTeams: collection(UnseatedTeam),
-  journal: collection(obj({ id: str(), at: ms(), count: s.int().min(1), actor: ActorVM, text: LabelRef, kind: s.enumOf(LIVE_KIND), occupantId: str().optional(), activity: oneOf('thinking', 'writing', 'calling', 'researching', 'working').optional() })),
+    hostAgentId: str().optional(), hostRole: oneOf('primary', 'delegate', 'unknown').optional(), hostStatus: oneOf('working', 'blocked', 'done', 'idle', 'waiting', 'unknown').optional() }))).max(MAX_OFFICE_OCCUPANTS),
+  occupantOverflowCount: nn().optional(), rosterGroups: collection(RosterGroup), rosterItems: collection(RosterItem), rosterPreviewItems: collection(RosterItem), rosterOverflowCount: nn(), rosterSummary: RosterSummary, rosterAllLabel: LabelRef, rosterOverflowLabel: LabelRef, conversationIds: arr(str()), conversationCount: nn(), conversationLabel: LabelRef, stateLabels: s.record(LabelRef), visitIntent: VisitIntent.optional(), rosterFloors: collection(RosterFloor), unseatedTeams: collection(UnseatedTeam),
+  journal: collection(obj({ id: str(), at: ms(), count: s.int().min(1), actor: ActorVM, text: LabelRef, kind: s.enumOf(LIVE_KIND), occupantId: str().optional(), activity: oneOf('thinking', 'writing', 'executing', 'calling', 'researching', 'waiting', 'blocked', 'working').optional() })),
   layoutRevision: nn(),
   queue: collection(obj({ id: str(), name: str(), schedule: LabelRef })),
 });
@@ -656,7 +658,7 @@ const ConnectorBrandVM3 = obj({ mark: str().nullable().optional(), color: str().
 const OrchestratorsVM3 = obj({
   hosts: collection(obj({ id: str(), label: strN(), platform: oneOf('linux', 'macos', 'windows', 'container', 'unknown'), status: oneOf('available', 'unavailable', 'unsupported', 'stale'), observedAt: msN() })),
   orchestrators: collection(obj({ id: str(), hostId: str(), kind: str(), label: strN(), sourceStatus: oneOf('available', 'unavailable', 'unsupported', 'stale'), observedAt: msN() })),
-  agents: collection(obj({ id: str(), hostId: str(), orchestratorId: str(), name: strN(), runtimeKind: strN(), role: oneOf('primary', 'delegate', 'unknown'), status: oneOf('working', 'blocked', 'done', 'idle', 'unknown'), observedAt: ms(), staleAfter: ms(), linkedOccupantId: str().optional() })),
+  agents: collection(obj({ id: str(), hostId: str(), orchestratorId: str(), name: strN(), runtimeKind: strN(), role: oneOf('primary', 'delegate', 'unknown'), status: oneOf('working', 'blocked', 'done', 'idle', 'waiting', 'unknown'), observedAt: ms(), staleAfter: ms(), linkedOccupantId: str().optional() })),
   revision: nn(), hostRevision: nn(), teamRevision: nn(), observedAt: ms(),
 });
 const TeamsVM3 = obj({

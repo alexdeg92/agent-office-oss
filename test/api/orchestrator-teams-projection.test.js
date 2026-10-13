@@ -11,6 +11,7 @@ const { createHerdrReader } = require('../../src/adapters/herdr/reader');
 const { createTeamStoreReader } = require('../../src/adapters/agent-team-pm/store-reader');
 const { createOrchestratorTeamSnapshots } = require('../../src/sources/orchestrator-team-snapshots');
 const { validate } = require('../../src/schema');
+const { hashPassword } = require('../../src/security/password');
 
 const people = ['pm', 'chars-b', 'chars-c', 'access-codex', 'office-codex', 'backend-codex', 'decor', 'critic', 'security', 'designer'];
 const statuses = ['working', 'idle', 'done', 'blocked'];
@@ -86,7 +87,7 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       assert.equal(occupant.execution.evidence.level, 'verified');
       assert.ok(Number.isSafeInteger(occupant.execution.evidence.observedAt));
       assert.ok(occupant.execution.evidence.expiresAt > occupant.execution.evidence.observedAt, 'evidence lease expires with Herdr presence');
-      assert.equal(occupant.state, ({ working: 'working', idle: 'idle', done: 'idle', blocked: 'error' })[status]);
+      assert.equal(occupant.state, ({ working: 'working', idle: 'idle', done: 'idle', blocked: 'blocked' })[status]);
     }
     const pm = projectedMembers.find(row => row.name === 'pm');
     assert.ok(pm);
@@ -123,6 +124,9 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       const admin = await h.get('/api/v2/views/office');
       assert.equal(admin.status, 200, admin.text);
       const adminRows = new Map(admin.json.data.occupants.map(row => [row.id, row]));
+      const revision = h.store.office.active(() => require('../../src/api/v2/vm/office').officeDefaults().layout).revision;
+      const pinned = h.store.office.teamHomeAssignments(revision);
+      assert.ok(Object.keys(pinned).length >= 1, 'the first full/admin path commits one durable team placement');
       activePrincipal = { id: 'placement-reader', role: 'reader', permissionRevision: 2,
         permissions: { teams: 'read', orchestrators: 'read' } };
       sessionsGrant = false;
@@ -137,25 +141,46 @@ describe('T-0045 · wired orchestrator/team projections', () => {
           homeTarget: full.homeTarget, sceneTarget: full.sceneTarget, activity: full.activity, sceneTravel: full.sceneTravel },
         `${row.id} uses the same placement independent of sessions.read`);
       }
+      const replay = await h.get('/api/v3/views/office');
+      assert.equal(replay.status, 200, replay.text);
+      for (const row of replay.json.data.occupants.filter(row => people.includes(row.name))) {
+        const prior = [...adminRows.values()].find(candidate => candidate.name === row.name);
+        assert.ok(prior);
+        assert.deepEqual([row.floorId, row.stationUid], [prior.floorId, prior.stationUid], `${row.name} keeps the same home after v2→v3/admin/reader projections`);
+      }
     } finally {
       activePrincipal = { id: 'owner-fixture', role: 'admin', permissionRevision: 1 };
       sessionsGrant = true;
     }
   });
 
-  it('builds viewer-independent placement when a limited reader requests Office first', async () => {
-    let principal = { id: 'first-office-reader', role: 'reader', permissionRevision: 1, permissions: { office: 'read' } };
+  it('keeps limited Office private when a reader requests Teams before the first Office view', async () => {
+    let principal = { id: 'first-office-reader', role: 'reader', permissionRevision: 1, permissions: { office: 'read', teams: 'read' } };
     let mayReadSessions = false;
     const source = { detected: true, hasHerdr: true, hasTeamStore: true, enabled: true, start() {}, close() {}, onChange: () => () => {},
       getSnapshot: () => ({ observedAt: Date.now(), revision: 1, team: { id: 'team:first-reader', label: 'Synthetic team', status: 'active' },
         hosts: [], orchestrators: [], agents: [], identityLinks: [],
-        members: [{ id: 'member:first-lead', name: 'Synthetic lead', roleKind: 'lead', parentMemberId: null, hostAgentId: null },
-          { id: 'member:first-child', name: 'Synthetic child', roleKind: 'member', parentMemberId: 'member:first-lead', hostAgentId: null }],
+        members: [{ id: 'member:first-lead', name: 'Synthetic lead', roleKind: 'lead', status: 'active', runtimeKind: 'claude-code', parentMemberId: null, hostAgentId: null },
+          { id: 'member:first-child', name: 'Synthetic child', roleKind: 'member', status: 'active', runtimeKind: 'codex', parentMemberId: 'member:first-lead', hostAgentId: null }],
         privateMemberSessionKeys: {}, privateMemberSessionRefs: {}, tasks: [], reviews: [] }) };
     const fixture = await settingsFixture({ sourcePrincipalFor: () => principal, sessionsReadable: () => mayReadSessions, orchestratorTeams: source });
     try {
+      const at = Date.now(), privateKey = 'rt:codex:session:teams-first-private';
+      const run = { status: 'running', endReason: null, evidence: 'status-field', evidenceLevel: 'verified', observedAt: at,
+        expiresAt: at + 60_000, startedAt: at - 1_000, endedAt: null, hasActiveSubagentRun: false,
+        runtimeMs: null, lastRunId: null, lastError: null };
+      const ingested = fixture.engine.ingestCanonical('sessions.snapshot', [{ key: privateKey, sessionId: 'native-private',
+        class: { kind: 'conversation', ruleId: 'private-fixture', agentId: null, channel: null, heartbeatOf: null, background: false, rawClassification: null },
+        displayName: 'PRIVATE_OFFICE_SCOPE_TITLE', summary: 'PRIVATE_OFFICE_SCOPE_SUMMARY', model: null, provider: null,
+        usage: { total: 0, input: null, output: null }, updatedAt: at, run, costUsd: null, parentKey: null, childKeys: [],
+        goal: null, cwd: null, messageCount: 1, interactive: true, group: null }]);
+      assert.equal(ingested.ok, true, JSON.stringify(ingested));
+      const teamsFirst = await fixture.get('/api/v3/teams');
+      assert.equal(teamsFirst.status, 200, teamsFirst.text);
       const limited = await fixture.get('/api/v2/views/office');
       assert.equal(limited.status, 200, limited.text);
+      assert.equal(JSON.stringify(limited.json.data).includes('PRIVATE_OFFICE_SCOPE_'), false,
+        'a prior team-view request cannot cause limited Office to reuse transcript-derived fields');
       principal = { id: 'full-office-admin', role: 'admin', permissionRevision: 2 };
       mayReadSessions = true;
       const full = await fixture.get('/api/v2/views/office');
@@ -171,8 +196,68 @@ describe('T-0045 · wired orchestrator/team projections', () => {
     } finally { await fixture.close(); }
   });
 
+  it('uses the private canonical placement graph for session-only team members in full and limited Office routes', async () => {
+    const at = Date.now(), sessionKey = 'rt:codex:session:limited-member';
+    let mayReadSessions = false;
+    const principal = () => ({ id: 'limited-placement-reader', role: 'admin', permissionRevision: 1,
+      permissions: { logs: mayReadSessions ? 'read' : 'none' } });
+    const snapshot = { hosts: [], orchestrators: [], revision: 1, hostRevision: 1, teamRevision: 1, observedAt: at,
+      agents: [], identityLinks: [], team: { id: 'team:limited-session', name: 'Synthetic team' },
+      members: [
+        { id: 'member:limited-lead', name: 'PM', roleKind: 'lead', parentMemberId: null, hostAgentId: null },
+        { id: 'member:limited-builder', name: 'Builder', roleKind: 'member', parentMemberId: 'member:limited-lead', hostAgentId: null },
+      ], tasks: [], reviews: [], diagnostics: { skippedTaskCount: 0, skippedMemberCount: 0 } };
+    Object.defineProperties(snapshot, {
+      privateMemberSessionKeys: { enumerable: false, value: { 'member:limited-builder': sessionKey } },
+      privateMemberSessionRefs: { enumerable: false, value: { 'member:limited-builder': {
+        runtimeKind: 'codex', sessionRef: 'native-limited-builder', sessionKey,
+      } } },
+    });
+    const source = { detected: false, hasHerdr: false, hasTeamStore: true, enabled: true,
+      start() {}, close() {}, refresh: async () => {}, onChange: () => () => {}, getSnapshot: () => snapshot };
+    const fixture = await settingsFixture({
+      sourcePrincipalFor: principal,
+      sessionsReadable: () => mayReadSessions, orchestratorTeams: source,
+    });
+    try {
+      const run = { status: 'running', endReason: null, evidence: 'status-field', evidenceLevel: 'verified', observedAt: at,
+        expiresAt: at + 60_000, startedAt: at - 1_000, endedAt: null, hasActiveSubagentRun: false,
+        runtimeMs: null, lastRunId: null, lastError: null };
+      const ingested = fixture.engine.ingestCanonical('sessions.snapshot', [{ key: sessionKey, sessionId: 'native-limited-builder',
+        class: { kind: 'conversation', ruleId: 'synthetic', agentId: null, channel: null, heartbeatOf: null, background: false, rawClassification: null },
+        displayName: null, summary: null, model: null, provider: null, usage: { total: 0, input: null, output: null },
+        updatedAt: at, run, costUsd: null, parentKey: null, childKeys: [], goal: null, cwd: null, messageCount: null,
+        interactive: true, group: null }]);
+      assert.equal(ingested.ok, true, JSON.stringify(ingested));
+      const limitedByVersion = new Map();
+      for (const version of [2, 3]) {
+        const limited = await fixture.get(`/api/v${version}/views/office`);
+        assert.equal(limited.status, 200, limited.text);
+        const limitedMembers = limited.json.data.occupants.filter(row => row.name === 'Builder');
+        assert.equal(limitedMembers.length, 1, `v${version} limited Office contains one registered member`);
+        assert.ok(limitedMembers[0].stationUid, `v${version} limited identity receives the planned seat`);
+        assert.equal(limitedMembers[0].sceneTarget.stationUid, limitedMembers[0].stationUid);
+        assert.equal(JSON.stringify(limited.json.data).includes(sessionKey), false, 'private session identity never enters limited JSON');
+        assert.equal(validate(require('../../src/api/v2/vm/schemas').schemasFor(version).office, limited.json.data).ok, true);
+        limitedByVersion.set(version, limitedMembers[0]);
+      }
+
+      mayReadSessions = true;
+      for (const version of [2, 3]) {
+        const full = await fixture.get(`/api/v${version}/views/office`);
+        assert.equal(full.status, 200, full.text);
+        const fullMembers = full.json.data.occupants.filter(row => row.name === 'Builder');
+        assert.equal(fullMembers.length, 1, `v${version} full Office contains the member once`);
+        assert.ok(fullMembers[0].stationUid, `v${version} full projection plans the registered session-only member`);
+        assert.equal(fullMembers[0].stationUid, limitedByVersion.get(version).stationUid,
+          `v${version} full and limited Office keep the same seat`);
+        assert.equal(fullMembers[0].sceneTarget.stationUid, fullMembers[0].stationUid);
+      }
+    } finally { await fixture.close(); }
+  });
+
   it('keeps an identity-only registered member in both mounted OfficeVM versions and reports a malformed peer', async () => {
-    const fixture = await settingsFixture({ orchestratorTeams: ({ tmp }) => {
+    const fixture = await settingsFixture({ sourcePrincipalFor: () => ({ id: 'identity-only-owner', role: 'admin', permissionRevision: 1 }), orchestratorTeams: ({ tmp }) => {
       const root = path.join(tmp, 'sparse-team');
       for (const dir of ['members', 'tasks', 'inbox']) fs.mkdirSync(path.join(root, dir), { recursive: true });
       fs.writeFileSync(path.join(root, 'members', 'connect-ux.json'), JSON.stringify({ id: 'member:cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'connect-ux' }));
@@ -184,6 +269,7 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       return createOrchestratorTeamSnapshots({ herdr, teamStore, now: () => Date.parse('2026-10-10T20:02:00Z') });
     } });
     try {
+      await fixture.orchestratorTeams.refresh();
       const board = await fixture.get('/api/v3/teams');
       assert.equal(board.status, 200, board.text);
       assert.deepEqual(board.json.data.diagnostics, { skippedTaskCount: 0, skippedMemberCount: 1, skippedCount: 1,
@@ -284,8 +370,12 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       hasHerdr: true, hasTeamStore: false, enabled: true,
       start() {}, close() {}, refresh: async () => {}, onChange: () => () => {},
       getSnapshot: () => ({ hosts: [], orchestrators: [], revision: 1, hostRevision: 1, teamRevision: 0, observedAt: Date.now(),
-        agents: [{ id: 'host-pane-1', hostId: 'host-fixture', orchestratorId: 'herdr-fixture', name: 'Scribe', runtimeKind: 'claude-code',
-          role: 'delegate', status: 'working', observedAt: Date.now(), staleAfter: Date.now() + 60000 }],
+        agents: [
+          { id: 'host-pane-1', hostId: 'host-fixture', orchestratorId: 'herdr-fixture', name: 'Scribe', runtimeKind: 'claude-code',
+            role: 'delegate', status: 'waiting', observedAt: Date.now(), staleAfter: Date.now() + 60_000 },
+          { id: 'host-pane-2', hostId: 'host-fixture', orchestratorId: 'herdr-fixture', name: 'Waiting pane', runtimeKind: 'codex',
+            role: 'delegate', status: 'waiting', observedAt: Date.now(), staleAfter: Date.now() + 60_000 },
+        ],
         identityLinks: [{ hostAgentId: 'host-pane-1', agentId: 'runtime-main', evidence: 'shared-runtime-session-ref', confidence: 'exact' }],
         team: null, members: [], tasks: [], reviews: [] }),
     };
@@ -295,14 +385,17 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         mainSessionKey: 'private-runtime-ref', hostObservations: [] }]);
       const hosts = await fixture.get('/api/v3/orchestrators');
       assert.equal(hosts.status, 200, hosts.text);
-      assert.equal(hosts.json.data.agents.length, 0, 'the linked Herdr observation is not repeated in the Herdr collection');
+      assert.equal(hosts.json.data.agents.length, 1, 'the linked observation is not repeated while the unlinked pane remains visible');
+      assert.equal(hosts.json.data.agents[0].status, 'waiting', 'host VM preserves its canonical waiting state');
       const office = await fixture.get('/api/v3/views/office');
       assert.equal(office.status, 200, office.text);
       const occupants = office.json.data.occupants;
       const annotated = occupants.filter(row => row.hostAgentId === 'host-pane-1');
       assert.equal(annotated.length, 1, 'the exact link annotates one existing occupant');
-      assert.deepEqual({ id: annotated[0].hostAgentId, role: annotated[0].hostRole, status: annotated[0].hostStatus },
-        { id: 'host-pane-1', role: 'delegate', status: 'working' });
+      assert.deepEqual({ id: annotated[0].hostAgentId, role: annotated[0].hostRole, status: annotated[0].hostStatus, state: annotated[0].state },
+        { id: 'host-pane-1', role: 'delegate', status: 'waiting', state: 'waiting' });
+      const v2Office = await fixture.get('/api/v2/views/office');
+      assert.equal(v2Office.status, 200, v2Office.text);
       assert.equal(office.json.meta.topic.id, 'office', 'the API keeps the logical office topic while the server scopes its projection');
       principal = { id: 'reader-link-fixture', role: 'reader', permissionRevision: 2, permissions: {} };
       const readerOffice = await fixture.get('/api/v3/views/office');
@@ -322,7 +415,7 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       getSnapshot: () => ({ hosts: [], orchestrators: [], revision: 1, hostRevision: 1, teamRevision: 1, observedAt: at,
         agents: [
           { id: 'host-pm', hostId: 'host-fixture', orchestratorId: 'herdr-fixture', name: 'PM', runtimeKind: 'claude-code', role: 'delegate', status: 'working', observedAt: at, staleAfter: at + 60_000 },
-          { id: 'host-builder', hostId: 'host-fixture', orchestratorId: 'herdr-fixture', name: 'Builder', runtimeKind: 'codex', role: 'delegate', status: 'idle', observedAt: at, staleAfter: at + 60_000 },
+          { id: 'host-builder', hostId: 'host-fixture', orchestratorId: 'herdr-fixture', name: 'Builder', runtimeKind: 'codex', role: 'delegate', status: 'waiting', observedAt: at, staleAfter: at + 60_000 },
         ], identityLinks: [],
         team: { id: 'team-fixture', label: 'PM team', status: 'active' },
         members: [
@@ -342,6 +435,7 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         const pm = rows.find(row => row.name === 'PM');
         const builder = rows.find(row => row.name === 'Builder');
         assert.equal(builder.parentId, pm.id);
+        assert.equal(builder.state, 'waiting', `live host-reported waiting reaches v${version} OfficeVM`);
         if (version === 2) assert.ok(rows.every(row => !('hostAgentId' in row) && !('hostStatus' in row)));
       }
       const stream = openSse(fixture.base, '/api/v2/stream?topics=office', { cookie: fixture.cookie });
@@ -378,6 +472,81 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         const serialized = JSON.stringify(response.json.data);
         assert.equal(serialized.includes('fixture_handle'), false);
         assert.equal(serialized.includes('123456789012345678'), false);
+      }
+    } finally { await fixture.close(); }
+  });
+
+  it('uses default signed-cookie RBAC Logs grants for scoped Office session fields in v2/v3', async () => {
+    const at = Date.now(), sessionKey = 'rt:openclaw:session:private-team-title', sessionRef = 'private-session-ref';
+    const canary = 'PRIVATE_SESSION_TITLE_CANARY';
+    const member = { id: 'member:private-title', name: 'Safe team lead', roleKind: 'lead', roleLabel: 'lead', status: 'active',
+      runtimeKind: 'openclaw', hostAgentId: null, parentMemberId: null };
+    const snapshot = { hosts: [], orchestrators: [], agents: [], identityLinks: [],
+      observedAt: at, revision: 1, team: { id: 'team:private-title', label: 'Synthetic team', status: 'active' },
+      members: [member], tasks: [], reviews: [], diagnostics: { skippedTaskCount: 0, skippedMemberCount: 0 } };
+    Object.defineProperty(snapshot, 'privateMemberSessionKeys', { enumerable: false, value: { [member.id]: sessionKey } });
+    Object.defineProperty(snapshot, 'privateMemberSessionRefs', { enumerable: false, value: { [member.id]: {
+      runtimeKind: 'openclaw', sessionRef, sessionKey, agentId: 'private-title-runtime' } } });
+    const source = { detected: false, hasHerdr: false, hasTeamStore: true, enabled: true,
+      start() {}, close() {}, refresh: async () => {}, onChange: () => () => {}, getSnapshot: () => snapshot };
+    const fixture = await settingsFixture({ enforceAuthorization: true, orchestratorTeams: source });
+    try {
+      assert.equal(fixture.engine.ingestCanonical('agents', [{ id: 'private-title-runtime', name: 'Safe runtime', displayName: 'Safe runtime',
+        workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: sessionKey }]).ok, true);
+      const run = { status: 'idle', endReason: null, evidence: 'status-field', evidenceLevel: 'verified', observedAt: at,
+        expiresAt: null, startedAt: at - 1000, endedAt: at, hasActiveSubagentRun: false, runtimeMs: null, lastRunId: null, lastError: null };
+      assert.equal(fixture.engine.ingestCanonical('sessions.snapshot', [{ key: sessionKey, sessionId: sessionRef,
+        class: { kind: 'primary', ruleId: 'synthetic', agentId: 'private-title-runtime', channel: null, heartbeatOf: null,
+          background: false, rawClassification: null }, displayName: canary, summarySource: 'runtime', summary: null, model: null, provider: 'openclaw',
+        usage: { total: 0, input: null, output: null }, updatedAt: at, run, costUsd: null, parentKey: null, childKeys: [], goal: null,
+        cwd: null, messageCount: null, interactive: true, group: null }]).ok, true);
+      fixture.engine.setIdentitySessionRefs([{ sessionKey, sessionRef, agentId: 'private-title-runtime' }]);
+      const ownerCookie = fixture.cookie;
+      const reader = fixture.store.userManagement.invite({ name: 'Synthetic reader', email: 'reader-t0113@example.invalid', roleId: 'rol_reader' },
+        { userId: fixture.store.users.owner().id, authGeneration: fixture.store.users.owner().auth_generation, requestId: 'req_t0113_invite', authorize: () => {} });
+      fixture.store.userManagement.accept({ token: reader.token, purpose: 'invite', passwordHash: await hashPassword('synthetic-t0113-password') },
+        { userId: fixture.store.users.owner().id, authGeneration: fixture.store.users.owner().auth_generation, requestId: 'req_t0113_accept', authorize: () => {} });
+      const readerUser = fixture.store.users.byId(reader.user.id);
+      fixture.cookie = 'taco_sess=' + fixture.auth.signSession({ email: readerUser.email, userId: readerUser.id,
+        authGeneration: readerUser.auth_generation, sid: 'synthetic-t0113-reader', exp: Date.now() + 60_000 });
+      for (const version of [2, 3]) {
+        const response = await fixture.get(`/api/v${version}/views/office`);
+        assert.equal(response.status, 200, response.text);
+        assert.equal(JSON.stringify(response.json.data).includes(canary), false, `v${version} omits private runtime titles without sessions.read`);
+        const primary = response.json.data.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
+        assert.ok(primary);
+        assert.notEqual(primary.name, canary);
+        assert.notEqual(primary.title?.params?.name, canary);
+        assert.equal(primary.sessionKey, null);
+      }
+      const role = fixture.store.rbac.role('rol_reader');
+      fixture.store.userManagement.editRole('rol_reader', { expectedRevision: role.revision, permissions: [{ resource: 'logs', level: 'read' }] },
+        { userId: fixture.store.users.owner().id, authGeneration: fixture.store.users.owner().auth_generation, requestId: 'req_t0113_logs_on', authorize: () => {} });
+      assert.equal(fixture.store.policy.can(fixture.store.users.byId(reader.user.id), 'logs', 'read'), true, 'role edit grants Logs read');
+      assert.equal((await fixture.get('/api/v3/me')).json.data.permissions.logs, 'read', 'signed-in account sees current effective Logs grant');
+      for (const version of [2, 3]) {
+        const response = await fixture.get(`/api/v${version}/views/office`);
+        assert.equal(response.status, 200, response.text);
+        assert.equal(JSON.stringify(response.json.data).includes(canary), false,
+          `v${version} never puts transcript-derived session titles in Office`);
+        const primary = response.json.data.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
+        assert.equal(primary.sessionKey, sessionKey);
+      }
+      const grantedRole = fixture.store.rbac.role('rol_reader');
+      fixture.store.userManagement.editRole('rol_reader', { expectedRevision: grantedRole.revision, permissions: [{ resource: 'logs', level: 'none' }] },
+        { userId: fixture.store.users.owner().id, authGeneration: fixture.store.users.owner().auth_generation, requestId: 'req_t0113_logs_off', authorize: () => {} });
+      for (const version of [2, 3]) {
+        const response = await fixture.get(`/api/v${version}/views/office`);
+        assert.equal(response.status, 200, response.text);
+        assert.equal(JSON.stringify(response.json.data).includes(canary), false, `v${version} drops title after Logs read is removed`);
+        const primary = response.json.data.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
+        assert.equal(primary.sessionKey, null, `v${version} drops session identity after Logs read is removed`);
+      }
+      fixture.cookie = ownerCookie;
+      for (const version of [2, 3]) {
+        const response = await fixture.get(`/api/v${version}/views/office`);
+        assert.equal(response.status, 200, response.text);
+        assert.equal(JSON.stringify(response.json.data).includes(canary), true, `v${version} preserves the owner legacy-cookie grant`);
       }
     } finally { await fixture.close(); }
   });
@@ -462,6 +631,10 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         assert.equal(builder.parentId, pm.id, `v${version} membership parent does not depend on host availability`);
         assert.equal(builder.state, 'working', `v${version} retains the fresh runtime evidence`);
         assert.equal(builder.summary, undefined, 'session-derived summaries remain hidden when not readable');
+        assert.ok(builder.stationUid, `v${version} plans the final exact-session-folded occupant id onto a desk`);
+        assert.equal(builder.sceneTarget?.stationUid, builder.stationUid,
+          `v${version} scene intent targets the folded occupant's allocated desk`);
+        assert.notEqual(builder.stationUid, pm.stationUid, `v${version} does not allocate the lead's desk twice`);
         assert.equal(validate(require('../../src/api/v2/vm/schemas').schemasFor(version).office, response.json.data).ok, true,
           `v${version} mounted OfficeVM validates`);
         const serialized = JSON.stringify(response.json.data);

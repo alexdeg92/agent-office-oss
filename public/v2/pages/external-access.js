@@ -1,3 +1,4 @@
+import { chunkError } from '../build-update.js';
 import { html, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../lib.js';
 import { msg, getLang } from '../i18n.js';
 import { registerMessages } from '../messages.js';
@@ -13,7 +14,7 @@ registerMessages(dictionary);
 let styles;
 export function loadStyles(){
  if(!globalThis.document)return Promise.resolve();
- return styles ||= Promise.all([loadBureauStyles(),new Promise((resolve,reject)=>{const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('./external-access.css'+buildQuery,import.meta.url).href;link.onload=resolve;link.onerror=()=>{link.remove();styles=null;reject(Error('External access stylesheet unavailable'));};document.head.append(link);})]).catch(error=>{styles=null;throw error;});
+ return styles ||= Promise.all([loadBureauStyles(),new Promise((resolve,reject)=>{const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('./external-access.css'+buildQuery,import.meta.url).href;link.onload=resolve;link.onerror=()=>{link.remove();styles=null;reject(chunkError(Error('External access stylesheet unavailable')));};document.head.append(link);})]).catch(error=>{styles=null;throw error;});
 }
 const DEFAULTS={mode:'local',apiPublicUrl:null,uiOrigins:[],domain:null,proxy:'caddy',security:{accessTokenMinutes:10,refreshIdleHours:12,refreshAbsoluteDays:7,partitionedCookie:false}};
 const MODES=['local','lan','private','public-same-origin','public-split-origin','tunnel'];

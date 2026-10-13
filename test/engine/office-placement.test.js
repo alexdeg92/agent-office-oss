@@ -54,6 +54,25 @@ test('a sparse lead pin128 is bounded and a conflicting member pin cannot split 
   for(const value of ['0','129000','../2','9007199254740991'])assert.equal(floorId(value),null);
 });
 
+test('automatic team floors and stations are stable across poll order and a fresh planner',()=>{
+  const teams = ['alpha', 'zeta'].flatMap((teamId, t) => Array.from({length: 7}, (_, i) => ({
+    id: `agent:${teamId}-${i}`, role: 'agent', teamId, parentId: i ? `agent:${teamId}-0` : null,
+    rosterOrder: t * 20 + 7 - i, state: 'working', name: `${teamId} ${i}`,
+  })));
+  const first = planOfficePlacement({index,layout:base,occupants:teams});
+  const pins = first.homeAssignments;
+  assert.ok(Object.keys(pins).length === 2);
+  const signature = rows => Object.fromEntries(rows.map(row => [row.id, `${row.floorId}:${row.stationUid}`]));
+  const expected = signature(first.placements);
+  for (const occupants of [teams.toReversed(), [...teams.slice(7), ...teams.slice(0, 7)].reverse()]) {
+    const projected = planOfficePlacement({index,layout:base,occupants,homeAssignments:pins});
+    assert.deepEqual(signature(projected.placements), expected, 'the persisted team and per-member station assignment survives poll reorder');
+  }
+  // Simulate a process restart by constructing a new planner with only the persisted contract.
+  const restarted = planOfficePlacement({index,layout:base,occupants:[...teams].sort((a,b)=>b.id.localeCompare(a.id)),homeAssignments:structuredClone(pins)});
+  assert.deepEqual(signature(restarted.placements), expected);
+});
+
 test('deskless conversations follow canonical parent chains onto the host floor, including bridge/nested rows',()=>{
   const workers=team(10),conversation={id:'opaque:conversation',role:'conversation',parentId:workers[0].id,rosterOrder:90},nested={...conversation,id:'opaque:nested-conversation',parentId:conversation.id};
   const result=planOfficePlacement({index,layout:base,occupants:[conversation,...workers,nested]});

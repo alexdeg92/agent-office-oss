@@ -104,7 +104,7 @@ test('registered pane-linked team members enter the office once with stable PM l
   assert.equal(projected.occupants.filter(row => row.role === 'primary').length, 1, 'only the instance main agent is primary');
   assert.equal(byName.get('Builder').parentId, byName.get('PM').id);
   assert.equal(byName.get('Critic').parentId, byName.get('PM').id);
-  assert.equal(byName.get('Critic').state, 'error');
+  assert.equal(byName.get('Critic').state, 'blocked');
   assert.equal(byName.get('Builder').state, 'unknown', 'a shared pane without exact identity does not assert status for either member');
   assert.equal(projected.kpis.find(row => row.id === 'active').value, null, 'the ambiguous host state makes the active count unknown');
   assert.deepEqual(projected.kpis.find(row => row.id === 'active').sub, { key: 'kpi.stateUnknown' }, 'the count explains ambiguous host evidence');

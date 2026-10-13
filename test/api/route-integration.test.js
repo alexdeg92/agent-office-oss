@@ -92,6 +92,36 @@ test('actual HTTP topics, actor-specific me, command VMs, conflicts and revision
     const deniedDelete=await f.request('DELETE','/api/v'+version+'/projects/'+vm.id+'/comments/'+comment.json.data.result.comment.id,{},f.admin);assert.equal(deniedDelete.status,403);
   }
 });
+test('actual RBAC Office responses withhold session overflow from readers without logs in v2 and v3',async t=>{
+  const f=await fixture(t),primary=f.engine.primaryAgent();
+  assert.ok(primary);
+  assert.equal(f.store.policy.can(f.admin,'logs','read'),true,'owner principal has the logs grant');
+  const base=f.engine.sessions()[0];assert.ok(base,'scenario supplies a canonical session template');
+  const rows=Array.from({length:80},(_,i)=>{
+    const row=structuredClone(base);
+    row.key='private-conversation-'+i;row.sessionId=null;row.class={...row.class,kind:'conversation-direct',agentId:primary.id,subagentId:null,heartbeatOf:null};
+    row.usage={total:1,input:null,output:null};row.updatedAt=Date.now();
+    row.interactive=true;
+    row.run={...row.run,status:'running',evidence:'status-field',evidenceLevel:'verified',observedAt:Date.now(),expiresAt:Date.now()+3600000,startedAt:Date.now(),endedAt:null};
+    return row;
+  });
+  const ingested=f.engine.ingestCanonical('sessions.snapshot',rows);
+  assert.equal(ingested.ok,true,JSON.stringify(ingested.issues));
+  assert.equal(f.engine.sessions().length,80);
+  f.set('logs','none');
+  for(const version of [2,3]) {
+    const restricted=await f.request('GET','/api/v'+version+'/views/office');
+    assert.equal(restricted.status,200,JSON.stringify(restricted));
+    assert.equal(Object.hasOwn(restricted.json.data,'occupantOverflowCount'),false);
+    assert.equal(restricted.json.data.conversationCount,0);
+    assert.deepEqual(restricted.json.data.conversationIds,[]);
+    const authorized=await f.request('GET','/api/v'+version+'/views/office',undefined,f.admin);
+    assert.equal(authorized.status,200,JSON.stringify(authorized));
+    assert.ok(authorized.json.data.occupantOverflowCount>0,`logs reader receives the full-population overflow: ${JSON.stringify({count:authorized.json.data.conversationCount,occupants:authorized.json.data.occupants.length,overflow:authorized.json.data.occupantOverflowCount})}`);
+    assert.equal(authorized.json.data.conversationCount,authorized.json.data.conversationIds.length);
+    assert.ok(authorized.json.data.conversationCount>0);
+  }
+});
 test('real async response boundary discards output after identity or permission revocation',async t=>{
   const f=await fixture(t);f.set('logs','read');
   for(const kind of ['permission','generation']) {

@@ -7,14 +7,16 @@ const path = require('node:path');
 const { nameOf, participantsOf } = require('../../engine/model/sender');
 const PROFILE = 'claude-jsonl-observed-v1';
 const { redactText } = require('../../security/redact-text');
+const { toolActivity, awaitingReplyText, WAITING_RECENCY_MS } = require('../transcript-execution');
 const MAX_BLOCKS = 256, MAX_TEXT = 32768;
+const MAX_PENDING_BACKGROUND = 64;
 const SUBAGENT_TOOLS = new Set(['Task', 'Agent']);   // T-0062: the sub-agent tool's names across versions
 const NON_SESSION_TYPES = new Set(['attachment', 'mode', 'permission-mode', 'atis-latch', 'last-prompt', 'ai-title',
   'queue-operation', 'progress', 'summary', 'file-history-snapshot']);
 const TOP_KEYS = new Set(['type','title','sessionId','session_id','timestamp','parentUuid','isSidechain','uuid','userType','entrypoint',
   'cwd','version','gitBranch','message','apiBlockIndex','requestId','advisorModel','effort','perTurnEffort','attachment',
   'rendered','renderedRole','promptId','wireToolInputs','toolUseResult','sourceToolAssistantUUID','thinkingDurationMs',
-  'permissionMode','mode','atis','lastPrompt','isMeta','isCompactSummary','agentId','subtype']);
+  'permissionMode','mode','atis','lastPrompt','isMeta','isCompactSummary','agentId','subtype','task_id','taskId','tool_use_id','toolUseId']);
 const MESSAGE_KEYS = new Set(['role','content','model','id','type','container','stop_reason','stop_sequence','stop_details',
   'usage','input_transformations','diagnostics','context_management']);
 const USAGE_KEYS = new Set(['input_tokens','output_tokens','cache_creation_input_tokens','cache_read_input_tokens',
@@ -55,7 +57,7 @@ function projectBasename(cwd) {
   return name && !['.', '..'].includes(name) && name.length <= 255 ? name : null;
 }
 // sidechainAgent (T-0062): this file is that sub-agent's own transcript (<session>/subagents/agent-<id>.jsonl)
-function mapRecord(row, { sessionKey, agentId, fallbackId, runtime = 'claude-code', counters = {}, sidechainAgent = null }) {
+function mapRecord(row, { sessionKey, agentId, fallbackId, runtime = 'claude-code', counters = {}, sidechainAgent = null, pendingBackground = false, pendingBackgroundIds = [], pendingBackgroundOverflow = false, awaitingReply = false, awaitingReplyAt = null, now = Date.now }) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return skip(counters, null);
   countExtra(row, TOP_KEYS, counters);
   if (row.type === 'ai-title') {
@@ -121,15 +123,67 @@ function mapRecord(row, { sessionKey, agentId, fallbackId, runtime = 'claude-cod
   if (row.type === 'user' && typeof spawned === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(spawned)) for (const b of content) if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string' && b.tool_use_id.length <= 512)
     spawns.push({ callId: b.tool_use_id, agentId: spawned });
   let execution = null;
-  if (row.type === 'user' && !row.isMeta && !row.isCompactSummary && !row.isSidechain && !row.agentId) execution = { status: 'running', at };
+  let activity = null;
+  const backgroundStarts = row.type === 'assistant' ? content.filter(b => b?.type === 'tool_use' && b.input?.run_in_background === true) : [];
+  const backgroundCompleted = row.type === 'system' && ['task_notification', 'background_task_completed', 'task_completed'].includes(row.subtype);
+  const pendingIds = new Set(Array.isArray(pendingBackgroundIds) ? pendingBackgroundIds.filter(id => typeof id === 'string').slice(-64) : []);
+  const currentTime = typeof now === 'function' ? now() : now;
+  let replyAt = Number.isSafeInteger(awaitingReplyAt) && awaitingReplyAt <= currentTime && currentTime - awaitingReplyAt < WAITING_RECENCY_MS ? awaitingReplyAt : null;
+  let replyPending = awaitingReply === true && replyAt !== null;
+  if (row.type === 'user' && !row.isMeta && !row.isCompactSummary && !row.isSidechain && !row.agentId) { replyPending = false; replyAt = null; }
+  if (row.type === 'assistant' && (m.stop_reason === 'end_turn' || m.stop_reason === 'stop_sequence')) {
+    const textAnswer = content.filter(b => b?.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n');
+    replyPending = awaitingReplyText(textAnswer);
+    replyAt = replyPending ? at : null;
+  }
+  let pendingOverflow = pendingBackgroundOverflow === true || (Array.isArray(pendingBackgroundIds) && pendingBackgroundIds.filter(id => typeof id === 'string').length > MAX_PENDING_BACKGROUND);
+  if (pendingBackground === true && !pendingIds.size && !pendingOverflow) { pendingIds.add('legacy:pending'); pendingOverflow = true; pendingIds.clear(); }
+  for (const [index, block] of backgroundStarts.entries()) {
+    const id = `tool:${typeof block.id === 'string' && block.id.length <= 512 ? block.id : `${fallbackId}:${index}`}`;
+    if (pendingIds.has(id)) continue;
+    if (pendingIds.size < MAX_PENDING_BACKGROUND) pendingIds.add(id);
+    else pendingOverflow = true;
+  }
+  if (backgroundCompleted && pendingIds.size) {
+    const completedId = [row.task_id, row.taskId, row.tool_use_id, row.toolUseId].find(id => typeof id === 'string' && id.length <= 512);
+    if (completedId) {
+      const exact = `tool:${completedId}`;
+      pendingIds.delete(exact);
+    }
+  }
+  const backgroundIsPending = pendingIds.size > 0 || pendingOverflow;
+  if (backgroundCompleted) activity = backgroundIsPending || replyPending ? 'waiting' : null;
+  else if (row.type === 'system' && ['permission_request', 'approval_request'].includes(row.subtype)) activity = 'blocked';
+  else if (row.type === 'system' && ['user_input_request', 'ask_user_question'].includes(row.subtype)) activity = 'waiting';
+  else if (row.type === 'user' && !row.isMeta && !row.isCompactSummary && !row.isSidechain && !row.agentId) {
+    activity = 'working';
+    execution = { status: 'running', at };
+    if (content.some(b => b?.type === 'tool_result')) activity = content.some(b => b?.type === 'tool_result' && b.is_error === true) ? 'blocked' : 'thinking';
+  }
   else if (row.type === 'assistant') {
-    const openTool = content.some(b => b?.type === 'tool_use');
+    const tools = content.filter(b => b?.type === 'tool_use');
+    const openTool = tools.length > 0;
+    const tool = tools.at(-1);
+    const textAnswer = content.filter(b => b?.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n');
+    const lastSignal = [...content].reverse().find(b => b?.type === 'thinking' || b?.type === 'tool_use');
+    if (lastSignal?.type === 'thinking') activity = 'thinking';
+    else if (tool || lastSignal?.type === 'tool_use') activity = toolActivity((tool || lastSignal).name);
+    else if (m.stop_reason == null && content.length) activity = 'thinking';
     if (m.stop_reason === 'end_turn' || m.stop_reason === 'stop_sequence') execution = { status: 'idle', at };
     else if (m.stop_reason === 'tool_use' || openTool || m.stop_reason == null) execution = { status: 'running', at };
     else execution = { status: 'idle', at };
+    if (execution.status === 'idle') activity = backgroundIsPending || replyPending ? 'waiting' : null;
   }
+  // A later completion can be the event that reveals an outstanding reply
+  // wait, but it must not renew that wait's lease. Anchor it to the original
+  // question timestamp so cached readers and subsequent refreshes expire it
+  // at the same deadline.
+  const activitySince = activity === 'waiting' && replyPending ? replyAt : at;
   return { events, at, model: nameOf(m.model), projectName: projectBasename(row.cwd), summary: safeSummary(firstPrompt), recognized: true,
-    ...(execution ? { execution } : {}), ...(spawns.length ? { spawns } : {}) };
+    ...(execution ? { execution } : {}), ...(activity ? { activity: { kind: activity, since: activitySince } } : { activity: null }),
+    backgroundPending: backgroundIsPending, backgroundPendingIds: [...pendingIds], pendingBackgroundOverflow: pendingOverflow,
+    awaitingReply: replyPending, awaitingReplyAt: replyPending ? replyAt : null,
+    backgroundCompleted, ...(spawns.length ? { spawns } : {}) };
 }
 function mergeRecord(events, record) {
   for (const event of record.events) {

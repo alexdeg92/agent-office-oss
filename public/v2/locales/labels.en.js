@@ -21,8 +21,8 @@ export const LABELS_EN = {
   "projectThread.delivery.unavailable": "Read-only: {agent} wasn’t notified",
   "projectThread.event.summary-requested": "{actor} asked for a summary.",
 
-  'agentState.calling': 'Calling a tool', 'agentState.error': 'Error', 'agentState.idle': 'Idle', 'agentState.offline': 'Offline',
-  'agentState.researching': 'Researching', 'agentState.thinking': 'Thinking', 'agentState.waiting': 'Waiting', 'agentState.working': 'Working',
+  'agentState.blocked': 'Blocked', 'agentState.calling': 'Calling a tool', 'agentState.error': 'Error', 'agentState.executing': 'Executing',
+  'agentState.idle': 'Idle', 'agentState.offline': 'Offline', 'agentState.researching': 'Researching', 'agentState.thinking': 'Thinking', 'agentState.waiting': 'Waiting', 'agentState.working': 'Working',
   'agentState.writing': 'Writing',
   'channel.discord': 'Discord', 'channel.unrecognized': 'Unknown channel', 'channel.wechat': 'WeChat', 'channel.whatsapp': 'WhatsApp',
   'channelHealth.connected': 'Connected', 'channelHealth.error': 'Error', 'channelHealth.not-configured': 'Not configured',

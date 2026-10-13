@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBuildUpdate } from '../../public/v2/build-update.js';
+import { reloadGuards, hasDirtyDraft, allowReload } from '../../public/v2/services.js';
 import { createRouter } from '../../public/v2/router.js';
 import { configure } from '../../public/v2/config.js';
 import { createRequire } from 'node:module';
@@ -10,6 +11,22 @@ import { join } from 'node:path';
 const require = createRequire(import.meta.url);
 const { createFrontendServer } = require('../../scripts/serve-frontend.js');
 const { createApp } = require('../../src/api/http.js');
+
+test('reload guards preserve all dirty owners until every discard confirmation succeeds', async () => {
+  let confirm = false, asked = 0;
+  const a = { dirty: () => true, confirm: async () => { asked++; return confirm; } };
+  const b = { dirty: () => true, confirm: async () => { asked++; return true; } };
+  reloadGuards.add(a); reloadGuards.add(b);
+  try {
+    assert.equal(hasDirtyDraft(), true); assert.equal(asked, 0, 'automatic predicate never prompts or discards');
+    assert.equal(await allowReload(), false); assert.equal(asked, 1);
+    assert.equal(a.approved, false); assert.equal(b.approved, false);
+    confirm = true;
+    assert.equal(await allowReload(), true); assert.equal(asked, 3);
+    assert.equal(a.approved, true); assert.equal(b.approved, true);
+  } finally { reloadGuards.delete(a); reloadGuards.delete(b); }
+  assert.equal(hasDirtyDraft(), false);
+});
 
 test('build update: one non-blocking notification, no navigation until a full reload of the target', async () => {
   let deployed = 'A', notice, notifications = 0;
@@ -38,34 +55,40 @@ test('build update: missing/failed checks preserve offline navigation; concurren
   assert.equal(await createBuildUpdate({ build: 'A', fetchBuild: async () => { throw Error('offline'); } }).beforeNavigate('/journaux'), true);
 });
 
-test('build update: a stalled endpoint releases navigation at 800ms and the page reuses its check', async t => {
+test('build update: navigation awaits a slow complete response instead of assuming current after 800ms', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   let reads = 0, resolve, notices = 0;
   const release = createBuildUpdate({ build: 'A', fetchBuild: () => {
     reads++; return new Promise(r => { resolve = r; });
   }, notify: () => { notices++; }, reload: () => {} });
   let continued = false;
-  const navigation = release.beforeNavigate('/journaux').then(value => { continued = value; });
+  let settled = false;
+  const navigation = release.beforeNavigate('/journaux').then(value => { continued = value; settled = true; });
   await Promise.resolve();
   t.mock.timers.tick(799); await Promise.resolve();
   assert.equal(continued, false);
-  t.mock.timers.tick(1); await navigation;
-  assert.equal(continued, true);
-  assert.equal(await release.check({ maxAge: 800 }), false);
+  t.mock.timers.tick(2201); await Promise.resolve();
+  assert.equal(settled, false);
+  const shared = release.check({ maxAge: 800 });
   assert.equal(reads, 1, 'the lazy page does not add a second navigation delay');
-  resolve('B'); await Promise.resolve(); await Promise.resolve();
+  resolve('B'); await navigation;
+  assert.equal(continued, false);
+  assert.equal(await shared, true);
   assert.equal(release.stale, true, 'a late deployment result still announces the update');
   assert.equal(notices, 1);
   assert.equal(await release.beforeNavigate('/bureau'), false);
 });
 
-test('build update: a successful check cancels its deadline and the next navigation checks afresh', async t => {
+test('build update: a successful check is reused and the next navigation checks afresh', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   let deployed = 'A', reads = 0;
   const release = createBuildUpdate({ build: 'A', fetchBuild: async () => { reads++; return deployed; }, reload: () => {} });
   assert.equal(await release.beforeNavigate('/journaux'), true);
   assert.equal(await release.check({ maxAge: 800 }), false);
   assert.equal(reads, 1);
+  t.mock.timers.tick(3000);
+  assert.equal(await release.beforePageLoad(), false);
+  assert.equal(reads, 1, 'a slow render consumes the completed navigation check without a second wait');
   deployed = 'B';
   assert.equal(await release.beforeNavigate('/bureau'), false);
   assert.equal(reads, 2);

@@ -131,6 +131,24 @@ describe('manifest.example.json ↔ delivered art', () => {
   });
 });
 
+it('blocked and executing states have explicit, available scene mappings', () => {
+  const { viewFor, stateIconFor, SEATED_VIEW } = require(path.join(OFFICE, 'states.js'));
+  const { readFileSync } = require('node:fs');
+  assert.ok(STATES.includes('blocked'));
+  assert.equal(viewFor('blocked').marker, 'alert');
+  assert.equal(viewFor('blocked').pose, 'alert');
+  assert.equal(SEATED_VIEW.blocked.pose, 'seated-alert-sw');
+  assert.equal(SEATED_VIEW.blocked.turn, true);
+  assert.equal(stateIconFor('blocked'), 'state-error');
+  assert.equal(viewFor('executing').pose, 'working');
+  assert.equal(viewFor('executing').marker, 'executing');
+  assert.equal(stateIconFor('executing'), 'tool-exec');
+  assert.match(readFileSync(path.join(__dirname, '../../public/v2/icons.js'), 'utf8'), /"tool-exec"/);
+  for (const character of manifest.characters) {
+    assert.ok(character.poses[viewFor('blocked').pose], `${character.id} has blocked pose`);
+  }
+});
+
 describe('layout.example.json', () => {
   const room = idx.rooms.get(layout.room);
   const floor = layout.items.filter((i) => i.wall == null);

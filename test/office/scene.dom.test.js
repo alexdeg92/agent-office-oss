@@ -826,7 +826,8 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
     assert.equal(r.focus, 'Fermer');
     assert.equal(r.current, 'true');
     assert.match(r.plate, /^Plume, /);
-    assert.equal(r.bodyParagraphs.length, 1, 'the drawer shows the selected occupant state without appending a fabricated unknown label');
+    // The state, then (T-0106, office-dev-70) the execution evidence only when the VM carries one (Plume: verified).
+    assert.deepEqual(r.bodyParagraphs, ['Rédige', 'Vérifié'], 'the drawer shows the selected occupant state and its real evidence, never a fabricated unknown label');
     await p.key('Escape');
     const after = await p.eval(`await window.officeBench.until(() => !document.querySelector('.bu-drawer') && document.activeElement.closest('.ao-roster')); return { drawer: !!document.querySelector('.bu-drawer'), focus: (document.activeElement.querySelector('.ao-roster__name') ?? document.activeElement).textContent.trim(), url: location.search };`);
     assert.deepEqual(after, { drawer: false, focus: 'Plume', url: '?steps=6&tick=600000' });

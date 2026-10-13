@@ -1,3 +1,4 @@
+import { chunkError, reloadChunks } from '../build-update.js';
 import { html, useEffect, useState } from '../lib.js';
 import { buildQuery } from '../config.js';
 import * as api from '../api.js';
@@ -19,7 +20,7 @@ export async function loadStyles() {
   sheet = new Promise((resolve, reject) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet'; link.href = href.href; link.dataset.designSystemCss = '';
-    link.onload = resolve; link.onerror = () => { link.remove(); sheet = null; reject(new Error('Design system gallery stylesheet unavailable')); };
+    link.onload = resolve; link.onerror = () => { link.remove(); sheet = null; reject(chunkError(new Error('Design system gallery stylesheet unavailable'))); };
     document.head.append(link);
   });
   return sheet;
@@ -69,7 +70,7 @@ export function DesignSystemPage() {
   }, []);
 
   if (!stylesReady) return styleError
-    ? html`<div class="ds-gate" role="alert"><span>${tr('Styles indisponibles.','Styles are unavailable.')}</span><${Button} label=${tr('Réessayer','Retry')} onPress=${ensureStyles} /></div>`
+    ? html`<div class="ds-gate" role="alert"><span>${tr('Styles indisponibles.','Styles are unavailable.')}</span><${Button} label=${tr('Réessayer','Retry')} onPress=${() => reloadChunks({ manual: true })} /></div>`
     : html`<div class="ds-gate" role="status" aria-busy="true"><span class="bu-spinner" aria-hidden="true"></span><span>${tr('Chargement de la bibliothèque','Loading the library')}</span></div>`;
   if (access === 'checking') return html`<div class="ds-gate" role="status" aria-busy="true"><span class="bu-spinner" aria-hidden="true"></span><span>${tr('Vérification de l’accès','Checking gallery access')}</span></div>`;
   if (access !== 'allowed') return html`<div class="ds-gate"><${EmptyState} icon="system" title=${tr('Accès indisponible','Access unavailable')} text=${tr('Cette galerie est réservée au propriétaire de l’instance.','This design-system gallery is restricted to the instance owner.')} compact /></div>`;

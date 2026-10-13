@@ -1,3 +1,4 @@
+import { chunkError } from '../build-update.js';
 // First-run setup (F8; explorer-05 « installation », ADR-001 §5 / §12.1, G4): shown instead of the app when
 // MetaVM.instance.configured === false. Welcome (one-time setup code) → runtime → gateway check → agents → identities
 // → office → review → done. The step is in the URL (?etape=); the setup code and the runtime token live in memory
@@ -30,7 +31,7 @@ export function loadStyles() {
     l.rel = 'stylesheet';
     l.href = new URL('./setup.css' + buildQuery, import.meta.url).href;
     l.onload = resolve;
-    l.onerror = () => { l.remove(); styles = null; reject(new Error('Setup stylesheet unavailable')); };
+    l.onerror = () => { l.remove(); styles = null; reject(chunkError(new Error('Setup stylesheet unavailable'))); };
     document.head.append(l);
   }).then(() => loadExternalAccessStyles()).catch(error => { styles=null; throw error; });
   return styles;

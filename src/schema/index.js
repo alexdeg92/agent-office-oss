@@ -63,9 +63,10 @@ const s = {
   // Deliberately opaque subtree we pass through without inspecting (documented at each use).
   unknown: () => new Schema('unknown', (v) => ({ ok: true, value: v })),
 
-  array(item, { perItem = false } = {}) {
+  array(item, { perItem = false, maxItems = null } = {}) {
     const sch = new Schema('array<' + item.describe() + '>', (v, p, ctx) => {
       if (!Array.isArray(v)) return bad(ctx, p, 'array', v);
+      if (Number.isSafeInteger(maxItems) && maxItems >= 0 && v.length > maxItems) return bad(ctx, p, `array with at most ${maxItems} items`, v);
       const out = [];
       for (let i = 0; i < v.length; i++) {
         const before = ctx.issues.length;
@@ -76,7 +77,7 @@ const s = {
       }
       return { ok: true, value: out };
     });
-    sch.item = item; sch.perItem = perItem;
+    sch.item = item; sch.perItem = perItem; sch.maxItems = maxItems;
     return sch;
   },
 

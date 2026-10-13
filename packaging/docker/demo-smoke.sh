@@ -60,10 +60,41 @@ while [ "$i" -lt 40 ]; do
 done
 [ "$html" = 1 ] || fail "GET / did not serve the UI"
 
+# The container's front proxy can serve the UI before its API process is ready.
+# Probe the public bootstrap only for readiness; it intentionally omits runtime
+# and primary-agent metadata until the owner authenticates.
+i=0
+api_code=000
+while [ "$i" -lt 40 ]; do
+  api_code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/backend/api/v3/meta" 2>/dev/null || true)
+  [ "$api_code" = "200" ] && break
+  i=$((i + 1))
+  sleep 1
+done
+[ "$api_code" = "200" ] || fail "API did not become ready (meta returned ${api_code})"
+
+login_code=$(curl -sS -o "$TMP/login.json" -w '%{http_code}' \
+  -c "$TMP/cookies" \
+  -H 'content-type: application/json' \
+  -H 'X-AO-Request: 1' \
+  --data-binary @- \
+  "$base/backend/api/login" <<EOF
+{"email":"${EMAIL}","password":"${PASSWORD}"}
+EOF
+)
+[ "$login_code" = "200" ] || fail "login returned ${login_code}"
+node - "$TMP/login.json" <<'JS' || fail "login body was not ok"
+const fs = require('fs');
+const body = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (!body.ok) process.exit(1);
+JS
+
+# Metadata is private bootstrap data; inspect the selected demo runtime only
+# after establishing the owner session, just like the app does after login.
 i=0
 meta_code=000
 while [ "$i" -lt 40 ]; do
-  meta_code=$(curl -sS -o "$TMP/meta.json" -w '%{http_code}' "$base/backend/api/v3/meta" 2>/dev/null || true)
+  meta_code=$(curl -sS -o "$TMP/meta.json" -w '%{http_code}' -b "$TMP/cookies" "$base/backend/api/v3/meta" 2>/dev/null || true)
   [ "$meta_code" = "200" ] && break
   i=$((i + 1))
   sleep 1
@@ -80,22 +111,6 @@ if (runtime.id !== 'demo') process.exit(1);
 if (primary.id !== 'nova' || primary.name !== 'Nova') process.exit(1);
 if (!data.instance || data.instance.configured !== true) process.exit(1);
 if (data.readonly !== true) process.exit(1);
-JS
-
-login_code=$(curl -sS -o "$TMP/login.json" -w '%{http_code}' \
-  -c "$TMP/cookies" \
-  -H 'content-type: application/json' \
-  -H 'X-AO-Request: 1' \
-  --data-binary @- \
-  "$base/backend/api/login" <<EOF
-{"email":"${EMAIL}","password":"${PASSWORD}"}
-EOF
-)
-[ "$login_code" = "200" ] || fail "login returned ${login_code}"
-node - "$TMP/login.json" <<'JS' || fail "login body was not ok"
-const fs = require('fs');
-const body = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-if (!body.ok) process.exit(1);
 JS
 
 office() {

@@ -1,3 +1,4 @@
+import { loadModule } from '../build-update.js';
 import { buildQuery } from '../config.js';
 // In-browser mock of API v2 (used with ?mock=… or while /api/v2 answers 404). It speaks the exact
 // api.md shapes: envelopes, the error format, and an SSE-like source with hello/snapshot/delta/system frames.
@@ -63,7 +64,7 @@ export async function login(email, password) {
   await sleep(400);
   if (!email || !password || password.length < 4) {
     const err = { status: 401, body: { error: { code: 'unauthorized', message: 'Identifiants invalides. Vérifiez le courriel et le mot de passe.', requestId: rid() } } };
-    const { toApiError } = await import('../api.js' + buildQuery);
+    const { toApiError } = await loadModule(() => import('../api.js' + buildQuery));
     throw toApiError(err.status, err.body);
   }
   setLoggedIn(true);
@@ -72,7 +73,7 @@ export async function login(email, password) {
 export async function logout() {
   // Test hook (?mock=…&echec-deconnexion=1): the logout request never reaches the server (R4-11).
   if (globalThis.location && new URLSearchParams(location.search).has('echec-deconnexion')) {
-    const { ApiError } = await import('../api.js' + buildQuery);
+    const { ApiError } = await loadModule(() => import('../api.js' + buildQuery));
     throw new ApiError({ code: 'network', message: 'Le serveur ne répond pas. Vérifiez la connexion, puis réessayez.' });
   }
   setLoggedIn(false);
@@ -221,7 +222,7 @@ function externalAccessMock(path) {
 }
 async function settingsMock() {
   if (!settingsDb) settingsDb = (async () => {
-    const {createSettingsMock}=await import('./settings.js' + buildQuery);
+    const {createSettingsMock}=await loadModule(() => import('./settings.js' + buildQuery));
     const variant=['settings-fixall','settings-fixall-partial','settings-fixall-delayed'].includes(scenario) ? 'settings-fixall-vm' : ['settings-readonly','settings-env','settings-restart-manual'].includes(scenario) ? scenario + '-vm' : 'settings-vm';
     const names=[variant,'check-result','integration-plan-result','reauth-request',...(scenario === 'settings-fixall-partial' ? ['fix-all-partial-result'] : [])];
     const examples=Object.fromEntries(await Promise.all(names.map(async name => [name,await fetch(assetUrl('mock/examples/settings/' + name + '.json')).then(r => r.json())])));

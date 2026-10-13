@@ -1,3 +1,4 @@
+import { loadModule, chunkError, reloadChunks } from '../build-update.js';
 // Bureau: OfficeVM + LayoutVM; headline, scene, roster and Carnet in reading order.
 import { html, useEffect, useRef, useState } from '../lib.js';
 import { useTopic, useNow, useStore } from '../hooks.js';
@@ -15,17 +16,18 @@ import { streamUnconfirmed } from '../stream.js';
 import * as fmtTz from '../fmt.js';
 import { Frame, Icon, Ago, Skeleton, ErrorState } from '../components/ui.js';
 import { OfficeScene } from './scene.js';
+import * as sceneIntents from './scene-intents.js';
 import { Modal } from '../components/modal.js';
 let Button, MobileRoster;
 let mobileControls;
 const loadMobileControls=()=>mobileControls ||= Promise.all([
-  import('./mobile-roster.js' + buildQuery),
-  import('../components/bureau/styles.js' + buildQuery).then(module=>module.loadStyles()),
+  loadModule(() => import('./mobile-roster.js' + buildQuery)),
+  loadModule(() => import('../components/bureau/styles.js' + buildQuery)).then(module=>module.loadStyles()),
 ]).then(([module])=>{Button=module.Button;MobileRoster=module.MobileRoster;}).catch(error=>{mobileControls=null;throw error;});
-import { STATES } from './states.js';
+import { STATES, stateIconFor } from './states.js';
 import { indexManifest } from './assets.js';
 import { avatarSource, CharacterAvatar } from './avatar.js';
-import { itemName, resolveOccupants, canonicalRuleId } from './layout-rules.js';
+import { itemName, canonicalRuleId } from './layout-rules.js';
 import { displayName } from './names.js';
 import { s as tr, locale, duration, labelOf } from './strings.js';
 import { headline } from './headline.js';
@@ -36,7 +38,7 @@ export { shippedLayoutVM };
 // Localize generated titles; preserve given names.
 const titleSource = (ref) => (ref && services.meta?.labels?.[ref.key] != null ? fmt.interpolate(services.meta.labels[ref.key], ref.params ?? {}) : null);
 const nameOf = (o) => displayName(o, { primaryName: primaryName(), title: o.title ? L(o.title) : null, titleSource: titleSource(o.title) });
-const occupantsKey = (list) => list.map((o) => [o.id, o.state, o.stateSince, o.stationUid, o.presenceLabel ?? '', o.name, JSON.stringify(o.look), o.destination?.stationUid ?? ''].join('\u0001')).join('\u0002');
+const occupantsKey = (list) => list.map((o) => [o.id, o.state, o.stateSince, o.stationUid, o.presenceLabel ?? '', o.name, JSON.stringify(o.look), o.destination?.stationUid ?? '', JSON.stringify([o.sceneTarget, o.sceneTravel, o.activity, o.standingPoint])].join('\u0001')).join('\u0002');
 
 function useSceneRecovery() {
   const dispose = useRef(null);
@@ -49,11 +51,6 @@ function useSceneRecovery() {
   return { dispose, error, attempt, retry, protect };
 }
 
-/** Occupants restyled by a layout (looks and home stations), as the server's OfficeVM would after a save. */
-function withLayout(occupants, lay) {
-  const r = resolveOccupants(lay.layout.data, indexOf(lay.manifest), occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, automaticLook: o.automaticLook })));
-  return occupants.map((o, i) => ({ ...o, look: r[i].look, stationUid: r[i].stationUid, ruleId: r[i].ruleId }));
-}
 /** Occupants with their display name resolved (the scene and the headline read `name`). */
 const named = (list) => list.map((o) => ({ ...o, name: nameOf(o), stateLabelText: L(o.stateLabel), stateLastLabelText: L(o.stateLastLabel) }));
 // Keep the generic i18n fallback out; each sentence chooses its own form.
@@ -99,7 +96,7 @@ function loadStyles() {
       const finish = ok => {
         clearTimeout(timer); link.onload = link.onerror = null;
         if (ok) { link.dataset.loaded = 'true'; resolve(); }
-        else { link.remove(); styleLoads.delete(href); reject(new Error(tr('office.mapUnavailable'))); }
+        else { link.remove(); styleLoads.delete(href); reject(chunkError(new Error(tr('office.mapUnavailable')))); }
       };
       const timer = setTimeout(() => finish(false), 10000);
       link.onload = () => finish(true); link.onerror = () => finish(false);
@@ -114,11 +111,11 @@ function useStyles() {
   const [ready, setReady] = useState(stylesReady);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const retry = () => { setError(null); setAttempt(n => n + 1); };
+  const retry = () => reloadChunks({ manual: true });
   useEffect(() => {
     let alive = true;
     loadStyles().then(() => { if (alive) setReady(true); }, e => { if (alive) setError(e); });
-    const online = () => { if (!stylesReady()) retry(); };
+    const online = () => { if (!stylesReady()) { setError(null); setAttempt(n => n + 1); } };
     window.addEventListener('online', online);
     return () => { alive = false; window.removeEventListener('online', online); };
   }, [attempt]);
@@ -159,7 +156,7 @@ export function BureauPage({ match }) {
 
 function BureauContent({ match }) {
   const [teamUI, setTeamUI] = useState(null);
-  useEffect(() => { import(new URL('./team-office.js' + buildQuery, import.meta.url).href).then(setTeamUI, api.toastError); }, []);
+  useEffect(() => { loadModule(() => import(new URL('./team-office.js' + buildQuery, import.meta.url).href)).then(setTeamUI, api.toastError); }, []);
   const lang = useLang();
   const mobile = usePhone();
   const [controlsReady,setControlsReady]=useState(!!Button);
@@ -170,6 +167,8 @@ function BureauContent({ match }) {
   },[mobile]);
   const office = useTopic('office', '/api/v2/views/office');
   const layout = useLayout();
+  const layoutRef = useRef(layout.data);
+  layoutRef.current = layout.data;
   const status = useStore(services.stream?.status ?? NO_STATUS);
   const now = useNow(1_000);
   const selected = match.query.agent || null;
@@ -195,6 +194,7 @@ function BureauContent({ match }) {
   }, [mobileSheet]);
   const closeMobileSheet=()=>{mobileIsolation.current?.();setMobileSheet(null);};
   const mainScene=useRef(null);
+  const travelMemory=useRef(new Map());
   const [feed, setFeed] = useState('journal');   // the Journal / File tabs below the office
   // A language switch remounts the scene (its labels are set at mount), but never under an open editor's draft.
   const [stageLang, setStageLang] = useState(lang);
@@ -272,7 +272,7 @@ function BureauContent({ match }) {
       <div class="ao-bureau__stagecol">
         <div class="ao-bureau__stagewrap">
           ${mobile ? html`<button type="button" class="bu-btn bu-btn--sm ao-floor-mobile-trigger" onClick=${() => setMobileSheet('floors')} aria-haspopup="dialog">${tr('office.floor.picker')}: ${floorLabel(currentFloor)}</button>` : null}
-          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : visiblePeople} lay=${floorLay} store=${currentStore} floor=${currentFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} minimalLabels=${mobile && !editing} />
+          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${visiblePeople} lay=${floorLay} store=${currentStore} floor=${currentFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} travelMemory=${travelMemory.current} minimalLabels=${mobile && !editing} />
           ${editing ? null : html`<button type="button" class="bu-btn bu-btn--sm bu-btn--icon ao-mobile-options" disabled=${mobile&&!controlsReady} aria-label=${i18n.msg('office.mobile.options')} onClick=${() => setMobileSheet('options')}><${Icon} name="plus" /></button>`}
         </div>
         ${editing || !mobile ? null : html`<${MobileSummary} summary=${vm.rosterSummary} kpis=${vm.kpis || []} unconfirmed=${unconfirmed} />
@@ -413,7 +413,7 @@ function ThemeToggle({ lay, store = officeApi(), labelId = 'ao-theme-label', vis
 }
 
 /** The scene: one OfficeScene per mount, fed from the VMs; cues from SSE `cue` frames. */
-function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, minimalLabels }) {
+function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, travelMemory, minimalLabels }) {
   const latestOcc = useRef(occupants);
   latestOcc.current = occupants;
   const host = useRef(null);
@@ -438,6 +438,7 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
     dispose.current = cleanup;
     protect(() => {
       scene = new OfficeScene(host.current, {
+        intents: sceneIntents,
         manifest: lay.manifest, layout: lay.layout.data, assetBase: assetBase(),
         theme: lay.theme.resolved, onSelect: (id) => onSelect(id), primaryName: () => primaryName(), timeZone: () => fmtTz.timeZone(),
       });
@@ -469,8 +470,9 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
   // Occupants: the same list as the roster and the drawer.
   useEffect(() => protect(() => {
     if (!sceneRef.current || editorRef.current) return;
+    sceneRef.current.setTravelIntents(vm.occupants, floor.id, travelMemory);
     sceneRef.current.setOccupants(named(occupants));
-  }), [occupantsKey(occupants), attempt]);
+  }), [occupantsKey(occupants), JSON.stringify(vm.occupants.map(o => [o.id, o.sceneTravel])), editing, attempt]);
 
   useEffect(() => protect(() => { sceneRef.current?.setSignals(vm.journal); }), [vm.journal, attempt]);
   useEffect(() => protect(() => { sceneRef.current?.select(selected); }), [selected, vm.occupants, attempt]);
@@ -483,7 +485,7 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
     if (!editing || editorRef.current || !sceneRef.current) return;
     let alive = true;
     // The editor loads on first use.
-    import('./editor.js' + buildQuery).then(({ openEditor }) => openEditor({
+    loadModule(() => import('./editor.js' + buildQuery)).then(({ openEditor }) => openEditor({
       scene: sceneRef.current, store, assetBase: assetBase(), primaryName: primaryName(), timeZone: fmtTz.timeZone(),
       barHost: document.getElementById('ao-bureau-editbar'), asideHost: document.getElementById('ao-bureau-editaside'),
       getOccupants: () => latest.current.occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, automaticLook: o.automaticLook, state: o.state, stateSince: o.stateSince })),
@@ -493,15 +495,17 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
         editorRef.current = null;
         const s = sceneRef.current;
         if (s) {
-          // R8-10: the scene shows the authoritative layout again: the saved VM, else the latest subscribed one
-          // (an unsaved exit must drop the preview).
-          const L = (result?.saved && result.vm) || latestLay.current;
+          // Drop the draft and restore subscribed server data. A LayoutVM save
+          // response cannot supply occupant placement; refresh OfficeVM below.
+          const L = latestLay.current;
           s.setLayout(L.layout.data);
           s.setTheme(L.theme.resolved);
-          // Re-resolve saved looks with the same resolver used by OfficeVM.
-          s.setOccupants(named(result?.saved ? withLayout(latestOcc.current, L) : latestOcc.current));
+          // Restore the last server projection until the refreshed OfficeVM arrives.
+          s.setTravelIntents(latest.current.occupants, floor.id, travelMemory);
+          s.setOccupants(named(latestOcc.current));
         }
         setEditing(false);
+        if (result?.saved) services.stream.resync?.('office');
       }),
     })).then((ed) => {
       if (!alive) { ed.close({ saved: false }); return; }
@@ -585,7 +589,7 @@ function FloorPicker({ floors, current, onSelect, mobile = false }) {
 function StateChip({ state, stateLabel: stateRef, stateActive = false, live = true, title }) {
   const on = live && stateActive;
   return html`<span class=${'bu-state ao-roster__state' + (on ? ' bu-state--live ao-roster__state--live' : '')} data-agent-state=${state} title=${title || undefined}>
-    <${Icon} name=${STATES.includes(state) ? 'state-' + state : 'info'} />${L(stateRef)}</span>`;
+    <${Icon} name=${STATES.includes(state) ? stateIconFor(state) : 'info'} />${L(stateRef)}</span>`;
 }
 
 /** Journal (O3): time, then the event's sentence (it already names its subject, set in bold when it leads); a repeated
@@ -675,6 +679,7 @@ function Drawer({ o, lay, onClose, onCustomize, onBack, teamLabel, unconfirmed, 
           <div class="bu-kv__row"><dt>${tr('office.drawer.station')}</dt><dd>${stationText(o, lay)}</dd></div>
           ${o.sessionKey ? html`<details class="ao-drawer__technical"><summary>${tr('office.tech')}</summary><dl><div class="bu-kv__row"><dt>${tr('office.drawer.session')}</dt><dd class="bu-mono">${o.sessionKey}</dd></div></dl></details>` : null}
         </dl>
+        ${['observed', 'verified'].includes(o.execution?.evidence?.level) ? html`<p class="ao-drawer__evidence">${tr('state.' + o.execution.evidence.level)}</p>` : null}
       </div>
       <div class="bu-modal__footer">
         ${onCustomize ? html`<button type="button" class="bu-btn bu-btn--ghost" onClick=${onCustomize}><${Icon} name="pencil" />${tr('office.customize')}</button>` : null}

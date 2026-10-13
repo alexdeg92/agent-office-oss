@@ -22,4 +22,13 @@ describe('shared VM schema module (frontend)', () => {
     assert.equal(bad.ok, false); assert.ok(!JSON.stringify(bad).includes('secret-value'));
     assert.equal(m.validateVM('nope', {}).ok, false);
   });
+  it('browser v2/v3 validators accept the backend blocked state', async () => {
+    const m = await import(pathToFileURL(path.resolve(OUT)).href);
+    for (const version of [2, 3]) {
+      const vm = structuredClone(loadExample('office-vm', version).data);
+      vm.occupants[0].state = 'blocked';
+      vm.occupants[0].stateLabel = { key: 'agentState.blocked' };
+      assert.equal(m.validateVM('office', vm, version).ok, true, `v${version} blocked state is in the generated schema`);
+    }
+  });
 });

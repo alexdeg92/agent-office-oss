@@ -1,5 +1,5 @@
 {
-  "$comment": "Shape sidecar for office-vm.json (api.md §3.2). execution separates lifecycle status/evidence from the presentation state and source health. occupants[].exchanges (architect-55) is optional: conversation occupants with a known answered exchange. occupants[].summary/model/project/runtime/startedAt/lastActivityAt/tokensKnown (agent-identity-1) are optional: present only for callers with the sessions read grant, when the source knows them. occupants[].automaticLook is the durable assignment; its variant may be null. occupants[].parentId (T-0062/T-0092) is required and nullable: the authorized occupant id of the spawner/parent on stage, or null for roots and callers without lineage access.",
+  "$comment": "Shape sidecar for office-vm.json (api.md §3.2). execution separates lifecycle status/evidence from the presentation state and source health. occupants[].exchanges (architect-55) is optional: conversation occupants with a known answered exchange. occupants[].summary/model/project/runtime/startedAt/lastActivityAt/tokensKnown (agent-identity-1) are optional: present only for callers with the sessions read grant, when the source knows them. occupants[].automaticLook is the durable assignment; its variant may be null. occupants[].parentId (T-0062/T-0092) is required and nullable: the authorized occupant id of the spawner/parent on stage, or null for roots and callers without lineage access. The optional $.occupantOverflowCount is the exact number omitted by bounded Office projection and is visible only with sessions.read.",
   "nullable": [
     "$.connection.since",
     "$.kpis[].value",
@@ -32,7 +32,8 @@
     "$.occupants[].execution.evidence.observedAt": "number",
     "$.occupants[].execution.evidence.expiresAt": "number",
     "$.rosterFloors[].capacity": "number",
-    "$.visitIntent.until": "number"
+    "$.visitIntent.until": "number",
+    "$.occupantOverflowCount": "number"
   },
   "variants": {
     "$.occupants[].destination": [
@@ -203,5 +204,7 @@
   "opaque": [
     "$.rosterFloors[].layout"
   ],
-  "optional": []
+  "optional": [
+    "$.occupantOverflowCount"
+  ]
 }

@@ -193,20 +193,24 @@ test('project labels use only a validated cwd basename, keep opaque identity, an
   fs.renameSync(file, file + '.old'); fs.writeFileSync(file, JSON.stringify(record('label-main', 'New generation', { cwd: privateRoot + '/renamed-project' })) + '\n');
   await runtime.cycle(); assert.equal(engine.agents().find(a => a.id === id).name, 'renamed-project', 'rotation resets label metadata, keeping identity');
 });
-test('Claude JSONL maps transcript run evidence, stable trace IDs, and an open tool turn as working', async t => {
+test('Claude JSONL maps transcript run evidence, stable trace IDs, and an open read turn as researching', async t => {
   const h = fixture(t), id = 'session-a';
   const file=h.file('project-one', id, [record(id), record(id, '', { type: 'assistant', uuid: 'assistant-event', message: { role: 'assistant', model: 'synthetic-model',
-    content: [{ type: 'thinking', thinking: 'Synthetic thought' }, { type: 'tool_use', id: 'call-one', name: 'Read', input: { path: 'synthetic.txt' } }] } }),
-  record(id, '', { uuid: 'result-event', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-one', content: 'Synthetic result' }] } })]);
+    content: [{ type: 'thinking', thinking: 'Synthetic thought' }, { type: 'tool_use', id: 'call-one', name: 'Read', input: { path: 'synthetic.txt' } }] } })]);
   const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } }, { now: () => NOW }), engine = createEngine({ adapter: runtime.definition, now: () => NOW });
   t.after(() => runtime.close()); runtime.attach(engine); await runtime.start(engine);
   const session = engine.sessions()[0]; assert.deepEqual([session.run.status, session.run.evidence, session.run.evidenceLevel], ['running', 'live-activity', 'observed']);
   assert.equal(session.run.expiresAt, NOW - 1000 + 30000, 'open transcript turns carry the bounded recency lease');
   const office = buildOfficeVM({ engine, canReadSessions: true, now: NOW, tracker: createStateTracker(), actorOf: x => x, P: project3x });
-  assert.ok(office.occupants.some(o => o.state === 'working'), 'a live transcript-backed run reads as Working in Office');
+  assert.ok(office.occupants.some(o => o.state === 'researching'), 'an open Read tool turn renders its safe rich activity in Office');
   assert.ok(office.occupants.every(o => o.state !== 'unknown'), 'sessions with transcript state do not render Unknown');
   assert.ok(office.occupants.some(o => o.execution.status === 'running' && o.execution.evidence.level === 'observed'));
-  const trace = engine.transcript(session.key); assert.equal(trace.events.length, 3); assert.equal(trace.events.find(e => e.kind === 'tool').output, 'Synthetic result');
+  let trace = engine.transcript(session.key); assert.equal(trace.events.length, 3); assert.equal(trace.events.find(e => e.kind === 'tool').output, '');
+  fs.appendFileSync(file, JSON.stringify(record(id, '', { uuid: 'result-event', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-one', content: 'Synthetic result' }] } })) + '\n');
+  await runtime.cycle();
+  const completedRead = buildOfficeVM({ engine, canReadSessions: true, now: NOW, tracker: createStateTracker(), actorOf: x => x, P: project3x });
+  assert.ok(completedRead.occupants.some(o => o.state === 'thinking'), 'a completed tool result returns the agent to thinking');
+  trace = engine.transcript(session.key); assert.equal(trace.events.length, 3); assert.equal(trace.events.find(e => e.kind === 'tool').output, 'Synthetic result');
   assert.equal(trace.events.find(e => e.kind === 'tool').callId, 'call-one'); assert.equal(trace.events[0].senderInfo.name, null);
   assert.equal(engine.quarantine.counts().open.error, 0);
   const before = trace.events.map(e => e.id); assert.equal((await engine.request('transcript', session.key)).ok, true);
@@ -214,6 +218,254 @@ test('Claude JSONL maps transcript run evidence, stable trace IDs, and an open t
   fs.appendFileSync(file,JSON.stringify(record(id,'New synthetic turn',{uuid:'new-turn'}))+'\n'); await runtime.cycle();
   assert.equal(engine.activity(session.key).source,'transcript');
 });
+
+test('Claude transcript activity maps safe thinking/tool/permission evidence into both Office contracts', async t => {
+  const { mapRecord } = require('../../src/adapters/claude-code/profile');
+  const assistant = (kind, name = null) => ({ type: 'assistant', sessionId: 'synthetic-activity-session', uuid: `event-${kind}-${name || ''}`,
+    timestamp: new Date(NOW - 1000).toISOString(), message: { role: 'assistant', stop_reason: null, content: kind === 'thinking'
+      ? [{ type: 'thinking', thinking: 'SYNTHETIC_PRIVATE_REASONING' }]
+      : [{ type: 'tool_use', id: 'synthetic-call', name, input: { file_path: '/private/synthetic-secret' } }] } });
+  const cases = [
+    [assistant('thinking'), 'thinking'], [assistant('tool', 'Read'), 'researching'], [assistant('tool', 'Edit'), 'writing'], [assistant('tool', 'Bash'), 'executing'],
+    [{ type: 'system', subtype: 'user_input_request', sessionId: 'synthetic-activity-session', uuid: 'event-wait', timestamp: new Date(NOW - 1000).toISOString(), message: { role: 'system', content: 'Synthetic request' } }, 'waiting'],
+    [{ type: 'system', subtype: 'permission_request', sessionId: 'synthetic-activity-session', uuid: 'event-block', timestamp: new Date(NOW - 1000).toISOString(), message: { role: 'system', content: 'Synthetic approval' } }, 'blocked'],
+  ];
+  for (const [row, kind] of cases) {
+    const parsed = mapRecord(row, { sessionKey: 'synthetic-activity-session', agentId: 'synthetic-agent', fallbackId: row.uuid });
+    assert.equal(parsed.activity?.kind, kind);
+    assert.equal(JSON.stringify(parsed.activity).includes('/private'), false, 'activity contains no tool arguments or paths');
+    assert.equal(JSON.stringify(parsed.activity).includes('SYNTHETIC_PRIVATE'), false, 'activity contains no transcript text');
+  }
+
+  let clock = NOW;
+  const h = fixture(t), rows = [assistant('thinking')];
+  const file = h.file('synthetic-activity-project', 'synthetic-activity-session', rows);
+  const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } }, { now: () => clock });
+  const engine = createEngine({ adapter: runtime.definition, now: () => clock });
+  t.after(() => runtime.close()); runtime.attach(engine);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error('Claude activity refresh timed out')), 5000);
+    runtime.start(engine, { refreshed: () => { clearTimeout(timer); resolve(); } });
+  });
+  const session = engine.sessions()[0]; assert.ok(session); assert.equal(engine.activity(session.key)?.kind, 'thinking');
+  for (const version of [2, 3]) {
+    const vm = buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { [engine.agents()[0].id]: 'Synthetic agent' }, now: clock, tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'System' }), ...(version === 3 ? { P: project3x } : {}) });
+    assert.ok(vm.occupants.some(row => row.state === 'thinking'), `v${version} projects adapter-derived thinking`);
+    const { VM_SCHEMAS, VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
+    const validation = require('../../src/schema').validate((version === 3 ? VM_SCHEMAS_V3 : VM_SCHEMAS).office, vm);
+    assert.equal(validation.ok, true, `v${version} schema-valid: ${JSON.stringify(validation.issues)}`);
+  }
+  clock += 11_000; engine.expireObservedActivity();
+  assert.equal(engine.activity(session.key)?.kind, 'working', 'tool detail expires but the separate live run lease remains');
+  const staleVM = buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { [engine.agents()[0].id]: 'Synthetic agent' }, now: clock,
+    tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'System' }) });
+  assert.equal(staleVM.occupants.find(row => row.name === 'Synthetic agent')?.state, 'working', `stale detail degrades to generic running state: ${JSON.stringify(staleVM.occupants.map(({ id, role, name, state }) => ({ id, role, name, state })))}`);
+  clock += 20_000; engine.expireObservedActivity();
+  assert.equal(engine.activity(session.key), null, 'running evidence also expires at its longer lease');
+  const expiredVM = buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { [engine.agents()[0].id]: 'Synthetic agent' }, now: clock,
+    tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'System' }) });
+  assert.equal(expiredVM.occupants.some(row => ['thinking', 'researching', 'writing', 'executing', 'working'].includes(row.state)), false,
+    'runtime detail and its longer running lease expire without leaving a false active state');
+
+  const questionAt = new Date(clock - 1000).toISOString();
+  fs.appendFileSync(file, JSON.stringify({ type: 'assistant',
+    sessionId: 'synthetic-activity-session', uuid: 'synthetic-final-question', timestamp: questionAt,
+    message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'PRIVATE_CANARY Should I continue?' }] } }) + '\n');
+  await runtime.cycle();
+  assert.equal(engine.activity(session.key)?.kind, 'waiting', 'a completed question enters the waiting state');
+  for (const version of [2, 3]) {
+    const vm = buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { [engine.agents()[0].id]: 'Synthetic agent' }, now: clock,
+      tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'System' }), ...(version === 3 ? { P: project3x } : {}) });
+    const waiting = vm.occupants.find(row => row.name === 'Synthetic agent');
+    assert.equal(waiting?.state, 'waiting', `v${version} projects adapter-derived waiting`);
+    const { VM_SCHEMAS, VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
+    assert.equal(require('../../src/schema').validate((version === 3 ? VM_SCHEMAS_V3 : VM_SCHEMAS).office, vm).ok, true, `v${version} waiting OfficeVM schema-valid`);
+  }
+  clock += 15 * 60_000;
+  engine.expireObservedActivity();
+  assert.equal(engine.activity(session.key), null, 'waiting expires at its bounded reply window');
+});
+
+test('Claude end-of-turn questions and background commands project bounded waiting without copying message text', () => {
+  const { mapRecord } = require('../../src/adapters/claude-code/profile');
+  const at = new Date(NOW - 1000).toISOString();
+  const assistant = (content, stop_reason = 'end_turn') => mapRecord({ type: 'assistant', sessionId: 'synthetic-await', uuid: 'await-event', timestamp: at,
+    message: { role: 'assistant', stop_reason, content } }, { sessionKey: 'synthetic-await', agentId: 'synthetic-agent', fallbackId: 'await-event' });
+  const question = assistant([{ type: 'text', text: 'PRIVATE_AWAIT_CANARY Can you review this?' }]);
+  assert.equal(question.activity?.kind, 'waiting', 'a completed question remains waiting for a reply');
+  assert.equal(question.execution?.status, 'idle', 'waiting is separate from active execution');
+  assert.equal(JSON.stringify(question.activity).includes('PRIVATE_AWAIT_CANARY'), false);
+  assert.equal(assistant([{ type: 'text', text: 'The operation is complete.' }]).activity, null,
+    'a completed statement with no pending signal remains idle');
+  const background = assistant([{ type: 'tool_use', id: 'background-1', name: 'Bash', input: { run_in_background: true, command: 'PRIVATE_COMMAND_CANARY' } }]);
+  assert.equal(background.activity?.kind, 'waiting', 'a background process handed off at end-of-turn is waiting');
+  assert.equal(JSON.stringify(background.activity).includes('PRIVATE_COMMAND_CANARY'), false);
+  const completed = mapRecord({ type: 'system', subtype: 'task_notification', sessionId: 'synthetic-await', uuid: 'background-done',
+    task_id: 'background-1', timestamp: at, message: { role: 'system', content: 'Background command completed PRIVATE_COMMAND_CANARY' } },
+    { sessionKey: 'synthetic-await', agentId: 'synthetic-agent', fallbackId: 'background-done', pendingBackgroundIds: ['tool:background-1'], now: () => NOW });
+  assert.equal(completed.backgroundPending, false, 'completion clears the pending process flag');
+  assert.equal(completed.activity, null, 'completion does not retain a waiting signal');
+  const completionWhileAwaiting = mapRecord({ type: 'system', subtype: 'task_notification', sessionId: 'synthetic-await', uuid: 'background-done-again',
+    timestamp: at, message: { role: 'system', content: 'Background command completed' } },
+    { sessionKey: 'synthetic-await', agentId: 'synthetic-agent', fallbackId: 'background-done-again', awaitingReply: true, awaitingReplyAt: NOW - 1000, now: () => NOW });
+  assert.equal(completionWhileAwaiting.activity?.kind, 'waiting', 'an unrelated completion cannot erase the outstanding user reply wait');
+  assert.equal(JSON.stringify({ activity: completed.activity, execution: completed.execution }).includes('PRIVATE_COMMAND_CANARY'), false,
+    'command output is never copied to activity metadata');
+});
+
+test('Claude completion of one background job preserves its concurrent sibling through a real transcript read', async t => {
+  let clock = NOW;
+  const h = fixture(t), at = new Date(NOW - 1000).toISOString(), file = h.file('synthetic-parallel', 'parallel-session', []);
+  const assistant = (uuid, content, stop_reason = 'tool_use') => ({ type: 'assistant', sessionId: 'parallel-session', uuid, timestamp: at,
+    message: { role: 'assistant', stop_reason, content } });
+  fs.writeFileSync(file, [assistant('spawned', [
+    { type: 'tool_use', id: 'background-a', name: 'Bash', input: { run_in_background: true, command: 'PRIVATE_A' } },
+    { type: 'tool_use', id: 'background-b', name: 'Bash', input: { run_in_background: true, command: 'PRIVATE_B' } },
+  ]), assistant('handoff', [{ type: 'text', text: 'Two jobs are running.' }], 'end_turn')].map(row => JSON.stringify(row)).join('\n') + '\n');
+  const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } }, { now: () => clock });
+  const engine = createEngine({ adapter: runtime.definition, now: () => clock }); t.after(() => runtime.close()); runtime.attach(engine);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error('Claude parallel background refresh timed out')), 5000);
+    runtime.start(engine, { refreshed: () => { clearTimeout(timer); resolve(); } });
+  });
+  const key = engine.sessions()[0].key;
+  assert.equal(engine.activity(key)?.kind, 'waiting');
+  fs.appendFileSync(file, JSON.stringify({ type: 'system', subtype: 'task_notification', task_id: 'background-a', sessionId: 'parallel-session',
+    uuid: 'finished-a', timestamp: at, message: { role: 'system', content: 'Background command completed PRIVATE_A' } }) + '\n');
+  await runtime.cycle();
+  assert.equal(engine.activity(key)?.kind, 'waiting', 'finishing task A leaves task B pending through the runtime projection');
+  assert.deepEqual(runtime.files.rows()[0].backgroundPendingIds, ['tool:background-b']);
+  fs.appendFileSync(file, [
+    { type: 'system', subtype: 'task_notification', task_id: 'background-a', sessionId: 'parallel-session', uuid: 'duplicate-a', timestamp: at, message: { role: 'system', content: 'Duplicate completion' } },
+    { type: 'system', subtype: 'task_notification', task_id: 'unknown-x', sessionId: 'parallel-session', uuid: 'unknown-x', timestamp: at, message: { role: 'system', content: 'Unrelated completion' } },
+  ].map(row => JSON.stringify(row)).join('\n') + '\n');
+  await runtime.cycle();
+  assert.equal(engine.activity(key)?.kind, 'waiting', 'duplicate A and unknown X cannot retire still-live B');
+  assert.deepEqual(runtime.files.rows()[0].backgroundPendingIds, ['tool:background-b']);
+  for (const version of [2, 3]) {
+    const vm = buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { [engine.agents()[0].id]: 'Synthetic agent' }, now: clock,
+      tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'System' }), ...(version === 3 ? { P: project3x } : {}) });
+    assert.equal(vm.occupants.find(row => row.name === 'Synthetic agent')?.state, 'waiting', `v${version} retains waiting while task B is live`);
+    const { VM_SCHEMAS, VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
+    assert.equal(require('../../src/schema').validate((version === 3 ? VM_SCHEMAS_V3 : VM_SCHEMAS).office, vm).ok, true, `v${version} VM validates`);
+  }
+  assert.equal(JSON.stringify(runtime.files.rows()[0]).includes('PRIVATE_'), false, 'private command details never enter adapter status');
+  fs.appendFileSync(file, JSON.stringify({ type: 'system', subtype: 'task_notification', task_id: 'background-b', sessionId: 'parallel-session',
+    uuid: 'finished-b', timestamp: at, message: { role: 'system', content: 'Background command completed' } }) + '\n');
+  await runtime.cycle();
+  assert.equal(engine.activity(key), null, 'the exact final completion retires its obligation');
+});
+
+test('Claude pending-job overflow stays conservatively pending and reply expiry is never renewed by completion', () => {
+  const { mapRecord } = require('../../src/adapters/claude-code/profile');
+  const at = NOW - 1000;
+  const toolCalls = Array.from({ length: 65 }, (_, index) => ({ type: 'tool_use', id: `bounded-${index}`, name: 'Bash', input: { run_in_background: true } }));
+  let record = mapRecord({ type: 'assistant', sessionId: 'bounded-session', uuid: 'many', timestamp: new Date(at).toISOString(),
+    message: { role: 'assistant', stop_reason: 'end_turn', content: toolCalls } },
+    { sessionKey: 'bounded-session', agentId: 'synthetic', fallbackId: 'many', now: () => NOW });
+  assert.equal(record.backgroundPendingIds.length, 64);
+  assert.equal(record.pendingBackgroundOverflow, true, 'the 65th live job sets an uncertainty sentinel rather than dropping work');
+  for (let index = 0; index < 64; index++) record = mapRecord({ type: 'system', subtype: 'task_notification', task_id: `bounded-${index}`,
+    sessionId: 'bounded-session', uuid: `complete-${index}`, timestamp: new Date(at + index).toISOString(), message: { role: 'system', content: 'Done' } },
+    { sessionKey: 'bounded-session', agentId: 'synthetic', fallbackId: `complete-${index}`, pendingBackground: record.backgroundPending,
+      pendingBackgroundIds: record.backgroundPendingIds, pendingBackgroundOverflow: record.pendingBackgroundOverflow, now: () => NOW });
+  assert.equal(record.pendingBackgroundOverflow, true);
+  assert.equal(record.backgroundPending, true, 'unknown overflow work remains represented until source reset');
+  const question = mapRecord({ type: 'assistant', sessionId: 'reply-session', uuid: 'question', timestamp: new Date(at).toISOString(),
+    message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Can you confirm?'}] } },
+    { sessionKey: 'reply-session', agentId: 'synthetic', fallbackId: 'question', now: () => NOW });
+  const lateAt = at + 20 * 60_000;
+  const late = mapRecord({ type: 'system', subtype: 'task_notification', task_id: 'unknown', sessionId: 'reply-session', uuid: 'late-completion',
+    timestamp: new Date(lateAt).toISOString(), message: { role: 'system', content: 'Done' } },
+    { sessionKey: 'reply-session', agentId: 'synthetic', fallbackId: 'late-completion', awaitingReply: question.awaitingReply,
+      awaitingReplyAt: question.awaitingReplyAt, now: () => lateAt });
+  assert.equal(question.awaitingReplyAt, at);
+  assert.equal(late.awaitingReply, false, 'an old reply obligation expires before an unrelated completion');
+  assert.equal(late.activity, null, 'late completion does not create fresh waiting evidence');
+});
+
+test('Claude completion preserves the original reply-wait timestamp for cached-reader expiry', () => {
+  const { mapRecord } = require('../../src/adapters/claude-code/profile');
+  const questionAt = NOW - 11 * 60_000;
+  const question = mapRecord({ type: 'assistant', sessionId: 'reply-lease', uuid: 'question', timestamp: new Date(questionAt).toISOString(),
+    message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Can you confirm?'}] } },
+    { sessionKey: 'reply-lease', agentId: 'synthetic', fallbackId: 'question', now: () => NOW });
+  assert.equal(question.activity.since, questionAt);
+  const completedAt = questionAt + 10 * 60_000;
+  const completion = mapRecord({ type: 'system', subtype: 'task_notification', task_id: 'unrelated', sessionId: 'reply-lease', uuid: 'completion',
+    timestamp: new Date(completedAt).toISOString(), message: { role: 'system', content: 'Completed' } },
+    { sessionKey: 'reply-lease', agentId: 'synthetic', fallbackId: 'completion', awaitingReply: question.awaitingReply,
+      awaitingReplyAt: question.awaitingReplyAt, now: () => completedAt });
+  assert.equal(completion.activity.since, questionAt, 'completion cannot restart the reply deadline at minute ten');
+  const cachedReadAt = questionAt + 20 * 60_000;
+  const cachedRefresh = mapRecord({ type: 'system', subtype: 'task_notification', task_id: 'later-unrelated', sessionId: 'reply-lease', uuid: 'later',
+    timestamp: new Date(cachedReadAt).toISOString(), message: { role: 'system', content: 'Later' } },
+    { sessionKey: 'reply-lease', agentId: 'synthetic', fallbackId: 'later', awaitingReply: completion.awaitingReply,
+      awaitingReplyAt: completion.awaitingReplyAt, now: () => cachedReadAt });
+  assert.equal(cachedRefresh.activity, null, 'cached reader reaches the original 15-minute expiry');
+});
+
+test('Claude persisted reply timestamps expire across a later unrelated completion', async t => {
+  let clock = NOW;
+  const h = fixture(t), questionAt = NOW - 1000;
+  const file = h.file('reply-expiry-project', 'reply-expiry-session', [
+    { type: 'assistant', sessionId: 'reply-expiry-session', uuid: 'old-question', timestamp: new Date(questionAt).toISOString(),
+      message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Can you confirm?'}] } },
+  ]);
+  const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } }, { now: () => clock });
+  const engine = createEngine({ adapter: runtime.definition, now: () => clock });
+  t.after(() => runtime.close()); runtime.attach(engine);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error('Claude reply-expiry refresh timed out')), 5000);
+    runtime.start(engine, { refreshed: () => { clearTimeout(timer); resolve(); } });
+  });
+  const session = engine.sessions()[0];
+  assert.equal(engine.activity(session.key)?.kind, 'waiting');
+  assert.equal(runtime.files.rows()[0].awaitingReplyAt, questionAt, 'the persisted obligation retains its original timestamp');
+
+  clock = questionAt + 20 * 60_000;
+  fs.appendFileSync(file, JSON.stringify({ type: 'system', subtype: 'task_notification', task_id: 'unknown-task',
+    sessionId: 'reply-expiry-session', uuid: 'late-completion', timestamp: new Date(clock).toISOString(),
+    message: { role: 'system', content: 'Unrelated completion' } }) + '\n');
+  await runtime.cycle();
+  assert.equal(runtime.files.rows()[0].awaitingReply, false, 'the stale persisted reply wait expires');
+  assert.equal(runtime.files.rows()[0].awaitingReplyAt, null);
+  assert.equal(engine.activity(session.key), null, 'the late completion cannot renew the expired lease');
+  for (const version of [2, 3]) {
+    const vm = buildOfficeVM({ engine, canReadSessions: true, now: clock, tracker: createStateTracker(),
+      actorOf: () => ({ kind: 'system', name: 'System' }), ...(version === 3 ? { P: project3x } : {}) });
+    assert.notEqual(vm.occupants.find(row => row.sessionKey === session.key)?.state, 'waiting', `v${version} does not show expired waiting evidence`);
+  }
+});
+
+test('a fresh Claude permission wait remains observed after an older Bash run lease expires', async t => {
+  let clock = NOW;
+  const h = fixture(t), id = 'synthetic-delayed-permission';
+  const at = delta => new Date(NOW + delta).toISOString();
+  h.file('synthetic-delayed-project', id, [
+    { type: 'user', sessionId: id, uuid: 'old-user', timestamp: at(-26_000), message: { role: 'user', content: 'Synthetic task' } },
+    { type: 'assistant', sessionId: id, uuid: 'old-bash', timestamp: at(-25_000), message: { role: 'assistant', stop_reason: 'tool_use',
+      content: [{ type: 'tool_use', id: 'synthetic-bash', name: 'Bash', input: { command: 'synthetic command' } }] } },
+    { type: 'system', sessionId: id, uuid: 'fresh-permission', subtype: 'permission_request', timestamp: at(-1_000),
+      message: { role: 'system', content: 'Synthetic permission request' } },
+  ]);
+  const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } }, { now: () => clock });
+  const engine = createEngine({ adapter: runtime.definition, now: () => clock });
+  t.after(() => runtime.close()); runtime.attach(engine); await runtime.start(engine);
+  const session = engine.sessions()[0];
+  assert.ok(session);
+  assert.equal(engine.activity(session.key)?.kind, 'blocked');
+  clock += 6_000;
+  engine.expireObservedActivity();
+  assert.equal(engine.activity(session.key)?.kind, 'blocked', 'the rich lease outlives the older 30-second run evidence');
+  const agent = engine.agents()[0];
+  const vm = buildOfficeVM({ engine, canReadSessions: true, configuredAgents: { [agent.id]: 'Synthetic agent' }, now: clock,
+    tracker: createStateTracker(), actorOf: () => ({ kind: 'system', name: 'System' }) });
+  const occupant = vm.occupants.find(row => row.sessionKey === session.key || row.name === 'Synthetic agent');
+  assert.equal(occupant?.state, 'blocked');
+  assert.deepEqual(occupant?.execution, { status: 'running', evidence: { level: 'observed', observedAt: NOW - 1_000, expiresAt: NOW + 9_000 } });
+});
+
 test('old closed Claude transcript stays in history but its unconfigured project agent leaves the office', async t => {
   const h = fixture(t), id = 'completed-session', at = new Date(NOW - 24 * 60 * 60 * 1000).toISOString();
   h.file('agent-office-portal', id, [

@@ -1,3 +1,4 @@
+import { loadModule } from '../build-update.js';
 // Standalone harness for the Bureau page: the real page component on a fake stream fed by
 // mock-office.js, until frontend wires the route and the mock API (see office-dev-03).
 // Query: ?scenario=1|vide|panne  &tick=<ms>  &agent=<occupantId>  &steps=<n> (fast-forward the script)
@@ -126,7 +127,7 @@ window.officeBench = { om, services, publish, until, subscribed };
 
 // Explicit opt-in QA controls. Calls the real lifecycle, including work guards and A* walking.
 if (q.get('life') === '1') {
-  const { mountAnimationControls } = await import('./animation-tools.js' + buildQuery);
+  const { mountAnimationControls } = await loadModule(() => import('./animation-tools.js' + buildQuery));
   await until(() => document.querySelector('.ao-bureau__stage')?.aoScene);
   const scene = document.querySelector('.ao-bureau__stage').aoScene;
   mountAnimationControls(scene, document.getElementById('app'), { weather:q.get('weather')??undefined });

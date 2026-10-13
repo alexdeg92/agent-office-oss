@@ -273,6 +273,7 @@
         "stateActive": false
       }
     ],
+    "occupantOverflowCount": 0,
     "journal": [
       {
         "id": "le_42",
@@ -698,6 +699,9 @@
       "writing": {
         "key": "agentState.writing"
       },
+      "executing": {
+        "key": "agentState.executing"
+      },
       "calling": {
         "key": "agentState.calling"
       },
@@ -706,6 +710,9 @@
       },
       "error": {
         "key": "agentState.error"
+      },
+      "blocked": {
+        "key": "agentState.blocked"
       },
       "offline": {
         "key": "agentState.offline"

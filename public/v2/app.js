@@ -1,5 +1,6 @@
+import { loadModule, configureChunkRecovery, reloadChunks, recoverChunk } from './build-update.js';
 // UI entry point: boot (meta → auth → stream), routing, shell. Business state lives on the server.
-import { html, render, useState, useEffect, useRef } from './lib.js';
+import { html, render, useState, useEffect, useRef, useErrorBoundary } from './lib.js';
 import { SPRITE } from './icons.js';
 import { createRouter, safeReturn, inApp, parse } from './router.js';
 import { createStream } from './stream.js';
@@ -24,15 +25,22 @@ document.body.insertAdjacentHTML('afterbegin', SPRITE);
 
 applyTheme(theme.get().pref);
 
-const release = createBuildUpdate({ notify: (run) => toast({
-  message: msg('release.available'), action: { label: msg('release.reload'), run }, duration: 0,
+let navigationUrl = null;
+const release = createBuildUpdate({ reload: url => { void reloadChunks({ url }); }, notify: () => toast({
+  message: msg('release.available'), action: { label: msg('release.reload'), run: () => reloadChunks({ manual: true }) }, duration: 0,
 }) });
+configureChunkRecovery(() => release.check(), () => navigationUrl, () => toast({
+  message: msg('release.recovery'), action: { label: msg('release.reload'), run: () => reloadChunks({ manual: true }) }, duration: 0,
+}));
 release.start();
+globalThis.AO_ROUTES?.attach(api.prewarm);
 const router = createRouter(window, { beforeNavigate: async url => {
+  navigationUrl = url;
   if (!await release.beforeNavigate(url)) return false;
-  for (const guard of services.navigationGuards || []) if (!await guard(url)) return false;
+  for (const guard of services.navigationGuards || []) if (!await guard(url)) { navigationUrl = null; return false; }
   return true;
 } });
+router.subscribe(() => { navigationUrl = null; });
 services.router = router;
 services.officeAssetBase = config.assetBase;   // office/page.js until it imports config.js itself
 
@@ -41,7 +49,7 @@ const TOAST_LEVEL = { info: 'info', success: 'success', error: 'danger' };
 async function makeStream(meta) {
   const mock = api.isMock() ? await api.mock() : null;
   const openSource = mock ? (url) => new mock.MockEventSource(versioned(url))
-    : splitOrigin ? (await import('./split-stream.js' + buildQuery)).openSource
+    : splitOrigin ? (await loadModule(() => import('./split-stream.js' + buildQuery))).openSource
     : (url) => new EventSource(apiUrl(url), {withCredentials:true});
   return createStream({
     openSource,
@@ -63,28 +71,28 @@ async function makeStream(meta) {
 
 // Lazy route chunks; scripts/first-load.js reads this map.
 const PAGES = {
-  connexion: () => import('./pages/login.js' + buildQuery).then((m) => m.LoginPage),
-  'bureau-animations': () => import('./office/animations.js' + buildQuery).then((m) => m.AnimationsPage),
-  bureau: () => import('./office/page.js' + buildQuery).then((m) => m.BureauPage),
-  boutique: () => import('./office/boutique.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.BoutiquePage; }),
-  discuter: () => import('./pages/chat.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.ChatPage; }),
-  flux: () => import('./pages/flows.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.FlowsPage; }),
-  'flux-detail': () => import('./pages/flow.js' + buildQuery).then((m) => m.FlowPage),
-  projets: () => import('./pages/projects.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.ProjectsPage; }),
-  projet: () => import('./pages/project.js' + buildQuery).then((m) => m.ProjectPage),
-  importer: () => import('./pages/import.js' + buildQuery).then((m) => m.ImportPage),
-  habilitations: () => import('./pages/access.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.AccessPage; }),
-  interlocuteur: () => import('./pages/interlocutor.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.InterlocutorPage; }),
-  journaux: () => import('./pages/journaux.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.JournauxPage; }),
-  session: () => import('./pages/session.js' + buildQuery).then((m) => m.SessionPage),
-  competences: () => import('./pages/skills.js' + buildQuery).then((m) => m.SkillsPage),
-  competence: () => import('./pages/skill.js' + buildQuery).then((m) => m.SkillPage),
-  sante: () => import('./pages/health.js' + buildQuery).then((m) => m.HealthPage),
-  parametres: () => import('./pages/settings.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.SettingsPage; }),
-  ds: () => import('./pages/ds.js' + buildQuery).then(m=>m.DesignSystemPage),
-  invitation: () => import('./pages/invitation.js' + buildQuery).then((m) => m.InvitationPage),
-  setup: () => import('./pages/setup.js' + buildQuery).then(async (m) => { await m.loadStyles(); return m.SetupPage; }),
-  'a-propos': () => import('./pages/about.js' + buildQuery).then((m) => m.AboutPage),
+  connexion: () => loadModule(() => import('./pages/login.js' + buildQuery)).then((m) => m.LoginPage),
+  'bureau-animations': () => loadModule(() => import('./office/animations.js' + buildQuery)).then((m) => m.AnimationsPage),
+  bureau: () => loadModule(() => import('./office/page.js' + buildQuery)).then((m) => m.BureauPage),
+  boutique: () => loadModule(() => import('./office/boutique.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.BoutiquePage; }),
+  discuter: () => loadModule(() => import('./pages/chat.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.ChatPage; }),
+  flux: () => loadModule(() => import('./pages/flows.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.FlowsPage; }),
+  'flux-detail': () => loadModule(() => import('./pages/flow.js' + buildQuery)).then((m) => m.FlowPage),
+  projets: () => loadModule(() => import('./pages/projects.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.ProjectsPage; }),
+  projet: () => loadModule(() => import('./pages/project.js' + buildQuery)).then((m) => m.ProjectPage),
+  importer: () => loadModule(() => import('./pages/import.js' + buildQuery)).then((m) => m.ImportPage),
+  habilitations: () => loadModule(() => import('./pages/access.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.AccessPage; }),
+  interlocuteur: () => loadModule(() => import('./pages/interlocutor.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.InterlocutorPage; }),
+  journaux: () => loadModule(() => import('./pages/journaux.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.JournauxPage; }),
+  session: () => loadModule(() => import('./pages/session.js' + buildQuery)).then((m) => m.SessionPage),
+  competences: () => loadModule(() => import('./pages/skills.js' + buildQuery)).then((m) => m.SkillsPage),
+  competence: () => loadModule(() => import('./pages/skill.js' + buildQuery)).then((m) => m.SkillPage),
+  sante: () => loadModule(() => import('./pages/health.js' + buildQuery)).then((m) => m.HealthPage),
+  parametres: () => loadModule(() => import('./pages/settings.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.SettingsPage; }),
+  ds: () => loadModule(() => import('./pages/ds.js' + buildQuery)).then(m=>m.DesignSystemPage),
+  invitation: () => loadModule(() => import('./pages/invitation.js' + buildQuery)).then((m) => m.InvitationPage),
+  setup: () => loadModule(() => import('./pages/setup.js' + buildQuery)).then(async (m) => { await m.loadStyles(); return m.SetupPage; }),
+  'a-propos': () => loadModule(() => import('./pages/about.js' + buildQuery)).then((m) => m.AboutPage),
 };
 const pageLoads = new Map();   // name → Promise<Component>
 const pageReady = new Map();   // name → Component (no loading flash once a page has been shown)
@@ -111,17 +119,21 @@ for (const type of ['pointerover', 'focusin', 'touchstart']) {
 }
 function loadPage(name) {
   if (!pageLoads.has(name)) {
-    // Reuse the guard that just permitted this navigation, including its timeout.
-    pageLoads.set(name, release.check({ maxAge: 800 }).then((stale) => {
-      if (stale) { location.reload(); return new Promise(() => {}); }
+    // Reuse a completed successful navigation check, never an elapsed deadline.
+    pageLoads.set(name, release.beforePageLoad().then((stale) => {
+      if (stale) throw new Error(msg('release.available'));
       globalThis.AO_ROUTES?.preload(name);
       return PAGES[name]();
     }).catch(async (err) => {
-      if (await release.check()) { location.reload(); return new Promise(() => {}); }
+      await recoverChunk(err);
       throw err;
     }).then((C) => { pageReady.set(name, C); return C; }, (err) => { pageLoads.delete(name); throw err; }));
   }
   return pageLoads.get(name);
+}
+function PageBoundary({ children }) {
+  const [error, reset] = useErrorBoundary();
+  return error ? html`<div class="bu-page"><${ErrorState} error=${{ code: 'internal', message: msg('common.unexpected') }} onRetry=${reset} /></div>` : children;
 }
 function LazyPage({ name, ...props }) {
   const [, setTick] = useState(0);
@@ -134,14 +146,14 @@ function LazyPage({ name, ...props }) {
     loadPage(name).then(() => live && setTick((n) => n + 1), (err) => live && setError(err));
     return () => { live = false; };
   }, [name]);
-  if (C) return html`<${C} ...${props} />`;
-  if (error) return html`<div class="bu-page"><${ErrorState} error=${{ code: 'network', message: msg('apiError.network') }} onRetry=${() => { setError(null); loadPage(name).then(() => setTick((n) => n + 1), setError); }} /></div>`;
+  if (C) return html`<${PageBoundary}><${C} ...${props} /></${PageBoundary}>`;
+  if (error) return html`<div class="bu-page"><${ErrorState} error=${{ code: 'network', message: msg('apiError.network') }} onRetry=${() => reloadChunks({ manual: true })} /></div>`;
   return html`<div class="bu-page" aria-busy="true"><p class="bu-sr-only" role="status">${msg('common.loading')}</p></div>`;
 }
 
 function Page({ match, onLogout }) {
-  if (match.name === 'introuvable') return html`<${NotFoundPage} />`;
-  if (match.name === 'plus') return html`<${MorePage} onLogout=${onLogout} />`;
+  if (match.name === 'introuvable') return html`<${PageBoundary}><${NotFoundPage} /></${PageBoundary}>`;
+  if (match.name === 'plus') return html`<${PageBoundary}><${MorePage} onLogout=${onLogout} /></${PageBoundary}>`;
   return PAGES[match.name] ? html`<${LazyPage} key=${match.name + ':' + JSON.stringify(match.params)} name=${match.name} match=${match} />` : html`<${PlaceholderPage} match=${match} />`;
 }
 
@@ -210,7 +222,7 @@ function App() {
 
   let body;
   if (boot.phase === 'loading') body = html`<${Frame} bodyClass="ao-boot" aria-busy="true"><span class="bu-spinner" aria-label=${msg('common.loading')}></span></${Frame}>`;
-  else if (boot.phase === 'error') body = html`<${Frame} bodyClass="ao-boot"><${ErrorState} error=${boot.error} onRetry=${checkAuth} /></${Frame}>`;
+  else if (boot.phase === 'error') body = html`<${Frame} bodyClass="ao-boot"><${ErrorState} error=${boot.error} onRetry=${boot.error?.chunkFailure ? () => reloadChunks({ manual: true }) : checkAuth} /></${Frame}>`;
   else if (match.route?.public && match.name !== 'connexion') body = html`<${LazyPage} name=${match.name} match=${match} />`;
   else if (boot.phase === 'out' || match.name === 'connexion') body = html`<${LazyPage} name="connexion" onLoggedIn=${checkAuth} />`;
   else body = html`<${Shell} match=${match} me=${boot.me} status=${status} onLogout=${onLogout}><${Page} match=${match} onLogout=${onLogout} /></${Shell}>`;
@@ -239,7 +251,7 @@ async function main() {
     services.stream = await makeStream(meta);
     render(html`<${App} />`, root);
   } catch (error) {
-    render(html`<${Frame} bodyClass="ao-boot"><${ErrorState} error=${error} onRetry=${() => location.reload()} /></${Frame}><${Toasts} />`, root);
+    render(html`<${Frame} bodyClass="ao-boot"><${ErrorState} error=${error} onRetry=${() => error?.chunkFailure ? reloadChunks({ manual: true }) : location.reload()} /></${Frame}><${Toasts} />`, root);
   }
 }
 

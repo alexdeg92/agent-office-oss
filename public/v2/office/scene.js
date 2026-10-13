@@ -1,3 +1,4 @@
+import { loadModule } from '../build-update.js';
 // Layered DOM scene (design/office/README.md), driven by OfficeVM occupants and SSE cues.
 import { project, unproject, imageBox, wallPoint, footprintFor, itemDepth, characterDepth, sortScene } from './geometry.js';
 import { buildGrid, findPath, nearestWalkable, isWalkable } from './pathfind.js';
@@ -57,6 +58,7 @@ export class OfficeScene {
   constructor(stage, opts) {
     this.stage = stage;
     this.opts = opts;
+    this._intents = opts.intents;
     this.chars = new Map();
     this._events = new AbortController();
     try {
@@ -410,7 +412,7 @@ export class OfficeScene {
     const previous = this._decorLoad;
     if (!ids.length) { previous?.abort(); this._decorLoad = null; delete this.stage.dataset.decorError; return; }
     const controller = this._decorLoad = new AbortController();
-    this._decorReady = import('./decor-pack-loader.js' + buildQuery).then(m => {
+    this._decorReady = loadModule(() => import('./decor-pack-loader.js' + buildQuery)).then(m => {
       if (this.destroyed || controller.signal.aborted) { previous?.abort(); return; }
       const ready = m.ensureDecorPacks(this.index, ids, this.assetBase, { signal: controller.signal });
       // Admit replacement consumers before releasing previous consumers of shared requests.
@@ -569,6 +571,12 @@ export class OfficeScene {
   }
 
   // ---------- occupants ----------
+  setTravelIntents(occupants, floorId, memory) {
+    this._travelRows = occupants;
+    this._floorId = floorId;
+    this._travelMemory = memory ?? this._travelMemory ?? new Map();
+    this._intents?.setTravel(this);
+  }
   /**
    * @param {Array<{id:string, role:string, name:string, state:string, stateSince:number, stationUid:string,
    *   look:{character:string, variant:string|null, accessories:string[]}}>} occupants  roster order
@@ -582,7 +590,7 @@ export class OfficeScene {
       const previousLoad = this._packLoad;
       const controller = this._packLoad = new AbortController();
       const revision = this._packRevision = (this._packRevision ?? 0) + 1;
-      return import('./character-pack-loader.js' + buildQuery)
+      return loadModule(() => import('./character-pack-loader.js' + buildQuery))
         .then(m => {
           const loaded = m.ensureCharacterPacks(this.index, missing, this.assetBase, { signal: controller.signal });
           previousLoad?.abort(); return loaded;
@@ -606,7 +614,9 @@ export class OfficeScene {
       const prevState = c.occ?.state;
       const prevLook = JSON.stringify(c.occ?.look);
       const prevPresence = c.occ?.presence ?? null;
+      const activityChanged = c.occ?.activity?.id !== o.activity?.id || c.occ?.activity?.kind !== o.activity?.kind;
       c.occ = o;
+      if (activityChanged) { c._sipNext = null; c._sipRest = false; }
       if (prevState !== o.state) { c.signalState = null; c.signalBusy = false; }
       if (!canIdle(o)) c.carryProp = null;
       if (c.egg && !canIdle(o)) this._cancelEgg(c);
@@ -621,7 +631,7 @@ export class OfficeScene {
       if (prevState !== o.state && prevState) this._announce(c);
       else if (isNew && !first) this._announce(c, 'enter');
       this._retarget(c, false);
-      if (prevState !== o.state || prevLook !== JSON.stringify(o.look) || prevPresence !== (o.presence ?? null)) this._renderPose(c);
+      if (activityChanged || prevState !== o.state || prevLook !== JSON.stringify(o.look) || prevPresence !== (o.presence ?? null)) this._renderPose(c);
       this._renderPlate(c);
     });
     for (const event of this._packSignals?.values() ?? []) if (ids.has(event.occupantId)) this.signal(event.occupantId, event);
@@ -656,7 +666,11 @@ export class OfficeScene {
     this.layers.scene.append(c.el);
     this.layers.fx.append(c.ring, c.marker);
     this.chars.set(o.id, c);
-    if (walkIn && this.room.entrance) {
+    const arrival = this._intents?.arrival(this, o);
+    if (arrival && !this.reducedMotion) {
+      c.pos = { x: arrival.target.x, y: arrival.target.y };
+      c.el.dataset.journey = arrival.id; c.el.dataset.travelPhase = 'arrival';
+    } else if (walkIn && this.room.entrance) {
       const e = nearestWalkable(this.grid, this.room.entrance.x, this.room.entrance.y) ?? this.room.entrance;
       c.pos = { x: e.x + 0.5, y: e.y + 0.5 };
       c.el.classList.add('ao-enter');
@@ -674,7 +688,16 @@ export class OfficeScene {
     if (c.occ) this._announce(c, 'leave');
     c.leaving = true;
     c.plate.remove();
+    c.sleepLetters?.remove();c.sleepLetters=null;
     c.marker.hidden = true;
+    const departure = this._intents?.departure(this, c);
+    if (departure && this.reducedMotion) return this._destroyChar(c);
+    if (departure && c.pos) {
+      c.target = departure.target;
+      c.el.dataset.journey = departure.id; c.el.dataset.travelPhase = 'departure';
+      this._walkTo(c, c.target, () => this._fadeOut(c));
+      return;
+    }
     const e = this.room.entrance;
     if (this.reducedMotion || !e || !c.pos) return this._fadeOut(c);
     c.target = { x: e.x + 0.5, y: e.y + 0.5, uid: null };
@@ -695,7 +718,7 @@ export class OfficeScene {
     c.dead = true;
     this._cancelAll(c);
     this._allChars?.delete(c);
-    c.el.remove(); c.plate.remove(); c.marker.remove(); c.ring.remove();
+    c.el.remove(); c.plate.remove(); c.marker.remove(); c.ring.remove(); c.sleepLetters?.remove();
     // Only the current instance owns the id: a replacement with the same id keeps its selection (R4-13).
     if (this.chars.get(c.id) === c) {
       this.chars.delete(c.id);
@@ -708,6 +731,7 @@ export class OfficeScene {
   /** Where this occupant should be: own station, or a free lounge after 10 min idle (README §4.2). */
   _targetFor(c) {
     const o = c.occ;
+    if (this._intents && Object.hasOwn(o, 'sceneTarget')) return this._intents.target(c);
     if (o.floorTravel?.point) return { x: o.floorTravel.point.x + 0.5, y: o.floorTravel.point.y + 0.5, uid: `floor-trip:${o.floorTravel.phase}`, mode: 'stand' };
     if (c.egg && !c.egg.returning) return c.egg.target ?? c.target ?? this._standingSpot(c);
     if (c.activity) return c.activity.target;
@@ -784,8 +808,9 @@ export class OfficeScene {
     if (c.egg?.returning && c.egg.phase!=='return' && !instant) return;
     if (c.leaving) return;
     const t = this._targetFor(c);
+    if (!t) return;
     const sameGen = c.targetGen === this.layoutGen;
-    if (sameGen && c.target && c.target.uid === t.uid && c.target.x === t.x && c.target.y === t.y && c.pos) { this._scheduleIdleSwivel(c); return; }
+    if (sameGen && c.target && c.target.uid === t.uid && c.target.x === t.x && c.target.y === t.y && c.target.mode === t.mode && c.target.seatIndex === t.seatIndex && c.target.facing === t.facing && c.pos) { c.target = t; this._scheduleIdleSwivel(c); return; }
     c.target = t;
     c.targetGen = this.layoutGen;
     if (!c.pos || instant || this.reducedMotion || this.editing) {
@@ -797,6 +822,10 @@ export class OfficeScene {
       return;
     }
     // The walking feet stop beside the chair. Only a seated body enters its footprint.
+    if (t.approachPoint && t.mode !== 'stand') {
+      this._walkTo(c, t.approachPoint, () => { c.pos = { x: t.x, y: t.y }; this._arrive(c); });
+      return;
+    }
     if (t.mode === 'desk') {
       const from = { x: Math.floor(c.pos.x), y: Math.floor(c.pos.y) };
       const grid = { ...this.grid, blocked: this.grid.blocked.slice() };
@@ -840,6 +869,8 @@ export class OfficeScene {
   _arrive(c) {
     c.walking = false;
     c.path = [];
+    delete c.el.dataset.travelPhase;
+    if (c.target?.facing) c.facing = c.target.facing;
     if (c.target?.mode === 'desk') {
       if (c.carryProp === 'cup') {
         const node = this.itemNodes.get(c.target.uid);
@@ -891,6 +922,8 @@ export class OfficeScene {
   _currentPose(c) {
     // Walking toward the camera shows the front walks; away from it the back walks (fallback: front).
     if (c.walking) return c.carryProp === 'cup' ? `life-cupwalk-${c.facing}` : { se: 'walking-se', sw: 'walking', ne: 'walking-ne', nw: 'walking-nw' }[c.facing] ?? 'walking';
+    const intentPose = this._intents?.pose(c);
+    if (intentPose) return intentPose;
     if (c.egg?.pose) return c.egg.pose;
     if (c.activity?.phase === 'interact') {
       if (c.activity.kind === 'sleep' && c.seatMode === 'desk') return 'life-sleep-ne';
@@ -907,8 +940,8 @@ export class OfficeScene {
       const pose = REACTIONS[reaction]?.pose;
       if (pose) return pose;
     }
-    if (c.visit && !c.meet) return c.visit.talk === false ? (c.visit.facing === 'se' ? 'idle-se' : 'idle') : c.visit.facing === 'se' ? 'talking-se' : 'talking';
-    if (c.meet && c.meet.phase !== 'go') {
+    if (!Object.hasOwn(c.occ, 'sceneTarget') && c.visit && !c.meet) return c.visit.talk === false ? (c.visit.facing === 'se' ? 'idle-se' : 'idle') : c.visit.facing === 'se' ? 'talking-se' : 'talking';
+    if (!Object.hasOwn(c.occ, 'sceneTarget') && c.meet && c.meet.phase !== 'go') {
       const se = c.meet.facing === 'se';
       return c.meet.phase === 'talk' ? (se ? 'talking-se' : 'talking') : (se ? 'idle-se' : 'idle');
     }
@@ -980,7 +1013,7 @@ export class OfficeScene {
     c.poseScale = renderScale(ch) * (c.seatMode === 'desk' ? (composition?.scaleByCharacter?.[ch.id] ?? 1) : 1);
     const accessoryMode = this.stage.dataset.officeTheme === 'night' ? 'night' : 'day';
     if (c.occ.look.accessories?.some(id => this.index.accessories.get(id)?.packManifest))
-      import('./accessory-pack-loader.js' + buildQuery).then(m => m.prepareSceneAccessories(this,c,body.pose,accessoryMode)).catch(() => {});
+      loadModule(() => import('./accessory-pack-loader.js' + buildQuery)).then(m => m.prepareSceneAccessories(this,c,body.pose,accessoryMode)).catch(() => {});
     const acc = accessoryLayers(this.index, ch.id, c.occ.look.accessories, body.pose, c.occ.look.variant, { legacy: this.legacyAccessories, mode: accessoryMode });
     // Back accessories → body → front accessories. A null frame is always shown.
     const nFrames = body.frames ? body.frames.length : 0;
@@ -1028,7 +1061,7 @@ export class OfficeScene {
     group.append(...imgs);
     if (this.debugLandmarks) {
       const variant = c.occ.look.variant;
-      import('./scene-landmarks.js' + buildQuery).then(m => {
+      loadModule(() => import('./scene-landmarks.js' + buildQuery)).then(m => {
         if (this._alive(c) && c.poseEl === group && this.debugLandmarks) group.append(m.landmarkSvg(ch,variant,body.pose));
       }).catch(() => {});
     }
@@ -1068,7 +1101,7 @@ export class OfficeScene {
 
   _renderMarker(c) {
     const view = viewFor(c.occ.state);
-    const kind = c.cue ? null : view.marker;
+    const kind = this._intents?.marker ? this._intents.marker(c, view.marker) : c.cue ? null : view.marker;
     if (c.markerKind !== kind) {
       c.markerKind = kind;
       c.marker.innerHTML = kind ? markerHtml(kind) : '';
@@ -1180,6 +1213,7 @@ export class OfficeScene {
     const now = this.now();
     for (const c of this.chars.values()) {
       c.egg?.controller?.tick(now);
+      this._intents?.tick(this, c, now);
       if (c.reaction && now >= c.reactionUntil) { c.reaction = null; this._renderPose(c); }
       const a = c.activity, d = a && ACTIVITIES[a.kind];
       if (a?.phase === 'interact') {
@@ -1189,6 +1223,7 @@ export class OfficeScene {
         }
       }
     }
+    this._intents?.tickScreens?.(this, now);
     if (now >= this._nextLifeCheck) { this._nextLifeCheck = now + this.lifeConfig.intervalMs; this._checkLife(); }
   }
 
@@ -1229,6 +1264,7 @@ export class OfficeScene {
   _checkLife() {
     if (this.hidden || this.editing || this.destroyed) return;
     for (const c of this.chars.values()) {
+      if (Object.hasOwn(c.occ || {}, 'sceneTarget')) continue;
       if (c.occ?.floorTravel || c.egg || c.leaving || c.walking || c.activity || c.social || c.visit || c.meet || c.deskTalk) continue;
       if (!canIdle(c.occ) || c.signalBusy) {
         if (reactionFor(c.occ, c.occ, this.now(), this.lifeConfig) === 'stretch'
@@ -1299,7 +1335,7 @@ export class OfficeScene {
     const egg = c.egg = {kind, phase:'loading', target:c.target};
     c.lastSurprise = this.now(); c.lastEgg = kind; rememberSurprise(c.id,c.lastSurprise,kind);
     try {
-      const { EggController } = await import('./egg-controller.js' + buildQuery);
+      const { EggController } = await loadModule(() => import('./egg-controller.js' + buildQuery));
       if (c.egg !== egg || !this._alive(c) || !canIdle(c.occ)) { if (c.egg === egg) this._cancelEgg(c, {dispose:true}); return false; }
       egg.controller = new EggController(this,c,kind,{...this.surpriseConfig,...config});
       egg.controller.start(); return true;
@@ -1340,10 +1376,10 @@ export class OfficeScene {
   }
 
   _renderLife(c) {
-    const action = c.social?.phase === 'interact' ? c.social.kind : c.activity?.phase === 'interact' ? c.activity.kind : '';
+    const action = this._intents?.activity(c) || (c.social?.phase === 'interact' ? c.social.kind : c.activity?.phase === 'interact' ? c.activity.kind : '');
     c.el.dataset.activity = action; c.el.dataset.facing = c.facing; c.el.dataset.reaction = c.reaction ?? '';
     // Objects and gripping fingers are one authored raster. Only environmental FX are overlays.
-    const fx = c.carryProp === 'cup' || action === 'coffee' && c.activity.drinkRest ? 'steam' : action === 'water' ? 'drops' : null;
+    const fx = action === 'smoke' ? 'smoke' : c.carryProp === 'cup' || action === 'coffee' && (c.activity?.drinkRest || c._sipRest) ? 'steam' : action === 'water' ? 'drops' : null;
     if (fx !== c.lifeFxKind) {
       c.lifeFx?.remove();c.lifeFx=null;c.lifeFxKind=fx;
       if(fx){c.lifeFx=el('div',`ao-life-fx ao-life-fx--${fx}`,{'aria-hidden':'true'});for(let i=0;i<3;i++)c.lifeFx.append(el('i'));c.el.append(c.lifeFx);}
@@ -1361,9 +1397,14 @@ export class OfficeScene {
       c.lifeFx.style.top = `${hand.y / c.poseCanvas.h * 100}%`;
     }
     // Screen-space bubbles remain readable when the mobile camera fits the whole office.
-    const glyph = action === 'sleep' ? 'Zzz' : c.reaction ? REACTIONS[c.reaction].symbol
+    if(action==='sleep'&&!c.leaving){
+      if(!c.sleepLetters){c.sleepVersion=(c.sleepVersion??0)+1;c.sleepLetters=el('span','ao-sleep-letters',{'aria-hidden':'true','data-occupant':c.id});c.sleepLetters.hidden=true;for(const letter of ['z','Z','z']){const node=el('i');node.textContent=letter;c.sleepLetters.append(node);}this.labelsLayer.append(c.sleepLetters);}
+      this._sleepReady??=loadModule(()=>import('./sleep-letters.js'+buildQuery)).then(m=>{if(!this.destroyed){this._positionSleep=m.positionSleep;this._positionLabels();}}).catch(()=>{this._sleepReady=null;});
+    }else{c.sleepLetters?.remove();c.sleepLetters=null;}
+    const rawGlyph = action === 'sleep' ? null : c.reaction ? REACTIONS[c.reaction].symbol
       : action === 'highfive' ? '✦' : action === 'chat' ? '…' : action === 'wave' ? '👋'
       : ({ waiting:'…', thinking:'?', error:'!' }[c.occ?.state]);
+    const glyph = this._intents?.bubble ? this._intents.bubble(c, rawGlyph) : rawGlyph;
     let bubble = c.plate.querySelector('.ao-life-bubble');
     if (glyph) {
       if (!bubble) { bubble = el('span','ao-life-bubble',{'aria-hidden':'true'}); c.plate.append(bubble); }
@@ -1381,7 +1422,7 @@ export class OfficeScene {
       this._interactions.add(interactionId);
       if (this._interactions.size > 200) this._interactions.delete(this._interactions.values().next().value);
     }
-    if (cue === 'delegating' && partnerId && !this.reducedMotion && this._meetingSeats()) {
+    if (cue === 'delegating' && partnerId && !Object.hasOwn(this.chars.get(occupantId)?.occ ?? {}, 'sceneTarget') && !this.reducedMotion && this._meetingSeats()) {
       if (this.chars.get(partnerId)) this._startMeeting(occupantId, partnerId, interactionId);
       else this._pendingMeet = { aId: occupantId, bId: partnerId, interactionId, until: this.now() + 4000 };
       return;
@@ -1406,38 +1447,25 @@ export class OfficeScene {
   }
 
   _applyVisits() {
+    if ([...this.chars.values()].some(c => Object.hasOwn(c.occ ?? {}, 'sceneTarget'))) {
+      for (const c of this.chars.values()) { c.visit = null; c.deskTalk = false; c.deskBubble = false; c.plate?.removeAttribute('data-talking'); }
+      return;
+    }
     const plan = this._visitPlan;
     const want = new Map();
-    let deskHost = null;
-    if (plan && !this.editing) {
-      const talking = plan.talking !== false;
-      const host = this.chars.get(plan.hostId);
-      const meeting = plan.meeting?.length ? this._tableSpots(plan.meeting.length) : null;
-      if (meeting) plan.meeting.forEach((id, i) => { if (id !== plan.hostId || talking) want.set(id, { ...meeting[i], key: `t${i}` }); });
-      const deskVisitors = meeting ? [] : [...(plan.desk ?? []), ...(plan.meeting ?? []).filter((id) => id !== plan.hostId)];
-      if (host && (deskVisitors.length || meeting)) this._cancelActivity(host, false);
-      const at = host ? this._homeOf(host) : null;
-      if (deskVisitors.length && at) {
-        // Keep host and visitor on the same screen row, facing each other.
-        const near = this._spotsNear(at.x, at.y, 6);
-        const pick = (side) => near.find((c) => this._besides(c, 1, [side]).length);
-        const h = pick(-1) ?? pick(1) ?? near[0];
-        const spots = h ? this._besides(h, deskVisitors.length) : [];
-        spots.forEach((s, i) => want.set(deskVisitors[i], { ...s, key: `d${i}` }));
-        const home = host && this.itemNodes.get(host.occ.stationUid);
-        const canSit = home && seatModeFor(host.ch, host.occ.look.variant, home.f.station) === 'desk' && !host.occ.destination;
-        if (talking && canSit) deskHost = host.id;
-        else if (h && talking) {
-          const v = spots[0];
-          want.set(plan.hostId, { x: h.x, y: h.y, key: 'dh', facing: v && v.x - v.y < h.x - h.y ? 'sw' : 'se' });
-        }
+    // Conversations happen from each participant's own desk (no crowding at one desk or table);
+    // only participants without a station stay where they are. Physical meetings come back later, rarely.
+    const deskTalkers = new Set();
+    if (plan && !this.editing && plan.talking !== false) {
+      for (const id of [plan.hostId, ...(plan.desk ?? []), ...(plan.meeting ?? [])]) {
+        const c = id && this.chars.get(id);
+        if (c?.occ?.stationUid && !c.occ.destination) deskTalkers.add(id);
       }
-      for (const [id, w] of want) { w.talk = talking; w.bubble = talking && plan.speaker === id; }
     }
     for (const c of this.chars.values()) {
       if (c.leaving || !c.occ) continue;
       const w = want.get(c.id) ?? null;
-      const deskTalk = c.id === deskHost;
+      const deskTalk = deskTalkers.has(c.id);
       const changedDeskTalk = !!c.deskTalk !== deskTalk;
       const deskBubble = deskTalk && plan?.speaker === c.id;
       const moved = (c.visit?.key ?? null) !== (w?.key ?? null) || c.visit?.x !== w?.x || c.visit?.y !== w?.y;
@@ -1540,6 +1568,7 @@ export class OfficeScene {
 
   _startMeeting(aId, bId, interactionId) {
     const a = this.chars.get(aId), b = this.chars.get(bId);
+    if ([a, b].some(c => Object.hasOwn(c?.occ ?? {}, 'sceneTarget'))) return;
     const seats = this._meetingSeats();
     if (!a || !b || a.leaving || b.leaving || !seats || a.meet || b.meet) return;
     const id = interactionId ?? `m${(this._meetSeq = (this._meetSeq ?? 0) + 1)}`;
@@ -1620,10 +1649,13 @@ export class OfficeScene {
     }
     const view = occ ? viewFor(occ.state) : null;
     let mon = view?.monitor ?? 'off';
-    if (occ && this.theme?.monitors === 'on' && mon === 'off' && occ.state !== 'offline') mon = 'on';
+    if (occ && this.theme?.monitors === 'on' && mon === 'off' && !['idle', 'offline'].includes(occ.state)) mon = 'on';
     const monitor = node.parts.monitor;
     if (monitor) {
-      setSrc(monitor, resolveUrl(partImage(node.f.station.parts.monitor, mon === 'off' ? null : 'on'), this.assetBase));
+      const screen = this._intents?.screen(this, occ, this.now());
+      setSrc(monitor, resolveUrl(screen || partImage(node.f.station.parts.monitor, mon === 'off' ? null : 'on'), this.assetBase));
+      monitor.dataset.screen = screen ? screen.split('/').pop() : '';
+      if (screen) mon = 'on';
     }
     if (node.tint) {
       node.tint.hidden = mon !== 'error';
@@ -1644,7 +1676,7 @@ export class OfficeScene {
     const o = c.occ;
     // O8: a seen agent's plate says when it was last seen (« vu il y a 12 min »), as text, name and tooltip.
     const label = o.sourceStale ? o.stateLastLabelText
-      : o.presenceLabel ?? (c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : o.stateLabelText);
+      : o.presenceLabel ?? (o.activity && this._intents ? this._intents.label(c) : c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : o.stateLabelText);
     const shown = this._name(o);
     c.plate.setAttribute('aria-label', `${shown}, ${label}`);
     c.plate.dataset.state = o.state;
@@ -1743,6 +1775,9 @@ export class OfficeScene {
 
   // ---------- frame loop ----------
   _kick() {
+    // Cached/frozen snapshots still need correct static furniture/character
+    // stacking after a layout or decoded-pose update; only motion is paused.
+    if (!this.destroyed && this._frozen && this._sortDirty) this._sort();
     if (!this._raf && !this.destroyed && !this.hidden) this._raf = requestAnimationFrame((t) => this._frame(t));
   }
 
@@ -1782,8 +1817,10 @@ export class OfficeScene {
     // Seated (desk/sofa, Batch 6): the pose's hip contact lands on the seat contact; else feet on the floor.
     const seatNode = !c.walking && (c.seatMode === 'desk' || c.seatMode === 'sofa') && c.seatUid ? this.itemNodes.get(c.seatUid) : null;
     const seatAt = seatNode?.seatWorld && c.poseSeat ? (seatNode.seatWorlds?.[c.target?.seatIndex] ?? seatNode.seatWorld) : null;
-    const box = seatAt
-      ? imageBox(seatAt.sx, seatAt.sy, c.poseSeat, c.poseCanvas ?? ch.canvas, this.proj, c.poseScale ?? renderScale(ch))
+    const activitySeat = !c.walking && c.occ.activity && c.target?.seatContact && c.poseSeat ? project(c.target.seatContact.x, c.target.seatContact.y, this.proj) : null;
+    const contact = activitySeat || seatAt;
+    const box = contact
+      ? imageBox(contact.sx, contact.sy, c.poseSeat, c.poseCanvas ?? ch.canvas, this.proj, c.poseScale ?? renderScale(ch))
       : imageBox(p.sx, p.sy, c.poseAnchor ?? ch.anchor, c.poseCanvas ?? ch.canvas, this.proj, c.poseScale ?? renderScale(ch));
     c.el.style.transform = `translate(${box.left}px, ${box.top}px)`;
     Object.assign(c.el.style, { width: `${box.width}px`, height: `${box.height}px` });
@@ -1832,6 +1869,7 @@ export class OfficeScene {
         .map(node => node.getBoundingClientRect()).filter(r => r.width && r.height)
         .map(r => ({ left: r.left - viewport.left, right: r.right - viewport.left, top: r.top - viewport.top, bottom: r.bottom - viewport.top }));
       const labelIds = this.selected ? [this.selected, ...(this.mobileLabelIds ?? []).filter(id => id !== this.selected)] : this.mobileLabelIds ?? [];
+      placed.push(...(this._positionSleep?.(this,placed)??[]));
       for (const c of this.chars.values()) if (!labelIds.includes(c.id) || !c.head || c.leaving) this._showPlate(c,false);
       // Geometry may suppress a supplied label, but never substitutes another occupant.
       for (const id of labelIds) {
@@ -1877,6 +1915,7 @@ export class OfficeScene {
     const placed = [...(this.stage.parentElement?.querySelectorAll('.bu-stage__controls, .ao-mobile-options') ?? [])]
       .map(node => node.getBoundingClientRect()).filter(rect => rect.width && rect.height)
       .map(rect => ({ vx: rect.left - viewport.left + rect.width / 2, top: rect.top - viewport.top, w: rect.width, h: rect.height, bh: 0 }));
+    placed.push(...(this._positionSleep?.(this,placed)??[]).map(b=>({vx:(b.left+b.right)/2,top:b.top,w:b.right-b.left,h:b.bottom-b.top,bh:0})));
     for (const it of items) {
       it.vx = Math.max(it.w / 2 + 2, Math.min(width - it.w / 2 - 2, it.vx));
       const min = it.bh + 2, max = Math.max(min, height - it.h - 2);

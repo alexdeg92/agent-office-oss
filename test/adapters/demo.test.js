@@ -75,6 +75,12 @@ describe('G6 · the server on the demo runtime (AO_RUNTIME=demo)', () => {
   after(async () => { if (h) await h.stop(); });
 
   it('meta names the demo runtime and is read-only; the views are full and valid (the runtime check throws in test)', async () => {
+    const ownerCookie = h.cookie;
+    h.cookie = '';
+    const anonymous = (await h.get('/api/v3/meta')).json.data;
+    assert.equal(anonymous.runtime, null, 'public bootstrap does not disclose runtime metadata');
+    assert.equal(anonymous.primaryAgent, null, 'public bootstrap does not disclose the primary agent');
+    h.cookie = ownerCookie;
     const meta = (await h.get('/api/v3/meta')).json.data;
     assert.deepEqual([meta.runtime.id, meta.runtime.name, meta.readonly, meta.capabilities.openclawWrites, meta.primaryAgent.name], ['demo', 'Demo', true, false, 'Nova']);
     for (const v of ['v2', 'v3']) for (const p of ['office', 'logs', 'flows', 'access', 'health', 'skills']) assert.equal((await h.get(`/api/${v}/views/${p}`)).status, 200, `${v} ${p}`);

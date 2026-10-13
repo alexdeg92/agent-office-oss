@@ -18,7 +18,7 @@ const externalUrlN = () => s.string().refine((v) => safeExternalUrl(v) === v, 'c
 const R = { extra: 'reject' };
 const boundedId = (max = 256) => s.string().min(1).max(max);
 const sourceStatus = s.enumOf(['available', 'unavailable', 'unsupported', 'stale']);
-const hostStatus = s.enumOf(['working', 'blocked', 'done', 'idle', 'unknown']);
+const hostStatus = s.enumOf(['working', 'blocked', 'done', 'idle', 'waiting', 'unknown']);
 const hostRole = s.enumOf(['primary', 'delegate', 'unknown']);
 const teamState = s.enumOf(['open', 'claimed', 'working', 'review', 'done', 'blocked']);
 const memberRoleKind = s.enumOf(['lead', 'member', 'unknown']);
@@ -156,7 +156,7 @@ const LiveEvent = s.object({
   kind: s.enumOf(['gateway.connected', 'gateway.disconnected', 'activity', 'run.started', 'run.succeeded', 'run.failed', 'cron.fired',
     'occupant.joined', 'occupant.left', 'agent.removed', 'agent.primary-changed', 'project.status', 'project.risk']),
   actor: ActorRef, occupantId: strN(), sessionKey: strN(), count: s.int().min(1),
-  activity: s.enumOf(['thinking', 'writing', 'calling', 'researching', 'working']).optional(),
+  activity: s.enumOf(['thinking', 'writing', 'executing', 'calling', 'researching', 'waiting', 'blocked', 'working']).optional(),
   cronJobId: s.string().min(1).optional(), projectId: s.string().min(1).optional(),
 }, R).refine((e) => (e.kind === 'cron.fired') === (e.cronJobId != null) && (e.kind === 'activity') === (e.activity != null), 'kind fields');
 

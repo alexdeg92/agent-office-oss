@@ -3,7 +3,7 @@ const path = require('node:path'), os = require('node:os');
 const s = require('../../schema');
 const { createFiles, BOUNDS } = require('./files');
 const { PROFILE } = require('./profile');
-const { runFromTranscript, unknownRun, chooseTailsByAgent } = require('../transcript-execution');
+const { runFromTranscript, unknownRun, chooseTailsByAgent, transcriptActivity } = require('../transcript-execution');
 const label = key => ({ key: 'settings.claude.' + key });
 const defaults = ({ home = path.join(os.homedir(), '.claude'), include = [], exclude = [], agentGrouping = 'project' } = {}) => ({ home, include, exclude, agentGrouping });
 const filters = s.array(s.string().min(1).max(256).refine(v => !/[\x00-\x1f/\\]/.test(v) && !['.', '..'].includes(v), 'project directory key')).max(2000);
@@ -66,7 +66,10 @@ function createRuntime(cfg, { now = Date.now } = {}) {
       engine.ingestCanonical('transcript', value, { key });
       loaded.add(key);
       const row = files.rows().find(r => r.key === key);
-      if (row?.activityAt && row.activityAt <= now() && now() - row.activityAt < 30000) engine.setObservedActivity(key, { kind: 'working', source: 'transcript', since: row.activityAt, expiresAt: row.activityAt + 30000 });
+      const activity = row?.activity && transcriptActivity(row.activity.kind, row.activity.since, now());
+      if (activity) engine.setObservedActivity(key, { ...activity, source: 'transcript' });
+      else if (row?.execution?.status === 'idle') engine.clearObservedActivity?.(key);
+      else if (row?.activityAt && row.activityAt <= now() && now() - row.activityAt < 30000) engine.setObservedActivity(key, { kind: 'working', source: 'transcript', since: row.activityAt, expiresAt: row.activityAt + 30000 });
       failures.delete(key); readRetries.delete(key); if (!failures.size) { healthFailure = null; failureTarget = null; engine.setSourceDown('transcripts', false); engine.notifyHealth?.(); }
       return { ok: true };
     } catch (error) {

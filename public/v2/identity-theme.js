@@ -1,3 +1,4 @@
+import { chunkError } from './build-update.js';
 import { createStore } from './lib.js';
 import { identityRegistry } from './identity-themes/registry.js';
 import { buildQuery } from './config.js';
@@ -28,6 +29,7 @@ function apply(id) {
       const color = document.querySelector('meta[name="theme-color"]');
       if (color && background) color.content = background;
     };
+    link.onerror = () => chunkError(Error('Identity stylesheet unavailable'));
     link.href = `identity-themes/${id}/theme.css${buildQuery}`;
     const background = getComputedStyle(root).getPropertyValue('--bu-bg').trim();
     const color = document.querySelector('meta[name="theme-color"]');
@@ -47,7 +49,7 @@ export function loadIdentityPreviewStyles() {
       link.href = `identity-themes/${id}/theme.css${buildQuery}`;
       previewStyles.set(id, new Promise((resolve, reject) => {
         link.onload = resolve;
-        link.onerror = () => { link.remove(); previewStyles.delete(id); reject(Error(`Identity preview unavailable: ${id}`)); };
+        link.onerror = () => { link.remove(); previewStyles.delete(id); reject(chunkError(Error(`Identity preview unavailable: ${id}`))); };
       }));
       document.head.append(link);
     }

@@ -1,3 +1,4 @@
+import { loadModule, chunkError } from '../build-update.js';
 // Lazy room hosts share the artwork, camera and weather; actors own only pose/deadline data.
 import { buildQuery } from '../config.js';
 import { poseImage, accessoryLayers, resolveUrl, renderScale } from './assets.js';
@@ -8,7 +9,7 @@ const node=(tag,cls)=>{const n=document.createElement(tag);n.className=cls;retur
 function styles() {
   if(!styleReady) styleReady=new Promise((resolve,reject)=>{
     const link=node('link','');link.rel='stylesheet';link.href=new URL('./break-room.css' + buildQuery,import.meta.url).href;
-    link.dataset.breakRoomStyle='';link.onload=resolve;link.onerror=()=>{link.remove();styleReady=null;reject(Error('room style'));};document.head.append(link);
+    link.dataset.breakRoomStyle='';link.onload=resolve;link.onerror=()=>{link.remove();styleReady=null;reject(chunkError(Error('room style')));};document.head.append(link);
   });return styleReady;
 }
 export async function createBreakRoom(scene,c,id,cfg={}) {
@@ -68,7 +69,7 @@ class RoomActor {
     const body=poseImage(ch,look.variant,pose),mode=this.scene.stage.dataset.officeTheme==='night'?'night':'day';
     this.accessoryMode=mode;
     if(look.accessories?.some(id=>this.scene.index.accessories.get(id)?.packManifest)) {
-      const m=await import('./accessory-pack-loader.js'+buildQuery);
+      const m=await loadModule(() => import('./accessory-pack-loader.js'+buildQuery));
       await m.prepareAccessoryLayers(this.scene.index,look,body.pose,this.scene.assetBase,{mode}).catch(()=>{});
       if(this.disposed || version!==this.version)return;
     }

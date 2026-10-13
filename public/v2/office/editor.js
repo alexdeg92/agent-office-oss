@@ -19,6 +19,7 @@ import { agentRows as sharedAgentRows, ruleView as sharedRuleView, patchAgent as
 import { defaultAccessoriesFor, canonicalRuleId, canonicalRole } from './layout-rules.js';
 import { resolveTheme } from './theme.js';
 import { s as tr, labelOf, intlLocale } from './strings.js';
+import { reloadGuards } from '../services.js';
 
 const html = htm.bind(h);
 
@@ -75,6 +76,10 @@ class EditorController {
   async init() {
     this.vm = await this.o.store.get();
     this.history = new History(this.vm.layout.data);
+    this.reloadGuard = { dirty: () => this.dirty || this.saving, confirm: () => {
+      if (this.saving) return Promise.resolve(false);
+      return new Promise(resolve => { this.reloadResolve = resolve; this.modal = { kind: 'leave' }; this.emit(); });
+    } };
     this.scene.setEditing(true);
     this.markMode();
     this.scene.setPointerHandler((e) => this.onScenePointer(e));
@@ -85,6 +90,7 @@ class EditorController {
     this.onKey = (e) => this.onKeyDown(e);
     document.addEventListener('keydown', this.onKey, true);
     this.apply();
+    reloadGuards.add(this.reloadGuard);
   }
 
   get draft() { return this.history.current; }
@@ -454,10 +460,17 @@ class EditorController {
     this.close({ saved: false });
   }
 
-  closeModal() { this.modal = null; this.emit(); }
+  closeModal() { this.reloadResolve?.(false); this.reloadResolve = null; this.modal = null; this.emit(); }
+
+  confirmLeave() {
+    const resolve = this.reloadResolve; this.reloadResolve = null; this.modal = null;
+    if (resolve) { resolve(true); this.emit(); } else this.close({ saved: false });
+  }
 
   close({ saved }) {
     if (this.closed) return;   // exit runs once (R7-05)
+    reloadGuards.delete(this.reloadGuard);
+    this.reloadResolve?.(false); this.reloadResolve = null;
     this.cancelPlace();
     document.removeEventListener('keydown', this.onKey, true);
     this.mq.removeEventListener('change', this.onMq);
@@ -770,7 +783,7 @@ function Modal({ ctl }) {
       `} foot=${html`<div class="bu-modal__footer">${footer}</div>`}>${body}</${Frame}></div>`;
   if (m.kind === 'leave') return frame(tr('ed.leave.title'), tr('ed.leave.desc'), null, html`
     <button type="button" class="bu-btn bu-btn--ghost" ref=${first} onClick=${() => ctl.closeModal()}>${tr('ed.stay')}</button>
-    <button type="button" class="bu-btn bu-btn--danger" onClick=${() => { ctl.modal = null; ctl.close({ saved: false }); }}>${tr('ed.quit')}</button>`);
+    <button type="button" class="bu-btn bu-btn--danger" onClick=${() => ctl.confirmLeave()}>${tr('ed.quit')}</button>`);
   if (m.kind === 'reset') return frame(tr('ed.reset.title'), tr('ed.reset.desc'), null, html`
     <button type="button" class="bu-btn bu-btn--ghost" ref=${first} onClick=${() => ctl.closeModal()}>${tr('ed.cancel')}</button>
     <button type="button" class="bu-btn bu-btn--primary" onClick=${() => ctl.confirmReset()}>${tr('ed.reset.confirm')}</button>`);

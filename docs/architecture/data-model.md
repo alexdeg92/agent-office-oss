@@ -75,7 +75,7 @@ type TeamMemberId = string;
 type TaskId = string;
 type ReviewId = string;
 type SourceStatus = 'available' | 'unavailable' | 'unsupported' | 'stale';
-type HostAgentStatus = 'working' | 'blocked' | 'done' | 'idle' | 'unknown';
+type HostAgentStatus = 'working' | 'blocked' | 'done' | 'idle' | 'waiting' | 'unknown';
 type HostAgentRole = 'primary' | 'delegate' | 'unknown';
 interface Lineage {
   agentId: AgentId | null; sessionKey: SessionKey | null;

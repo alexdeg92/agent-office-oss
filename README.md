@@ -12,7 +12,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/readme/hero-dark.webp">
-  <img src="docs/readme/hero-light.webp" width="1440" alt="Agent Office: Atlas and six subagents at work on the first floor of the live Bureau, with activity totals, the floor list and a team roster grouped under Atlas.">
+  <img src="docs/readme/hero-light.webp" width="1440" alt="Agent Office: Atlas and six subagents on the first floor of the live Bureau, each at its own desk with its current action on the monitor, one dozing with floating z Z z and one resting on the sofa, next to a roster showing working, waiting, thinking, executing and researching states.">
 </picture>
 
 ## Your team, in one place
@@ -23,8 +23,8 @@ Connect OpenClaw, Claude Code and Codex side by side, or explore with the includ
 
 <table>
   <tr>
-    <td width="33%"><a href="docs/readme/hero-light.webp"><img src="docs/readme/hero-light.webp" alt="Live Bureau with agents, subagents and activity indicators"></a><br><strong>Bureau · Live office</strong><br>See who is working, thinking or waiting. Subagents are listed under the agent that launched them.</td>
-    <td width="33%"><a href="docs/readme/lobby.webp"><img src="docs/readme/lobby.webp" alt="Furnished ground-floor lobby with reception desk, lounge armchairs, glass facade and an outdoor smoking terrace, with idle agents taking a break"></a><br><strong>Floors and teams</strong><br>Idle agents take breaks in the ground-floor lobby, on its terrace or in the <a href="docs/readme/gym.webp">gym</a>. A <a href="docs/readme/teams.webp">team</a> sits together on its own floor, grouped under its lead.</td>
+    <td width="33%"><a href="docs/readme/hero-light.webp"><img src="docs/readme/hero-light.webp" alt="Live Bureau with agents, subagents and activity indicators"></a><br><strong>Bureau · Live office</strong><br>Every agent has its own desk and its monitor shows what it is doing. See who is working, thinking, executing, blocked or waiting for a reply; idle agents <a href="docs/readme/doze.webp">doze at their desk</a>. Subagents are listed under the agent that launched them.</td>
+    <td width="33%"><a href="docs/readme/lobby.webp"><img src="docs/readme/lobby.webp" alt="Furnished ground-floor lobby with reception desk, lounge armchairs, glass facade and an outdoor smoking terrace, with idle agents taking a break"></a><br><strong>Floors and teams</strong><br>Idle agents take the elevator for breaks in the ground-floor lobby, on its terrace or in the <a href="docs/readme/gym.webp">gym</a>. A <a href="docs/readme/teams.webp">team</a> sits together on its own floor, grouped under its lead; when desks run out, working agents keep theirs.</td>
     <td width="33%"><a href="docs/readme/connectors.webp"><img src="docs/readme/connectors.webp" alt="Connector gallery with Claude Code and Codex connected"></a><br><strong>Connectors · Several runtimes</strong><br>Connect OpenClaw, Claude Code and Codex at the same time, each with its own instances.</td>
   </tr>
   <tr>

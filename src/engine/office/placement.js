@@ -1,15 +1,16 @@
 'use strict';
 // Spatial allocation only. Canonical identity, membership, order and status are supplied by the caller.
 const { planFloors } = require('./floors.js');
-const { canonicalRole, elevatorAccess, seatTile } = require('./layout-rules.js');
+const { canonicalRole, canonicalRuleId, elevatorAccess, seatTile } = require('./layout-rules.js');
 const { buildGrid, findPath, isWalkable } = require('./pathfind.js');
 const crypto = require('node:crypto');
 
 const DEFAULT_IDLE_RELOCATION_MINUTES = 15;
-const SPOT_KINDS = new Set(['idle', 'gym', 'smoke', 'coffee']);
+const SPOT_KINDS = new Set(['idle', 'gym', 'smoke', 'coffee', 'seat']);
 const RELOCATABLE_ROLES = new Set(['primary', 'main', 'agent', 'subagent', 'host', 'team-host', 'member', 'team-member']);
 const facingFor = value => ['ne', 'se', 'sw'].includes(value) ? value : 'sw';
 const center = p => ({ x: p.x + 0.5, y: p.y + 0.5 });
+const spatialIdentity = id => canonicalRuleId(id) || id;
 const digest = value => crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 20);
 
 function target({ kind, floorId, stationUid = null, point, approachPoint = null, seatContact = null, mode = 'stand', seatIndex = null, facing = 'sw' }) {
@@ -44,21 +45,35 @@ function activitySpotsFor(floor, index) {
     const station = index.furniture.get(item.asset)?.station;
     if (!station || item.wall != null) return [];
     const point = seatTile(item, index.furniture.get(item.asset));
-    return [`${point.x},${point.y}`];
+    return [{ key: `${point.x},${point.y}`, uid: item.uid }];
   });
-  for (const key of seats) forbidden.add(key);
   const used = new Set();
   const declared = index.rooms.get(floor.layout.room)?.activitySpots || [];
   return declared.flatMap(spot => {
     if (!SPOT_KINDS.has(spot.kind) || !Array.isArray(spot.points) || spot.capacity !== spot.points.length) return [];
-    return spot.points.slice(0, spot.capacity).flatMap((p, slot) => {
-      if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return [];
-      const x = Math.floor(p.x), y = Math.floor(p.y), key = `${x},${y}`;
-      if (!isWalkable(grid, x, y) || forbidden.has(key) || used.has(key) || !findPath(grid, start, { x, y })) return [];
+    const seated = spot.kind === 'seat';
+    if (seated && (!spot.asset || spot.approachPoints?.length !== spot.capacity || spot.seatContacts?.length !== spot.capacity)) return [];
+    const items = spot.asset ? floor.layout.items.filter(item => item.asset === spot.asset && item.wall == null
+      && (!spot.orientation || (item.orientation ?? 'sw') === spot.orientation)) : [null];
+    return items.flatMap(item => spot.points.flatMap((local, slot) => {
+      const offset = point => point && { x: point.x + (item?.x ?? 0), y: point.y + (item?.y ?? 0) };
+      const p = offset(local), approach = seated ? offset(spot.approachPoints[slot]) : p;
+      const contact = seated ? offset(spot.seatContacts[slot]) : null;
+      if (![p, approach, ...(seated ? [contact] : [])].every(point => Number.isFinite(point?.x) && Number.isFinite(point?.y))) return [];
+      const region = spot.region;
+      if (region && (p.x < region.x || p.y < region.y || p.x >= region.x + region.w || p.y >= region.y + region.d)) return [];
+      const x = Math.floor(approach.x), y = Math.floor(approach.y), key = `${x},${y}`;
+      if (p.x < 0 || p.y < 0 || p.x >= room.cols || p.y >= room.rows
+        || !isWalkable(grid, x, y) || forbidden.has(key) || used.has(key)
+        || seats.some(seat => seat.key === key && seat.uid !== item?.uid)
+        || !findPath(grid, start, { x, y })) return [];
+      if (seated && grid.owner[Math.floor(p.y) * grid.cols + Math.floor(p.x)] !== item.uid) return [];
       used.add(key);
-      return [{ id: spot.id, activityId: `${floor.id}:${spot.id}:${slot}`, kind: spot.kind, capacity: spot.capacity, slot, floorId: floor.id,
-        target: target({ kind: spot.kind === 'gym' ? 'destination' : 'lounge', floorId: floor.id, point: p, approachPoint: center({ x, y }), mode: 'stand' }) }];
-    });
+      const id = item ? `${spot.id}:${item.uid}` : spot.id;
+      return [{ id, activityId: `${floor.id}:${id}:${slot}`, kind: spot.kind, capacity: spot.capacity, slot, floorId: floor.id,
+        target: target({ kind: spot.kind === 'gym' ? 'destination' : 'lounge', floorId: floor.id, stationUid: item?.uid ?? null,
+          point: p, approachPoint: approach, seatContact: contact, mode: seated ? 'sofa' : 'stand', seatIndex: seated ? slot : null }) }];
+    }));
   });
 }
 
@@ -69,7 +84,7 @@ function transitionTarget(floor, index, fallback) {
   return endpoint ? target({ kind: 'destination', floorId: floor.id, point: center(endpoint), approachPoint: center(endpoint) }) : fallback;
 }
 
-function relocateIdle(placements, occupants, floors, index, layoutData, now, tracker) {
+function relocateIdle(placements, occupants, floors, index, layoutData, now, tracker, pressureIds = new Set()) {
   const configured = layoutData?.idleRelocationMinutes;
   const thresholdMs = (Number.isInteger(configured) && configured >= 1 && configured <= 1440 ? configured : DEFAULT_IDLE_RELOCATION_MINUTES) * 60_000;
   const byId = new Map(occupants.map(row => [row.id, row]));
@@ -79,18 +94,25 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
   const assignments = new Map();
   const reserved = new Set();
   const eligible = occupants.filter(row => RELOCATABLE_ROLES.has(canonicalRole(row.role) || row.role) && row.state === 'idle'
-    && Number.isFinite(row.stateSince) && now - row.stateSince >= thresholdMs
+    && (pressureIds.has(row.id) || Number.isFinite(row.stateSince) && now - row.stateSince >= thresholdMs)
     && !row.visitPhase && !row.gone).sort((a, b) => {
+    const pressureOrder = Number(pressureIds.has(b.id)) - Number(pressureIds.has(a.id));
+    if (pressureOrder) return pressureOrder;
+    if (pressureIds.has(a.id) && pressureIds.has(b.id))
+      return (Number.isFinite(a.stateSince) ? a.stateSince : now) - (Number.isFinite(b.stateSince) ? b.stateSince : now)
+        || spatialIdentity(a.id).localeCompare(spatialIdentity(b.id));
     const standingA = !placementById.get(a.id)?.stationUid ? 0 : 1;
     const standingB = !placementById.get(b.id)?.stationUid ? 0 : 1;
-    return standingA - standingB || a.id.localeCompare(b.id);
+    return standingA - standingB || spatialIdentity(a.id).localeCompare(spatialIdentity(b.id));
   });
   // Retain valid assignments first so repeated snapshots cannot reshuffle occupants.
   for (const row of eligible) {
-    const old = tracker?.relocations?.get(row.id);
+    const old = tracker?.relocations?.get(spatialIdentity(row.id));
     if (!old?.activityId || old.stateSince !== row.stateSince) continue;
     const spot = available.find(item => item.activityId === old.slotId);
-    if (spot && !reserved.has(`${spot.floorId}:${spot.id}:${spot.slot}`)) {
+    const isPressure = pressureIds.has(row.id);
+    if (spot && spot.floorId !== placementById.get(row.id)?.floorId && (!isPressure || ['rdc', 'gym'].includes(spot.floorId))
+      && !reserved.has(`${spot.floorId}:${spot.id}:${spot.slot}`)) {
       assignments.set(row.id, spot); reserved.add(`${spot.floorId}:${spot.id}:${spot.slot}`);
     }
   }
@@ -98,15 +120,18 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
     if (assignments.has(row.id)) continue;
     const home = placementById.get(row.id);
     // Standing overflow workers go first; among them use stable canonical IDs.
-    const spot = available.find(item => !reserved.has(`${item.floorId}:${item.id}:${item.slot}`)
-      && (item.floorId !== home?.floorId || item.target.kind === 'lounge'));
+    const choices = available.filter(item => !reserved.has(`${item.floorId}:${item.id}:${item.slot}`)
+      && item.floorId !== home?.floorId && (!pressureIds.has(row.id) || ['rdc', 'gym'].includes(item.floorId)));
+    const kinds = [...new Set(choices.map(item => item.kind))].sort();
+    const preferred = kinds[parseInt(digest(spatialIdentity(row.id)).slice(0, 8), 16) % kinds.length];
+    const spot = choices.find(item => item.kind === preferred) || choices[0];
     if (!spot) continue;
     assignments.set(row.id, spot); reserved.add(`${spot.floorId}:${spot.id}:${spot.slot}`);
   }
-  const usedIds = new Set(occupants.map(row => row.id));
+  const usedIds = new Set(occupants.map(row => spatialIdentity(row.id)));
   for (const id of tracker?.relocations?.keys?.() || []) if (!usedIds.has(id)) tracker.relocations.delete(id);
   const updated = placements.map(home => {
-    const row = byId.get(home.id), spot = assignments.get(home.id), previous = tracker?.relocations?.get(home.id);
+    const row = byId.get(home.id), spot = assignments.get(home.id), previous = tracker?.relocations?.get(spatialIdentity(home.id));
     const homeTarget = homeTargetFor(home, floorById.get(home.floorId), index);
     if (!row || !spot) {
       if (previous?.activityId && tracker?.relocations) {
@@ -114,17 +139,22 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
         const toFloor = floorById.get(home.floorId);
         const departure = transitionTarget(fromFloor, index, previous.target);
         const arrival = transitionTarget(toFloor, index, homeTarget);
-        tracker.relocations.set(home.id, { activityId: null, floorId: home.floorId, target: homeTarget,
-          travel: previous.floorId === home.floorId ? null : { id: `travel:${digest(`${home.id}|${previous.activityId}|return`)}`, fromFloorId: previous.floorId, toFloorId: home.floorId, departure, arrival } });
+        tracker.relocations.set(spatialIdentity(home.id), { activityId: null, floorId: home.floorId, target: homeTarget,
+          travel: previous.floorId === home.floorId ? null : { id: `travel:${digest(`${spatialIdentity(home.id)}|${previous.activityId}|return`)}`, fromFloorId: previous.floorId, toFloorId: home.floorId, departure, arrival } });
       }
-      const state = tracker?.relocations?.get(home.id);
+      const state = tracker?.relocations?.get(spatialIdentity(home.id));
       return { ...home, homeTarget, sceneTarget: homeTarget, activity: null, sceneTravel: state?.activityId === null ? state.travel : null };
     }
     const slotId = spot.activityId;
     const activityId = `${row.stateSince}|${slotId}`;
-    const since = row.stateSince + thresholdMs;
-    const activity = { id: `activity:${digest(`${home.id}|${activityId}`)}`, kind: spot.kind, spotId: spot.id, since,
-      label: { key: `office.activity.${spot.kind}` } };
+    const sameActivity = previous?.activityId === activityId && previous?.stateSince === row.stateSince;
+    const since = sameActivity && Number.isSafeInteger(previous?.since) ? previous.since
+      : pressureIds.has(row.id) ? now : row.stateSince + thresholdMs;
+    // A seated pause uses the existing canonical idle activity; the supplied
+    // target mode/contact distinguishes seating without a new VM vocabulary.
+    const activityKind = spot.kind === 'seat' ? 'idle' : spot.kind;
+    const activity = { id: `activity:${digest(`${spatialIdentity(home.id)}|${activityId}`)}`, kind: activityKind, spotId: spot.id, since,
+      label: { key: `office.activity.${activityKind}` } };
     let travel = previous?.travel || null;
     const previousFloorId = previous?.activityId ? previous.floorId : home.floorId;
     if (previous?.activityId !== activityId && previousFloorId !== spot.floorId) {
@@ -132,10 +162,11 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
       const toFloor = floorById.get(spot.floorId);
       const departure = transitionTarget(fromFloor, index, previous?.target || homeTarget);
       const arrival = transitionTarget(toFloor, index, spot.target);
-      travel = { id: `travel:${digest(`${home.id}|${previous?.activityId || 'home'}|${activityId}`)}`, fromFloorId: previousFloorId, toFloorId: spot.floorId, departure, arrival };
+      travel = { id: `travel:${digest(`${spatialIdentity(home.id)}|${previous?.activityId || 'home'}|${activityId}`)}`, fromFloorId: previousFloorId, toFloorId: spot.floorId, departure, arrival };
     } else if (previous?.activityId === activityId) travel = previous.travel || null;
     else if (previousFloorId === spot.floorId) travel = null;
-    tracker?.relocations?.set(home.id, { activityId, slotId, stateSince: row.stateSince, floorId: spot.floorId, target: spot.target, travel });
+    tracker?.relocations?.set(spatialIdentity(home.id), { activityId, slotId, stateSince: row.stateSince, since,
+      floorId: spot.floorId, target: spot.target, travel });
     return { ...home, floorId: spot.floorId, stationUid: null, standingPoint: { x: Math.floor(spot.target.point.x), y: Math.floor(spot.target.point.y) }, homeTarget, sceneTarget: spot.target, activity, sceneTravel: travel };
   });
   return updated;
@@ -145,8 +176,8 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
  * @param {{index:object,layout:object,occupants:object[]}} input
  * @returns {{placements:{id:string,floorId:string,stationUid:string|null,standingPoint:{x:number,y:number}|null}[],floors:object[],unseatedTeams:object[]}}
  */
-function planOfficePlacement({ index, layout, occupants, now = Date.now(), tracker = null }) {
-  const plan = planFloors(index, layout, occupants);
+function planOfficePlacement({ index, layout, occupants, now = Date.now(), tracker = null, homeAssignments = null }) {
+  const plan = planFloors(index, layout, occupants, homeAssignments);
   const placements = new Map(plan.occupants.map(o => [o.id, {
     id: o.id, floorId: o.floorId, stationUid: o.stationUid ?? null,
     standingPoint: o.floorTravel?.phase === 'team-standing' ? { ...o.floorTravel.point } : null,
@@ -183,7 +214,13 @@ function planOfficePlacement({ index, layout, occupants, now = Date.now(), track
       floorId: leadHome.floorId, stationUid: null, standingPoint: leadHome.standingPoint || null });
   }
   const atomicHomePlacements = homePlacements.map(row => homeById.get(row.id) || row);
-  const withActivity = relocateIdle(atomicHomePlacements, occupants, plan.floors, index, layout, now, tracker);
+  const pressureIds = new Set();
+  for (const floor of plan.floors) {
+    const hasActive = floor.occupants.some(row => !['unknown', 'idle', 'offline'].includes(row.state));
+    if (!hasActive) continue;
+    for (const row of floor.occupants) if (row.state === 'idle' && !row.stationUid) pressureIds.add(row.id);
+  }
+  const withActivity = relocateIdle(atomicHomePlacements, occupants, plan.floors, index, layout, now, tracker, pressureIds);
   const withActivityById = new Map(withActivity.map(row => [row.id, row]));
   // planFloors may sort internally for deterministic seat allocation and may
   // omit deskless conversation rows. The placement boundary must preserve the
@@ -197,7 +234,7 @@ function planOfficePlacement({ index, layout, occupants, now = Date.now(), track
     // Room rendering does not expose global owner appearance/name rules from layout.agents.
     floors: plan.floors.map(({ id, kind, layout: local, capacity }) => ({ id, kind,
       layout: { room: local.room, theme: local.theme, items: local.items }, capacity })),
-    unseatedTeams: plan.unseatedTeams,
+    unseatedTeams: plan.unseatedTeams, homeAssignments: plan.homeAssignments,
   };
 }
 

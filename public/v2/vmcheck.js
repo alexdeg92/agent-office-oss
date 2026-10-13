@@ -1,3 +1,4 @@
+import { loadModule } from './build-update.js';
 // Dev/test validates received VMs against shared server schemas. Issues are value-free and
 // recorded on __AO_VM_ISSUES; strict tests can throw. Production never loads the validator.
 
@@ -14,7 +15,7 @@ function defaultReport(where, name, issues) {
 
 /** Turns checking on (dev/test). `validate` is injectable for tests; by default the generated module is loaded. */
 export async function enable({ validate = null, onIssue = null } = {}) {
-  validateVM = validate || (await import('./generated/vm-schemas.js' + buildQuery)).validateVM;
+  validateVM = validate || (await loadModule(() => import('./generated/vm-schemas.js' + buildQuery))).validateVM;
   if (onIssue) report = onIssue;
 }
 export function disable() { validateVM = null; report = defaultReport; }

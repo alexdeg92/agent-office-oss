@@ -71,7 +71,47 @@ test('Office without logs has only agent summaries, no session navigation, cues,
     assert.ok(projected.occupants.every(o=>o.execution.status==='unknown'&&o.execution.evidence.level==='unknown'
       &&o.execution.evidence.observedAt===null&&o.execution.evidence.expiresAt===null));
     assert.deepEqual(projected.journal,[]);assert.deepEqual(projected.queue,[]);assert.equal(projected.kpis.every(k=>k.id==='active'&&k.sub===null),true);
+    assert.equal(Object.hasOwn(projected,'occupantOverflowCount'),false);
+    assert.deepEqual(projected.conversationIds,[]);assert.equal(projected.conversationCount,0);
+    assert.equal(projected.conversationLabel.params.n,0);
+    assert.ok(projected.rosterFloors.every(floor=>floor.count===floor.occupantIds.length), 'floor totals are rebuilt from visible occupants');
     assert.equal(f.projector.frame(f.reader,'cue',{type:'cue',signal:{kind:'activity'}}),null);
+  }
+});
+test('restricted signed-cookie Office keeps physical floors, recomputes visible counts, and withholds visit state in v2 and v3',async t=>{
+  const f=fixture(t),auth=createAuth({secret:'synthetic-floor-projection-secret',ttlMs:60000,identity:{users:f.store.users,state:f.store.rbac.state},allowMultiUser:true});
+  const officeByVersion={2:example('office',2),3:example('office',3)};
+  for(const office of Object.values(officeByVersion)){
+    const root=office.occupants[0],member={...office.occupants[1],id:'agent:visible-team-member',parentId:root.id,teamId:'team:visible',stationUid:null};
+    root.teamId='team:visible';office.occupants.push(member);office.unseatedTeams=[{parentId:root.id,floorId:'1',count:99,capacity:3}];
+    office.visitIntent={hostId:'conversation:private-visitor',desk:['primary'],meeting:['primary','conversation:private-visitor'],talking:true,speaker:'conversation:private-visitor',until:Date.now()+60000,
+      visitors:[{id:'conversation:private-visitor',phase:'person',stateLabel:{key:'agentState.waiting'},onStage:true}]};
+    office.occupants[0].visitPhase='person';office.occupants[0].visitOnStage=true;office.occupants[0].visitStateLabel={key:'agentState.waiting'};
+    const floor=office.rosterFloors[0];floor.layout={theme:{resolved:'day'}};floor.capacity=9;
+    for(const [id,order,kind,label] of [['rdc',0,'lobby',{key:'office.floor.rdc'}],['gym',10002,'gym',{key:'office.floor.gym'}]])office.rosterFloors.push({id,order,label,countLabel:{key:'office.floor.count',params:{n:0}},statusLabel:{key:'office.floor.status',params:{active:0,idle:0}},kind,occupantIds:[],mobileLabelIds:[],items:[],count:0,activeCount:0,idleCount:0,layout:{theme:{resolved:'night'}},capacity:4});
+  }
+  const topics=createVersionedTopics({2:{P:{version:2}},3:{P:{version:3}}},{policyDeclarations:TOPICS,resourceRegistry:f.store.registry});
+  topics.define('office',{build:(params,P)=>officeByVersion[P.version]});
+  const app=trackMounts(express()),r=express.Router();
+  declareRoute(r,'get','/views/office',ROUTES.get('GET /views/office'),{store:f.store,auth},(req,res)=>{const version=req.baseUrl==='/api/v3'?3:2;res.json({data:f.projector.project(req.user,'office',topics.current('office',version).vm,{version})});});
+  app.use(['/api/v2','/api/v3'],r);app.use(errorMiddleware());assertRouteCoverage(app,f.store.registry);
+  const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+  f.cleanup.push(async()=>{topics.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+  const cookieFor=user=>'taco_sess='+auth.signSession({userId:user.id,authGeneration:user.auth_generation,sid:'synthetic-office-'+user.id,exp:Date.now()+60000});
+  for(const version of [2,3]){
+    const base='http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/office';
+    const readerResponse=await fetch(base,{headers:{cookie:cookieFor(f.reader)}}),readerText=await readerResponse.text();assert.equal(readerResponse.status,200,readerText);
+    const reader=JSON.parse(readerText).data;
+    assert.equal(Object.hasOwn(reader,'visitIntent'),false,`v${version}: no visitor ids, speaker, meeting membership, or live visit state`);
+    assert.equal(reader.occupants.some(o=>['visitPhase','visitOnStage','visitStateLabel'].some(key=>Object.hasOwn(o,key))),false,`v${version}: no per-occupant visit state`);
+    assert.deepEqual(reader.rosterFloors.map(floor=>floor.id),['1','rdc','gym'],`v${version}: retain every physical floor`);
+    assert.deepEqual(reader.rosterFloors[0].layout,{theme:{resolved:'day'}});assert.equal(reader.rosterFloors[0].capacity,9);
+    assert.deepEqual(reader.rosterFloors.slice(1).map(floor=>[floor.layout,floor.capacity,floor.count,floor.activeCount,floor.occupantIds]),[
+      [{theme:{resolved:'night'}},4,0,0,[]],[{theme:{resolved:'night'}},4,0,0,[]]],`v${version}: empty physical floors remain renderable without stale occupants`);
+    for(const floor of reader.rosterFloors)assert.equal(floor.count,floor.occupantIds.length,`v${version}/${floor.id}: count reflects visible members`);
+    assert.deepEqual(reader.unseatedTeams,[{parentId:reader.occupants[0].id,floorId:'1',count:1,capacity:3}],`v${version}: unseated counts are rebuilt from visible team members`);
+    const adminResponse=await fetch(base,{headers:{cookie:cookieFor(f.admin)}}),adminText=await adminResponse.text();assert.equal(adminResponse.status,200,adminText);
+    assert.equal(JSON.parse(adminText).data.visitIntent.speaker,'conversation:private-visitor',`v${version}: Logs readers retain visit data`);
   }
 });
 test('Office actor projection strips execution evidence and outcomes, and unknown state does not claim zero activity',t=>{

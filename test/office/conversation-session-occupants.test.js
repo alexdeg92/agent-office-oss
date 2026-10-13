@@ -379,6 +379,57 @@ test('a distinct Claude PM session stays separate from the OpenClaw primary and 
   }
 });
 
+test('an exact PM main session keeps its user-set runtime name ahead of the member fallback', () => {
+  const principal = { id: 'synthetic-admin', role: 'admin', permissionRevision: 1 };
+  for (const [P, version, ownerId, ownerRole] of [
+    [project2x, 2, 'main', 'main'], [project3x, 3, 'primary', 'primary'],
+  ]) {
+    const { build, session } = project();
+    const base = build(P), owner = base.occupants.find(row => row.id === ownerId);
+    const runtimeName = 'Project Manager';
+    const titledSession = { ...session, displayName: runtimeName, summarySource: 'runtime' };
+    const ref = { runtimeKind: 'claude-code', sessionRef: 'primary-runtime-title', sessionKey: session.key, agentId: 'coding-agent' };
+    const snapshot = { observedAt: NOW, team: { id: 'team:primary-title' }, agents: [], identityLinks: [],
+      members: [{ id: 'member:pm', name: 'pm', roleKind: 'lead', parentMemberId: null, hostAgentId: null }],
+      privateMemberSessionKeys: { 'member:pm': session.key }, privateMemberSessionRefs: { 'member:pm': ref } };
+    const projected = projectOfficeTeamOccupants({ ...base, occupants: [{ ...owner, name: 'pm', sessionKey: session.key }] }, snapshot, principal, {
+      sourceEnabled: true, version, canReadSessions: true, primaryAgentId: 'coding-agent',
+      runtimeAgents: [{ id: 'coding-agent', isPrimary: true, mainSessionKey: session.key }], runtimeSessions: [titledSession],
+      runtimeIdentitySessions: [{ ...ref }],
+    });
+    const primary = projected.occupants.find(row => row.role === ownerRole);
+    assert.equal(primary.name, runtimeName, `v${version} uses the session's user-set name rather than the member name`);
+    assert.deepEqual(primary.title.params, { name: runtimeName });
+    assert.equal(projected.occupants.filter(row => row.role === ownerRole).length, 1, `v${version} keeps one primary`);
+    assert.equal(validate(schemasFor(version).office, projected).ok, true, `v${version} schema`);
+  }
+});
+
+test('a folded team lead keeps rich activity from its exact transcript session in both Office contracts', () => {
+  const principal = { id: 'synthetic-admin', role: 'admin', permissionRevision: 1 };
+  for (const [P, version, ownerRole] of [[project2x, 2, 'main'], [project3x, 3, 'primary']]) {
+    const { build, session } = project();
+    const base = build(P), owner = base.occupants.find(row => row.role === ownerRole);
+    const key = session.key, ref = { runtimeKind: 'claude-code', sessionRef: `native-folded-lead-v${version}`, sessionKey: key, agentId: 'coding-agent' };
+    const primary = { ...owner, sessionKey: key, state: 'idle', execution: { status: 'idle', evidence: { level: 'verified', observedAt: NOW - 1000, expiresAt: NOW + 60_000 } } };
+    const transcriptRow = { ...owner, id: key, role: version === 2 ? 'channel' : 'session', sessionKey: key, state: 'waiting',
+      execution: { status: 'idle', evidence: { level: 'observed', observedAt: NOW, expiresAt: NOW + 15 * 60_000 } } };
+    const snapshot = { observedAt: NOW, team: { id: 'team:folded-lead' }, agents: [], identityLinks: [],
+      members: [{ id: 'member:pm', name: 'pm', roleKind: 'lead', parentMemberId: null, hostAgentId: null }],
+      privateMemberSessionKeys: { 'member:pm': key }, privateMemberSessionRefs: { 'member:pm': ref } };
+    const projected = projectOfficeTeamOccupants({ ...base, occupants: [primary, transcriptRow] }, snapshot, principal, {
+      sourceEnabled: true, version, canReadSessions: true, primaryAgentId: 'coding-agent',
+      runtimeAgents: [{ id: 'coding-agent', isPrimary: true, mainSessionKey: key }], runtimeSessions: [session],
+      runtimeIdentitySessions: [{ ...ref }],
+    });
+    const folded = projected.occupants.find(row => row.role === ownerRole);
+    assert.equal(folded?.state, 'waiting', `v${version} folded lead receives its exact transcript's richer waiting state`);
+    assert.equal(projected.occupants.filter(row => row.role === ownerRole).length, 1, `v${version} keeps one canonical primary`);
+    assert.equal(projected.occupants.some(row => row.id === key), false, `v${version} consumes the folded transcript row`);
+    assert.equal(validate(schemasFor(version).office, projected).ok, true, `v${version} schema-valid OfficeVM`);
+  }
+});
+
 test('a distinct orchestrator lead is an agent root, never a second instance primary', () => {
   const principal = { id: 'synthetic-admin', role: 'admin', permissionRevision: 1 };
   for (const [P, version, primaryId, primaryRole] of [
@@ -931,6 +982,55 @@ test('live host idle status outlives session history, while an expired host leas
     const gone = projectHost({ ...host, staleAfter: NOW - 1 });
     assert.equal(gone.execution.status, 'unknown', `expired host lease cannot inherit session-only idle in v${version}`);
     assert.equal(gone.state, 'unknown', `expired host lease is unknown in v${version}`);
+
+    const waitingHost = projectHost({ ...host, status: 'waiting' });
+    assert.equal(waitingHost.state, 'waiting', `live host-reported waiting is current even when transcript history is old in v${version}`);
+    const expiredWaitingHost = projectHost({ ...host, status: 'waiting', staleAfter: NOW - 1 });
+    assert.equal(expiredWaitingHost.execution.status, 'unknown', `expired waiting host lease is unknown in v${version}`);
+    assert.equal(expiredWaitingHost.state, 'unknown', `expired waiting never remains on stage in v${version}`);
+  }
+});
+
+test('newer Herdr activity confirms live runtime detail, idle bounds stale detail, and blocked stays blocked', () => {
+  const principal = { id: 'synthetic-admin', role: 'admin', permissionRevision: 1 };
+  for (const [P, version] of [[project2x, 2], [project3x, 3]]) {
+    const { build, session } = project({ primaryOwner: false });
+    const base = build(P), primary = base.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
+    const member = { id: 'member:activity', name: 'Worker', roleKind: 'lead', parentMemberId: null, hostAgentId: 'pane-activity' };
+    const ref = { runtimeKind: 'claude-code', sessionRef: 'native-activity-session', sessionKey: session.key, agentId: 'coding-agent' };
+    const runtimeIdentitySessions = [{ ...ref }];
+    const runtimeAgent = { id: 'coding-agent', isPrimary: false };
+    const projectState = (state, runtimeObservedAt, runtimeExpiresAt, hostStatus, observedAt) => {
+      const runtimeRow = { ...primary, id: session.key, role: version === 2 ? 'channel' : 'session',
+        roleLabel: { key: 'occupantRole.' + (version === 2 ? 'channel' : 'session') }, sessionKey: session.key,
+        name: 'Runtime worker', state,
+        execution: { status: 'running', evidence: { level: 'verified', observedAt: runtimeObservedAt, expiresAt: runtimeExpiresAt } } };
+      const office = { ...base, occupants: [primary, runtimeRow] };
+      return projectOfficeTeamOccupants(office, { observedAt, team: { id: 'team:activity' }, members: [member],
+        privateMemberSessionKeys: { [member.id]: session.key }, privateMemberSessionRefs: { [member.id]: ref },
+        agents: [{ id: 'pane-activity', role: 'delegate', status: hostStatus, observedAt, staleAfter: observedAt + 60_000 }],
+        identityLinks: [{ hostAgentId: 'pane-activity', agentId: 'coding-agent', confidence: 'exact', evidence: 'shared-runtime-session-ref' }],
+      }, principal, { sourceEnabled: true, version, canReadSessions: true, runtimeAgents: [runtimeAgent], runtimeIdentitySessions, runtimeSessions: [session] });
+    };
+
+    const thinking = projectState('thinking', NOW, NOW + 60_000, 'working', NOW + 1000);
+    const thinkingRow = thinking.occupants.find(row => row.name === 'Worker');
+    assert.equal(thinkingRow.state, 'thinking', `v${version} host running confirms fresh richer runtime state`);
+    assert.equal(thinkingRow.stateLabel.key, 'agentState.thinking');
+
+    const waiting = projectState('unknown', NOW - 60_000, NOW - 1, 'waiting', NOW + 1500);
+    const waitingRow = waiting.occupants.find(row => row.name === 'Worker');
+    assert.equal(waitingRow.state, 'waiting', `v${version} live orchestrator waiting is current regardless of session history`);
+    assert.equal(waitingRow.execution.status, 'idle', `v${version} waiting is not active execution`);
+
+    const staleTool = projectState('writing', NOW - 60_000, NOW - 1, 'idle', NOW + 2000);
+    assert.equal(staleTool.occupants.find(row => row.name === 'Worker').state, 'idle', `v${version} stale runtime detail does not outlive host idle`);
+
+    const blocked = projectState('working', NOW, NOW + 60_000, 'blocked', NOW + 3000);
+    const blockedRow = blocked.occupants.find(row => row.name === 'Worker');
+    assert.equal(blockedRow.state, 'blocked', `v${version} Herdr blocked status remains distinct`);
+    assert.equal(blockedRow.stateLabel.key, 'agentState.blocked');
+    assert.equal(validate(schemasFor(version).office, blocked).ok, true, `v${version} blocked OfficeVM schema`);
   }
 });
 

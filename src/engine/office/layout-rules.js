@@ -396,10 +396,10 @@ function automaticAppearance(rule) {
 }
 
 /** Resolve names, LabelRefs, saved/manual looks and home stations in roster order; null station means overflow. */
-function resolveOccupants(layout, index, sources, { assignLook } = {}) {
+function resolveOccupants(layout, index, sources, { assignLook, stationAssignments = null, reservedStationUids = [] } = {}) {
   const seq = new Map();
   const out = sources.map((o) => {
-    const r = ruleFor(layout, o.id, o.role);
+    const r = ruleFor(layout, o.layoutRuleId || o.id, o.role);
     // Browsers reuse saved looks.
     const automaticLook = assignLook ? assignLook(o.appearanceId ?? o.id, index, { primary: canonicalRole(o.role) === 'primary' }) : o.automaticLook;
     const isPrimary = canonicalRole(o.role) === 'primary';
@@ -428,20 +428,64 @@ function resolveOccupants(layout, index, sources, { assignLook } = {}) {
       look: automaticLook && automaticAppearance(r) ? automaticLook : { character: ch.id, variant, accessories },
       ...(automaticLook && { automaticLook }),
       stationUid: null,
-      _want: exact && r.station && r.station !== 'auto' ? r.station : null,
+      _explicitWant: exact && r.station && r.station !== 'auto' ? r.station : null,
+      _savedWant: typeof stationAssignments?.[o.id] === 'string' ? stationAssignments[o.id] : null,
     };
   });
-  // Pass 1: explicit stations (first in roster order wins a contested one). Pass 2: automatic, in roster
-  // order, first free home station (desks, then lounges). None left → null (overflow, standing area).
+  // Owner-authored layout choices outrank private saved pins. Active pins then
+  // outrank reservations for temporarily absent members, and only then do new
+  // occupants take automatic seats. This keeps a returning teammate's seat
+  // from being consumed during a short source outage.
   const desks = homeStations(layout, index);
   const taken = new Set();
-  for (const o of out) if (o._want && desks.includes(o._want) && !taken.has(o._want)) { o.stationUid = o._want; taken.add(o._want); }
-  for (const o of out) {
+  const sourceById = new Map(sources.map(row => [row.id, row]));
+  const active = row => !['unknown', 'idle', 'offline'].includes(sourceById.get(row.id)?.state);
+  const stationOrder = [...out].sort((a, b) => {
+    const activeOrder = Number(active(b)) - Number(active(a));
+    if (activeOrder) return activeOrder;
+    if (!active(a)) {
+      const idleSinceA = sourceById.get(a.id)?.stateSince;
+      const idleSinceB = sourceById.get(b.id)?.stateSince;
+      if (Number.isFinite(idleSinceA) && Number.isFinite(idleSinceB) && idleSinceA !== idleSinceB)
+        return idleSinceB - idleSinceA; // Keep the most recently idle occupants seated first.
+    }
+    return (canonicalRuleId(a.id) ?? a.id).localeCompare(canonicalRuleId(b.id) ?? b.id);
+  });
+  const activeOrder = stationOrder.filter(active), inactiveOrder = stationOrder.filter(row => !active(row));
+  for (const field of ['_explicitWant', '_savedWant']) {
+    for (const o of activeOrder) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])) {
+      o.stationUid = o[field]; taken.add(o[field]);
+    }
+  }
+  // Allocate working occupants before idle occupants' preferences/pins. If a
+  // desk is scarce, active display states always retain a workstation.
+  for (const o of activeOrder) if (!o.stationUid) {
+    const d = desks.find(u => !taken.has(u));
+    if (d) { o.stationUid = d; taken.add(d); }
+  }
+  for (const uid of [...new Set(reservedStationUids)].sort()) if (desks.includes(uid) && !taken.has(uid)) taken.add(uid);
+  // Decide which idle/unknown occupants remain seated before honoring saved
+  // preferences. Otherwise a lexically earlier old pin can consume the only
+  // free desk and evict a more recently idle occupant, defeating longest-idle
+  // relocation. The source state is the displayed canonical state; runtime
+  // bookkeeping flags do not override it.
+  const inactiveSurvivors = inactiveOrder.slice(0, desks.filter(uid => !taken.has(uid)).length);
+  const survivingIds = new Set(inactiveSurvivors.map(o => o.id));
+  for (const field of ['_explicitWant', '_savedWant']) {
+    for (const o of inactiveSurvivors) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])) {
+      o.stationUid = o[field]; taken.add(o[field]);
+    }
+  }
+  for (const o of inactiveSurvivors) {
     if (!o.stationUid) {
       const d = desks.find((u) => !taken.has(u));
       if (d) { o.stationUid = d; taken.add(d); }
     }
-    delete o._want;
+  }
+  for (const o of inactiveOrder) {
+    if (!survivingIds.has(o.id)) o.stationUid = null;
+    delete o._explicitWant;
+    delete o._savedWant;
   }
   return out;
 }

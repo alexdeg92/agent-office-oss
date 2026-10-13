@@ -1,3 +1,4 @@
+import { chunkError } from '../build-update.js';
 // Lazy authenticated animation sandbox. Reads one LayoutVM; never subscribes to office/cues or writes an API.
 import { html, useState, useEffect, useRef, useMemo } from '../lib.js';
 import { services } from '../services.js';
@@ -31,7 +32,7 @@ async function readLayout() {
 export function AnimationsPage({match}) {
   const [loaded,setLoaded]=useState({}),[attempt,retry]=useState(0),[lang,setLang]=useState(getLang());
   useEffect(()=>onLang(setLang),[]);
-  useEffect(()=>{for(const href of styles){if(document.querySelector(`link[data-animations="${href}"]`))continue;const l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.animations=href;document.head.append(l);}},[]);
+  useEffect(()=>{for(const href of styles){if(document.querySelector(`link[data-animations="${href}"]`))continue;const l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.animations=href;l.onerror=()=>chunkError(Error('Animation stylesheet unavailable'));document.head.append(l);}},[]);
   useEffect(()=>{let alive=true;setLoaded({});readLayout().then(lay=>alive&&setLoaded({lay}),error=>alive&&setLoaded({error}));return()=>{alive=false;};},[attempt]);
   if(!loaded.lay)return html`<div class="bu-page"><p role="status">${msg(loaded.error?'animations.failed':'animations.loading')}</p>${loaded.error?html`<button class="bu-btn" onClick=${()=>retry(n=>n+1)}>${msg('animations.retry')}</button>`:null}</div>`;
   return html`<${Sandbox} lay=${loaded.lay} match=${match} lang=${lang}/>`;

@@ -260,7 +260,7 @@ export function createOfficeMock({ manifest, layout, floorDefaults = [], scenari
         rosterAllLabel: { key: 'office.mobile.all', params: { n: rosterItems.length } },
         rosterOverflowLabel: { key: 'office.mobile.overflowCount', params: { n: Math.max(0, rosterItems.length - rosterPreviewItems.length) } },
         conversationIds, conversationCount: conversationIds.length, conversationLabel: { key: 'office.mobile.conversations', params: { n: conversationIds.length } },
-        stateLabels: Object.fromEntries(['unknown','observed','idle','thinking','working','researching','writing','calling','waiting','error','offline'].map(state => [state, { key: `agentState.${state}` }])),
+        stateLabels: Object.fromEntries(['unknown','observed','idle','thinking','working','researching','writing','calling','executing','waiting','blocked','error','offline'].map(state => [state, { key: `agentState.${state}` }])),
         visitIntent, rosterFloors, unseatedTeams: [],
         journal: [...journal],
         layoutRevision: store.revision,

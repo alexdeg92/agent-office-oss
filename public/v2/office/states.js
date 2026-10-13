@@ -1,6 +1,6 @@
 // Agent state → pose, marker and micro-motion (design/office/README.md §4.2). Pure data.
 
-export const STATES = ['idle', 'thinking', 'working', 'researching', 'writing', 'calling', 'waiting', 'error', 'offline'];
+export const STATES = ['idle', 'thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting', 'blocked', 'error', 'offline'];
 
 /** French labels; the live app takes them from MetaVM.labels['agentState.*'] and passes them in. */
 export const STATE_LABELS = {
@@ -9,8 +9,10 @@ export const STATE_LABELS = {
   working: 'Travaille',
   researching: 'Recherche',
   writing: 'Rédige',
+  executing: 'Exécute',
   calling: "Appel d'outil",
   waiting: 'En attente',
+  blocked: 'Bloqué',
   error: 'Erreur',
   offline: 'Hors ligne',
 };
@@ -27,14 +29,24 @@ export const STATE_VIEW = {
   working: { pose: 'working', marker: null, monitor: 'on', motion: 'type' },
   researching: { pose: 'working', marker: 'reading', monitor: 'on', motion: 'type' },
   writing: { pose: 'working', marker: 'pen', monitor: 'on', motion: 'type-fast' },
+  executing: { pose: 'working', marker: 'executing', monitor: 'on', motion: 'type-fast' },
   calling: { pose: 'talking', marker: 'phone', monitor: 'on', motion: null },
-  waiting: { pose: 'idle', marker: 'question', monitor: 'on', motion: null },
+  waiting: { pose: 'idle', marker: null, monitor: 'on', motion: null },
+  blocked: { pose: 'alert', marker: 'alert', monitor: 'error', motion: 'shake' },
   error: { pose: 'alert', marker: 'alert', monitor: 'error', motion: 'shake' },
   offline: { pose: 'sleeping', marker: 'zz', monitor: 'off', motion: 'breathe-slow' },
 };
 
 export function viewFor(state) {
   return STATE_VIEW[state] ?? STATE_VIEW.idle;
+}
+
+// The backend distinguishes blocked from error, while the existing approved
+// alert icon remains the shared visual until the icon set adds its own glyph.
+export function stateIconFor(state) {
+  if (state === 'blocked') return 'state-error';
+  if (state === 'executing') return 'tool-exec';
+  return `state-${state}`;
 }
 
 /** One-shot cues (SSE 'cue' frames). Durations from README §4.2. */
@@ -59,8 +71,10 @@ export const SEATED_VIEW = {
   working: { pose: 'working-ne' },
   researching: { pose: 'life-readseat-ne' },
   writing: { pose: 'working-ne' },
+  executing: { pose: 'working-ne' },
   calling: { pose: 'life-phone-ne' },
   waiting: { pose: 'seated-ne' },
+  blocked: { pose: 'seated-alert-sw', turn: true },
   error: { pose: 'seated-alert-sw', turn: true },
   offline: { pose: 'sleeping-ne' },
 };

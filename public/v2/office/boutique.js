@@ -1,7 +1,8 @@
+import { loadModule, chunkError } from '../build-update.js';
 import { buildQuery } from '../config.js';
 import { html, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../lib.js';
 import { useTopic, useStore } from '../hooks.js';
-import { services } from '../services.js';
+import { services, reloadGuards } from '../services.js';
 import { config } from '../config.js';
 import * as fmtTz from '../fmt.js';
 import { agentName } from '../i18n.js';
@@ -36,6 +37,7 @@ function useStyles() {
       if (document.querySelector(`link[data-office="${href}"]`)) continue;
       const l = document.createElement('link');
       l.rel = 'stylesheet'; l.href = href; l.dataset.office = href;
+      l.onerror = () => chunkError(Error('Store stylesheet unavailable'));
       document.head.append(l);
     }
   }, []);
@@ -72,9 +74,12 @@ function FloorBoutique({match,currentFloorId}) {
   const draft = draftRef.current;
   useEffect(() => (draft ? draft.subscribe(() => setSeq((n) => n + 1)) : undefined), [draft]);
   useEffect(() => { if (draft && lay) draft.follow(lay); }, [lay?.layout?.revision]);
-  // Register before interaction, including immediately after a floor remount.
+  // Register before interaction, including immediately after a floor remount. Leaving with unsaved changes asks
+  // first: navigation (floor-scoped guard), a reload or closed tab, and chunk recovery (T-0106 reload guard).
   useLayoutEffect(() => {
-    const onUnload = (e) => { if (draftRef.current?.dirty) { e.preventDefault(); e.returnValue = ''; } };
+    const reloadGuard = { dirty: () => !!(draftRef.current?.dirty || draftRef.current?.saving), confirm: () => !draftRef.current?.saving && window.confirm(tr('ed.leave.desc')) };
+    reloadGuards.add(reloadGuard);
+    const onUnload = (e) => { if (draftRef.current?.dirty && !reloadGuard.approved) { e.preventDefault(); e.returnValue = ''; } };
     const guard=url=>{
       const target=new URL(url,location.href);
       if(target.pathname===new URL(services.router.href('boutique'),location.href).pathname && (floorId(target.searchParams.get('etage'))??'1')===currentFloorId)return true;
@@ -85,7 +90,7 @@ function FloorBoutique({match,currentFloorId}) {
     };
     (services.navigationGuards ||= new Set()).add(guard);
     addEventListener('beforeunload', onUnload);
-    return () => {removeEventListener('beforeunload',onUnload);services.navigationGuards.delete(guard);leaveRef.current?.resolve(false);};
+    return () => {reloadGuards.delete(reloadGuard);removeEventListener('beforeunload',onUnload);services.navigationGuards.delete(guard);leaveRef.current?.resolve(false);};
   }, []);
 
   if (!lay || !draft) {
@@ -146,7 +151,7 @@ function ThemesPanel(props) {
   useEffect(() => {
     let live = true;
     setFailed(false);
-    import('./themes-panel.js' + buildQuery)
+    loadModule(() => import('./themes-panel.js' + buildQuery))
       .then(m => { if (live) setComponent(() => m.ThemesPanel); })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
@@ -193,7 +198,7 @@ function useDecorItem(index, id) {
     setError(null);
     if (!f?.packManifest || f.packLoaded) return;
     const controller = new AbortController();
-    import('./decor-pack-loader.js' + buildQuery).then(m => m.ensureDecorPack(index, id, assetBase(), { signal: controller.signal }))
+    loadModule(() => import('./decor-pack-loader.js' + buildQuery)).then(m => m.ensureDecorPack(index, id, assetBase(), { signal: controller.signal }))
       .then(() => { if (!controller.signal.aborted) update(n => n + 1); })
       .catch(e => { if (!controller.signal.aborted && e.name !== 'AbortError') setError(e); });
     return () => controller.abort();
@@ -206,7 +211,7 @@ function DecorPlacement(props) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true; setLoadError(null);
-    import('./placement.js' + buildQuery).then(m => { if (active) setComponent(() => m.Placement); })
+    loadModule(() => import('./placement.js' + buildQuery)).then(m => { if (active) setComponent(() => m.Placement); })
       .catch(e => { if (active) setLoadError(e); });
     return () => { active = false; };
   }, [attempt]);

@@ -24,6 +24,8 @@ const SEATED_POSES = ['seated-ne', 'working-ne', 'reading-ne', 'thinking-ne', 's
   'life-sleep-ne', 'life-error-sw', 'life-success-sw', 'life-stretch-ne', 'life-highfive-se', 'life-highfive-sw',
   'life-cupwalk-sw', 'life-cupwalk-se', 'life-cupwalk-ne', 'life-cupwalk-nw', 'life-book-sw', 'life-book-se', 'life-book-ne', 'life-book-nw', 'life-drink-sw', 'life-drink-se', 'life-drink-ne', 'life-drink-nw', 'life-water-sw', 'life-water-se', 'life-water-ne', 'life-water-nw', 'life-pen-sw', 'life-pen-se', 'life-pen-ne', 'life-pen-nw', 'life-readseat-ne', 'life-phone-sw', 'life-phone-ne', 'life-readseat-sw', 'egg-curl-low-sw','egg-curl-high-sw','egg-smoke-sw','egg-crush-sw','egg-bench-low-sw','egg-bench-high-sw','egg-wipe-sw','egg-light-sw','egg-hide-sw','egg-shake-sw'];
 const FRAME_MS = 350;
+const LIFE_REGISTRATION = JSON.parse(readFileSync(root + 'office/terrace-life.registration.json', 'utf8'));
+const LOBBY_LIFE = LIFE_REGISTRATION.spots;
 const poseSet = (dir) => Object.fromEntries(POSES.filter((p) => has(`${dir}/${p}.png`)).map((p) => { const rel = `${dir}/${p}.png`, hand = A[rel].handAnchor; return [p, hand ? { image:P(rel), handAnchor:{x:hand[0],y:hand[1]} } : P(rel)]; }));
 // A Batch 6 pose is <pose>.png, or a frame loop <pose>.1.png, <pose>.2.png, …; it carries its own
 // anchor/canvas when they differ from the character's (seat anchors).
@@ -280,21 +282,21 @@ const manifest = {
     size: size('Office/room/day.png'),
     entrance: { x: 6, y: 9 },
     images: { day: P('Office/room/day.png'), night: P('Office/room/night.png') },
-    activitySpots: [{ id: 'lobby-waiting', kind: 'idle', capacity: 4, points: [{ x: 2.5, y: 5.5 }, { x: 3.5, y: 5.5 }, { x: 4.5, y: 5.5 }, { x: 5.5, y: 5.5 }] }],
+    activitySpots: [],
   }, ...(has('Office/floors/lobby/day.webp') && has('Office/floors/lobby/night.webp') ? [{
     id: 'lobby', label: 'Entrée et terrasse', cols: 12, rows: 10,
     anchor: anchor('Office/floors/lobby/day.webp'),
     size: size('Office/floors/lobby/day.webp'),
     entrance: { x: 6, y: 9 },
     images: { day: P('Office/floors/lobby/day.webp'), night: P('Office/floors/lobby/night.webp') },
-    activitySpots: [{ id: 'lobby-waiting', kind: 'idle', capacity: 4, points: [{ x: 2.5, y: 5.5 }, { x: 3.5, y: 5.5 }, { x: 4.5, y: 5.5 }, { x: 5.5, y: 5.5 }] }],
+    activitySpots: LOBBY_LIFE,
   }] : []), ...(has('Office/floors/gym-rich/day.webp') && has('Office/floors/gym-rich/night.webp') ? [{
     id: 'gym', label: 'Gym', cols: 12, rows: 10,
     anchor: anchor('Office/floors/gym-rich/day.webp'),
     size: size('Office/floors/gym-rich/day.webp'),
     entrance: { x: 6, y: 9 },
     images: { day: P('Office/floors/gym-rich/day.webp'), night: P('Office/floors/gym-rich/night.webp') },
-    activitySpots: [{ id: 'gym-recovery', kind: 'gym', capacity: 4, points: [{ x: 8.5, y: 8.5 }, { x: 9.5, y: 8.5 }, { x: 7.5, y: 8.5 }, { x: 10.5, y: 8.5 }] }],
+    activitySpots: LIFE_REGISTRATION.gymSpots,
   }] : [])],
   furniture,
   characters: [

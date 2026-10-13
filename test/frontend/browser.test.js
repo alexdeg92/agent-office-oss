@@ -92,8 +92,13 @@ before(async () => {
     if (msg.method === 'Network.requestWillBeSent') {
       const i = msg.params.initiator || {};
       const frames = (i.stack && i.stack.callFrames) || [];
-      requests.push({ url: msg.params.request.url, type: i.type, by: (frames[0] && frames[0].url) || i.url || null });
+      requests.push({ id: msg.params.requestId, url: msg.params.request.url, type: i.type, by: (frames[0] && frames[0].url) || i.url || null });
     }
+    // F11: a module load answered by the HTTP cache (no network round trip) is not a waterfall step.
+    const cached = (id) => { for (const r of requests) if (r.id === id) r.cached = true; };
+    if (msg.method === 'Network.requestServedFromCache') cached(msg.params.requestId);
+    if (msg.method === 'Network.loadingFinished') for (const r of requests) if (r.id === msg.params.requestId) r.done = true;
+    if (msg.method === 'Network.responseReceived' && (msg.params.response.fromDiskCache || msg.params.response.fromPrefetchCache)) cached(msg.params.requestId);
     if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
       const text = msg.params.args.map((x) => x.value ?? x.description ?? '').join(' ');
       if (text.startsWith('[vm]')) vmIssues.push(text);
@@ -477,6 +482,8 @@ test('default language: an English browser with no saved choice gets French; the
     assert.equal(await evaluate(`document.documentElement.lang`), 'fr-CA');
     assert.equal(await evaluate(`document.querySelector('.bu-topbar__title').textContent`), 'Journaux');
     // frontend-23: the server's labels follow the same language (its stored preference may come from another device)
+    // The shell can render before the probe's response completes (its resource entry appears then): wait for the event.
+    await waitFor(`performance.getEntriesByType('resource').some((e) => /\\/api\\/v2\\/meta\\?locale=/.test(e.name))`).catch(() => {});
     assert.ok(await evaluate(`performance.getEntriesByType('resource').some((e) => /\\/api\\/v2\\/meta\\?locale=fr$/.test(e.name))`), 'the meta probe asks for ?locale=fr');
     await evaluate(`[...document.querySelectorAll('.ao-lang [role=radio]')].find(b => b.lang === 'en').click()`);
     await waitFor(`document.documentElement.lang === 'en-CA'`);
@@ -735,19 +742,26 @@ test('F11: a deep link fetches its page chunk with the core (no waterfall); hove
   requests.length = 0;
   await go('/v2/journaux/agent%3Amain%3Asubagent%3Ascout-veille?mock=1');
   await waitFor(`document.querySelector('.ao-session:not([aria-busy=true])')`, 10_000);
-  // Event-based (no wall time): who initiated each module's request. The preload script, i.e. not an import found
-  // after the parent module arrived; the page's own module graph would name a module of the chunk instead.
-  const by = (m) => requests.filter((r) => new URL(r.url).pathname.endsWith('/v2/' + m)).map((r) => (r.by || r.type || '').split('/').pop().split('?')[0]);
-  const wrong = routes.session.modules.map((m) => [m, by(m)]).filter(([, b]) => !b.length || !b.every((x) => x === 'route-preload.js'));
-  assert.deepEqual(wrong, [], 'every module of the session chunk is requested by route-preload.js, never discovered by an import');
+  // Event-based (no wall time): who initiated each module's request. T-0106: route-preload.js no longer injects
+  // <link rel=modulepreload> (a failed one stays cached as failed in the module map for the document's lifetime): it
+  // queues the route's modules and api.js's prewarm (the transport layer) fetches them into the HTTP cache as soon as
+  // app.js attaches it, before the page is imported. The page's own import of a module is then a second request, which
+  // must be answered by the HTTP cache, never the network: no module of the chunk waits for its parent to arrive.
+  const name = (r) => (r.by || r.type || '').split('/').pop().split('?')[0];
+  const of = (m) => requests.filter((r) => new URL(r.url).pathname.endsWith('/v2/' + m));
+  const network = (m) => of(m).filter((r) => !r.cached).map(name);
+  const wrong = routes.session.modules.map((m) => [m, network(m)]).filter(([m, b]) => b.length !== 1 || b[0] !== 'api.js' || name(of(m)[0]) !== 'api.js');
+  assert.deepEqual(wrong, [], 'every module of the session chunk is fetched once from the network, up front, by the route prewarm (api.js); an import of it is served by the HTTP cache');
   const flux = routes.flux.modules.filter((m) => !routes.session.modules.includes(m));   // shared modules are already there
-  const before = await evaluate(`${JSON.stringify(flux)}.filter((m) => document.querySelector('link[rel=modulepreload][href^="' + m + '?v="]')).length`);
-  assert.equal(before, 0, 'not preloaded yet');
+  const warmed = (done = false) => flux.filter((m) => of(m).some((r) => name(r) === 'api.js' && (!done || r.done)));
+  assert.deepEqual(warmed(), [], 'not preloaded yet');
   await evaluate(`document.querySelector('.bu-sidebar a[href*="/flux"]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`);
-  await waitFor(`${JSON.stringify(flux)}.every((m) => document.querySelector('link[rel=modulepreload][href^="' + m + '?v="]'))`);
-  assert.equal(await evaluate(`${JSON.stringify(flux)}.filter((m) => document.querySelector('link[rel=modulepreload][href^="' + m + '?v="]')).length`), flux.length, 'hover preloads the whole chunk');
+  const until = Date.now() + 5000;
+  while (warmed(true).length < flux.length && Date.now() < until) await sleep(50);
+  assert.deepEqual(warmed(true), flux, 'hover preloads the whole chunk');
   await evaluate(`document.querySelector('.bu-sidebar a[href*="/flux"]').click()`);
   await waitFor(`location.pathname.endsWith('/flux') && document.querySelector('main .ao-frame__body .ao-flows:not([aria-busy=true])')`, 8000);
+  assert.deepEqual(flux.map((m) => [m, network(m)]).filter(([, b]) => b.length !== 1 || b[0] !== 'api.js'), [], 'the hovered page then loads from the warmed HTTP cache');
 });
 
 test('artist-15 state spots: only the active theme\'s variant is fetched and shown', { skip, timeout: 60_000 }, async () => {

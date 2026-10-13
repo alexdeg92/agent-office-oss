@@ -1,12 +1,20 @@
+import { loadModule } from './build-update.js';
 // Shared HTTP client: deployment prefixes, ApiError and explicit or legacy mock mode.
 import { toast } from './toast.js';
 import { apiUrl, assetUrl, versioned, buildQuery, splitOrigin } from './config.js';
 import * as vmcheck from './vmcheck.js';
 import { getLang, msg, messageKeys } from './i18n.js';
 
+// Route prewarm: HTTP cache only, never the module map.
+export async function prewarm(url) {
+  const r = await fetch(url, { priority: 'low', credentials: 'same-origin' });
+  await r.arrayBuffer();
+  if (!r.ok) throw new Error('preload');
+}
+
 /** The deployed static UI release, independently of the API version and mock mode. */
 export async function getUIBuildId() {
-  const r = await fetch(assetUrl('build.json'), { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(750) });
+  const r = await fetch(assetUrl('build.json'), { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(15000) });
   if (!r.ok) return null;
   return (await r.json()).buildId;
 }
@@ -42,14 +50,14 @@ let mockModule = null;
 let serverHasV2 = false; // GET /api/v2/meta answered (not 404): auth goes through /api/v2/me
 const authListeners = new Set();
 let splitAuthModule = null;
-const loadSplitAuth = () => splitAuthModule || (splitAuthModule = import('./split-auth.js' + buildQuery).then(auth => (auth.configure(ApiError,toApiError),auth)));
+const loadSplitAuth = () => splitAuthModule || (splitAuthModule = loadModule(() => import('./split-auth.js' + buildQuery)).then(auth => (auth.configure(ApiError,toApiError),auth)));
 
 export const onUnauthorized = (fn) => { authListeners.add(fn); return () => authListeners.delete(fn); };
 /** Session expired outside an HTTP call (e.g. the SSE stream, R4-10): same handling as a 401. */
 export function notifyUnauthorized() { for (const fn of authListeners) fn(new ApiError({ status: 401, code: 'unauthorized' })); }
 export const isMock = () => mode === 'mock';
 export const getMockScenario = () => mockScenario;
-export async function mock() { return mockModule || (mockModule = await import('./mock/server.js' + buildQuery)); }
+export async function mock() { return mockModule || (mockModule = await loadModule(() => import('./mock/server.js' + buildQuery))); }
 
 // Loopback-only mock fallback.
 export const isLoopbackHost = (h) => h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || /\.localhost$/.test(h);
@@ -66,6 +74,7 @@ export async function init({ search = location.search, hostname = location.hostn
     throw new ApiError({ code: 'network' });
   }
   if (res.status === 404) {
+    res.body?.cancel().catch(() => {});   // unread no-store body
     if (!mockableHost) throw new ApiError({ status: 404, code: 'not_found', message: 'Cette version de l’interface n’est pas encore disponible sur ce serveur.' });
     return useMock(wanted || '1', { standalone: wanted != null });
   }

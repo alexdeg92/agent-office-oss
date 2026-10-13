@@ -1,5 +1,6 @@
 'use strict';
 const { isDeepStrictEqual } = require('node:util');
+const crypto = require('node:crypto');
 // Floor layouts share appearance rules; furniture, themes and station IDs are local to a floor.
 const { canonicalRuleId, canonicalRole, ruleFor, resolveOccupants, homeStations, validateLayout, checkPlacement, unreachableStations, seatTile, elevatorAccess, MAX_ITEMS } = require('./layout-rules.js');
 const isVisitor = o => ['direct', 'group', 'conversation'].includes(canonicalRole(o.role));
@@ -16,6 +17,10 @@ const MAX_PINNED_FLOOR = 128;
 const pinnedFloorId = value => floorId(value) && Number(value) <= MAX_PINNED_FLOOR;
 const floorKind = id => id === 'rdc' ? 'lobby' : id === 'gym' ? 'gym' : 'office';
 const canon = a => canonicalRuleId(a.agentId) ?? a.agentId;
+// Placement identities are private database keys, not OfficeVM fields. Canonicalizing
+// first keeps v2 aliases and v3 ids on the same assignment without storing raw ids.
+const placementToken = value => crypto.createHash('sha256').update(String(canonicalRuleId(value) ?? value)).digest('hex');
+const placementTeamKey = unit => placementToken(unit.parent.teamId || unit.parent.id);
 const rootData = ({ floors, ...data }) => data;
 const localRules = (agents, id) => agents.map(a => ({ ...a, station: (a.homeFloor ?? '1') === id ? a.station ?? 'auto' : 'auto' }));
 const item = (uid, asset, x, y) => ({ uid, asset, x, y, orientation: 'sw' });
@@ -170,12 +175,17 @@ function validateFloors(base, index, { previous = null } = {}) {
 }
 
 /** Plan all floors as data. The page chooses one of these records to mount. */
-function planFloors(index, base, occupants) {
+function planFloors(index, base, occupants, homeAssignments = {}) {
   const groups = new Map(), overflowTeams = [], unseatedTeams = [];
   const units = floorTeams(occupants).map(({ parent, children }) => {
-    const pin = ruleFor(base, parent.id, parent.role)?.homeFloor;
-    return { parent, people: [parent, ...children], pin: pinnedFloorId(pin) && floorKind(pin) === 'office' ? pin : null };
-  });
+    const pin = ruleFor(base, parent.layoutRuleId || parent.id, parent.role)?.homeFloor;
+    const teamKey = placementTeamKey({ parent });
+    const saved = homeAssignments?.[teamKey];
+    const savedFloor = floorId(saved?.floorId) && floorKind(saved.floorId) === 'office' ? saved.floorId : null;
+    return { parent, people: [parent, ...children], teamKey,
+      pin: pinnedFloorId(pin) && floorKind(pin) === 'office' ? pin : savedFloor,
+      stationAssignments: saved?.stations && typeof saved.stations === 'object' ? saved.stations : {} };
+  }).sort((a, b) => a.teamKey.localeCompare(b.teamKey));
   function ensure(id) {
     if (groups.has(id)) return groups.get(id);
     const layout = floorLayout(base, index, id);
@@ -221,7 +231,24 @@ function planFloors(index, base, occupants) {
   for (const unit of units.filter(u => !u.pin || u.pin === '1')) seat(unit);
   for (const id of ['rdc', 'gym']) ensure(id);
   for (const f of groups.values()) {
-    const resolved = resolveOccupants(f.layout, index, f.occupants.map(o => ({ ...o, sourceName: o.sourceName ?? o.name })));
+    // Stable first-time seating is independent of source polling order. Persisted seats
+    // take precedence, while explicit layout station rules remain authoritative.
+    const unitFor = new Map();
+    for (const unit of units) for (const person of unit.people) unitFor.set(person.id, unit);
+    const ordered = [...f.occupants].sort((a, b) => placementToken(a.id).localeCompare(placementToken(b.id)));
+    const presentTokens = new Set(ordered.map(o => placementToken(o.id)));
+    const floorUnits = new Set(f.occupants.map(o => unitFor.get(o.id)).filter(Boolean));
+    const reservedStationUids = [...new Set([...floorUnits].flatMap(unit => Object.entries(unit.stationAssignments || {})
+      .filter(([token]) => !presentTokens.has(token)).map(([, station]) => station)))];
+    const resolvedOrdered = resolveOccupants(f.layout, index, ordered.map(o => ({ ...o, sourceName: o.sourceName ?? o.name })), {
+      stationAssignments: Object.fromEntries(ordered.flatMap(o => {
+        const station = unitFor.get(o.id)?.stationAssignments?.[placementToken(o.id)];
+        return typeof station === 'string' ? [[o.id, station]] : [];
+      })),
+      reservedStationUids,
+    });
+    const resolvedById = new Map(resolvedOrdered.map(row => [row.id, row]));
+    const resolved = f.occupants.map(o => resolvedById.get(o.id));
     f.occupants = f.occupants.map((o,i) => ({ ...o, stationUid: resolved[i].stationUid, floorId: f.id }));
   }
   for (const { unit, floorId: id } of overflowTeams) {
@@ -250,7 +277,21 @@ function planFloors(index, base, occupants) {
   }
   const order = id => id === 'rdc' ? -1 : id === 'gym' ? Infinity : Number(id);
   const floors = [...groups.values()].sort((a,b) => order(a.id) - order(b.id));
-  return { floors, byId: new Map(floors.map(f => [f.id, f])), occupants: floors.flatMap(f => f.occupants), unseatedTeams };
+  const placedById = new Map(floors.flatMap(f => f.occupants).map(row => [row.id, row]));
+  const nextHomeAssignments = {};
+  for (const unit of units) {
+    const lead = placedById.get(unit.parent.id);
+    if (!lead) continue;
+    nextHomeAssignments[unit.teamKey] = {
+      floorId: lead.floorId,
+      stations: Object.fromEntries(unit.people.flatMap(person => {
+        const placed = placedById.get(person.id);
+        return placed?.stationUid ? [[placementToken(person.id), placed.stationUid]] : [];
+      })),
+    };
+  }
+  return { floors, byId: new Map(floors.map(f => [f.id, f])), occupants: floors.flatMap(f => f.occupants), unseatedTeams,
+    homeAssignments: nextHomeAssignments };
 }
 
-module.exports = { floorId, floorKind, floorTeams, floorLayout, saveFloor, validateFloors, planFloors };
+module.exports = { floorId, floorKind, floorTeams, floorLayout, saveFloor, validateFloors, planFloors, placementToken, placementTeamKey };

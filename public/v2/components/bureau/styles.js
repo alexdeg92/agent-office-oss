@@ -1,3 +1,4 @@
+import { chunkError } from '../../build-update.js';
 import { buildQuery } from '../../config.js';
 
 let pending;
@@ -14,7 +15,7 @@ export function loadStyles() {
     sheet.onload = resolve;
     sheet.onerror = () => {
       sheet.remove(); pending = undefined;
-      reject(new Error('Bureau controls stylesheet unavailable'));
+      reject(chunkError(new Error('Bureau controls stylesheet unavailable')));
     };
     document.head.append(sheet);
   });

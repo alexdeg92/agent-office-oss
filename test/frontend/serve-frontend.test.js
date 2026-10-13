@@ -267,3 +267,16 @@ test('R32-04: AO_TRUST_PROXY is parsed by the API\'s own parser (proxy-addr, as 
   assert.equal(webAccepts('127.0.0.0/8/ignored'), false);
   assert.throws(() => serve.createFrontendServer({ root, trustProxy: '::1/128/ignored' }), /AO_TRUST_PROXY/, 'startup fails');
 });
+
+test('T-0106: only a successful current-release file is immutable; every error (404, 410, 5xx) is no-store', async () => {
+  const build = /<meta name="ao-build" content="([^"]+)">/.exec(INDEX)[1];
+  const get = async (p) => { const r = await fetch(`http://127.0.0.1:${frontPort}${p}`); await r.arrayBuffer(); return [r.status, r.headers.get('cache-control')]; };
+  assert.deepEqual(await get(`/pages/ds-late.js?v=${build}`), [404, 'no-store'], 'a missing current-release module is never cached');
+  assert.deepEqual(await get('/pages/ds-late.js'), [404, 'no-store']);
+  assert.deepEqual(await get(`/bureau/missing.txt?v=${build}`), [404, 'no-store']);
+  assert.deepEqual(await get('/pages/ds-late.js?v=0000000000000000'), [410, 'no-store']);
+  writeFileSync(join(root, 'pages', 'ds-late.js'), 'export const late = 1;');
+  assert.deepEqual(await get(`/pages/ds-late.js?v=${build}`), [200, 'public, max-age=31536000, immutable'], 'the same URL serves once the file exists');
+  assert.deepEqual(await get('/pages/ds-late.js'), [200, 'no-cache, must-revalidate'], 'an unversioned module still revalidates');
+  assert.match((await get(`/?v=${build}`))[1], /no-cache/, 'the shell is never immutable');
+});

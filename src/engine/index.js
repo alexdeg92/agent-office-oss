@@ -13,6 +13,7 @@ const { createQuarantine } = require('./quarantine');
 const { errorCategory, safeVersion } = require('./redact');
 const schemaDsl = require('../schema');
 const { createSessionsRegistry } = require('./sessions-registry');
+const { MAX_CANONICAL_SESSION_SNAPSHOT } = require('./session-limits');
 
 // G2 (ADR-001): runtime specifics come from a runtime adapter (src/adapters/<id>); the engine dispatches on the
 // adapter's routes (raw channel → canonical operation) and never imports adapter internals.
@@ -22,6 +23,9 @@ const CORE_ROUTES = { 'host.metrics': { op: 'host' } };
 const schemasOf = (adapter) => Object.assign({}, adapter.schemas, CORE_SCHEMAS);
 const DEFAULT_SCHEMAS = schemasOf(defaultAdapter().definition);
 const { activityOf } = require('./derive/activity');
+const { executionState } = require('./execution-state');
+const OBSERVED_ACTIVITY_KINDS = new Set(['thinking', 'researching', 'writing', 'executing', 'calling', 'waiting', 'blocked', 'working']);
+const MAX_WAITING_ACTIVITY_MS = 15 * 60_000;
 const { deriveHealth, THRESHOLDS } = require('./derive/health');
 const { occupantIdOf } = require('./derive/occupants');
 const lvlOf = (v, t) => (v == null ? null : v >= t.alert ? 'alert' : v >= t.warn ? 'warn' : 'ok');
@@ -149,7 +153,11 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   // architect-54: transcripts are kept for the views (at most TRANSCRIPTS_MAX, the least recently read go first: a view
   // reads a missing one again), and the adapter's project hints are taken from each one as it is admitted
   const TRANSCRIPTS_MAX = adapter.transcriptBounds?.sessions || 200, HINT_SESSIONS_MAX = 2000;
+  // At most one generic transcript lease and one richer detail lease per session.
+  // Retaining them separately lets a still-live lower-detail refresh take over
+  // when its short-lived detail overlay expires.
   const observed = new Map();
+  const OBSERVED_ACTIVITY_SESSIONS_MAX = 2000;
   let runExpiryTimer = null, runExpiryAt = null, engineClosed = false;
   const notifiedRunExpiries = new Map();
   const transcriptBudget = require('./transcript-budget'), transcriptKeys = new Map();
@@ -160,29 +168,65 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     transcriptBudget.release(transcriptKeys.get(key)); transcriptKeys.delete(key);
   };
   function setObservedActivity(key, value) {
-    if (!reg.get(key) || !value || value.kind !== 'working' || value.source !== 'transcript' || !Number.isSafeInteger(value.since)
-      || !Number.isSafeInteger(value.expiresAt) || value.expiresAt <= value.since || value.expiresAt - value.since > 30000) return false;
-    observed.set(key, { sessionKey: key, ...value });
-    for (const [k, v] of observed) if (!reg.get(k) || v.expiresAt <= now()) observed.delete(k);
-    if (observed.size > 2000) observed.delete(observed.keys().next().value);
+    const at = now();
+    if (!reg.get(key) || !value || !OBSERVED_ACTIVITY_KINDS.has(value.kind) || value.source !== 'transcript' || !Number.isSafeInteger(value.since)
+      || !Number.isSafeInteger(value.expiresAt) || value.since > at || value.expiresAt <= at || value.expiresAt <= value.since
+      || value.expiresAt - value.since > (value.kind === 'waiting' ? MAX_WAITING_ACTIVITY_MS : 30000)) return false;
+    const prior = observed.get(key) || { generic: null, detail: null };
+    const next = { ...prior, [value.kind === 'working' ? 'generic' : 'detail']: { sessionKey: key, ...value } };
+    observed.delete(key);
+    observed.set(key, next);
+    for (const [k, leases] of observed) {
+      if (!reg.get(k)) { observed.delete(k); continue; }
+      if (leases.generic?.expiresAt <= at) leases.generic = null;
+      if (leases.detail?.expiresAt <= at) leases.detail = null;
+      if (!leases.generic && !leases.detail) observed.delete(k);
+    }
+    while (observed.size > OBSERVED_ACTIVITY_SESSIONS_MAX) observed.delete(observed.keys().next().value);
     scheduleRunExpiry();
     ev.emit('change', { type: 'Activity' }); return true;
   }
+  function clearObservedActivity(key) {
+    if (!observed.delete(key)) return false;
+    scheduleRunExpiry(); ev.emit('change', { type: 'Activity' }); return true;
+  }
   function currentActivity(key) {
-    const verified = activityOf(reg.get(key)), lease = observed.get(key);
-    if (lease && (lease.expiresAt <= now() || !reg.get(key))) {
+    const session = reg.get(key), verified = activityOf(session), leases = observed.get(key), run = executionState(session?.run, now());
+    if (run.level === 'verified' && ['succeeded', 'failed', 'cancelled'].includes(run.status)) {
+      if (observed.delete(key)) scheduleRunExpiry();
+      return null;
+    }
+    if (leases && !session) {
       observed.delete(key);
       scheduleRunExpiry();
-      if (lease.expiresAt <= now()) ev.emit('change', { type: 'Activity' });
+      ev.emit('change', { type: 'Activity' });
     }
-    return verified || (observed.has(key) ? observed.get(key) : null);
+    const activeLeases = observed.get(key);
+    const leaseExpired = !!activeLeases && (activeLeases.generic?.expiresAt <= now() || activeLeases.detail?.expiresAt <= now());
+    if (activeLeases?.generic?.expiresAt <= now()) activeLeases.generic = null;
+    if (activeLeases?.detail?.expiresAt <= now()) activeLeases.detail = null;
+    if (activeLeases && !activeLeases.generic && !activeLeases.detail) observed.delete(key);
+    if (leaseExpired) {
+      scheduleRunExpiry(); ev.emit('change', { type: 'Activity' });
+    }
+    const live = observed.get(key);
+    const genericRun = verified || (run.status === 'running' ? { sessionKey: key, kind: 'working', source: run.level === 'verified' ? 'run-state' : 'transcript',
+      since: run.observedAt ?? session?.run?.startedAt ?? session?.updatedAt ?? null, expiresAt: run.expiresAt ?? null } : null);
+    return live?.detail || live?.generic || genericRun;
   }
   function clearExpiredEvidence() {
     const at = now(); let changed = false;
-    for (const [key, value] of observed) if (value.expiresAt <= at || !reg.get(key)) { observed.delete(key); changed = true; }
+    for (const [key, leases] of observed) {
+      if (!reg.get(key)) { observed.delete(key); changed = true; continue; }
+      if (leases.generic?.expiresAt <= at) { leases.generic = null; changed = true; }
+      if (leases.detail?.expiresAt <= at) { leases.detail = null; changed = true; }
+      if (!leases.generic && !leases.detail) { observed.delete(key); changed = true; }
+    }
     const current = new Map(reg.list().map(row => [row.key, row.run]));
     for (const key of notifiedRunExpiries.keys()) if (!current.has(key) || current.get(key)?.evidenceLevel !== 'observed'
       || current.get(key)?.expiresAt !== notifiedRunExpiries.get(key)) notifiedRunExpiries.delete(key);
+    for (const [key, run] of current) if (run.evidenceLevel === 'verified' && ['succeeded', 'failed', 'cancelled'].includes(run.status)
+      && observed.delete(key)) changed = true;
     for (const [key, run] of current) if (run.evidenceLevel === 'observed' && Number.isSafeInteger(run.expiresAt)
       && run.expiresAt <= at && notifiedRunExpiries.get(key) !== run.expiresAt) {
       notifiedRunExpiries.set(key, run.expiresAt); changed = true;
@@ -194,7 +238,8 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   function scheduleRunExpiry(sessions = reg.list()) {
     let at = sessions.reduce((earliest, row) => row.run.evidenceLevel === 'observed' && Number.isSafeInteger(row.run.expiresAt)
       && row.run.expiresAt > now() ? Math.min(earliest, row.run.expiresAt) : earliest, Infinity);
-    for (const value of observed.values()) if (value.expiresAt > now()) at = Math.min(at, value.expiresAt);
+    for (const leases of observed.values()) for (const value of [leases.generic, leases.detail])
+      if (value?.expiresAt > now()) at = Math.min(at, value.expiresAt);
     if (at === runExpiryAt && runExpiryTimer) return;
     if (runExpiryTimer) clearTimeout(runExpiryTimer);
     runExpiryTimer = null; runExpiryAt = null;
@@ -274,6 +319,9 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   let sessionsSeeded = false;
   function afterSessions() {
     const list = reg.list();
+    const currentKeys = new Set(list.map(x => x.key));
+    for (const key of observed.keys()) if (!currentKeys.has(key)) observed.delete(key);
+    for (const x of list) if (x.run.evidenceLevel === 'verified' && ['succeeded', 'failed', 'cancelled'].includes(x.run.status)) observed.delete(x.key);
     scheduleRunExpiry(list);
     for (const x of list) {
       const cur = x.run.status;
@@ -285,7 +333,6 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
       const kind = cur === 'running' ? 'run.started' : prev === 'running' && cur === 'succeeded' ? 'run.succeeded' : prev === 'running' && cur === 'failed' ? 'run.failed' : null;
       if (kind) pushLive({ kind, actor: { kind: 'system', component: 'engine' }, sessionKey: x.key, occupantId: occupantIdOf(x) });
     }
-    const currentKeys = new Set(list.map(x => x.key));
     for (const key of runStatus.keys()) if (!currentKeys.has(key)) runStatus.delete(key);
     sessionsSeeded = true;
     const j = JSON.stringify(list);
@@ -450,6 +497,10 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     // R13-03: rows are validated BEFORE the registry sees them. A rejected row is left out (its last good row stays) and
     // makes the snapshot incomplete, so no absence in it counts as deletion evidence.
     'sessions.snapshot': (list, rec) => {
+      if (list.length > MAX_CANONICAL_SESSION_SNAPSHOT) {
+        rec({ code: 'shape.invalid', severity: 'error', path: '$.sessions', detail: 'session inventory exceeds the supported limit' });
+        return;
+      }
       const good = list.map((row) => admit(SessionContract, 'session', row, rec)).filter(Boolean);
       reg.acceptPage({ sessions: good, hasMore: false, totalCount: list.length }, 0, rec, { rowsDropped: good.length !== list.length, canonical:true });
       afterSessions();
@@ -753,6 +804,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     activity: currentActivity,
     activities: () => reg.list().map(row => currentActivity(row.key)).filter(Boolean),
     setObservedActivity,
+    clearObservedActivity,
     agentPresence: () => adapter.presence === 'agents',
     forgetTranscript,
     close() { engineClosed = true; if (runExpiryTimer) clearTimeout(runExpiryTimer); runExpiryTimer = null; runExpiryAt = null;

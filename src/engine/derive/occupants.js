@@ -24,6 +24,7 @@ const ERROR_WINDOW_MS = 60 * 1000;
 const DEFAULT_SESSION_PRESENCE_WINDOW_MS = 15 * 60 * 1000;
 const DEFAULT_AGENT_PRESENCE_WINDOW_MS = 60 * 60 * 1000;
 const { executionState } = require('../execution-state');
+const { MAX_OFFICE_OCCUPANTS } = require('../session-limits');
 const runOf = (s, now) => executionState(s?.run, now);
 const isVerifiedTerminal = (s, now) => {
   const run = runOf(s, now);
@@ -90,7 +91,7 @@ const recentlyFailed = (s, now) => !!s && s.run.status === 'failed' && !!s.run.e
  * @param {number} p.now
  * @param {string} [p.mainKey]       agents.list mainKey, if known
  */
-function deriveOccupants({ sessions, activityFor = () => null, gwConnected, now, mainKey, primaryAgentId,
+function deriveOccupantProjection({ sessions, activityFor = () => null, gwConnected, now, mainKey, primaryAgentId,
   presenceWindowMs = DEFAULT_SESSION_PRESENCE_WINDOW_MS }) {
   // Transcript-only runtimes may identify a main session through the primary
   // agent catalog while classifying that conversation generically. Honor that
@@ -125,6 +126,7 @@ function deriveOccupants({ sessions, activityFor = () => null, gwConnected, now,
   });
 
   const occupants = [{ id: 'primary', role: 'primary', sessionKey: main ? main.key : (mainKey || null), session: main }];
+  let overflowCount = 0;
   const seen = new Set();
   const candidates = sessions.filter((s) => ROLE_OF[s.class.kind] && ROLE_OF[s.class.kind] !== 'primary'
     && isOnStageSession(s, now, activityFor, presenceWindowMs))
@@ -134,11 +136,11 @@ function deriveOccupants({ sessions, activityFor = () => null, gwConnected, now,
     const subjectId = s.class.subagentId || s.class.cronJobId || s.class.interlocutorId || s.key;
     const id = occupantIdOf(s) || role + ':' + subjectId;
     if (seen.has(id)) continue; seen.add(id);
+    if (occupants.length >= MAX_OFFICE_OCCUPANTS) { overflowCount++; continue; }
     occupants.push({ id, role, sessionKey: s.key, session: s });
-    if (occupants.length >= STATIONS.length) break;
   }
 
-  return occupants.map((o, i) => {
+  return { occupants: occupants.map((o, i) => {
     const s = o.session;
     const live = (s ? currentActivityFor(s, now, activityFor) : null) || (o.role === 'primary' ? internalLive || ownedLive : null);
     let state;
@@ -152,10 +154,13 @@ function deriveOccupants({ sessions, activityFor = () => null, gwConnected, now,
     } else {
       state = run.status === 'running' ? 'working' : run.status === 'idle' || run.level === 'verified' && ['succeeded', 'failed'].includes(run.status) ? 'idle' : 'unknown';
     }
-    return { id: o.id, role: o.role, sessionKey: o.sessionKey, state, stationUid: STATIONS[i], order: i,
+    return { id: o.id, role: o.role, sessionKey: o.sessionKey, state, stationUid: STATIONS[i] ?? null, order: i,
       tokens: s ? s.usage.total : 0, lastSeenAt: s ? s.updatedAt : null };
-  });
+  }), overflowCount };
 }
 
-module.exports = { deriveOccupants, occupantIdOf, ROLE_OF, STATIONS, ERROR_WINDOW_MS, DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS,
+function deriveOccupants(options) { return deriveOccupantProjection(options).occupants; }
+
+module.exports = { deriveOccupants, deriveOccupantProjection, occupantIdOf, ROLE_OF, STATIONS, ERROR_WINDOW_MS,
+  DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS, MAX_OFFICE_OCCUPANTS,
   isStateEvidenceSession, currentActivityFor, isVerifiedTerminal, isOnStageSession, isProjectAgentOnStage };

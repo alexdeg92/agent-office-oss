@@ -1,3 +1,4 @@
+import { loadModule, chunkError } from '../build-update.js';
 // Public sign-in: a calm live office scene dissolving into one compact, accessible form.
 import { html, useEffect, useRef, useState } from '../lib.js';
 import { Frame, Icon } from '../components/ui.js';
@@ -14,7 +15,7 @@ const PREVIEW = [
 ];
 let bureauControls;
 function loadBureauControls() {
-  return bureauControls ??= import('../components/bureau/index.js' + buildQuery).then(async module => {
+  return bureauControls ??= loadModule(() => import('../components/bureau/index.js' + buildQuery)).then(async module => {
     await module.loadStyles();
     return module;
   });
@@ -35,7 +36,7 @@ function loadOfficeStyles() {
     const link = document.createElement('link');
     link.rel = 'stylesheet'; link.href = href; link.dataset.loginOffice = href;
     link.onload = resolve;
-    link.onerror = () => { link.remove(); reject(new Error('Login office stylesheet unavailable')); };
+    link.onerror = () => { link.remove(); reject(chunkError(new Error('Login office stylesheet unavailable'))); };
     document.head.append(link);
   });
 }
@@ -58,8 +59,8 @@ function OfficeBackdrop({ elementRef }) {
     const start = async () => {
       await loadOfficeStyles();
       const [sceneModule, mockModule, manifestResponse, layoutResponse] = await Promise.all([
-        import('../office/scene.js' + buildQuery),
-        import('../office/mock-office.js' + buildQuery),
+        loadModule(() => import('../office/scene.js' + buildQuery)),
+        loadModule(() => import('../office/mock-office.js' + buildQuery)),
         api.getAsset('bureau/office/manifest.example.json'),
         api.getAsset('bureau/office/layout.example.json'),
       ]);

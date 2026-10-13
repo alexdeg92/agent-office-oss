@@ -77,9 +77,12 @@ test('shared styles: failed loading removes the link and allows a real retry', {
   const b=await openLayoutBrowser();let requests=0;
   try {
     await b.page.route('**/components/bureau/bureau.css',route=>++requests===1?route.abort():route.continue());
-    await fixture(b.page,b.origin,body=>body.replace('await Promise.all([loadStyles(),loadStyles()]);',"try { await loadStyles(); } catch(error) { window.styleFailure=error.message; await loadStyles(); }"));
+    // T-0106: a failed stylesheet also asks the app for its once-per-build document reload (build-update.js). The
+    // loop guard is spent here, so what remains observable is this module's own contract: no stale link, a real retry.
+    await fixture(b.page,b.origin,body=>body.replace('await Promise.all([loadStyles(),loadStyles()]);',"sessionStorage.setItem('ao.chunk-reload','unversioned'); try { await loadStyles(); } catch(error) { window.styleFailure=error.message; window.styleChunkFailure=error.chunkFailure; await loadStyles(); }"));
     assert.equal(requests,2);
     assert.equal(await b.page.evaluate(()=>window.styleFailure),'Bureau controls stylesheet unavailable');
+    assert.equal(await b.page.evaluate(()=>window.styleChunkFailure),true,'the failure is handed to chunk recovery');
     assert.equal(await b.page.locator('link[data-bureau-controls-css]').count(),1);
     assert.equal(await b.page.locator('.bu-control-switch__track').first().evaluate(e=>e.getBoundingClientRect().width),40);
   } finally { await b.close(); }

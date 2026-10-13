@@ -142,7 +142,8 @@ for (const width of [390, 360]) {
   }));
 
   for (const failure of ['abort', '410']) test(`PWA ${width}: failed CSS (${failure}) is removed and retried after online/navigation`, options, () => mobile(width, async (p, origin) => {
-    let broken = true, requests = 0;
+    let broken = true, requests = 0, documents = 0;
+    p.on('request',r=>{if(r.resourceType()==='document')documents++;});
     await p.route('**/office/office.css?*', route => {
       requests++;
       return broken ? failure === 'abort' ? route.abort() : route.fulfill({ status: 410, body: 'Synthetic obsolete asset', contentType: 'text/plain' }) : route.continue();
@@ -150,22 +151,29 @@ for (const width of [390, 360]) {
     await p.goto(origin + '/bureau?mock=1&agent=Atlas', { waitUntil: 'domcontentloaded' });
     const retry = p.getByRole('button', { name: 'Réessayer', exact: true });
     await retry.waitFor();
+    await p.waitForFunction(()=>sessionStorage.getItem('ao.chunk-reload')!==null);
+    await p.waitForFunction(()=>performance.getEntriesByType('navigation')[0]?.type==='reload');
+    await retry.waitFor();
+    assert.equal(documents,2,'one automatic reload resets the failed document');
+    assert.equal(requests,2,'the guarded fresh document makes one more stylesheet request');
     assert.equal(await p.locator('link[data-office*="/office.css"]').count(), 0, 'failed link removed');
     assert.equal(await p.locator('.ao-bureau__stage').count(), 0);
     await capture(p, `css-${failure}-${width}-retry`);
-    await retry.click(); await p.waitForFunction(() => document.querySelector('[role="alert"]'));
+    await Promise.all([p.waitForEvent('framenavigated',f=>f===p.mainFrame()),retry.click()]);
+    await p.waitForFunction(() => document.querySelector('[role="alert"]'));
     await p.waitForFunction(() => !document.querySelector('link[data-office*="/office.css"]'));
-    assert.equal(requests, 2, 'explicit retry makes a fresh request');
+    assert.equal(requests, 3, 'explicit retry reloads the document and makes a fresh request');
+    assert.equal(documents,3);
     broken = false;
     await p.evaluate(() => window.dispatchEvent(new Event('online')));
     await ready(p); await visibleMap(p);
     await capture(p, `css-${failure}-${width}-recovered`);
-    assert.equal(requests, 3);
+    assert.equal(requests, 4);
     // A fresh document fails once, then route navigation recovers without reloading the app.
     broken = true; await p.reload({ waitUntil: 'domcontentloaded' }); await retry.waitFor();
     await navigate(p, '/journaux'); await p.locator('.ao-logs').waitFor();
     broken = false; await navigate(p, '/bureau'); await ready(p); await visibleMap(p);
-    assert.equal(requests, 5);
+    assert.equal(requests, 6);
     assert.equal(await p.locator('link[data-office*="/office.css"]').count(), 1);
   }));
 
@@ -240,21 +248,24 @@ for (const width of [390, 360]) {
     assert.equal(await p.evaluate(() => __sceneListeners), 1);
   }));
 
-  test(`PWA ${width}: a stalled build.json cannot block navigation or controls`, options, () => mobile(width, async (p, origin) => {
+  test(`PWA ${width}: a slow complete build check gates new chunks while existing controls remain responsive`, options, () => mobile(width, async (p, origin) => {
     await open(p, origin);
-    let reads = 0;
-    await p.route('**/build.json', () => { reads++; }); // Deliberately never return a response.
-    const elapsed = await p.evaluate(async () => {
+    let reads = 0, release;
+    const held=new Promise(resolve=>{release=resolve;});
+    await p.route('**/build.json', async route => { reads++;await held;await route.continue(); });
+    await p.evaluate(async () => {
       const build = document.querySelector('meta[name="ao-build"]').content;
       const { services } = await import('/services.js?v=' + build);
-      const start = performance.now();
-      await services.router.navigate('/journaux');
-      return performance.now() - start;
+      void services.router.navigate('/journaux');
     });
-    assert.ok(elapsed < 1100, `800ms deadline plus throttled dispatch overhead: ${elapsed}ms`);
+    await p.waitForTimeout(1100);
+    assert.equal(new URL(p.url()).pathname,'/bureau','no old chunk is imported on an elapsed deadline');
+    await p.locator('.ao-mobile-options').click();await p.getByRole('dialog').waitFor();
+    await p.getByRole('dialog').getByRole('button',{name:'Fermer',exact:true}).click();
+    assert.equal(reads, 1, 'concurrent checks share the held navigation request');
+    release();
     await p.locator('.ao-logs:not([aria-busy="true"])').waitFor({ timeout: 5000 });
     assert.equal(new URL(p.url()).pathname, '/journaux');
-    assert.equal(reads, 1, 'the lazy page reuses the bounded navigation check');
     await navigate(p, '/bureau'); await ready(p);
     await p.locator('.ao-mobile-options').click();
     await p.getByRole('dialog').waitFor();

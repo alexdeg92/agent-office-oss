@@ -2,6 +2,27 @@
 
 All notable changes to Agent Office are documented in this file. The format is based on Keep a Changelog, and versions follow Semver. `packaging/release.sh` copies the matching section into `dist/RELEASE_NOTES.md`.
 
+## 1.2.2 - 2026-10-13
+
+This release makes the office read like a real workplace: every agent has its own desk, you can see what each one is doing, and idle agents doze or take breaks.
+
+### Office life
+
+- **Rich states:** working, thinking, executing, blocked and « En attente » (waiting for a reply or for background work) are shown on the character and in the roster.
+- **Desk monitors** show the agent's current action (writing code, running a command, searching, reading, blocked…).
+- **Dozing at the desk:** an idle agent rests its head on the desk, its monitor turns off and cartoon « z Z z » letters float up from its head.
+- **Desk pressure:** working agents always get a desk; when a floor is full, the longest-idle agents give up their desk and go to the lobby or the gym. An agent that starts working again returns to its own floor and desk.
+- **Elevator travel:** agents take the elevator between floors for breaks (lobby armchairs, terrace bench, coffee, smoking, gym), several at a time.
+- **Conversations happen from each agent's own desk** instead of everyone crowding one desk or the meeting table.
+- **Stable team floors:** a team's home floor and desks persist across refreshes, restarts and viewers.
+
+### Fixes
+
+- Fixed team agents gathering at the entrance with free desks after an identity merge; limited (no session access) viewers get the same seats without any private data.
+- Fixed the interface freezing until reload (chunk-load recovery, safe prefetch, per-page error boundaries).
+- Office projection is bounded for large session histories.
+- Codex and Claude Code waiting/working detection is safe on very large transcripts.
+
 ## 1.1.0 - 2026-10-09
 
 This release adds a guided first run, a cast of eleven characters, and an office that lives on its own. Existing installs upgrade in place: the store migrates forward, with a backup taken first, and a configured instance keeps its login.

@@ -1,3 +1,4 @@
+import { chunkError } from '../build-update.js';
 // Route-owned controls and layout: never loaded by the Bureau landing page.
 import { useState, useEffect } from '../lib.js';
 import { buildQuery } from '../config.js';
@@ -11,7 +12,7 @@ export function loadStyles() {
     sheet.rel = 'stylesheet';
     sheet.href = new URL('./workspace-mobile.css' + buildQuery, import.meta.url).href;
     sheet.onload = resolve;
-    sheet.onerror = () => { sheet.remove(); pending = undefined; reject(new Error('Workspace stylesheet unavailable')); };
+    sheet.onerror = () => { sheet.remove(); pending = undefined; reject(chunkError(new Error('Workspace stylesheet unavailable'))); };
     document.head.append(sheet);
   });
   return Promise.all([loadBureauStyles(), pending]);

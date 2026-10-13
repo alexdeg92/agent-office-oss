@@ -69,6 +69,12 @@ describe('portability · a foreign instance end to end (ADR-001 §12.8)', () => 
 
   it('office: Atlas is the primary occupant; the Telegram and Slack conversations are present; Paris night theme', async () => {
     const office = await get('/api/v2/views/office');
+    assert.equal(office.occupantOverflowCount, 0, 'the foreign Office projection reports its exact zero overflow');
+    assert.deepEqual(
+      ['executing', 'blocked'].map((state) => office.stateLabels[state]),
+      [{ key: 'agentState.executing' }, { key: 'agentState.blocked' }],
+      'state-label references include the rich activity states accepted by the OfficeVM',
+    );
     const primary = office.occupants[0];
     assert.deepEqual([primary.id, primary.role], ['main', 'main'], 'the listed 2.x wire aliases (§12.6)');
     assert.equal(primary.name, 'Atlas');

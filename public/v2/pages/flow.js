@@ -1,3 +1,4 @@
+import { chunkError } from '../build-update.js';
 import { buildQuery } from '../config.js';
 // Flux de travail, a scheduled task (S12; owner office-dev): FlowDetailVM from GET /api/v2/views/flows/:jobId, kept
 // fresh by `flow:<jobId>` (a run started here appears and finishes live over SSE). The original S7a design, restored
@@ -27,7 +28,7 @@ function useFlowCss() {
   useEffect(() => {
     if (document.querySelector('link[data-flow-css]')) return;
     const l = document.createElement('link');
-    l.rel = 'stylesheet'; l.href = CSS; l.dataset.flowCss = '';
+    l.rel = 'stylesheet'; l.href = CSS; l.dataset.flowCss = ''; l.onerror = () => chunkError(Error('Flow stylesheet unavailable'));
     document.head.append(l);
   }, []);
 }

@@ -49,6 +49,7 @@ describe('G5 · /api/v3 on a foreign instance', () => {
     assert.equal(meta.labels['provider.acme-llm'], 'acme-llm', 'an unknown provider labels as its raw value');
     assert.equal(meta.labels['agent.atlas'], 'Atlas');
     const office = await get('/api/v3/views/office');
+    assert.equal(office.occupantOverflowCount, 0, 'the bounded Office VM exposes the exact zero-overflow count when sessions are readable');
     assert.deepEqual([office.occupants[0].id, office.occupants[0].role, office.occupants[0].roleLabel.key], ['primary', 'primary', 'occupantRole.primary']);
     assert.ok(office.occupants.some((o) => o.role === 'direct' && o.id.startsWith('direct:')), 'the Telegram conversation is in the office');
     const logs = await get('/api/v3/views/logs?limit=200');

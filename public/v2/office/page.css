@@ -85,6 +85,7 @@
 .ao-floor-picker__count { font: var(--bu-type-caption); color: var(--bu-text-secondary); }
 .ao-floor-picker__status { grid-column: 1 / -1; font: var(--bu-type-caption); color: var(--bu-text-secondary); }
 .ao-floor-roster { display: flex; flex-direction: column; gap: var(--bu-space-2); }
+.ao-roster__state[data-agent-state="blocked"], .ao-drawer__state[data-agent-state="blocked"] { color: var(--bu-state-error); }
 .ao-floor-roster__jump { width: 100%; min-height: 40px; display: flex; align-items: center; gap: var(--bu-space-2); padding: var(--bu-space-2); color: var(--bu-text-secondary); background: transparent; border: 0; border-bottom: 1px solid var(--bu-border-subtle); font: var(--bu-type-label); text-align: left; cursor: pointer; }
 .ao-floor-roster__jump span:nth-child(2) { margin-left: auto; font: var(--bu-type-mono-sm); }
 .ao-floor-roster__team { padding: var(--bu-space-2) var(--bu-space-3) var(--bu-space-1); color: var(--bu-text-secondary); font: var(--bu-type-label); }

@@ -74,7 +74,17 @@ describe('engine sessions registry', () => {
   it('keeps unknown sessions canonical while counting one classifier warning per registry lifetime', () => {
     const e = createEngine({ now: () => NOW });
     const rows = Array.from({ length: 1000 }, (_, i) => row('unmapped-' + i));
-    e.ingest(list(rows)); e.ingest(list(rows));
+    const ingestPages = () => {
+      for (let offset = 0; offset < rows.length; offset += 300) {
+        const sessions = rows.slice(offset, offset + 300);
+        const hasMore = offset + sessions.length < rows.length;
+        const page = list(sessions);
+        page.context = { offset };
+        page.body.value = { sessions, totalCount: rows.length, hasMore, nextOffset: hasMore ? offset + sessions.length : null };
+        e.ingest(page);
+      }
+    };
+    ingestPages(); ingestPages();
     assert.equal(e.sessions().length, 1000);
     assert.ok(e.sessions().every(s => s.class.kind === 'unrecognized'));
     const issue = e.quarantine.list().find(i => i.code === 'session.unclassified');
@@ -202,9 +212,10 @@ describe('derived occupants', () => {
       ['primary/working/desk-1', 'subagent/working/desk-2']);
   });
 
-  it('live activity sets the state; caps at 7 stations', () => {
+  it('live activity sets state; all active delegates stay on stage beyond the seven default stations', () => {
     const rows = [row('agent:main:main', { isMain: true })].concat(Array.from({ length: 10 }, (_, i) => row('agent:main:subagent:s' + i, { status: 'active', updatedAt: NOW - i })));
     const o = deriveOccupants({ sessions: mk(rows), activityFor: (k) => (k === 'agent:main:subagent:s0' ? 'calling' : null), gwConnected: true, now: NOW });
-    assert.equal(o.length, 7); assert.equal(o[1].state, 'calling'); assert.deepEqual(o.map((x) => x.order), [0, 1, 2, 3, 4, 5, 6]);
+    assert.equal(o.length, 11); assert.equal(o[1].state, 'calling'); assert.deepEqual(o.map((x) => x.order), Array.from({ length: 11 }, (_, i) => i));
+    assert.equal(o[7].stationUid, null, 'rows beyond the default station inventory keep their roster identity without a fake station');
   });
 });

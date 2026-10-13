@@ -1,9 +1,10 @@
+import { loadModule, chunkError } from '../build-update.js';
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../lib.js';
 import { msg, getLang } from '../i18n.js';
 import { registerMessages } from '../messages.js';
 import * as dictionary from '../messages/settings.js';
 import { buildQuery } from '../config.js';
-import { services } from '../services.js';
+import { services, reloadGuards } from '../services.js';
 import { chooseLang } from '../lang.js';
 import { readSettings, settingsCommand, reauthenticate } from '../settings-api.js';
 import { ErrorState, Icon } from '../components/ui.js';
@@ -27,7 +28,7 @@ export function loadStyles() {
   if (!globalThis.document) return Promise.resolve();
   return styles ||= Promise.all([loadBureauStyles(),loadExternalAccessStyles(),new Promise((resolve,reject) => {
     const sheet=document.createElement('link'); sheet.rel='stylesheet'; sheet.href=new URL('./settings.css' + buildQuery,import.meta.url).href;
-    sheet.onload=resolve; sheet.onerror=() => { sheet.remove(); styles=null; reject(Error('Settings stylesheet unavailable')); };
+    sheet.onload=resolve; sheet.onerror=() => { sheet.remove(); styles=null; reject(chunkError(Error('Settings stylesheet unavailable'))); };
     document.head.append(sheet);
   })]).catch(error => { styles=null; throw error; });
 }
@@ -65,7 +66,7 @@ function LazySettingsAccess({tab,me}) {
   useEffect(()=>{
     let live=true;
     setError(null);
-    import('./settings-access.js'+buildQuery).then(async module=>{
+    loadModule(() => import('./settings-access.js'+buildQuery)).then(async module=>{
       await module.loadStyles();
       return module.SettingsAccess;
     }).then(Component=>{if(live)setView(()=>Component);},err=>{if(live)setError(err);});
@@ -213,12 +214,15 @@ export function SettingsPage({match}) {
       return !isDirty() || await confirm('discard');
     };
     (services.navigationGuards ||= new Set()).add(guard);
-    const unload=e => { if (isDirty()) { e.preventDefault(); e.returnValue=''; } };
+    const reloadGuard={dirty:()=>isDirty()||!!busyRef.current,confirm:()=>!busyRef.current&&confirm('discard')};
+    reloadGuards.add(reloadGuard);
+    const unload=e => { if (isDirty()&&!reloadGuard.approved) { e.preventDefault(); e.returnValue=''; } };
     window.addEventListener('beforeunload',unload);
     return () => {
       alive.current=false; modalRef.current?.(false); modalRef.current=null;
       restartOperation.current?.abort();
       services.settingsListeners.delete(changed); services.navigationGuards.delete(guard); window.removeEventListener('beforeunload',unload);
+      reloadGuards.delete(reloadGuard);
     };
   },[]);
   useEffect(()=>{

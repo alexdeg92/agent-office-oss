@@ -7,7 +7,8 @@
  */
 const path = require('path');
 const fs = require('fs');
-const { deriveOccupants, isStateEvidenceSession, currentActivityFor, isOnStageSession, isProjectAgentOnStage,
+const { deriveOccupantProjection, isStateEvidenceSession, currentActivityFor, isOnStageSession, isProjectAgentOnStage,
+  MAX_OFFICE_OCCUPANTS,
   DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS } = require('../../../engine/derive/occupants');
 const { scheduleVM } = require('./flows');
 const { redactText, isRawChatIdentity, redactChatIdentity } = require('../../../security/redact-text');
@@ -222,8 +223,10 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
   // agent-identity-1: titles can come from transcripts, so they need the sessions read grant and the shared redactor
   const titleOf = (v) => canReadSessions ? redactText(v, { maxLength: 120 }) : null;
   const primaryName = primary ? redactText(configuredAgents[primary.id] || primary.name || primary.id, { maxLength: 120 }) || 'Agent' : null;
-  let derived = deriveOccupants({ sessions, activityFor: key => engine.activity?.(key)?.kind || null, gwConnected: primary && engine.runtimeFor ? !!engine.runtimeFor(primary.id)?.connected : gw.connected, now,
+  const derivedProjection = deriveOccupantProjection({ sessions, activityFor: key => engine.activity?.(key)?.kind || null, gwConnected: primary && engine.runtimeFor ? !!engine.runtimeFor(primary.id)?.connected : gw.connected, now,
     primaryAgentId: primary?.id, mainKey: primary ? primary.mainSessionKey || undefined : undefined, presenceWindowMs });
+  let derived = derivedProjection.occupants;
+  let occupantOverflowCount = derivedProjection.overflowCount;
 
   // Manual selections remain visible while idle. A saved display name or an
   // auto-added catalog identity is not presence: historical project folders
@@ -239,13 +242,15 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
     sessions.filter(s => s.class.agentId === a.id), now, key => engine.activity?.(key)?.kind || null, agentPresenceWindowMs)))) {
     const id = 'agent:' + a.id;
     if (derived.some(o => o.id === id)) continue;
+    if (derived.length >= MAX_OFFICE_OCCUPANTS) { occupantOverflowCount++; continue; }
     const owned = sessions.filter(s => s.class.agentId === a.id && !s.class.heartbeatOf);
     const session = owned.sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0))[0];
     const sessionRun = executionState(session?.run, now);
+    const liveActivity = owned.map(s => engine.activity?.(s.key)).find(Boolean);
     const recentOwnedSession = owned.some(row => Number.isSafeInteger(row.updatedAt) && row.updatedAt <= now
       && now - row.updatedAt <= agentPresenceWindowMs);
     derived.push({ id, role: 'agent', sessionKey: session?.key || null, state: !(engine.runtimeFor?.(a.id)?.connected ?? gw.connected) ? 'offline'
-      : owned.some(s => executionState(s.run, now).status === 'running' || engine.activity?.(s.key)) ? 'working'
+      : owned.some(s => executionState(s.run, now).status === 'running' || engine.activity?.(s.key)) ? liveActivity?.kind || 'working'
         : sessionRun.status === 'idle' || sessionRun.level === 'verified' && ['succeeded', 'failed'].includes(sessionRun.status) || recentOwnedSession ? 'idle' : 'unknown',
       tokens: session?.usage.total || 0, lastSeenAt: session?.updatedAt || null });
   }
@@ -354,7 +359,7 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
       : session ? [session] : [];
     const evidence = candidates.map(x => ({ key: x.key, run: executionState(x.run, now), activity: currentActivityFor(x, now, key => engine.activity?.(key)) }));
     const verifiedRun = evidence.find(x => x.run.level === 'verified' && x.run.status === 'running');
-    const observed = evidence.find(x => x.activity?.kind === 'working' || x.run.level === 'observed' && x.run.status === 'running');
+    const observed = evidence.find(x => x.activity || x.run.level === 'observed' && x.run.status === 'running');
     const observedKey = observed?.activity?.sessionKey || observed?.key;
     const terminalForObserved = observed && evidence.find(x => x.key === observedKey && x.run.level === 'verified'
       && ['succeeded', 'failed'].includes(x.run.status));
@@ -433,7 +438,8 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
   for (const o of occupants) place(o);
   const visitProjection = tracker.visitRows(listed, now, P.version);
   const roster = projectOfficeRoster({ connection: { gateway: gw.connected ? 'up' : 'down', since: gw.since }, kpis,
-    occupants: visitProjection.occupants, visitIntent: visitProjection.visitIntent, journal, layoutRevision: layout.revision, queue });
+    occupants: visitProjection.occupants, ...(canReadSessions ? { occupantOverflowCount } : {}),
+    visitIntent: visitProjection.visitIntent, journal, layoutRevision: layout.revision, queue });
   return projectOfficePlacement(roster, { layout: layout.layout, index: layout.index, projectOccupantId: P.occupantId, now, tracker });
 }
 

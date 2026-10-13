@@ -2,7 +2,10 @@
   "data": {
     "hosts": [{ "id": "host_7a4f", "label": "Development host", "platform": "container", "status": "available", "observedAt": 1791662400000 }],
     "orchestrators": [{ "id": "orch_42ad", "hostId": "host_7a4f", "kind": "herdr", "label": null, "sourceStatus": "available", "observedAt": 1791662400000 }],
-    "agents": [{ "id": "ha_84cc", "hostId": "host_7a4f", "orchestratorId": "orch_42ad", "name": "Builder", "runtimeKind": "claude-code", "role": "delegate", "status": "working", "observedAt": 1791662400000, "staleAfter": 1791662520000 }],
+    "agents": [
+      { "id": "ha_84cc", "hostId": "host_7a4f", "orchestratorId": "orch_42ad", "name": "Builder", "runtimeKind": "claude-code", "role": "delegate", "status": "working", "observedAt": 1791662400000, "staleAfter": 1791662520000 },
+      { "id": "ha_91bd", "hostId": "host_7a4f", "orchestratorId": "orch_42ad", "name": "Reviewer", "runtimeKind": "codex", "role": "delegate", "status": "waiting", "observedAt": 1791662400000, "staleAfter": 1791662520000 }
+    ],
     "revision": 7,
     "hostRevision": 4,
     "teamRevision": 3,

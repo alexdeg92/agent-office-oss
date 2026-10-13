@@ -121,9 +121,9 @@ test('migration 024 upgrades a synthetic v23 single-owner copy, retaining cookie
   assert.equal(h.db.prepare('SELECT role_id FROM users WHERE id=?').get(row.id).role_id,'rol_admin');
   assert.deepEqual(h.db.prepare('PRAGMA foreign_key_check').all(),[]);
 });
-test('fresh installation has contiguous migrations through 028 after deleted-email reuse and survives reopen',t=>{
+test('fresh installation has contiguous migrations through 029 after stable team placement and survives reopen',t=>{
   const {store,admin}=fixture(t),dir=store.dir;
-  assert.deepEqual(store.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(r=>r.version),Array.from({length:28},(_,i)=>i+1));
+  assert.deepEqual(store.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(r=>r.version),Array.from({length:29},(_,i)=>i+1));
   assert.equal(store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_detection'").get().name,'runtime_detection');
   const installationId=store.rbac.state().installation_id;
   store.db.prepare("INSERT INTO runtime_detection VALUES (1,'{}')").run();store.close();

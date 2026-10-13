@@ -64,8 +64,39 @@ function createViewProjection({store,cfg={}}) {
     if(name==='office') {
       if(!logs) {
         vm.occupants=vm.occupants.filter(o=>SUMMARY_ROLES.has(o.role));
-        for(const o of vm.occupants){o.sessionKey=null;o.tokens=null;o.lastSeenAt=null;o.execution={status:'unknown',evidence:{level:'unknown',observedAt:null,expiresAt:null}};delete o.exchanges;}
+        for(const o of vm.occupants){
+          o.sessionKey=null;o.tokens=null;o.lastSeenAt=null;o.execution={status:'unknown',evidence:{level:'unknown',observedAt:null,expiresAt:null}};
+          delete o.exchanges;delete o.visitPhase;delete o.visitOnStage;delete o.visitStateLabel;
+        }
         vm.journal=[];
+        // The cached OfficeVM is built from the full population. Rebuild every
+        // count/tree derived from session rows only after the caller's rows have
+        // been removed; even an exact overflow count reveals hidden activity.
+        delete vm.occupantOverflowCount;
+        vm.conversationIds=[];
+        vm.conversationCount=0;
+        vm.conversationLabel={key:'office.mobile.conversations',params:{n:0}};
+        const physicalFloors=Array.isArray(vm.rosterFloors)?vm.rosterFloors:[];
+        Object.assign(vm,require('../api/v2/vm/office-roster').projectOfficeRoster(vm));
+        // Rebuild visible membership/counts, but retain the physical registry that
+        // the scene needs to render even a floor with no visible occupants.
+        const projectedFloors=new Map(vm.rosterFloors.map(floor=>[floor.id,floor]));
+        vm.rosterFloors=physicalFloors.map(physical=>{
+          const visible=projectedFloors.get(physical.id);
+          if(visible){projectedFloors.delete(physical.id);return {...physical,...visible,layout:physical.layout,capacity:physical.capacity};}
+          return {...physical,occupantIds:[],mobileLabelIds:[],items:[],count:0,activeCount:0,idleCount:0,
+            countLabel:{key:'office.floor.count',params:{n:0}},
+            statusLabel:{key:'office.floor.status',params:{active:0,idle:0}}};
+        });
+        vm.rosterFloors.push(...projectedFloors.values());
+        const visibleIds=new Set(vm.occupants.map(o=>o.id));
+        vm.unseatedTeams=(Array.isArray(vm.unseatedTeams)?vm.unseatedTeams:[]).flatMap(team=>{
+          if(!visibleIds.has(team.parentId))return [];
+          const root=vm.occupants.find(o=>o.id===team.parentId);
+          const count=vm.occupants.filter(o=>o.parentId===team.parentId&&o.teamId===root?.teamId&&!o.stationUid).length;
+          return count?[{...team,count}]:[];
+        });
+        delete vm.visitIntent;
       } else {
         vm.journal=vm.journal.filter(e=>!e.kind.startsWith('project.')||can(user,'projects'));
         if(!can(user,'flows'))vm.journal=vm.journal.filter(e=>!['cron.fired','run.started','run.succeeded','run.failed'].includes(e.kind));

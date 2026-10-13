@@ -162,10 +162,15 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
           || st.size <= (row.offset || 0) && row.readMtime !== st.mtimeMs
           || row.coverageComplete && !row.recognizable && row.readMtime !== st.mtimeMs || !cache.has(key);
         let offset = reset ? readFromStart ? 0 : Math.max(0, st.size - BOUNDS.readBytes) : row.offset || 0;
-        if (reset) { row.summary = null; row.summarySource = null; row.displayName = null; row.spawns = []; row.execution = null; }
+        if (reset) { row.summary = null; row.summarySource = null; row.displayName = null; row.spawns = []; row.execution = null; row.activity = null; row.backgroundPending = false; row.backgroundPendingIds = []; row.pendingBackgroundOverflow = false; row.awaitingReply = false; row.awaitingReplyAt = null; }
         const startedAtZero = reset ? offset === 0 : !!row.startedAtZero;
         let skip = reset ? offset > 0 : row.skip || false, pending = Buffer.alloc(0), events = reset ? [] : structuredClone(cache.get(key).events);
-        let committed = offset, at = null, model = null, readTotal = 0, accepted = false, activityAt = null;
+        let committed = offset, at = null, model = null, readTotal = 0, accepted = false, activityAt = null, activity = reset ? null : row.activity || null,
+          backgroundPending = reset ? false : row.backgroundPending === true,
+          backgroundPendingIds = reset ? [] : [...(row.backgroundPendingIds || [])],
+          pendingBackgroundOverflow = reset ? false : row.pendingBackgroundOverflow === true,
+          awaitingReply = reset ? false : row.awaitingReply === true,
+          awaitingReplyAt = reset ? null : row.awaitingReplyAt ?? null;
         let recognizable = reset ? false : !!row.recognizable, coverageComplete = reset ? st.size === 0 && offset === 0 : !!row.coverageComplete;
         let projectName = reset ? null : row.projectName || null;
         const ancestry = reset ? new Map() : new Map(row.ancestry || []);
@@ -187,7 +192,14 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             let value; try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(line)); }
             catch { stats.malformedLines++; stats.ignoredLines++; continue; }
             const fallbackId = `${st.dev}:${st.ino}:${reset ? st.mtimeMs : row.fileGeneration}:${lineStart}`;
-            const record = mapRecord(value, { sessionKey: row.sessionId, agentId: row.agentId, fallbackId, counters: stats, sidechainAgent: row.subagent || null });
+            const record = mapRecord(value, { sessionKey: row.sessionId, agentId: row.agentId, fallbackId, counters: stats,
+              sidechainAgent: row.subagent || null, pendingBackground: backgroundPending, pendingBackgroundIds: backgroundPendingIds,
+              pendingBackgroundOverflow, awaitingReply, awaitingReplyAt, now: now() });
+            if (typeof record.backgroundPending === 'boolean') backgroundPending = record.backgroundPending;
+            if (Array.isArray(record.backgroundPendingIds)) backgroundPendingIds = record.backgroundPendingIds;
+            if (typeof record.pendingBackgroundOverflow === 'boolean') pendingBackgroundOverflow = record.pendingBackgroundOverflow;
+            if (typeof record.awaitingReply === 'boolean') awaitingReply = record.awaitingReply;
+            if (Number.isSafeInteger(record.awaitingReplyAt) || record.awaitingReplyAt === null) awaitingReplyAt = record.awaitingReplyAt;
             if (record.summary) {
               if (value.type === 'ai-title' || !row.summary) {
                 row.summary = record.summary;
@@ -201,6 +213,9 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             if (!record.recognized) continue;
             recognizable = true;
             if (record.execution) row.execution = record.execution;
+            if (record.activity) activity = record.activity;
+            else if (record.backgroundCompleted) activity = null;
+            else if (record.execution?.status === 'idle') activity = null;
             projectName ||= record.projectName;
             if (value.uuid && ancestry.has(value.uuid) && record.events.every(e => !e.id || events.some(old => old.id === e.id))) continue;
             if (record.at !== null && value.uuid !== tip && typeof value.parentUuid === 'string' && value.parentUuid !== tip) {
@@ -212,7 +227,9 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             const fresh = record.events.some(e => e.id && !events.some(old => old.id === e.id));
             mergeRecord(events, record); accepted = accepted || record.at !== null;
             if (record.at !== null) { tip = value.uuid || fallbackId; if (events.length) ancestry.set(tip, events[events.length - 1].id); if (ancestry.size > 256) ancestry.delete(ancestry.keys().next().value); }
-            if (row.initialized && row.readDev===st.dev && row.readIno===st.ino && lineStart >= (row.offset || 0) && fresh && record.at != null) activityAt = Math.max(activityAt || 0, record.at);
+            if (row.initialized && row.readDev===st.dev && row.readIno===st.ino && lineStart >= (row.offset || 0) && fresh && record.at != null) {
+              activityAt = Math.max(activityAt || 0, record.at);
+            }
             at = Math.max(at || 0, record.at || 0) || null; model = record.model || model;
           }
           if (pending.length > BOUNDS.lineBytes) { pending = Buffer.alloc(0); skip = true; committed = offset; partial = true; stats.oversizeLines = (stats.oversizeLines || 0) + 1; }
@@ -222,7 +239,7 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
         if (startedAtZero && committed >= st.size && !pending.length) coverageComplete = true;
         await verify(row.chain); const after = await fsp.lstat(row.file); if (!same(st, after) || after.isSymbolicLink() || after.size < committed) throw unsafe();
         if (closed || index.get(key) !== row) return null;
-        Object.assign(row, { offset: committed, skip, readDev: st.dev, readIno: st.ino, readMtime: st.mtimeMs, fileGeneration: reset ? st.mtimeMs : row.fileGeneration, initialized: true, activityAt, ancestry: [...ancestry], tip, partial, recognizable, startedAtZero, coverageComplete,
+        Object.assign(row, { offset: committed, skip, readDev: st.dev, readIno: st.ino, readMtime: st.mtimeMs, fileGeneration: reset ? st.mtimeMs : row.fileGeneration, initialized: true, activityAt, activity, backgroundPending, backgroundPendingIds, pendingBackgroundOverflow, awaitingReply, awaitingReplyAt, ancestry: [...ancestry], tip, partial, recognizable, startedAtZero, coverageComplete,
           at: at || (reset ? null : row.at) || null, model: model || (reset ? null : row.model) || null, projectName, accepted: accepted || (!reset && row.accepted) });
         let value = transcript(key, events, now());
         while (events.length > 1 && Buffer.byteLength(JSON.stringify(value)) > BOUNDS.cacheBytes / BOUNDS.cacheSessions) { events.shift(); value = transcript(key, events, now()); }

@@ -84,10 +84,12 @@
 .ao-marker[hidden] { display: none; }
 .ao-marker[data-state="thinking"] { --_s: var(--bu-state-thinking); }
 .ao-marker[data-state="working"] { --_s: var(--bu-state-working); }
+.ao-marker[data-state="executing"] { --_s: var(--bu-state-working); }
 .ao-marker[data-state="researching"] { --_s: var(--bu-state-researching); }
 .ao-marker[data-state="writing"] { --_s: var(--bu-state-writing); }
 .ao-marker[data-state="calling"] { --_s: var(--bu-state-calling); }
 .ao-marker[data-state="waiting"] { --_s: var(--bu-state-waiting); }
+.ao-marker[data-state="blocked"] { --_s: var(--bu-state-error); }
 .ao-marker[data-state="error"] { --_s: var(--bu-state-error); }
 .ao-marker[data-state="offline"] { --_s: var(--bu-state-offline); }
 .ao-mk { position: absolute; left: 0; bottom: 0; display: inline-flex; align-items: center; gap: 2px; font: 700 13px/1 var(--bu-font-sans, Inter, sans-serif); }
@@ -100,7 +102,7 @@
 .ao-mk--thought i:nth-child(2) { animation-delay: 0.2s; }
 .ao-mk--thought i:nth-child(3) { animation-delay: 0.4s; }
 .ao-marker[data-kind="question"] .ao-mk { animation: ao-mbob 1.6s ease-in-out infinite; }
-.ao-marker[data-kind="plug"] .ao-mk, .ao-marker[data-kind="reading"] .ao-mk, .ao-marker[data-kind="pen"] .ao-mk { animation: ao-pulse 1.4s ease-in-out infinite; }
+.ao-marker[data-kind="plug"] .ao-mk, .ao-marker[data-kind="reading"] .ao-mk, .ao-marker[data-kind="pen"] .ao-mk, .ao-marker[data-kind="executing"] .ao-mk { animation: ao-pulse 1.4s ease-in-out infinite; }
 .ao-mk--zz { font-size: 13px; gap: 0; }
 .ao-mk--zz b:nth-child(2) { font-size: 10px; transform: translate(1px, -3px); }
 .ao-mk--zz b { animation: ao-zz 3s ease-in-out infinite; display: inline-block; }
@@ -121,10 +123,12 @@
 .ao-plate { --_s: var(--bu-state-idle); }
 .ao-plate[data-state="thinking"] { --_s: var(--bu-state-thinking); }
 .ao-plate[data-state="working"] { --_s: var(--bu-state-working); }
+.ao-plate[data-state="executing"] { --_s: var(--bu-state-working); }
 .ao-plate[data-state="researching"] { --_s: var(--bu-state-researching); }
 .ao-plate[data-state="writing"] { --_s: var(--bu-state-writing); }
 .ao-plate[data-state="calling"] { --_s: var(--bu-state-calling); }
 .ao-plate[data-state="waiting"] { --_s: var(--bu-state-waiting); }
+.ao-plate[data-state="blocked"] { --_s: var(--bu-state-error); }
 .ao-plate[data-state="error"] { --_s: var(--bu-state-error); }
 .ao-plate[data-state="offline"] { --_s: var(--bu-state-offline); }
 .ao-plate__state { display: none; }
@@ -218,6 +222,10 @@ html.ao-fs-lock, html.ao-fs-lock body { overflow: hidden; }
 .ao-life-fx--steam i { width:3px;height:8px;border-left:1px solid #eee8dcaa;background:none;bottom:2px;left:-4px;transform:rotate(12deg);animation:ao-life-steam 1.8s ease-out infinite; }
 .ao-life-fx--steam i:nth-child(2) { left:0;animation-delay:-.6s; }
 .ao-life-fx--steam i:nth-child(3) { left:4px;animation-delay:-1.2s; }
+.ao-life-fx--smoke i { width:14px;height:14px;background:#deded699;left:0;bottom:0;animation:ao-life-smoke 2.4s linear infinite; }
+.ao-life-fx--smoke i:nth-child(2) { animation-delay:-.8s; }
+.ao-life-fx--smoke i:nth-child(3) { animation-delay:-1.6s; }
+@keyframes ao-life-smoke { from { opacity:.6;transform:translate(0,0) scale(.45); } to { opacity:0;transform:translate(-24px,-45px) scale(1.8); } }
 .ao-life-fx--drops i { background:#79b9d2;top:10px;left:16px;height:8px;animation:ao-life-drops 1s linear infinite; }
 .ao-life-fx--drops i:nth-child(2) { left:25px;animation-delay:-.33s; }
 .ao-life-fx--drops i:nth-child(3) { left:33px;animation-delay:-.66s; }
@@ -231,6 +239,30 @@ html.ao-fs-lock, html.ao-fs-lock body { overflow: hidden; }
 .ao-life-bubble[data-kind="success"] { color:var(--bu-success); border-color:var(--bu-success-border); }
 .ao-life-bubble[data-kind="error"] { color:var(--bu-danger); border-color:var(--bu-danger-border); }
 .ao-life-bubble[data-kind="sleep"] { animation:ao-zzz 2.5s ease-out infinite; }
+.ao-sleep-letters { position:absolute; width:62px; height:82px; z-index:4; pointer-events:none; color:#fff4da; text-shadow:1px 1px 1px #232938,-1px -1px 1px #232938; }
+.ao-sleep-letters[data-mobile] { width:42px; height:65px; }
+.ao-sleep-letters[data-side="left"] { --ao-sleep-drift:-1; }
+.ao-sleep-letters[data-side="left"] i { left:auto; right:0; }
+.ao-sleep-letters i { position:absolute; left:0; bottom:0; font:italic 700 19.6px/1 sans-serif; opacity:0; animation:ao-sleep-letter 2.8s linear infinite; }
+.ao-sleep-letters i:nth-child(2) { font-size:24.5px; animation-delay:-.933s; }
+.ao-sleep-letters i:nth-child(3) { font-size:29.4px; animation-delay:-1.866s; }
+.ao-sleep-letters[data-mobile] i { font-size:11.2px; }
+.ao-sleep-letters[data-mobile] i:nth-child(2) { font-size:14px; }
+.ao-sleep-letters[data-mobile] i:nth-child(3) { font-size:16.8px; }
+@keyframes ao-sleep-letter {
+  0% { opacity:0; transform:translate(0,0) scale(.55); }
+  12% { opacity:.9; transform:translate(calc(4.2px * var(--ao-sleep-drift,1)),-5.6px) scale(.65); }
+  45% { opacity:1; transform:translate(calc(12.6px * var(--ao-sleep-drift,1)),-17.5px) scale(.9); }
+  75% { opacity:.7; transform:translate(calc(8.4px * var(--ao-sleep-drift,1)),-29.4px) scale(1.05); }
+  100% { opacity:0; transform:translate(calc(18.2px * var(--ao-sleep-drift,1)),-42px) scale(1.15); }
+}
+.ao-office[data-reduced-motion] .ao-sleep-letters i { animation:none; opacity:1; transform:translate(0,0); font-size:14.7px; }
+.ao-office[data-reduced-motion] .ao-sleep-letters i:nth-child(2) { transform:translate(calc(14px * var(--ao-sleep-drift,1)),-21px); font-size:19.6px; }
+.ao-office[data-reduced-motion] .ao-sleep-letters i:nth-child(3) { transform:translate(calc(28px * var(--ao-sleep-drift,1)),-42px); font-size:24.5px; }
+.ao-office[data-reduced-motion] .ao-sleep-letters[data-mobile] i { font-size:8.4px; }
+.ao-office[data-reduced-motion] .ao-sleep-letters[data-mobile] i:nth-child(2) { transform:translate(calc(8.4px * var(--ao-sleep-drift,1)),-12.6px); font-size:11.2px; }
+.ao-office[data-reduced-motion] .ao-sleep-letters[data-mobile] i:nth-child(3) { transform:translate(calc(18.2px * var(--ao-sleep-drift,1)),-25.2px); font-size:14px; }
+.ao-office[data-paused] .ao-sleep-letters i { animation-play-state:paused; }
 .ao-life-bubble[data-kind="highfive"] { color:var(--bu-warning); animation:ao-clap .7s ease-out infinite; }
 .life-steam { animation:ao-steam 1.8s ease-out infinite; }
 .life-drops { stroke-width:3; animation:ao-water .8s ease-out infinite; }

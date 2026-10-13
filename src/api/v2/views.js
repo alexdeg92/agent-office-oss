@@ -54,7 +54,7 @@ const decodeKey = (k) => { try { return decodeURIComponent(k); } catch (_) { ret
  * @param {Function} p.authed, p.ok
  */
 function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, enrichment = null, orchestratorTeams = null,
-  officePrincipalFor = () => null, officeTopicFor: scopedOfficeTopicFor = null, authed, ok, isSubscribed = () => false, sessionsReadable = () => false, now = () => Date.now(),
+  officePrincipalFor = () => null, officeScopeFor = () => null, officeTopicFor: scopedOfficeTopicFor = null, authed, ok, isSubscribed = () => false, sessionsReadable = () => false, now = () => Date.now(),
   presenceWindowMs = sessionPresenceWindow(), agentPresenceWindowMs = agentPresenceWindow() }) {
   // G7 (ADR-001 §14.2): interlocutor profiles come from the selected enrichers (InterlocutorProfile, cached only)
   const peek = enrichment ? (id) => enrichment.peek(id) : () => ({ resolution: 'unresolvable', profile: null });
@@ -194,8 +194,16 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   // The base office remains shared by the ordinary office cache. T-0045 adds
   // team/Herdr data only through a caller-specific topic identity.
   topics.define('office-scope', { params: 'path', permission: { resource: 'office', level: 'read' }, build: ({ key }, P) => {
-    const office = topics.current('office', P.version)?.vm;
+    const scope = officeScopeFor(key);
+    const office = topics.current(scope?.officeLimited ? OFFICE_LIMITED : 'office', P.version)?.vm;
     if (!office) return office;
+    // Team folding and placement need the private full session inventory even
+    // when the caller receives a limited OfficeVM. Keep that inventory solely
+    // on the server-side planning path; project and return the limited `office`.
+    const planningOffice = scope?.officeLimited
+      ? topics.current('office', P.version)?.vm || buildOfficeVM({ engine, now: now(), tracker, names, actorOf, layout: activeLayout(),
+        configuredAgents, canReadSessions: true, P, isNewAgent, assignLook, presenceWindowMs, agentPresenceWindowMs })
+      : office;
     const principal = officePrincipalFor(key), snapshot = orchestratorTeams?.getSnapshot?.();
     if (!principal) return office;
     // Only an administrator may learn that the locally detected orchestrator
@@ -236,16 +244,20 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     const projected = projectOfficeTeamOccupants(annotated, snapshot, principal, { sourceEnabled: true, runtimeAgents: agents,
       primaryAgentId: engine.primaryAgent()?.id || null, runtimeIdentitySessions: engine.identitySessions?.(snapshot.agents?.[0]?.hostId) || [],
       runtimeSessions: engine.sessions(),
-      canReadSessions: office.occupants.some(row => typeof row.sessionKey === 'string' && row.sessionKey), version: P.version, tracker, agentPresenceWindowMs });
+      canReadSessions: sessionsReadable({ session: null, principal }), version: P.version, tracker, agentPresenceWindowMs });
     const { projectOfficeRoster, projectOfficePlacement } = require('./vm/office-roster');
     const roster = projectOfficeRoster(projected, { projectOccupantId: P.occupantId });
-    const placed = projectOfficePlacement(roster, { layout: activeLayout().layout, index: officeDefaults().index, projectOccupantId: P.occupantId, now: now(), tracker,
-      planningOccupants: placementPopulationFor(office, snapshot, P) });
+    const placementLayout = activeLayout();
+    const placed = projectOfficePlacement(roster, { layout: placementLayout.layout, index: officeDefaults().index, projectOccupantId: P.occupantId, now: now(), tracker,
+      planningOccupants: placementPopulationFor(planningOffice, snapshot, P),
+      homeAssignments: store?.office?.teamHomeAssignments?.(placementLayout.revision) || null,
+      rememberHomeAssignments: store?.office?.rememberTeamHomeAssignments
+        ? assignments => store.office.rememberTeamHomeAssignments(placementLayout.revision, assignments) : null });
     return activationHint ? { ...placed, ...activationHint } : placed;
   } });
   const officeTopic = req => {
     const ordinary = officeTopicFor(req, sessionsReadable);
-    return ordinary === 'office' && scopedOfficeTopicFor ? scopedOfficeTopicFor(req) : ordinary;
+    return ['office', OFFICE_LIMITED].includes(ordinary) && scopedOfficeTopicFor ? scopedOfficeTopicFor(req) : ordinary;
   };
   topics.define('session', { params: 'path', build: ({ key:wire }, P = projectionFor(2)) => {const key=legacyKey(wire,'session',P.version);return buildSessionVM(engine.session(key), shown(engine.transcript(key)), names,
     traceStates.get(key) || (engine.transcript(key) ? 'fresh' : 'stale'), P, now()) || notFound();} });

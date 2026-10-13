@@ -29,6 +29,21 @@ test('Codex-only synthetic instance reaches AO_READY and loads its first session
  assert.match(h.output,/AO_READY \{"mode":"app"/);const logs=await h.get('/api/v3/views/logs');assert.equal(logs.status,200);assert.ok(logs.json.data.items.length>0);const log=logs.json.data.items.find(row=>row.kind==='conversation');assert.equal(log?.tokens,73,'Journaux exposes the session-local Codex total');assert.equal(log?.tokensKnown,true);
 });
 
+test('legacy environment-owner cookie retains rich Office details before identity migration',async t=>{
+ const h=await startServer(loadScenario('synthetic-basic'),{demo:true});t.after(()=>h.stop());
+ await h.waitReady();
+ const cookieValue=h.cookie.split('=')[1],payload=JSON.parse(Buffer.from(cookieValue.split('.')[0],'base64url').toString('utf8'));
+ assert.equal(Object.hasOwn(payload,'userId'),false,'the legacy environment cookie has no account id');
+ const logs=await h.get('/api/v3/views/logs');assert.equal(logs.status,200);assert.ok(logs.json.data.items.length>0);
+ for(const version of [2,3]) {
+  const office=await h.get(`/api/v${version}/views/office`);assert.equal(office.status,200,office.text);
+  const primary=office.json.data.occupants.find(row=>row.role===(version===2?'main':'primary'));
+  assert.ok(primary?.sessionKey,`v${version} keeps the legacy owner's primary session identity`);
+  assert.equal(primary.execution.evidence.level,'verified',`v${version} keeps verified execution for the authenticated owner`);
+  assert.ok(office.json.data.occupants.length>1,`v${version} keeps the owner environment's full office projection`);
+ }
+});
+
 test('Codex runtime start does not wait for its initial filesystem scan',async t=>{
  const h=fixture(t),runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home}}}),engine=createEngine({adapter:runtime.definition});t.after(()=>runtime.close());runtime.attach(engine);
  let release,entered;const scanning=new Promise(resolve=>{entered=resolve;}),blocked=new Promise(resolve=>{release=resolve;});runtime.files.scan=async()=>{entered();await blocked;return[];};
@@ -106,6 +121,237 @@ test('Codex archived task events keep their own timestamps and cannot mint fresh
  ],{sessionKey:'codex:closed-archived',agentId:'archived'});
  assert.equal(closed.execution.status,'idle');
  assert.equal(executionState(runFromTranscript(closed.execution,NOW),NOW).status,'idle','a closed transcript remains idle regardless of age');
+});
+
+test('Codex transcript activity maps safe event classes and keeps evidence private and fresh',async t=>{
+ const {parse}=require('../../src/adapters/codex/profile');
+ const event=(type,payload={})=>({type:'event_msg',timestamp:new Date(NOW-1000).toISOString(),payload:{type,...payload}});
+ const call=(name,type='function_call')=>({type:'response_item',timestamp:new Date(NOW-1000).toISOString(),payload:{type,call_id:'synthetic-call',name,arguments:{path:'/private/synthetic-secret'},output:'/private/synthetic-secret'}});
+ const cases=[
+  [event('agent_reasoning'),'thinking'],[call('web_search'),'researching'],[call('apply_patch','custom_tool_call'),'writing'],
+  [call('exec_command'),'executing'],[event('request_user_input'),'waiting'],[event('exec_approval_request'),'blocked'],
+ ];
+ for(const [line,kind] of cases){
+   const parsed=parse([meta(),ctx(),line],{sessionKey:'codex:synthetic',agentId:'synthetic',now:()=>NOW});
+   assert.equal(parsed.activity?.kind,kind);
+   assert.deepEqual(Object.keys(parsed.activity).sort(),['expiresAt','kind','since']);
+   assert.equal(JSON.stringify(parsed.activity).includes('/private'),false);
+ }
+ const stale=parse([meta(),ctx(),event('task_started'),event('agent_reasoning')],{sessionKey:'codex:stale',agentId:'synthetic',now:()=>NOW+20_000});
+ assert.equal(stale.activity,null,'rich detail expires independently from the 30s running evidence');
+ assert.equal(runFromTranscript(stale.execution,NOW+20_000).status,'running','stale rich detail degrades to generic Working');
+
+ let clock=NOW;const h=fixture(t),at=new Date(NOW-1000).toISOString();
+ h.file('2026/10/10','rollout-live.jsonl',[meta(),ctx(),{type:'event_msg',timestamp:at,payload:{type:'agent_reasoning'}}]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home,agentGrouping:'project'}}},{now:()=>clock}),engine=createEngine({adapter:runtime.definition,now:()=>clock});
+ t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
+ const session=engine.sessions()[0];assert.equal(engine.activity(session.key)?.kind,'thinking');
+ for(const version of [2,3]){
+  const vm=buildOfficeVM({engine,canReadSessions:true,now:clock,tracker:createStateTracker(),actorOf:()=>({kind:'system',name:'System'}),P:version===3?project3x:undefined});
+  assert.ok(vm.occupants.some(row=>row.state==='thinking'),`v${version} projects adapter-derived thinking`);
+  const {VM_SCHEMAS,VM_SCHEMAS_V3}=require('../../src/api/v2/vm/schemas');
+  assert.equal(require('../../src/schema').validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).office,vm).ok,true,`v${version} schema-valid`);
+ }
+ clock+=11_000;engine.expireObservedActivity();assert.equal(engine.activity(session.key)?.kind,'working','stale detail degrades to the still-live run state');
+ clock+=20_000;engine.expireObservedActivity();assert.equal(engine.activity(session.key),null,'the separate running evidence lease eventually expires too');
+});
+
+test('Codex yields with a pending execution as bounded waiting, then clears it on completion', () => {
+ const {parse}=require('../../src/adapters/codex/profile');
+ const event=(type,payload={})=>({type:'event_msg',timestamp:new Date(NOW-1000).toISOString(),payload:{type,...payload}});
+ const answer={type:'response_item',timestamp:new Date(NOW-900).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'Synthetic yielded response PRIVATE_AWAIT_CANARY'}]}};
+ const lines=[meta(),ctx(),event('exec_command_begin',{command_id:'single-exec'}),answer];
+ const pending=parse(lines,{sessionKey:'codex:pending',agentId:'synthetic',now:()=>NOW});
+ assert.equal(pending.activity?.kind,'waiting','an assistant turn yielded while an exec is still open');
+ assert.equal(pending.execution.status,'idle','the model turn ended even though its background execution remains pending');
+ assert.equal(JSON.stringify(pending.activity).includes('PRIVATE_AWAIT_CANARY'),false);
+ const finished=parse([...lines,event('exec_command_end',{command_id:'single-exec'})],{sessionKey:'codex:pending',agentId:'synthetic',now:()=>NOW});
+ assert.equal(finished.activity,null,'the matching execution completion clears pending wait');
+ assert.equal(finished.execution.status,'idle');
+});
+
+test('Codex preserves reply waits through task completion and tracks concurrent exec ids independently', () => {
+ const {parse}=require('../../src/adapters/codex/profile');
+ const event=(type,payload={})=>({type:'event_msg',timestamp:new Date(NOW-1000).toISOString(),payload:{type,...payload}});
+ const message=(role,text)=>({type:'response_item',timestamp:new Date(NOW-900).toISOString(),payload:{type:'message',role,status:'completed',content:[{type:role==='user'?'input_text':'output_text',text}]}});
+ const asked=parse([meta(),ctx(),message('assistant','Could you confirm?'),event('task_complete')],{sessionKey:'codex:asked',agentId:'synthetic',now:()=>NOW});
+ assert.equal(asked.activity?.kind,'waiting','task completion does not erase an unanswered question');
+ const answered=parse([meta(),ctx(),message('assistant','Could you confirm?'),event('task_complete'),message('user','Yes')],{sessionKey:'codex:asked',agentId:'synthetic',now:()=>NOW});
+ assert.equal(answered.activity?.kind,'working','a subsequent user turn clears the waiting question');
+ const commandEnded=parse([meta(),ctx(),event('exec_command_begin',{command_id:'question-followup'}),message('assistant','Could you confirm?'),event('task_complete'),event('exec_command_end',{command_id:'question-followup'})],{sessionKey:'codex:asked',agentId:'synthetic',now:()=>NOW});
+ assert.equal(commandEnded.activity?.kind,'waiting','command completion cannot erase the final unanswered reply wait');
+ const both=[meta(),ctx(),event('exec_command_begin',{command_id:'exec-a'}),event('exec_command_begin',{command_id:'exec-b'}),message('assistant','Background work continues')];
+ const oneDone=parse([...both,event('exec_command_end',{command_id:'exec-a'})],{sessionKey:'codex:parallel',agentId:'synthetic',now:()=>NOW});
+ assert.equal(oneDone.activity?.kind,'waiting','one completed command cannot clear another pending command');
+ const allDone=parse([...both,event('exec_command_end',{command_id:'exec-a'}),event('exec_command_end',{command_id:'exec-b'})],{sessionKey:'codex:parallel',agentId:'synthetic',now:()=>NOW});
+ assert.equal(allDone.activity,null,'all command completions clear the pending wait');
+ const duplicateAndUnknown=parse([...both,event('exec_command_end',{command_id:'exec-a'}),event('exec_command_end',{command_id:'exec-a'}),event('exec_command_end',{command_id:'exec-x'})],{sessionKey:'codex:parallel',agentId:'synthetic',now:()=>NOW});
+ assert.equal(duplicateAndUnknown.activity?.kind,'waiting','duplicate and unknown completion ids cannot retire sibling B');
+ const foreground=[event('task_started'),event('exec_command_begin',{command_id:'foreground'}),event('exec_command_end',{command_id:'foreground'})];
+ const commandOnly=parse(foreground,{sessionKey:'codex:foreground',agentId:'synthetic',now:()=>NOW});
+ assert.equal(commandOnly.execution.status,'running','a command end does not end its enclosing model turn');
+ assert.ok(commandOnly.activity,'the still-open turn keeps current activity');
+ const turnEnded=parse([...foreground,event('task_complete')],{sessionKey:'codex:foreground',agentId:'synthetic',now:()=>NOW});
+ assert.equal(turnEnded.execution.status,'idle','the actual task completion ends the turn');
+ assert.equal(turnEnded.activity,null);
+});
+
+test('Codex late unrelated completions cannot renew an expired reply wait',()=>{
+ const {parse}=require('../../src/adapters/codex/profile'),t0=NOW-1000,tLate=t0+20*60_000;
+ const line=(type,payload={},at=t0)=>({type:'event_msg',timestamp:new Date(at).toISOString(),payload:{type,...payload}});
+ const question={type:'response_item',timestamp:new Date(t0).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'Can you confirm?'}]}};
+ const expired=parse([meta(),ctx(),question,line('task_complete',{},tLate),line('task_complete',{},tLate+1000)],{sessionKey:'codex:old-question',agentId:'synthetic',now:()=>tLate+1000});
+ assert.equal(expired.activity,null,'unrelated completions do not restart the 15-minute question lease');
+ const freshQuestion={...question,timestamp:new Date(tLate+2000).toISOString()};
+ const fresh=parse([meta(),ctx(),freshQuestion,line('task_complete',{},tLate+3000)],{sessionKey:'codex:new-question',agentId:'synthetic',now:()=>tLate+3000});
+ assert.equal(fresh.activity?.kind,'waiting','a new final question starts its own bounded lease');
+ const answered=parse([meta(),ctx(),freshQuestion,{type:'response_item',timestamp:new Date(tLate+4000).toISOString(),payload:{type:'message',role:'user',status:'completed',content:[{type:'input_text',text:'Yes'}]}}],{sessionKey:'codex:answered-question',agentId:'synthetic',now:()=>tLate+4000});
+ assert.equal(answered.activity?.kind,'working','an actual user reply clears the prior question wait');
+});
+
+test('Codex lifecycle state survives long completed histories and display-event truncation',()=>{
+ const {parse}=require('../../src/adapters/codex/profile');
+ const completed=Array.from({length:300},(_,i)=>({type:'response_item',timestamp:new Date(NOW-1000+i).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:`Completed ${i}`} ]}}));
+ const oldHistory=parse([meta(),ctx(),...completed],{sessionKey:'codex:long-completed',agentId:'synthetic',now:()=>NOW});
+ assert.equal(oldHistory.activity,null,'a long completed history alone is not a pending execution');
+ const handoff={type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'I will continue after the command.'}]}};
+ const pending=parse([meta(),ctx(),{type:'event_msg',timestamp:new Date(NOW-2).toISOString(),payload:{type:'exec_command_begin',command_id:'still-open'}},handoff,...completed],
+   {sessionKey:'codex:long-pending',agentId:'synthetic',now:()=>NOW});
+ assert.equal(pending.activity?.kind,'waiting','the retained unresolved command remains represented');
+ assert.equal(pending.execution.status,'idle','the model handoff is complete while the command remains pending');
+ const ids=Array.from({length:65},(_,i)=>`background-${i}`);
+ const manyBegins=ids.map((command_id,i)=>({type:'event_msg',timestamp:new Date(NOW-2000+i).toISOString(),payload:{type:'exec_command_begin',command_id}}));
+ const later=Array.from({length:300},(_,i)=>({type:'response_item',timestamp:new Date(NOW-1000+i).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:`Later ${i}`} ]}}));
+ const completions=ids.slice(0,64).map((command_id,i)=>({type:'event_msg',timestamp:new Date(NOW+i).toISOString(),payload:{type:'exec_command_end',command_id}}));
+ const overflow=parse([meta(),ctx(),...manyBegins,handoff,...later,...completions],{sessionKey:'codex:overflow-after-history-window',agentId:'synthetic',now:()=>NOW+1000});
+ assert.equal(overflow.activity?.kind,'waiting','the 65th live command survives both the event-history window and completion of the 64 tracked ids');
+});
+
+test('Codex byte-sampled transcripts reset non-ID state and quarantine unresolved head obligations',async t=>{
+ const h=fixture(t);
+ const filler=Array.from({length:700},(_,i)=>({type:'response_item',timestamp:new Date(NOW-10000+i).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:`Completed sample ${i} ${'x'.repeat(320)}`} ]}}));
+ const event=(type,command_id)=>({type:'event_msg',timestamp:new Date(NOW).toISOString(),payload:{type,...(command_id===undefined?{}:{command_id})}});
+ const handoff={type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'Synthetic handoff'}]}};
+ const question={type:'response_item',timestamp:new Date(NOW-2).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'Can you confirm?'}]}};
+ const toolStart={type:'response_item',timestamp:new Date(NOW-3).toISOString(),payload:{type:'function_call',call_id:'tool-head',name:'exec_command'}};
+ const toolEnd={type:'response_item',timestamp:new Date(NOW).toISOString(),payload:{type:'function_call_output',call_id:'tool-head',output:'ok'}};
+ // Put any `item.middle` record after 150 full-length rows (beyond the 64 KiB
+ // head) but leave more than the 192 KiB tail after it. This keeps the record
+ // inside the omitted byte interval rather than accidentally sampling it.
+ const gapPrefix=filler.slice(0,150),gapSuffix=filler.slice(150);
+ const cases=[
+  {name:'hidden command start',head:[],middle:[event('exec_command_begin','hidden-in-gap')],tail:[handoff],expect:'unknown'},
+  {name:'head task boundary cannot authorize a hidden tail command',head:[event('task_complete')],middle:[event('exec_command_begin','hidden-after-head')],tail:[handoff],expect:'unknown'},
+  {name:'accepted hidden background-exec limitation at task boundary',head:[],middle:[event('exec_command_begin','unseen-background')],tail:[event('task_complete')],activity:null,execution:'idle'},
+  {name:'head question answered in gap',head:[question],middle:[{type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'user',status:'completed',content:[{type:'input_text',text:'Yes'}]}}],tail:[handoff],activity:null,execution:'unknown'},
+  {name:'tail execution replaces head reply wait',head:[question],middle:[{type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'user',status:'completed',content:[{type:'input_text',text:'Yes'}]}}],tail:[event('exec_command_begin','tail-command')],activityKind:'executing',activitySince:NOW,execution:'running'},
+  {name:'head foreground turn reset',head:[event('task_started')],middle:[event('task_complete')],tail:[handoff],activity:null,execution:'unknown'},
+  {name:'unresolved exact command',head:[event('exec_command_begin','head-open'),handoff],middle:[],tail:[event('exec_command_end','different-id')],expect:'unknown'},
+  {name:'exact command completed in tail',head:[event('exec_command_begin','head-closed'),handoff],middle:[],tail:[event('exec_command_end','head-closed'),handoff],activity:null,execution:'unknown'},
+  {name:'closed head ID reused by a tail command',head:[event('exec_command_begin','reused-id')],middle:[],tail:[event('exec_command_end','reused-id'),event('exec_command_begin','reused-id')],activityKind:'executing',activitySince:NOW,execution:'running'},
+  {name:'unresolved exact tool',head:[toolStart],middle:[],tail:[handoff],expect:'unknown'},
+  {name:'exact tool completed in tail',head:[toolStart],middle:[],tail:[toolEnd,handoff],activity:null,execution:'unknown'},
+  {name:'tail task completion closes sequential head tools',head:[toolStart],middle:[],tail:[event('task_complete')],activity:null,execution:'idle'},
+  {name:'unbounded command overflow',head:Array.from({length:65},(_,i)=>event('exec_command_begin',`head-${i}`)),middle:[],tail:[handoff],expect:'unknown'},
+  {name:'anonymous command obligation',head:[event('exec_command_begin')],middle:[],tail:[handoff],expect:'unknown'},
+ ];
+ const filesToRead=[];
+ for(const [index,item] of cases.entries()) {
+  const filename=h.file('2026/10/10',`rollout-gap-case-${index}.jsonl`,[meta(),ctx(),...item.head,...gapPrefix,...item.middle,...gapSuffix,...item.tail]);
+  assert.ok(fs.statSync(filename).size>require('../../src/adapters/codex/files').MAX_READ,`${item.name} fixture crosses the adapter byte-sampling boundary`);
+  if(item.middle.length) {
+   const prefixBytes=Buffer.byteLength([meta(),ctx(),...item.head,...gapPrefix].map(row=>JSON.stringify(row)).join('\n')+'\n');
+   const gapEnd=fs.statSync(filename).size-(MAX_READ-64*1024);
+   assert.ok(prefixBytes>64*1024&&prefixBytes<gapEnd,`${item.name} fixture event is inside the omitted byte interval`);
+  }
+  filesToRead.push({item,filename});
+ }
+ const files=createFiles({home:h.home,now:()=>NOW}),rows=await files.scan();t.after(()=>files.close());
+ const read=async filename=>{const row=rows.find(item=>item.filename===filename);assert.ok(row);await files.read(row.key);return row;};
+ for(const {item,filename} of filesToRead) {
+  const row=await read(filename);
+  if(item.expect) {assert.equal(row.execution?.status,item.expect,`${item.name}: uncertainty cannot become false waiting/executing/idle`);assert.equal(row.activity,null,`${item.name}: uncertain head state is not exposed as live activity`);}
+  else {
+   if(item.activityKind) {assert.equal(row.activity?.kind,item.activityKind,`${item.name}: tail activity is authoritative`);assert.equal(row.activity?.since,item.activitySince,`${item.name}: activity time comes from the tail`);}
+   else assert.equal(row.activity,item.activity,`${item.name}: tail activity is authoritative`);
+   assert.equal(row.execution?.status,item.execution,`${item.name}: tail execution evidence is authoritative`);
+  }
+ }
+});
+
+test('Codex unknown after an omitted append clears cached activity instead of becoming fresh Working',async t=>{
+ let clock=Date.now();const h=fixture(t),filename=h.file('2026/10/10','rollout-append-gap.jsonl',[
+  meta(),ctx(),{type:'event_msg',timestamp:new Date(clock-1000).toISOString(),payload:{type:'task_started'}},
+ ]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home,agentGrouping:'project'}}},{now:()=>clock});
+ const engine=createEngine({adapter:runtime.definition,now:()=>clock});t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
+ const session=engine.sessions()[0];assert.equal(engine.activity(session.key)?.kind,'working','the baseline starts with observed activity');
+ const filler=Array.from({length:700},(_,i)=>({type:'response_item',timestamp:new Date(clock+i).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:`Synthetic completed record ${i} ${'x'.repeat(320)}`} ]}}));
+ const hiddenStart={type:'event_msg',timestamp:new Date(clock+200).toISOString(),payload:{type:'exec_command_begin',command_id:'hidden-after-append'}};
+ const prefix=filler.slice(0,150),suffix=filler.slice(150);
+ fs.appendFileSync(filename,[...prefix,hiddenStart,...suffix].map(row=>JSON.stringify(row)).join('\n')+'\n');
+ await runtime.files.scan();
+ const fileRow=runtime.files.rows().find(row=>row.filename===filename);
+ assert.ok(fileRow.size>MAX_READ);
+ const eventOffset=Buffer.byteLength([meta(),ctx(),{type:'event_msg',timestamp:new Date(clock-1000).toISOString(),payload:{type:'task_started'}},...prefix].map(row=>JSON.stringify(row)).join('\n')+'\n');
+ assert.ok(eventOffset>64*1024&&eventOffset<fileRow.size-(MAX_READ-64*1024),'the appended command start is truly inside the omitted bytes');
+ clock+=1;await runtime.cycle();
+ assert.equal(engine.activity(session.key),null,'uncertain parser output clears the old observed activity lease');
+ assert.equal(engine.session(session.key).run.status,'unknown','an omitted lifecycle boundary cannot mint fresh run evidence');
+ for(const version of [2,3]) {
+  const vm=buildOfficeVM({engine,canReadSessions:true,now:clock,tracker:createStateTracker(),actorOf:()=>({kind:'system',name:'System'}),P:version===3?project3x:undefined});
+  const row=vm.occupants.find(occupant=>occupant.sessionKey===session.key);
+  assert.ok(!row||row.state!=='working',`v${version} never promotes this unknown sample to Working`);
+  if(row)assert.equal(row.execution.evidence.level,'unknown');
+ }
+});
+
+test('Codex runtime and v2/v3 Office preserve correlated siblings, foreground turns, and reply expiry',async t=>{
+ let clock=NOW;const h=fixture(t),at=new Date(NOW-1000).toISOString(),late=NOW+20*60_000;
+ const event=(type,payload={},when=NOW-1000)=>({type:'event_msg',timestamp:new Date(when).toISOString(),payload:{type,...payload}});
+ const msg=(role,text,when=NOW-1000)=>({type:'response_item',timestamp:new Date(when).toISOString(),payload:{type:'message',role,status:'completed',content:[{type:role==='user'?'input_text':'output_text',text}]}});
+ const shared=[meta(),ctx(),event('exec_command_begin',{command_id:'runtime-a'}),event('exec_command_begin',{command_id:'runtime-b'}),msg('assistant','Two jobs continue'),
+  event('exec_command_end',{command_id:'runtime-a'}),event('exec_command_end',{command_id:'runtime-a'}),event('exec_command_end',{command_id:'runtime-unknown'})];
+ // Keep each synthetic conversation in its own project so project aggregation
+ // cannot collapse rows and make a session-key assertion select a sibling.
+ const project=name=>`/synthetic/private/${name}`;
+ h.file('2026/10/10','rollout-parallel.jsonl',[meta(project('parallel')),ctx('gpt-synthetic-codex',project('parallel')),...shared.slice(2)]);
+ h.file('2026/10/10','rollout-foreground.jsonl',[meta(project('foreground')),ctx('gpt-synthetic-codex',project('foreground')),event('task_started'),event('exec_command_begin',{command_id:'foreground'}),event('exec_command_end',{command_id:'foreground'})]);
+ h.file('2026/10/10','rollout-expired-question.jsonl',[meta(project('expired-question')),ctx('gpt-synthetic-codex',project('expired-question')),msg('assistant','Can you confirm?',NOW-20*60_000),event('task_complete',{},late)]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home,agentGrouping:'project'}}},{now:()=>clock});
+ const engine=createEngine({adapter:runtime.definition,now:()=>clock});t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
+ const sessionOf=name=>engine.sessions().find(row=>runtime.files.rows().find(item=>item.key===row.key)?.filename.endsWith(name));
+ const parallel=sessionOf('rollout-parallel.jsonl'),foreground=sessionOf('rollout-foreground.jsonl'),expired=sessionOf('rollout-expired-question.jsonl');
+ assert.equal(engine.activity(parallel.key)?.kind,'waiting','duplicate/unknown completions leave B pending through the actual file reader');
+ assert.equal(engine.session(foreground.key).run.status,'running','exec end does not end the live foreground model turn');
+ assert.equal(engine.activity(expired.key),null,'an unrelated late completion does not revive the old question');
+ for(const version of [2,3]){
+  const vm=buildOfficeVM({engine,canReadSessions:true,now:clock,tracker:createStateTracker(),actorOf:()=>({kind:'system',name:'System'}),...(version===3?{P:project3x}:{})});
+  assert.equal(vm.occupants.find(row=>row.sessionKey===parallel.key)?.state,'waiting',`v${version} retains the correlated sibling wait`);
+  assert.notEqual(vm.occupants.find(row=>row.sessionKey===foreground.key)?.state,'idle',`v${version} keeps an unfinished foreground turn active`);
+  assert.notEqual(vm.occupants.find(row=>row.sessionKey===expired.key)?.state,'waiting',`v${version} does not present expired reply evidence`);
+ }
+ fs.appendFileSync(runtime.files.rows().find(row=>row.filename.endsWith('rollout-parallel.jsonl')).filename,
+  JSON.stringify(event('exec_command_end',{command_id:'runtime-b'}))+'\n');
+ clock+=1;await runtime.cycle();assert.equal(engine.activity(parallel.key),null,'the exact final sibling completion clears waiting');
+ fs.appendFileSync(runtime.files.rows().find(row=>row.filename.endsWith('rollout-foreground.jsonl')).filename,JSON.stringify(event('task_complete'))+'\n');
+ await runtime.cycle();assert.equal(engine.session(foreground.key).run.status,'idle','the actual model completion closes the foreground turn');
+});
+
+test('Codex pending exec waiting reaches schema-valid v2/v3 OfficeVMs and expires',async t=>{
+ const h=fixture(t),at=new Date(NOW-1000).toISOString();
+ const answer={type:'response_item',timestamp:at,payload:{type:'message',id:'pending-answer',role:'assistant',status:'completed',content:[{type:'output_text',text:'Synthetic handoff'}]}};
+ h.file('2026/10/10','rollout-pending-exec.jsonl',[meta(),ctx(),{type:'event_msg',timestamp:at,payload:{type:'exec_command_begin'}},answer]);
+ let clock=NOW;const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home,agentGrouping:'project'}}},{now:()=>clock});
+ const engine=createEngine({adapter:runtime.definition,now:()=>clock});t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
+ const session=engine.sessions()[0];assert.equal(engine.activity(session.key)?.kind,'waiting');
+ for(const version of [2,3]){
+  const vm=buildOfficeVM({engine,canReadSessions:true,configuredAgents:{[engine.agents()[0].id]:'Codex agent'},now:clock,tracker:createStateTracker(),actorOf:()=>({kind:'system',name:'System'}),P:version===3?project3x:undefined});
+  assert.equal(vm.occupants.find(row=>row.name==='Codex agent')?.state,'waiting',`v${version} waiting projection`);
+  const {VM_SCHEMAS,VM_SCHEMAS_V3}=require('../../src/api/v2/vm/schemas');
+  assert.equal(schema.validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).office,vm).ok,true,`v${version} schema validation`);
+ }
+ clock+=15*60_000;engine.expireObservedActivity();assert.equal(engine.activity(session.key),null,'pending activity expires at the bounded freshness limit');
 });
 
 test('Codex project grouping separates projects and runtime grouping combines agents without path disclosure',async t=>{

@@ -11,16 +11,24 @@ export function browserSkipReason() {
   catch { return 'no playwright-core (install devDependencies to run the layout checks)'; }
   return !browserPath() && 'no Chrome (set CHROME_BIN to run the layout checks)';
 }
-export async function openLayoutBrowser({ root = resolve('public/v2'), theme = 'light', touch = false, apiVersion } = {}) {
+export async function openLayoutBrowser({ root = resolve('public/v2'), theme = 'light', touch = false, apiVersion, apiProxy } = {}) {
   const skip = browserSkipReason();
   if (skip) throw new Error(`Layout browser unavailable: ${skip}`);
   const { chromium } = await import('playwright-core');
   const { createFrontendServer } = require('../../../scripts/serve-frontend');
-  const server = createFrontendServer({ root, allowDesignSystem:true, ...(apiVersion ? { apiVersion } : {}) });
+  const options = { root, allowDesignSystem:true, ...(apiVersion ? { apiVersion } : {}) };
+  const server = createFrontendServer({ ...options, ...(typeof apiProxy === 'string' ? { apiProxy } : {}) });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
   let browser;
   try {
+    // A mounted API fixture can configure its allowed public origin only once
+    // this existing frontend server has its actual ephemeral listen address.
+    if (typeof apiProxy === 'function') {
+      const proxy = createFrontendServer({ ...options, apiProxy: await apiProxy(origin) });
+      server.removeAllListeners('request');
+      for (const listener of proxy.listeners('request')) server.on('request', listener);
+    }
     browser = await chromium.launch({ executablePath: browserPath(), headless: true, args: ['--no-sandbox', '--disable-background-networking'] });
     const context = await browser.newContext({ hasTouch: touch, locale: 'fr-FR' });
     await context.addInitScript(({ theme }) => {

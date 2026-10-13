@@ -11,11 +11,11 @@ const row = (pane_id, agent_status = 'working', extra = {}) => ({ pane_id, agent
 const response = agents => Buffer.from(JSON.stringify({ id: 'fixture-request', result: { type: 'agents', agents } }));
 
 test('Herdr fixture envelope maps allowlisted host-agent data to opaque, stable canonical rows', () => {
-  const parsed = parseSnapshot(response(['working', 'blocked', 'done', 'idle', 'new-status'].map((status, i) => row(`pane-${i}`, status, { name: '  Agent\u0000  ' }))),
+  const parsed = parseSnapshot(response(['working', 'blocked', 'done', 'idle', 'waiting', 'new-status'].map((status, i) => row(`pane-${i}`, status, { name: '  Agent\u0000  ' }))),
     { ...config, observedAt: BASE });
   assert.equal(parsed.host.sourceStatus, 'available');
   assert.equal(parsed.orchestrator.kind, 'herdr');
-  assert.deepEqual(parsed.agents.map(x => x.status), ['working', 'blocked', 'done', 'idle', 'unknown']);
+  assert.deepEqual(parsed.agents.map(x => x.status), ['working', 'blocked', 'done', 'idle', 'waiting', 'unknown']);
   assert.equal(parsed.agents[0].name, 'Agent');
   assert.match(parsed.agents[0].id, /^ha_[a-f0-9]{32}$/);
   assert.equal(parsed.agents[0].id, parseSnapshot(response([row('pane-0')]), { ...config, observedAt: BASE + 1_000 }).agents[0].id);

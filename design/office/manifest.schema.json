@@ -135,7 +135,12 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "$ref": "#/$defs/id" },
-                "kind": { "enum": ["idle", "gym", "smoke", "coffee"] },
+                "kind": { "enum": ["idle", "gym", "smoke", "coffee", "seat"] },
+                "asset": { "$ref": "#/$defs/id", "description": "Optional furniture binding. Points are relative to each matching placed item, so interaction targets follow owner edits." },
+                "orientation": { "enum": ["sw", "se"], "description": "Supported orientation of the registered furniture interaction." },
+                "region": { "type": "object", "required": ["x", "y", "w", "d"], "additionalProperties": false, "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number", "exclusiveMinimum": 0 }, "d": { "type": "number", "exclusiveMinimum": 0 } }, "description": "Room-relative allowed region, independent of movable furniture. Outdoor smoke slots stay outside if their ash receptacle is moved." },
+                "approachPoints": { "type": "array", "minItems": 1, "maxItems": 24, "items": { "$ref": "#/$defs/point" }, "description": "Reachable furniture-relative approach points for seated targets; one per capacity slot." },
+                "seatContacts": { "type": "array", "minItems": 1, "maxItems": 24, "items": { "$ref": "#/$defs/point" }, "description": "Authored hip contacts in relative grid coordinates, including seat elevation; one per seated slot." },
                 "capacity": { "type": "integer", "minimum": 1, "maximum": 24 },
                 "points": { "type": "array", "minItems": 1, "maxItems": 24, "items": { "$ref": "#/$defs/point" } }
               }

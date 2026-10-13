@@ -1494,31 +1494,7 @@
         "day": "assets/Office/room/day.png",
         "night": "assets/Office/room/night.png"
       },
-      "activitySpots": [
-        {
-          "id": "lobby-waiting",
-          "kind": "idle",
-          "capacity": 4,
-          "points": [
-            {
-              "x": 2.5,
-              "y": 5.5
-            },
-            {
-              "x": 3.5,
-              "y": 5.5
-            },
-            {
-              "x": 4.5,
-              "y": 5.5
-            },
-            {
-              "x": 5.5,
-              "y": 5.5
-            }
-          ]
-        }
-      ]
+      "activitySpots": []
     },
     {
       "id": "lobby",
@@ -1543,27 +1519,108 @@
       },
       "activitySpots": [
         {
-          "id": "lobby-waiting",
-          "kind": "idle",
-          "capacity": 4,
+          "id": "terrace-bench",
+          "kind": "seat",
+          "asset": "bench",
+          "orientation": "sw",
+          "capacity": 2,
           "points": [
             {
-              "x": 2.5,
-              "y": 5.5
+              "x": 0.5,
+              "y": 0.5
             },
             {
-              "x": 3.5,
-              "y": 5.5
+              "x": 1.5,
+              "y": 0.5
+            }
+          ],
+          "approachPoints": [
+            {
+              "x": 0.5,
+              "y": 1.5
             },
             {
-              "x": 4.5,
-              "y": 5.5
+              "x": 1.5,
+              "y": 1.5
+            }
+          ],
+          "seatContacts": [
+            {
+              "x": -0.75,
+              "y": -0.7291666666666667
             },
             {
-              "x": 5.5,
-              "y": 5.5
+              "x": 0.234375,
+              "y": -0.734375
+            }
+          ],
+          "region": {
+            "x": 8,
+            "y": 0,
+            "w": 4,
+            "d": 10
+          }
+        },
+        {
+          "id": "lobby-armchair",
+          "kind": "seat",
+          "asset": "armchair",
+          "orientation": "sw",
+          "capacity": 1,
+          "points": [
+            {
+              "x": 0.5,
+              "y": 0.5
+            }
+          ],
+          "approachPoints": [
+            {
+              "x": 0.5,
+              "y": 1.5
+            }
+          ],
+          "seatContacts": [
+            {
+              "x": -0.2604166666666667,
+              "y": -0.23958333333333334
             }
           ]
+        },
+        {
+          "id": "lobby-coffee",
+          "kind": "coffee",
+          "asset": "coffee-machine",
+          "orientation": "sw",
+          "capacity": 1,
+          "points": [
+            {
+              "x": 0.5,
+              "y": 1.5
+            }
+          ]
+        },
+        {
+          "id": "terrace-smoke",
+          "kind": "smoke",
+          "asset": "ash-receptacle",
+          "orientation": "sw",
+          "capacity": 2,
+          "points": [
+            {
+              "x": -0.5,
+              "y": -0.5
+            },
+            {
+              "x": -1.5,
+              "y": 0.5
+            }
+          ],
+          "region": {
+            "x": 8,
+            "y": 0,
+            "w": 4,
+            "d": 10
+          }
         }
       ]
     },
@@ -1590,25 +1647,41 @@
       },
       "activitySpots": [
         {
-          "id": "gym-recovery",
+          "id": "gym-mat",
           "kind": "gym",
-          "capacity": 4,
+          "asset": "exercise-mat",
+          "orientation": "sw",
+          "capacity": 1,
           "points": [
             {
-              "x": 8.5,
-              "y": 8.5
-            },
+              "x": 0.5,
+              "y": 0.5
+            }
+          ]
+        },
+        {
+          "id": "gym-weights",
+          "kind": "gym",
+          "asset": "weight-rack",
+          "orientation": "sw",
+          "capacity": 1,
+          "points": [
             {
-              "x": 9.5,
-              "y": 8.5
-            },
+              "x": 0.5,
+              "y": 2.5
+            }
+          ]
+        },
+        {
+          "id": "gym-bench",
+          "kind": "gym",
+          "asset": "exercise-bench",
+          "orientation": "sw",
+          "capacity": 1,
+          "points": [
             {
-              "x": 7.5,
-              "y": 8.5
-            },
-            {
-              "x": 10.5,
-              "y": 8.5
+              "x": -0.5,
+              "y": 0.5
             }
           ]
         }

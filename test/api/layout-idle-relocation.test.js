@@ -9,24 +9,27 @@ describe('office layout idle relocation threshold', () => {
   let h;
   before(async () => { h = await startServer(loadScenario('synthetic-basic')); });
   after(async () => { if (h) await h.stop(); });
-  it('ships four entrance waiting targets and four Gym targets in both real layout contracts', async () => {
+  it('ships furniture-bound lobby seats, coffee and outdoor smoke targets plus four Gym targets in both contracts', async () => {
     const fs = require('node:fs'), path = require('node:path');
     const shipped = JSON.parse(fs.readFileSync(path.join(__dirname, '../../public/v2/bureau/office/manifest.example.json'), 'utf8'));
     for (const version of [2, 3]) {
       const response = await h.get(`/api/v${version}/office/layout`);
       assert.equal(response.status, 200);
       const rooms = response.json.data.manifest.rooms;
-      for (const [id, kind] of [['bureau', 'idle'], ['gym', 'gym']]) {
-        const room = rooms.find(r => r.id === id);
-        const spots = room.activitySpots.filter(s => s.kind === kind);
-        assert.equal(spots.reduce((n, s) => n + s.capacity, 0), 4);
-        for (const spot of spots) {
-          assert.equal(spot.capacity, spot.points.length);
-          assert.equal(new Set(spot.points.map(p => `${p.x},${p.y}`)).size, spot.capacity);
-        }
-        assert.deepEqual(room.activitySpots, shipped.rooms.find(r => r.id === id).activitySpots, 'packaged runtime manifest carries the API destinations');
+      for (const id of ['bureau','lobby','gym']) {
+        const room=rooms.find(r=>r.id===id);
+        assert.deepEqual(room.activitySpots,shipped.rooms.find(r=>r.id===id).activitySpots,'packaged runtime manifest carries the API destinations');
+        for(const spot of room.activitySpots){assert.equal(spot.capacity,spot.points.length);assert.equal(new Set(spot.points.map(p=>`${p.x},${p.y}`)).size,spot.capacity);}
       }
-      assert.ok(rooms.every(r => !r.activitySpots?.some(s => s.kind === 'smoke')), 'an indoor shell does not declare an outdoor smoking deck');
+      assert.deepEqual(rooms.find(r=>r.id==='bureau').activitySpots,[],'no generic indoor standing cluster');
+      assert.deepEqual(rooms.find(r=>r.id==='gym').activitySpots.map(s=>s.asset),['exercise-mat','weight-rack','exercise-bench']);
+      const lobby=rooms.find(r=>r.id==='lobby');
+      assert.ok(lobby.activitySpots.every(s=>s.asset),'lobby interactions follow their furniture');
+      assert.equal(lobby.activitySpots.filter(s=>s.kind==='seat').reduce((n,s)=>n+s.capacity,0),3,'two bench seats plus one seat for each armchair instance');
+      assert.equal(lobby.activitySpots.filter(s=>s.kind==='coffee').reduce((n,s)=>n+s.capacity,0),1);
+      const smoking=lobby.activitySpots.filter(s=>s.kind==='smoke');assert.equal(smoking.length,1);assert.equal(smoking[0].capacity,2);
+      assert.equal(smoking[0].asset,'ash-receptacle');assert.deepEqual(smoking[0].region,{x:8,y:0,w:4,d:10});
+      assert.ok(rooms.filter(r=>r.id!=='lobby').every(r=>!r.activitySpots.some(s=>s.kind==='smoke')),'smoking requires the explicit outdoor region');
     }
   });
   it('validates 1–1440 minutes, round-trips on both contracts, and survives a v2 save that omits it', async () => {
