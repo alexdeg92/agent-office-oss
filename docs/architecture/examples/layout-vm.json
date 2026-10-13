@@ -4589,7 +4589,8 @@
         "name": "Guest",
         "lastSeenAt": 1791100000000
       }
-    ]
+    ],
+    "allowNoDesk": false
   },
   "meta": {
     "modelVersion": 1,

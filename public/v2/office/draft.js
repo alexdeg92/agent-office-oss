@@ -23,7 +23,7 @@ export function createDraft(vm, index, store) {
     get canRedo() { return st.history.canRedo; },
     get saving() { return st.saving; },
     get conflict() { return st.conflict; },
-    get errors() { return validateLayout(st.history.current, index); },
+    get errors() { return validateLayout(st.history.current, index, {allowNoDesk:st.vm.allowNoDesk === true}); },
     get announcement() { return st.said; },
     get seq() { return st.seq; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },

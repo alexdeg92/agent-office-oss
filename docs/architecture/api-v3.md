@@ -41,6 +41,8 @@
 - Optional `homeTarget` and `sceneTarget` carry the backend-reserved home and current destination. `activity` carries the stable selected activity/spot and start time; `sceneTravel` carries stable doorway endpoints for a floor transition. The backend owns threshold, spot and capacity selection and the return-to-home decision; the browser animates only.
 
 ## D4 · LayoutVM and the layout commands
+
+The additive `allowNoDesk?: boolean` is backend-provided editor validation policy. Floor-scoped layout reads/topics, writes, theme changes and version reads use `floorId` with the same backend projection/merge as v2 (api.md §3.10); canonical v3 identity rules and permission/redaction checks remain unchanged.
 - Layout rules use the 3.0 names: `agents[].agentId` `'primary'`, `'*subagent'`, `'*scheduled'`, `'*direct'`, `'*group'`, `'*conversation'`; `match.kind` the D3 roles. `agentsSeen[]` ids and roles too.
 - `layout.data.agents[].appearance` and `default.data.agents[].appearance` optionally declare `'auto' | 'manual'` (T-0052): auto uses the persisted first-sight assignment; manual uses the owner's chosen character/variant/accessories. Legacy rules without the field remain accepted. Both authoritative LayoutVM examples include auto on the shipped seed rules.
 - Stored layouts are **not rewritten in place**: they are read in either vocabulary, **normalised to 3.0 names on save**, and served in the caller's version (`/api/v2` gets 2.x names). `PUT /api/v3/office/layout` accepts 3.0 names only.

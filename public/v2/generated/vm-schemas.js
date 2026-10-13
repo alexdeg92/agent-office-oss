@@ -592,6 +592,7 @@ const LayoutData = s.object({ version: s.literal(1), manifestVersion: nn(), room
   idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
 const LayoutRevisionVM = obj({ revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM, data: LayoutData });
 const LayoutVM = obj({
+  allowNoDesk: bool().optional(),
   layout: obj({ id: str(), name: str(), revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM, data: LayoutData }),
   manifest: s.unknown(),
   theme: obj({ resolved: str(), mode: oneOf('auto', 'fixed'), nextChangeAt: msN(), season: strN() }),
@@ -705,6 +706,7 @@ const LayoutData3 = s.object({ version: s.literal(1), manifestVersion: nn(), roo
   presence: obj({ seenMinutes: s.int().min(0).max(1440) }).optional(), idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
 const LayoutRevisionVM3 = obj({ revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM, data: LayoutData3 });
 const LayoutVM3 = obj({
+  allowNoDesk: bool().optional(),
   layout: obj({ id: str(), name: str(), revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM, data: LayoutData3 }),
   manifest: s.unknown(),
   theme: obj({ resolved: str(), mode: oneOf('auto', 'fixed'), nextChangeAt: msN(), season: strN() }),

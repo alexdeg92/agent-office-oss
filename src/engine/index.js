@@ -678,6 +678,11 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     gateway: () => Object.assign({}, gateway),
     senderPeople: () => senderContext().people || [],
     agents: () => canon.agents,
+    // Manual selection is distinct from adapter discovery and persisted auto-add.
+    // Consumers may keep explicitly selected agents visible while idle without
+    // treating every remembered/discovered identity as current presence.
+    configuredAgentIds: () => [...new Set([...(Array.isArray(configuredAgents) ? configuredAgents : []), ...Object.keys(agentNames || {})])],
+    autoAddedAgentIds: () => [...autoAdded],
     // Private reconciliation input for trusted local host adapters. Raw stable
     // runtime references never enter canonical Agent rows or public VMs.
     identityAgents: (hostId) => typeof hostId === 'string' ? canon.agents.filter(a => typeof a.mainSessionKey === 'string' && a.mainSessionKey)

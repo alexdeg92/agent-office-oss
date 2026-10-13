@@ -1,4 +1,5 @@
 'use strict';
+const { isDeepStrictEqual } = require('node:util');
 // Floor layouts share appearance rules; furniture, themes and station IDs are local to a floor.
 const { canonicalRuleId, canonicalRole, ruleFor, resolveOccupants, homeStations, validateLayout, checkPlacement, unreachableStations, seatTile, elevatorAccess, MAX_ITEMS } = require('./layout-rules.js');
 const isVisitor = o => ['direct', 'group', 'conversation'].includes(canonicalRole(o.role));
@@ -73,16 +74,29 @@ function defaultsFor(base, index, id) {
   const items = [];
   if (index.furniture.has('elevator-door')) items.push({ uid: 'floor-elevator', asset: 'elevator-door', wall: 'right', offset: 0 });
   if (id === 'rdc') {
-    if (index.furniture.has('reception-counter')) items.push(item('floor-reception', 'reception-counter', 3, 7));
+    if (index.furniture.has('reception-counter')) items.push(item('floor-reception', 'reception-counter', 3, 1));
     if (index.furniture.has('pause-shelter')) items.push(item('floor-pause-shelter', 'pause-shelter', 8, 7));
-    if (index.furniture.has('ash-receptacle')) items.push(item('floor-ash-receptacle', 'ash-receptacle', 6, 7));
+    if (index.furniture.has('ash-receptacle')) items.push(item('floor-ash-receptacle', 'ash-receptacle', 11, 6));
+    for (const [uid, asset, x, y] of [
+      ['floor-waiting-left', 'armchair', 2, 3], ['floor-waiting-right', 'armchair', 4, 3],
+      ['floor-waiting-rug', 'runner-rug', 2, 5], ['floor-mail-cubbies', 'cube-shelf', 2, 0],
+      ['floor-welcome-tree', 'indoor-tree', 0, 0], ['floor-reception-plant', 'monstera', 6, 1],
+      ['floor-waiting-light', 'arc-lamp', 0, 4], ['floor-waiting-coffee', 'coffee-machine', 0, 6],
+      ['floor-terrace-bench', 'bench', 9, 2], ['floor-terrace-planter', 'plant-large', 11, 3],
+      ['floor-terrace-light', 'lamp', 11, 5],
+    ]) if (index.furniture.has(asset)) items.push(item(uid, asset, x, y));
   } else if (id === 'gym') {
     if (index.furniture.has('treadmill')) items.push(item('floor-treadmill', 'treadmill', 8, 6));
     if (index.furniture.has('weight-rack')) items.push(item('floor-weight-rack', 'weight-rack', 2, 3));
     if (index.furniture.has('exercise-bench')) items.push(item('floor-exercise-bench', 'exercise-bench', 4, 7));
     if (index.furniture.has('exercise-mat')) items.push(item('floor-exercise-mat', 'exercise-mat', 4, 4));
+    for (const [uid, asset, x, y] of [
+      ['floor-stretch-mat', 'exercise-mat', 6, 4], ['floor-gym-water', 'water-cooler', 0, 6],
+      ['floor-gym-storage', 'cube-shelf', 2, 0], ['floor-gym-plant', 'monstera', 0, 0],
+      ['floor-gym-tree', 'indoor-tree', 11, 0], ['floor-gym-light', 'lamp', 11, 4],
+    ]) if (index.furniture.has(asset)) items.push(item(uid, asset, x, y));
   }
-  return { room: id === 'gym' ? 'gym' : base.room, theme: base.theme, items };
+  return { room: id === 'gym' ? 'gym' : index.rooms.has('lobby') ? 'lobby' : base.room, theme: base.theme, items };
 }
 
 /** Read a stored or generated floor without duplicating owner appearance rules. */
@@ -125,7 +139,7 @@ function saveFloor(base, index, id, draft) {
 }
 
 /** Existing layout rules apply to every floor; destinations alone may omit a work desk. */
-function validateFloors(base, index) {
+function validateFloors(base, index, { previous = null } = {}) {
   const errors = [], entries = base.floors ?? [], ids = new Set(['1']);
   if (!Array.isArray(entries)) return [{ code: 'floors' }];
   for (const f of entries) {
@@ -138,9 +152,19 @@ function validateFloors(base, index) {
   // Numbered office floors are generated on demand; a pin to floor N does not require an explicit layout entry.
   for (const a of base.agents) if (a.homeFloor != null && (!pinnedFloorId(a.homeFloor) || floorKind(a.homeFloor) !== 'office')) errors.push({ code: 'home-floor', agentId: a.agentId });
   if (errors.length) return errors;
-  for (const id of ids) for (const error of validateLayout(floorLayout(base, index, id), index)) {
-    if (error.code === 'no-desk' && floorKind(id) !== 'office') continue;
-    errors.push({ ...error, floorId: id });
+  const spatial = new Set(['elevator-access', 'occupied', 'outside', 'unreachable']);
+  for (const id of ids) {
+    const local = floorLayout(base,index,id);
+    const existed = previous && (id === '1' || previous.floors?.some(f=>f.id===id));
+    const old = existed && floorLayout(previous,index,id);
+    // New placement rules must not reject untouched, already persisted rooms
+    // during a theme/look edit or a scoped save on a different floor.
+    const unchanged = old && local.room === old.room && isDeepStrictEqual(local.items,old.items);
+    for (const error of validateLayout(local, index)) {
+      if (error.code === 'no-desk' && floorKind(id) !== 'office') continue;
+      if (unchanged && spatial.has(error.code)) continue;
+      errors.push({ ...error, floorId: id });
+    }
   }
   return errors;
 }

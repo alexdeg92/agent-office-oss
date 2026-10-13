@@ -13,6 +13,8 @@ const { ApiError, invalid } = require('./errors');
 const { officeDefaults } = require('./vm/office');
 const { project2x: P2 } = require('./project2x');
 const { redactChatIdentity } = require('../../security/redact-text');
+const backendRules = require('../../engine/office/layout-rules');
+const { floorId, floorKind, floorLayout, saveFloor, validateFloors } = require('../../engine/office/floors');
 
 const TZ = 'UTC';   // the fallback only: callers pass the instance time zone (G3a, ADR §12.7)
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -20,7 +22,7 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 // The resolved office theme now, and when it next changes (auto mode; the night window may wrap midnight).
 // review-16 R16-08: the boundary is a zoned calendar time computed by office-dev's shared theme module (Intl offsets),
 // not « now + the wall-clock difference », which is an hour off on DST days.
-const officeTheme = () => require('../../../public/v2/office/theme.js');
+const officeTheme = () => require('../../engine/office/theme');
 function resolveTheme(theme, now, tz = TZ) {
   const season = theme.season == null ? null : theme.season;
   if (theme.mode !== 'auto') return { resolved: theme.fixed || theme.day || 'day', mode: 'fixed', nextChangeAt: null, season };
@@ -63,7 +65,7 @@ function structural(d) {
 // G5 (api-v3.md D4, ADR §12.6): every SAVE is normalised to the 3.0 rule names, every read is served in the caller's
 // contract version, both with office-dev's own toVocabulary (layout-rules.js), so client and server can't disagree.
 // Stored layouts are never rewritten except by a save.
-const rulesLib = () => officeDefaults().rules;
+const rulesLib = () => backendRules;
 // O8: `presence` is 3.0 only: a 2.x read doesn't show it (a 2.x save keeps the stored value: `incoming`)
 function asVersion(data, version) {
   if (!data || !Array.isArray(data.agents)) return data;
@@ -86,14 +88,13 @@ function seenAs(x, version) {
   return Object.assign({}, x, { id: P2.occupantId(id), role: P2.occupantRole(role), name: redactChatIdentity(x.name, { id, role, maxLength: 120 }) || 'Agent' });
 }
 
-function validate(data, hideAgents = false) {
+function validate(data, hideAgents = false, previous = null) {
   const bad = structural(data);
   if (bad) throw invalid(bad, 'invalid');
   const off = officeDefaults();
   let errors;
   try {
-    errors = off.rules.validateLayout(data, off.index);
-    if (data.floors !== undefined) errors = [...errors, ...require('../../../public/v2/office/floors.js').validateFloors(data, off.index)];
+    errors = validateFloors(data, off.index, {previous});
   } catch (_) { throw invalid('data', 'invalid'); }
   if (errors && errors.length) {
     throw new ApiError('validation_failed', { details: errors.slice(0, 50).map((e) => Object.assign({ issue: String(e.code) },
@@ -108,25 +109,43 @@ function validate(data, hideAgents = false) {
 function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actorRefOf, timeZone = TZ, now = () => Date.now() }) {
   const off = officeDefaults();
   const active = () => store.office.active(() => off.layout);
-  const vmOf = (version = 2) => {
+  const selectedFloor = value => {
+    if (value == null) return null;
+    const id = floorId(value);
+    if (!id) throw invalid('floorId', 'invalid');
+    return id;
+  };
+  const requestFloor = req => {
+    if (req.body?.floorId != null && req.query.floorId != null && req.body.floorId !== req.query.floorId) throw invalid('floorId', 'conflicting');
+    return selectedFloor(req.body?.floorId ?? req.query.floorId);
+  };
+  const mergeFloor = (base, selected, data) => {
+    try { return saveFloor(base, off.index, selected, data); }
+    catch (_) { throw invalid('data', 'invalid'); }
+  };
+  const vmOf = (version = 2, selected = null) => {
     const l = active(), t = now();
+    const data = selected ? floorLayout(l.data, off.index, selected) : l.data;
     return {
-      layout: { id: l.id, name: l.name, revision: l.revision, updatedAt: l.updatedAt, updatedBy: actorOf(l.updatedBy), data: asVersion(l.data, version) },
+      allowNoDesk: selected != null && floorKind(selected) !== 'office',
+      layout: { id: l.id, name: l.name, revision: l.revision, updatedAt: l.updatedAt, updatedBy: actorOf(l.updatedBy), data: asVersion(data, version) },
       manifest: off.manifest,
-      theme: resolveTheme(l.data.theme, t, typeof timeZone === 'function' ? timeZone() : timeZone),
-      default: { data: asVersion(off.layout, version) },
+      theme: resolveTheme(data.theme, t, typeof timeZone === 'function' ? timeZone() : timeZone),
+      default: { data: asVersion(selected ? floorLayout(off.layout, off.index, selected) : off.layout, version) },
       revisions: store.office.revisions(l.id).map((x) => ({ id: String(x.revision), revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy) })),
       agentsSeen: store.office.seenRecent(t).map((x) => seenAs(x, version)),
     };
   };
-  topics.define('layout', { build: (_, P) => vmOf(P.version) });
+  topics.define('layout', { params: ['floorId'], build: (q, P) => vmOf(P.version, selectedFloor(q.floorId)) });
   topics.define('prefs', { build: () => store.office.prefs() });
 
   // the theme flips at nextChangeAt: push the layout topic then
   let themeTimer = null;
   const armTheme = () => {
     clearTimeout(themeTimer);
-    const next = resolveTheme(active().data.theme, now(), typeof timeZone === 'function' ? timeZone() : timeZone).nextChangeAt;
+    const current=active().data,t=now(),zone=typeof timeZone === 'function' ? timeZone() : timeZone;
+    const changes=[current.theme,...(current.floors??[]).map(f=>f.layout.theme)].map(theme=>resolveTheme(theme,t,zone).nextChangeAt).filter(at=>at!=null);
+    const next=changes.length?Math.min(...changes):null;
     if (next == null) return;
     themeTimer = setTimeout(() => { topics.invalidate('layout'); topics.invalidate('office'); armTheme(); }, Math.max(1000, Math.min(next - now() + 500, 2 ** 31 - 1)));
     if (themeTimer.unref) themeTimer.unref();
@@ -136,7 +155,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
   const send = (res, id) => { const t = topics.current(id, res.req.apiVersion); ok(res, t.vm, { id: t.id, rev: t.rev }); };
   // a save, from either version, is stored in the 3.0 names (after the structural check: toVocabulary assumes the shape)
   // R22-06 (api-v3.md D4): a v3 save takes 3.0 names only; a 2.x rule id or match kind is 400 'v2-name' (v2 saves take both)
-  const incoming = (req, data) => {
+  const incoming = (req, data, selected = null) => {
     const bad = structural(data); if (bad) throw invalid(bad, 'invalid');
     const withheld=req.authorize&&!store.policy.can(req.user,'logs','read');
     if(withheld&&data.agents.length)throw new ApiError('forbidden',{details:[{field:'agents',issue:'permission-denied'}]});
@@ -150,13 +169,15 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     }
     // O8: a 2.x client never sees presence, so its save keeps the stored value
     const stored = active().data;
+    if (selected && data.floors !== undefined) throw invalid('data.floors', 'unexpected-field');
     let preserved = data;
     if (req.apiVersion !== 3 && data.presence === undefined && stored?.presence) preserved = { ...preserved, presence: stored.presence };
     if (data.idleRelocationMinutes === undefined && stored?.idleRelocationMinutes !== undefined) preserved = { ...preserved, idleRelocationMinutes: stored.idleRelocationMinutes };
-    if (data.floors === undefined && stored?.floors) preserved = { ...preserved, floors: stored.floors };
+    if (!selected && data.floors === undefined && stored?.floors) preserved = { ...preserved, floors: stored.floors };
     const normalized = asVersion(preserved, 3);
     // A projected empty array means withheld. Preserve the current private rules on saves/restores.
-    return withheld ? { ...normalized, agents: structuredClone(asVersion(stored, 3).agents) } : normalized;
+    const authorized = withheld ? { ...normalized, agents: structuredClone(asVersion(selected ? floorLayout(stored, off.index, selected) : stored, 3).agents) } : normalized;
+    return selected ? mergeFloor(stored, selected, authorized) : authorized;
   };
   const body = (req, allowed) => {
     const b = req.body;
@@ -165,32 +186,40 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     if (!Number.isInteger(b.expectedRevision)) throw invalid('expectedRevision', 'required');
     return b;
   };
-  const commit = (req, res, data) => {
+  const commit = (req, res, data, selected = null) => {
     const out = store.office.save({ expectedRevision: req.body.expectedRevision, data, actor: actorRefOf(req) });
-    if (!out.ok) throw new ApiError('conflict', { current: { revision: out.current.revision, vm: vmOf(req.apiVersion) } });
+    if (!out.ok) throw new ApiError('conflict', { current: { revision: out.current.revision, vm: vmOf(req.apiVersion, selected) } });
     topics.invalidate('layout'); topics.invalidate('office'); armTheme();
-    ok(res, { ok: true, result: null, revision: out.layout.revision, vm: vmOf(req.apiVersion) });
+    ok(res, { ok: true, result: null, revision: out.layout.revision, vm: vmOf(req.apiVersion, selected) });
   };
 
-  r.get('/office/layout', authed, (req, res) => send(res, 'layout'));
+  r.get('/office/layout', authed, (req, res) => {
+    const selected = requestFloor(req);
+    send(res, selected ? 'layout?floorId=' + selected : 'layout');
+  });
   r.get('/office/layout/revisions/:rev', authed, (req, res) => {
     const n = Number(req.params.rev);
     if (!/^\d{1,9}$/.test(req.params.rev)) throw invalid('rev', 'invalid');
     const x = store.office.revision(active().id, n);
     if (!x) throw new ApiError('not_found');
-    ok(res, { revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy), data: asVersion(x.data, req.apiVersion) }, null, 'layoutRevision');
+    const selected = requestFloor(req);
+    ok(res, { revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy), data: asVersion(selected ? floorLayout(x.data, off.index, selected) : x.data, req.apiVersion) }, null, 'layoutRevision');
   });
   r.put('/office/layout', authed, guard('store'), (req, res) => {
-    const b = body(req, ['expectedRevision', 'data']);
-    const data = incoming(req, b.data);
-    validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'));
-    commit(req, res, data);
+    const b = body(req, ['expectedRevision', 'data', 'floorId']);
+    const selected = requestFloor(req);
+    const data = incoming(req, b.data, selected);
+    validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'),active().data);
+    commit(req, res, data, selected);
   });
   r.put('/office/layout/theme', authed, guard('store'), (req, res) => {
-    const b = body(req, ['expectedRevision', 'theme']);
-    const data = asVersion(Object.assign({}, active().data, { theme: b.theme }), 3);
-    validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'));
-    commit(req, res, data);
+    const b = body(req, ['expectedRevision', 'theme', 'floorId']);
+    const selected = requestFloor(req), stored = active().data;
+    const local = selected ? floorLayout(stored, off.index, selected) : stored;
+    const next = asVersion(Object.assign({}, local, { theme: b.theme }), 3);
+    const data = selected ? mergeFloor(stored, selected, next) : next;
+    validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'),active().data);
+    commit(req, res, data, selected);
   });
 
   r.get('/prefs', authed, (req, res) => send(res, 'prefs'));

@@ -245,9 +245,9 @@ for (const theme of ['light', 'dark']) for (const [width, height] of [[1440, 900
       await h.page.evaluate(async () => {
         const version = document.querySelector('meta[name=ao-build]').content;
         const { officeApi } = await import(new URL('office/layout-source.js?v=' + version, document.baseURI));
-        const api = officeApi(), put = api.put.bind(api); window.__themeWrites = [];
-        api.put = body => { window.__themeWrites.push(structuredClone(body)); return put(body); };
-        window.__themeManifest = (await api.get()).manifest;
+        window.__themeApi = officeApi('1');
+        window.__themeBefore = await window.__themeApi.get();
+        window.__themeManifest = window.__themeBefore.manifest;
       });
       const preview = h.page.locator('.ao-theme-preview > .ao-theme-scene');
       const control = mode => h.page.locator(`[data-theme-mode="${mode}"]`);
@@ -347,12 +347,14 @@ for (const theme of ['light', 'dark']) for (const [width, height] of [[1440, 900
         await h.page.locator(`[data-theme-season="${season}"]`).click(); await h.page.mouse.move(0, 0);
         assert.equal(await preview.getAttribute('data-preview-season'), season);
       }
-      assert.equal(await h.page.evaluate(() => window.__themeWrites.length), 0, 'all choices remain an unsaved draft');
+      assert.equal(await h.page.evaluate(async () => (await window.__themeApi.get()).layout.revision === window.__themeBefore.layout.revision), true, 'all choices remain an unsaved draft');
       await save.click();
       await h.page.waitForFunction(() => document.querySelector('.ao-shop__status').textContent === 'Tout est enregistré.');
-      const writes = await h.page.evaluate(() => window.__themeWrites);
-      assert.equal(writes.length, 1); assert.equal(writes[0].data.theme.nightFrom, '00:00');
-      assert.equal(writes[0].data.theme.nightTo, '07:15'); assert.equal(writes[0].data.theme.season, season || null);
+      const persisted = await h.page.evaluate(async () => ({ before: window.__themeBefore.layout, after: (await window.__themeApi.get()).layout }));
+      assert.equal(persisted.after.revision, persisted.before.revision + 1, 'Save accepts exactly one scoped revision');
+      assert.equal(persisted.after.data.theme.nightFrom, '00:00');
+      assert.equal(persisted.after.data.theme.nightTo, '07:15'); assert.equal(persisted.after.data.theme.season, season || null);
+      assert.deepEqual(persisted.after.data.items, persisted.before.data.items, 'theme save preserves selected-floor furniture');
       const fixed = h.page.locator('.ao-theme-preview,.ao-shop__tabs,.ao-shop__savebar,.bu-bottombar');
       const boxes = () => fixed.evaluateAll(es => es.map(e => e.getBoundingClientRect().toJSON()).filter(r => r.height));
       const before = await boxes();

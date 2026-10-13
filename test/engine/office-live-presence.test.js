@@ -6,6 +6,7 @@ const { buildLogsPage } = require('../../src/api/v2/vm/logs');
 const { deriveOccupants, DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS, isProjectAgentOnStage } = require('../../src/engine/derive/occupants');
 const { project2x } = require('../../src/api/v2/project2x');
 const { project3x } = require('../../src/api/v2/project3x');
+const t0117Capture = require('../fixtures/t0117-redacted-office-capture.json');
 
 const NOW = Date.UTC(2026, 9, 12, 0, 0);
 const twoHoursAgo = NOW - 2 * 60 * 60 * 1000;
@@ -128,6 +129,34 @@ test('unconfigured transcript agents leave the roster while configured and prima
   assert.ok(office.occupants.some(row => row.id === 'agent:configured-agent' && row.state === 'idle'), 'configured agents remain visible while inactive');
   assert.equal(office.occupants.length, withoutArchive.occupants.length, 'the archived project does not inflate the rendered office population');
   assert.equal(office.kpis.find(row => row.id === 'active').value, 0, 'population KPIs count only on-stage occupants');
+});
+
+test('persisted names and auto-added catalog identities do not keep stale project agents on stage', () => {
+  const primary = session('runtime:main', { agentId: 'primary-agent', status: 'idle', level: 'verified', updatedAt: NOW, classKind: 'primary' });
+  const staleRows = t0117Capture.staleProjectAggregates;
+  const staleIds = staleRows.map(row => row.id);
+  const staleSessions = staleRows.filter(row => row.sessionKeyPresent).map((row, index) => session(`runtime:old-project-session-${index}`,
+    { agentId: row.id, updatedAt: twoHoursAgo }));
+  const agents = [
+    { id: 'primary-agent', name: 'Primary', isPrimary: true, mainSessionKey: primary.key },
+    ...staleIds.map(id => ({ id, name: `Historical project ${id}`, isPrimary: false, mainSessionKey: null })),
+  ];
+  const engine = { sessions: () => [primary, ...staleSessions], agents: () => agents, configuredAgentIds: () => staleIds,
+    autoAddedAgentIds: () => staleIds, detectedAgents: () => agents.slice(1), primaryAgent: () => agents[0],
+    session: key => [primary, ...staleSessions].find(row => row.key === key) || null, gateway: () => ({ connected: true, since: NOW - 1000 }),
+    runtimeFor: () => ({ connected: true, name: 'Codex' }), activity: () => null, agentPresence: () => true,
+    cronJobs: () => [], host: () => null, liveEvents: () => [], transcript: () => null };
+  const office = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), configuredAgents: Object.fromEntries(staleIds.map(id => [id, `Saved ${id}`])),
+    canReadSessions: true, P: project3x });
+  assert.deepEqual(office.occupants.map(row => row.id), ['primary'], 'identity names and catalog persistence do not imply current presence');
+  assert.equal(office.occupants.filter(row => row.role === 'agent').length, t0117Capture.expected.staleProjectAggregateCount);
+  assert.equal(t0117Capture.expected.primaryCount, 1);
+  assert.equal(t0117Capture.expected.teamMemberCount, 5, 'the fixture retains PM plus five member presence as the live acceptance context');
+  assert.equal(office.kpis.find(row => row.id === 'active').value, 0);
+  staleSessions[0].updatedAt = NOW - 30 * 60 * 1000;
+  assert.ok(buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), configuredAgents: Object.fromEntries(staleIds.map(id => [id, `Saved ${id}`])),
+    canReadSessions: true, P: project3x }).occupants.some(row => row.id === `agent:${staleIds[0]}`),
+  'a fresh session still seats its auto-added project aggregate');
 });
 
 test('a live child keeps its old project-agent parent in both OfficeVM contracts', () => {

@@ -29,7 +29,7 @@ import { itemName, resolveOccupants, canonicalRuleId } from './layout-rules.js';
 import { displayName } from './names.js';
 import { s as tr, locale, duration, labelOf } from './strings.js';
 import { headline } from './headline.js';
-import { floorId, createFloorStore } from './floors.js';
+import { floorId } from './floors.js';
 import { resolveTheme } from './theme.js';
 import { useLayout, officeApi, shippedLayoutVM } from './layout-source.js';
 export { shippedLayoutVM };
@@ -179,19 +179,6 @@ function BureauContent({ match }) {
   const [editing, setEditing] = useState(false);
   const [mobileSheet,setMobileSheet]=useState(null);
   const [detailTeam,setDetailTeam]=useState(null);
-  const floorTripsRef = useRef(null);
-  const [, setTripsReady] = useState(false);
-  useEffect(() => () => floorTripsRef.current?.destroy(), []);
-  useEffect(() => {
-    if (floorTripsRef.current || !office.data?.occupants?.some(o => o.state === 'idle' && !o.presence && !o.destination)) return;
-    let active = true;
-    import('./floor-trips.js' + buildQuery).then(({ FloorTrips, floorTripRoute }) => {
-      if (!active || floorTripsRef.current) return;
-      floorTripsRef.current = new FloorTrips({ routeFor: (o, home, target) => floorTripRoute(o, home, target, indexManifest(layout.data?.manifest)) });
-      setTripsReady(true);
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [office.data, layout.data]);
   const mobileIsolation=useRef(null);
   useEffect(() => {
     if (!mobileSheet) return;
@@ -229,23 +216,11 @@ function BureauContent({ match }) {
   const floors = (vm.rosterFloors || []).map(floor => ({ ...floor,
     occupants: (floor.occupantIds || []).map(id => presentById.get(id)).filter(Boolean) }));
   const floorPlan = { floors, occupants: floors.flatMap(floor => floor.occupants), byId: new Map(floors.map(floor => [floor.id, floor])) };
-  const floorPeople = floorPlan.occupants;
-  const tripManager = floorTripsRef.current;
-  tripManager?.update(floorPeople, floorPlan, now);
-  const tripViews = new Map(tripManager ? floorPeople.map(o => [o.id, tripManager.view(o.id, now)]).filter(([,v]) => v) : []);
-  const peopleByFloor = new Map(floorPlan.floors.map(f => [f.id, f.occupants.map(o => {
-    const trip = tripViews.get(o.id);
-    if (!trip) return o;
-    const phase = trip.phase;
-    const point = phase === 'depart' || phase === 'ride' || phase === 'ride-home' ? trip.route.out.at(-1)
-      : phase === 'return' ? trip.route.arrival[0] : trip.route.arrival.at(-1);
-    return trip.floorId === f.id ? { ...o, floorTravel: { phase, point } } : null;
-  }).filter(Boolean)]));
-  const visiblePeople = peopleByFloor.get(floorId(match.query.etage) ?? '1') ?? floorPlan.byId.get('1')?.occupants ?? [];
   const roster = floorPlan.floors.flatMap(f => f.occupants);
   const queryFloor = floorId(match.query.etage);
   const currentFloor = floorPlan.byId.get(queryFloor) ?? floorPlan.byId.get('1');
-  const currentStore = createFloorStore(lay, indexOf(lay.manifest), currentFloor.id, officeApi(), fmtTz.timeZone());
+  const visiblePeople = currentFloor.occupants;
+  const currentStore = officeApi(currentFloor.id);
   const floorData = { ...lay.layout.data, ...currentFloor.layout };
   const floorLay = { ...lay, layout: { ...lay.layout, data: floorData }, default: lay.default && { ...lay.default, data: floorData }, theme: { ...lay.theme, resolved: resolveTheme(currentFloor.layout.theme, new Date(now), fmtTz.timeZone()) } };
   const sel = roster.find((o) => o.id === selected) || null;
@@ -287,7 +262,7 @@ function BureauContent({ match }) {
       <span class="bu-banner__text">${tr('office.gatewayDown')}${vm.connection.since ? html` <${Ago} at=${vm.connection.since} />` : null}</span>
       <a class="bu-btn bu-btn--sm" href=${services.router.href('parametres',{}, {onglet:'connexion'})}>${i18n.msg('settings.openConnection')}</a></div>` : null}
     <div class="ao-bureau__top">
-      ${mobile ? null : html`<${Kpis} kpis=${vm.kpis ?? []} />`}
+      ${mobile || editing ? null : html`<${Kpis} kpis=${vm.kpis ?? []} />`}
       ${editing ? null : canWrite ? html`<${ThemeToggle} lay=${floorLay} store=${currentStore} />`
         : html`<p class="ao-bureau__ro" id="ao-bureau-ro">${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}
     </div>

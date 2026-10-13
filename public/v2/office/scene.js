@@ -489,6 +489,7 @@ export class OfficeScene {
         this.layers.fx.append(node.glow);
         if (node.parts.monitor) {
           node.tint = el('div', 'ao-tint');
+          node.tint.hidden = true;
           node.tint.dataset.item = it.uid;
           const mon = node.parts.monitor;
           node.tint.style.cssText = mon.style.cssText;
@@ -530,8 +531,9 @@ export class OfficeScene {
       const img = node.parts[node.f.id];
       setSrc(img, resolveUrl(furnitureImage(node.f, node.it.orientation ?? 'sw', variants), this.assetBase));
     }
+    // A layout/pack rebuild creates new station parts even in the same theme.
+    for (const uid of this.itemNodes.keys()) this._updateStation(uid);
     if (changed) {
-      for (const uid of this.itemNodes.keys()) this._updateStation(uid);
       for (const c of this.chars.values()) this._renderPose(c);
     }
   }
@@ -2118,6 +2120,7 @@ export class OfficeScene {
 
   /** Placement preview: ghost={asset,x,y,orientation} or {asset,wall,offset}; footprint reflects validity. */
   showGhost(ghost, ok, tiles) {
+    if (!this.editing) { this.hideGhost(); return; }
     const svg = this._overlaySvg('_ghostSvg');
     // Invalid = danger fill + diagonal hatch + dashed edge: never colour alone (editor.md §6).
     svg.replaceChildren(...tiles.flatMap((t) => (ok ? [this._diamond(t, 'ghost ok')] : [this._diamond(t, 'ghost bad'), this._diamond(t, 'ghost hatch')])));
@@ -2149,6 +2152,7 @@ export class OfficeScene {
 
   /** Editor rings: selected item (accent floor outline + lifted sprite) and a highlighted station (hover/focus). */
   markItems({ selected = null, highlight = null, tilesOf = null } = {}) {
+    if (!this.editing) selected = highlight = null;
     const svg = this._overlaySvg('_markSvg');
     const polys = [];
     for (const n of this.itemNodes.values()) for (const img of Object.values(n.parts)) img.classList.remove('ao-selected', 'ao-highlight');

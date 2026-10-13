@@ -1,11 +1,11 @@
 # Homebrew formula for Agent Office.
-# sha256 is the packed tarball for 1.2.0.
+# sha256 is the packed tarball for 1.2.1.
 # packaging/release.sh writes it. The script does not publish.
 class AgentOffice < Formula
   desc "Dashboard for a self-hosted agent runtime"
   homepage "https://github.com/alexdeg92/agent-office-oss"
-  url "https://registry.npmjs.org/@alexdeg92/agent-office/-/agent-office-1.2.0.tgz"
-  sha256 "0a73f787e6e09c54bf6dd667bea80c78d2a282c8ccb8db8c6480cae1167255c5"
+  url "https://registry.npmjs.org/@alexdeg92/agent-office/-/agent-office-1.2.1.tgz"
+  sha256 "b4554df26ae3b67d43bca4d94604088f9ac3700156bd150e2da2702957768065"
 
   license "MIT"
 

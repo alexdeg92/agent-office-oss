@@ -60,6 +60,29 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
     await p.close();
   });
 
+  it('normal same-theme room rebuild never paints empty desks red or retains editor ghosts',async()=>{
+    const p=await harness();
+    try{
+      const result=await p.eval(`
+        sc.setOccupants([]);
+        sc.setLayout(H.layout);sc.setLayout(H.layout);
+        const tints=[...sc.stage.querySelectorAll('.ao-tint')];
+        const hidden=tints.every(n=>n.hidden&&getComputedStyle(n).display==='none');
+        const desk=H.layout.items.find(i=>i.asset==='desk');
+        sc.showGhost(desk,false,[{x:desk.x,y:desk.y}]);
+        const browseGhosts=sc.stage.querySelectorAll('.ghost.bad').length;
+        sc.setEditing(true);sc.showGhost(desk,false,[{x:desk.x,y:desk.y}]);
+        const editGhosts=sc.stage.querySelectorAll('.ghost.bad').length;
+        sc.setEditing(false);
+        return {tints:tints.length,hidden,browseGhosts,editGhosts,after:sc.stage.querySelectorAll('.ghost.bad').length,
+          ghostHidden:!sc._ghostImg||sc._ghostImg.hidden};
+      `);
+      assert.ok(result.tints>0);assert.equal(result.hidden,true);
+      assert.equal(result.browseGhosts,0);assert.ok(result.editGhosts>0);
+      assert.equal(result.after,0);assert.equal(result.ghostHidden,true);
+    }finally{await p.close();}
+  });
+
   it('uses the OfficeVM standingPoint when no station is assigned', async () => {
     const p = await harness();
     const target = await p.eval(`
@@ -855,7 +878,7 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
     const p = await bureau();
     const r = await p.eval(`
       const { ApiError } = await import('/public/v2/api.js');
-      window.officeBench.services.officeApi.get = () => Promise.reject(new ApiError({ status: 503, code: 'upstream_unavailable', message: 'La passerelle OpenClaw est injoignable.' }));
+      window.officeBench.services.officeApi.forFloor('1').get = () => Promise.reject(new ApiError({ status: 503, code: 'upstream_unavailable', message: 'La passerelle OpenClaw est injoignable.' }));
       document.querySelector('.ao-controls [data-page-control]').click();
       await window.officeBench.until(() => document.querySelector('[role=alert], .bu-toast--danger') && !document.querySelector('.ao-office').hasAttribute('data-editing'));
       return { editing: document.querySelector('.ao-office').hasAttribute('data-editing'), roster: document.querySelectorAll('.ao-bureau__roster .ao-roster').length,

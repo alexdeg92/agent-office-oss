@@ -7,6 +7,7 @@
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
+| T-0102 additive | 2026-10-12 | Backend floor-scoped LayoutVM/topic, commands and history via `floorId`; `allowNoDesk?: boolean` supplies editor validation policy. Floor saves preserve the other layouts and global appearance rules. Same addition on v3; §3.10. |
 | 2.8 | 2026-10-10 | Add canonical adapter-declared `HealthCheckVM` rows, bounded automatic/one-click/guided remedies and audit outcomes; `POST /health/checks/:id/fix` and `POST /health/fix-all`. Santé uses localized explanations instead of raw source/path names. Unknown session classifications remain generic and count once. **T-0053 additive:** `OccupantVM.isNew?: boolean` marks an auto-added agent during its first 24 hours; absent or false means no marker. |
 | 2.7 | 2026-10-09 | Locked missing-secrets recovery page; strict named partial-login boot errors; first-run DB owner and code-gated resumption/amendment/recovery; adapter-owned detection/discovery and connect capability; explicit `agent:<id>` peer occupants and role `agent`; runtime-scoped display names; reviewed installation plans with safe descriptor I/O and rollback; network guide; config v2 with strict v1 reader. Setup route examples and `SetupVM` schema are executable. Same additions in contract 3.2. |
 | 2.6 | 2026-10-08 | Runtime-neutral Sender identity (`senderInfo` on trace/chat messages), `SessionVM.participants` for humans and primary agents plus `SessionVM.subagents` with linked delegation labels/tasks, metadata-free display text and plain-text summaries, stable human avatars and sender grouping. `user.sender` remains a compatibility display string. See [sender-identities.md](sender-identities.md). |
@@ -544,6 +545,7 @@ History page: `Page<HistoryItemVM>`, newest first (`at` desc, `id` desc). Defaul
 ### 3.10 LayoutVM, UiPrefs (office; decisions in §3.13)
 ```ts
 interface LayoutVM {
+  allowNoDesk?: boolean;                     // backend editor policy; true on scoped lobby/gym reads, false on office/root
   layout: { id: LayoutId; name: string; revision: number; updatedAt: Ms; updatedBy: ActorVM /* 2.1 */; data: OfficeLayoutDataV1 };   // data-model §12
   manifest: unknown;                         // exactly design/office/build-manifest.mjs output (manifest.schema.json, version 2; §3.13)
   theme: { resolved: string; mode: 'auto' | 'fixed'; nextChangeAt: Ms | null; season: string | null /* 2.1 */ };
@@ -555,6 +557,8 @@ interface UiPrefs { uiTheme: 'system' | 'dark' | 'light' }
 ```
 `layout.data.idleRelocationMinutes` is optional and bounded to 1–1440; absence means 15 minutes. It is stored with the office layout. Both API versions preserve the value when an older client omits it. The backend picks a declared, reachable activity spot and publishes `activity`, `sceneTarget`, and any `sceneTravel`; the browser only animates those intents.
 Authoritative example: `docs/architecture/examples/layout-vm.json` (its `layout.data`, `default.data` and `manifest` are the design/office example files, verbatim). The shape checker treats `$.data.manifest` as opaque.
+
+`GET /office/layout?floorId=<id>` and its `layout?floorId=<id>` topic provide a backend-projected floor LayoutVM, including reset defaults, theme and validation policy. The same selector scopes layout/theme writes and revision reads. A scoped write merges that floor into the canonical root, preserves every other floor and global appearance rules, and returns a scoped VM (including on 409). Selectors are bounded and conflicting body/query values or a scoped `data.floors` registry are rejected. Existing authorization, readonly and revision guards apply. Clients render these values and send drafts unchanged; they do not generate defaults or merge the floor registry.
 
 ### 3.11 Defaults and null meanings (all VMs)
 - An optional *entity* (`repo`, `summaryMeta`, `profile`, `detail`) is `null` when absent, never omitted.

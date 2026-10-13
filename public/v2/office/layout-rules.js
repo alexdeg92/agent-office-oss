@@ -246,7 +246,7 @@ export function toVocabulary(layout, version = '3.0') {
  * Every rule a layout must satisfy to be saved (api-proposal.md §3). The JSON Schema only checks shape.
  * @returns {{ code: string, uid?: string, agentId?: string, message: string }[]} empty = valid
  */
-export function validateLayout(layout, index) {
+export function validateLayout(layout, index, { allowNoDesk = false } = {}) {
   const errors = [];
   const err = (code, message, extra = {}) => errors.push({ code, message, ...extra });
   const room = index.rooms.get(layout.room);
@@ -265,7 +265,7 @@ export function validateLayout(layout, index) {
     if (!c.ok && c.code !== 'blocks' && c.code !== 'unreachable') err(c.code, T('err.placement', { item: itemName(layout, index, it.uid), reason: c.reason }), { uid: it.uid });
   }
   for (const uid of unreachableStations(layout, index)) err('unreachable', T('err.unreachable', { item: itemName(layout, index, uid) }), { uid });
-  if (!layout.items.some((i) => i.wall == null && index.furniture.get(i.asset)?.station?.kind === 'desk')) err('no-desk', T('err.no-desk'));
+  if (!allowNoDesk && !layout.items.some((i) => i.wall == null && index.furniture.get(i.asset)?.station?.kind === 'desk')) err('no-desk', T('err.no-desk'));
 
   // agents
   const ids = new Set();

@@ -80,9 +80,9 @@ test('the registered lobby and gym pack furniture loads in their destination flo
         const shell = p.locator('.ao-shell');
         await p.waitForFunction(() => {
           const image = document.querySelector('.ao-shell');
-          return image?.complete && image.naturalWidth > 0 && /Office\/floors\/gym\/(day|night)\.webp$/.test(new URL(image.src).pathname);
+          return image?.complete && image.naturalWidth > 0 && /Office\/floors\/gym-rich\/(day|night)\.webp$/.test(new URL(image.src).pathname);
         });
-        assert.match(await shell.getAttribute('src'), /Office\/floors\/gym\/(day|night)\.webp$/);
+        assert.match(await shell.getAttribute('src'), /Office\/floors\/gym-rich\/(day|night)\.webp$/);
         await capture(p, 'gym-desktop');
       }
     }
@@ -141,9 +141,9 @@ test('mobile elevator sheet deep-links to its floor; reduced motion skips the tr
     await p.waitForFunction(() => document.querySelector('.ao-bureau__stage')?.dataset.floor === 'gym');
     await p.waitForFunction(() => {
       const image = document.querySelector('.ao-shell');
-      return image?.complete && image.naturalWidth > 0 && /Office\/floors\/gym\/(day|night)\.webp$/.test(new URL(image.src).pathname);
+      return image?.complete && image.naturalWidth > 0 && /Office\/floors\/gym-rich\/(day|night)\.webp$/.test(new URL(image.src).pathname);
     });
-    assert.match(await p.locator('.ao-shell').getAttribute('src'), /Office\/floors\/gym\/(day|night)\.webp$/);
+    assert.match(await p.locator('.ao-shell').getAttribute('src'), /Office\/floors\/gym-rich\/(day|night)\.webp$/);
     await capture(p, 'gym-mobile');
   } finally { await h.close(); }
 });

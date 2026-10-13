@@ -225,9 +225,17 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
   let derived = deriveOccupants({ sessions, activityFor: key => engine.activity?.(key)?.kind || null, gwConnected: primary && engine.runtimeFor ? !!engine.runtimeFor(primary.id)?.connected : gw.connected, now,
     primaryAgentId: primary?.id, mainKey: primary ? primary.mainSessionKey || undefined : undefined, presenceWindowMs });
 
-  // Named onboarding agents remain visible while idle; delegated session occupants still derive normally.
+  // Manual selections remain visible while idle. A saved display name or an
+  // auto-added catalog identity is not presence: historical project folders
+  // must leave the stage once their current sessions age out.
+  const configuredIds = typeof engine.configuredAgentIds === 'function'
+    ? new Set([...engine.configuredAgentIds(), ...Object.keys(configuredAgents)]) : new Set(Object.keys(configuredAgents));
+  const autoAddedIds = new Set(typeof engine.autoAddedAgentIds === 'function' ? engine.autoAddedAgentIds() : []);
+  const sourceAgentIds = typeof engine.detectedAgents === 'function'
+    ? new Set((engine.detectedAgents() || []).map(agent => agent?.id).filter(id => typeof id === 'string')) : null;
   const hasName = id => Object.hasOwn(configuredAgents, id) && typeof configuredAgents[id] === 'string';
-  for (const a of agents.filter(a => a.id !== primary?.id && (hasName(a.id) || isProjectAgentOnStage(
+  for (const a of agents.filter(a => a.id !== primary?.id && (configuredIds.has(a.id) && !autoAddedIds.has(a.id)
+    && (!sourceAgentIds || sourceAgentIds.has(a.id)) || isProjectAgentOnStage(
     sessions.filter(s => s.class.agentId === a.id), now, key => engine.activity?.(key)?.kind || null, agentPresenceWindowMs)))) {
     const id = 'agent:' + a.id;
     if (derived.some(o => o.id === id)) continue;

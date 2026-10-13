@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { loadScenario } = require('../helpers/scenario');
 const { startServer } = require('../helpers/harness');
 const { indexManifest } = require('../../public/v2/office/assets.js');
-const { floorLayout, saveFloor } = require('../../public/v2/office/floors.js');
+const { floorLayout, saveFloor } = require('../../src/engine/office/floors');
 
 describe('office floor registry API', () => {
   let h;

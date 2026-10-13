@@ -6,6 +6,7 @@ const path = require('node:path');
 const { indexManifest } = require('../../public/v2/office/assets.js');
 const { floorId, floorLayout, saveFloor, validateFloors, planFloors, createFloorStore } = require('../../public/v2/office/floors.js');
 const { createMockLayoutStore } = require('../../public/v2/office/mock-store.js');
+const { floorLayout: backendFloorLayout, validateFloors: validateBackendFloors } = require('../../src/engine/office/floors.js');
 const read = p => JSON.parse(readFileSync(path.join(__dirname, p)));
 const index = indexManifest(read('../../design/office/manifest.example.json'));
 const base = read('../../design/office/layout.example.json');
@@ -120,15 +121,18 @@ test('validate every registered layout; only lobby/gym can omit a work desk', ()
   const empty = saveFloor(base, index, '2', { ...floorLayout(base, index, '2'), items: [] });
   assert.ok(validateFloors(empty, index).some(e => e.code === 'no-desk' && e.floorId === '2'));
 });
-test('lobby and gym defaults use the registered pack gear and validate as visit destinations', () => {
-  const lobby = floorLayout(base, index, 'rdc'), gym = floorLayout(base, index, 'gym');
+test('backend lobby and gym defaults use the registered pack gear and validate as visit destinations', () => {
+  const lobby = backendFloorLayout(base, index, 'rdc'), gym = backendFloorLayout(base, index, 'gym');
   assert.ok(index.rooms.has('gym'));
   assert.equal(gym.room, 'gym');
-  assert.deepEqual(new Set(lobby.items.map(item => item.asset)), new Set(['elevator-door', 'reception-counter', 'pause-shelter', 'ash-receptacle']));
-  assert.deepEqual(new Set(gym.items.map(item => item.asset)), new Set(['elevator-door', 'treadmill', 'weight-rack', 'exercise-bench', 'exercise-mat']));
+  assert.equal(lobby.room, 'lobby');
+  for (const asset of ['elevator-door', 'reception-counter', 'pause-shelter', 'ash-receptacle', 'armchair', 'coffee-machine', 'bench']) assert.ok(lobby.items.some(item => item.asset === asset), asset);
+  for (const asset of ['elevator-door', 'treadmill', 'weight-rack', 'exercise-bench', 'exercise-mat', 'water-cooler']) assert.ok(gym.items.some(item => item.asset === asset), asset);
+  assert.ok(lobby.items.find(item => item.asset === 'reception-counter').x < 8, 'reception stays inside the glazing');
+  assert.ok(lobby.items.filter(item => ['pause-shelter', 'ash-receptacle', 'bench'].includes(item.asset)).every(item => item.x >= 8), 'terrace furniture stays outdoors');
   const withDestinations = { ...base, floors: [
     { id: 'rdc', kind: 'lobby', layout: { room: lobby.room, theme: lobby.theme, items: lobby.items } },
     { id: 'gym', kind: 'gym', layout: { room: gym.room, theme: gym.theme, items: gym.items } },
   ] };
-  assert.deepEqual(validateFloors(withDestinations, index), []);
+  assert.deepEqual(validateBackendFloors(withDestinations, index), []);
 });

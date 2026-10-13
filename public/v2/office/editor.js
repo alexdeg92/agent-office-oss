@@ -76,6 +76,7 @@ class EditorController {
     this.vm = await this.o.store.get();
     this.history = new History(this.vm.layout.data);
     this.scene.setEditing(true);
+    this.markMode();
     this.scene.setPointerHandler((e) => this.onScenePointer(e));
     this.offCam = this.scene.onCamera(() => this.emit());
     this.mq = matchMedia(NARROW);
@@ -88,7 +89,7 @@ class EditorController {
 
   get draft() { return this.history.current; }
   get dirty() { return this.history.dirty; }
-  get errors() { return validateLayout(this.draft, this.index); }
+  get errors() { return validateLayout(this.draft, this.index, {allowNoDesk:this.vm.allowNoDesk === true}); }
 
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit() { this.version = (this.version ?? 0) + 1; for (const fn of this.listeners) fn(); }
@@ -134,8 +135,12 @@ class EditorController {
     this.cancelPlace();
     this.mode = m;
     this.highlight = null;
+    this.markMode();
     this.apply();
   }
+
+  /** Presentation only: the stage hides occupants while the layout (furniture) is edited. */
+  markMode() { if (this.scene.stage) this.scene.stage.dataset.editMode = this.mode; }
 
   // -- selection and item commands (Disposition) --
   select(uid, { focus = false } = {}) {
@@ -458,6 +463,7 @@ class EditorController {
     this.mq.removeEventListener('change', this.onMq);
     this.offCam?.();
     this.scene.setPointerHandler(null);
+    if (this.scene.stage) delete this.scene.stage.dataset.editMode;
     this.scene.setEditing(false);
     this.closed = true;
     this.o.onExit?.({ saved, layout: saved ? this.draft : this.vm.layout.data, revision: this.vm.layout.revision, vm: this.vm });

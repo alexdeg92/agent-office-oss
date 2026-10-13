@@ -54,7 +54,7 @@ const subscribed = new Set();   // every topic the page asked for (tests: no `la
 async function publish(topic) {
   const set = subs.get(topic);
   if (!set) return;
-  const data = topic === 'office' ? await om.officeVM() : await om.layoutVM();
+  const data = topic === 'office' ? await om.officeVM() : await om.layoutVM(new URLSearchParams(topic.split('?')[1]).get('floorId'));
   const stale = topic === 'office' && q.get('stale') ? q.get('stale').split(',') : [];
   set({ data, meta: topic === 'office' ? { stale, generatedAt: Date.now() } : undefined, loading: false, error: null });
 }
@@ -66,18 +66,24 @@ services.stream = {
 const wrap = (fn) => async (...a) => {
   try { return await fn(...a); } catch (e) { throw e?.status ? toApiError(e.status, { error: e.error }) : e; }
 };
-services.officeApi = {
-  get: wrap(() => (q.get('layout') === '404' ? Promise.reject({ status: 404, error: { code: 'not_found', message: 'Introuvable.' } }) : om.layoutVM())),
-  getRevision: wrap((rev) => om.getRevision(rev)),
-  put: wrap(async (body) => { const r = await om.putLayout(body); publish('layout'); publish('office'); return r; }),
-  putTheme: wrap(async (body) => { const r = await om.putTheme(body); publish('layout'); return r; }),
+const publishLayouts = () => Promise.all([...subs.keys()].filter(t=>t==='office'||t==='layout'||t.startsWith('layout?floorId=')).map(publish));
+const clients = new Map();
+const clientFor = (floor = null) => {
+  if (!clients.has(floor)) clients.set(floor, {
+    get: wrap(() => (q.get('layout') === '404' ? Promise.reject({ status: 404, error: { code: 'not_found', message: 'Introuvable.' } }) : om.layoutVM(floor))),
+    getRevision: wrap(rev => om.getRevision(rev,floor)),
+    put: wrap(async body => { const r=await om.putLayout(body,floor);await publishLayouts();return r; }),
+    putTheme: wrap(async body => { const r=await om.putTheme(body,floor);await publishLayouts();return r; }),
+    forFloor: clientFor,
+  });
+  return clients.get(floor);
 };
+services.officeApi = clientFor();
 services.officeAssetBase = designBase;
 services.cueListeners ??= new Set();
 setInterval(async () => {
   const cues = om.tick();
-  await publish('office');
-  await publish('layout');   // the seen inventory changes as agents leave (architect-41: the layout topic is invalidated)
+  await publishLayouts();   // like the API, refresh office and each subscribed layout scope
   for (const f of cues) for (const fn of services.cueListeners) fn(f);
 }, Number(q.get('tick') ?? 3000));
 

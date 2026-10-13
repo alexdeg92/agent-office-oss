@@ -8,12 +8,33 @@ const path = require('node:path');
 const { projectSnapshot } = require('../../src/adapters/agent-team-pm/store-reader');
 const { parseSnapshot } = require('../../src/adapters/herdr/reader');
 const { createOrchestratorTeamSnapshots } = require('../../src/sources/orchestrator-team-snapshots');
-const { projectOrchestrators, projectTeamBoard, projectOfficeOccupant } = require('../../src/api/orchestrator-team-projection');
+const { projectOrchestrators, projectTeamBoard, projectOfficeOccupant, projectOfficeTeamOccupants,
+  projectOfficeTeamPlacementPopulation } = require('../../src/api/orchestrator-team-projection');
 const { scopedId } = require('../../src/runtime-ids');
 
 const admin = { id: 'owner-fixture', role: 'admin', permissionRevision: 1 };
 const IDs = Object.freeze({ pm: 'member:11111111-1111-4111-8111-111111111111', builder: 'member:22222222-2222-4222-8222-222222222222',
   critic: 'member:33333333-3333-4333-8333-333333333333' });
+
+test('the joined source snapshot stays incomplete until every configured reader publishes once', async () => {
+  const at = Date.UTC(2026, 9, 12);
+  const team = createOrchestratorTeamSnapshots({
+    herdr: { start() {}, stop() {}, refresh: async () => ({ host: null, orchestrator: null, agents: [], privateIdentityRefs: new Map(), privatePaneRefs: new Map() }) },
+    teamStore: { start() {}, stop() {}, refresh: async () => ({ team: null, members: [], tasks: [], reviews: [], privateMemberRefs: {} }) },
+    now: () => at,
+  });
+  const pending = team.getSnapshot();
+  assert.equal(pending.sourcesReady, false, 'identity inputs before the first source result are not a complete join');
+  assert.equal(JSON.stringify(team.getSnapshot()).includes('sourcesReady'), false, 'readiness stays private to server projections');
+  const office = { occupants: [{ id: 'primary', role: 'primary', name: 'Owner' }] };
+  assert.equal(projectOfficeTeamOccupants(office, pending, admin, { sourceEnabled: true }), office,
+    'the office keeps its runtime-only population until both readers have a first result');
+  assert.deepEqual(projectOfficeTeamPlacementPopulation(office, pending).map(row => row.id), ['primary'],
+    'placement does not allocate transient host/team rows before the join is ready');
+  await team.refresh();
+  assert.equal(team.getSnapshot().sourcesReady, true);
+  team.close();
+});
 
 test('Claude PM, Codex builder, and Cursor critic join by stable member IDs and exact session/pane refs without duplicate occupants', async () => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ao-mixed-team-lineage-'));

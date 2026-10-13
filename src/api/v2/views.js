@@ -130,6 +130,7 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   const assignLook = store?.office?.automaticLook ? (id, index, opts) => store.office.automaticLook(id, index, opts) : undefined;
   const placementPopulationFor = (office, snapshot, P) => {
     if (!office || !snapshot || !(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore)) return office?.occupants || [];
+    if (snapshot.sourcesReady === false) return office.occupants || [];
     return require('../orchestrator-team-projection').projectOfficeTeamPlacementPopulation(office, snapshot, {
       runtimeAgents: engine.agents(), primaryAgentId: engine.primaryAgent()?.id || null,
       runtimeIdentitySessions: engine.identitySessions?.(snapshot.agents?.[0]?.hostId) || [], runtimeSessions: engine.sessions(),
@@ -201,6 +202,10 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     // source is available to activate. This is a hint, never an implicit opt-in.
     const activationHint = principal.role === 'admin' && orchestratorTeams?.detected === true && !orchestratorTeams?.hasHerdr
       ? { orchestratorActivationAvailable: true } : null;
+    // During boot, exact runtime/Herdr links can precede the team registry.
+    // Keep the normal runtime projection until the source join is complete so
+    // a registered runtime agent is never briefly rendered as a duplicate.
+    if (snapshot?.sourcesReady === false) return activationHint ? { ...office, ...activationHint } : office;
     if (!snapshot || !(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore)) return activationHint ? { ...office, ...activationHint } : office;
     const { projectOfficeOccupant, projectOfficeTeamOccupants } = require('../orchestrator-team-projection');
     const agents = engine.agents(), links = snapshot.identityLinks || [];

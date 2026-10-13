@@ -1,12 +1,13 @@
 import { buildQuery } from '../config.js';
-import { html, useEffect, useMemo, useRef, useState } from '../lib.js';
+import { html, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../lib.js';
 import { useTopic, useStore } from '../hooks.js';
 import { services } from '../services.js';
 import { config } from '../config.js';
 import * as fmtTz from '../fmt.js';
 import { agentName } from '../i18n.js';
 import { Frame, Icon, Skeleton } from '../components/ui.js';
-import { Select } from '../components/bureau/forms.js';
+import { Modal } from '../components/modal.js';
+import { Button, Select } from '../components/bureau/forms.js';
 export { loadStyles } from '../components/bureau/styles.js';
 import { toast } from '../toast.js';
 import { indexManifest, resolveUrl, furnitureImage } from './assets.js';
@@ -15,7 +16,7 @@ import { displayName } from './names.js';
 import { s as tr, labelOf, locale } from './strings.js';
 import { useLayout, officeApi } from './layout-source.js';
 import { createDraft } from './draft.js';
-import { createFloorStore, floorId } from './floors.js';
+import { floorId } from './floors.js';
 import { agentRows, looksOf, patchAgent, lookPatch } from './agent-looks.js';
 import { TABS, furnitureItems, characterItems, colourItems, accessoryItems, isLookTab, placedOf } from './catalog.js';
 import { Figure } from './setup-characters.js';
@@ -44,31 +45,47 @@ const indexOf = (m) => indexCache.get(m) ?? (indexCache.set(m, indexManifest(m))
 
 export function BoutiquePage({ match }) {
   useStyles();
-  const layout = useLayout();
+  const id=floorId(match.query?.etage) ?? '1';
+  return html`<${FloorBoutique} key=${id} match=${match} currentFloorId=${id} />`;
+}
+
+function FloorBoutique({match,currentFloorId}) {
+  const q = match.query ?? {};
+  const layout = useLayout(currentFloorId);
   const office = useTopic('office', '/api/v2/views/office');
   const status = useStore(services.stream?.status ?? NO_STATUS);
-  const q = match.query ?? {};
   const tab = TABS.includes(q.onglet) ? q.onglet : 'mobilier';
   const setQuery = (patch) => services.router.setQuery(patch);
   const [categories, setCategories] = useState({});
 
-  // One draft per visit, created from the first LayoutVM; it follows the server while nothing is unsaved.
+  // One draft per floor context; its history and save transport share that scope.
   const draftRef = useRef(null);
+  const leaveRef=useRef(null);
+  const [leaving,setLeaving]=useState(false);
+  const decideLeave=ok=>{const pending=leaveRef.current;leaveRef.current=null;setLeaving(false);pending?.resolve(ok);};
   const [, setSeq] = useState(0);
   const rootLay = layout.data;
-  const currentFloorId = floorId(q.etage) ?? '1';
   const floorCaption = currentFloorId === 'rdc' ? tr('office.floor.rdc') : currentFloorId === 'gym' ? tr('office.floor.gym') : tr(currentFloorId === '1' ? 'office.floor.first' : 'office.floor.number', { n: currentFloorId });
-  const floorStore = rootLay ? createFloorStore(rootLay, indexOf(rootLay.manifest), currentFloorId, officeApi(), fmtTz.timeZone()) : null;
-  const lay = rootLay && floorStore ? floorStore.project(rootLay) : rootLay;
+  const floorStore = officeApi(currentFloorId);
+  const lay = rootLay;
   if (lay && !draftRef.current) draftRef.current = createDraft(lay, indexOf(lay.manifest), floorStore);
   const draft = draftRef.current;
   useEffect(() => (draft ? draft.subscribe(() => setSeq((n) => n + 1)) : undefined), [draft]);
   useEffect(() => { if (draft && lay) draft.follow(lay); }, [lay?.layout?.revision]);
-  // Leaving with unsaved changes asks first (a reload, a closed tab).
-  useEffect(() => {
+  // Register before interaction, including immediately after a floor remount.
+  useLayoutEffect(() => {
     const onUnload = (e) => { if (draftRef.current?.dirty) { e.preventDefault(); e.returnValue = ''; } };
+    const guard=url=>{
+      const target=new URL(url,location.href);
+      if(target.pathname===new URL(services.router.href('boutique'),location.href).pathname && (floorId(target.searchParams.get('etage'))??'1')===currentFloorId)return true;
+      if(draftRef.current?.saving)return false;
+      if(!draftRef.current?.dirty)return true;
+      if(!leaveRef.current){const pending={};pending.promise=new Promise(resolve=>{pending.resolve=resolve;});leaveRef.current=pending;setLeaving(true);}
+      return leaveRef.current.promise;
+    };
+    (services.navigationGuards ||= new Set()).add(guard);
     addEventListener('beforeunload', onUnload);
-    return () => removeEventListener('beforeunload', onUnload);
+    return () => {removeEventListener('beforeunload',onUnload);services.navigationGuards.delete(guard);leaveRef.current?.resolve(false);};
   }, []);
 
   if (!lay || !draft) {
@@ -114,6 +131,10 @@ export function BoutiquePage({ match }) {
     ${placing && canWrite ? html`<${DecorPlacement} key=${placing} draft=${draft} index=${index} lay=${lay} occupants=${occupants.map((o) => ({ ...o, name: o.name }))}
       asset=${index.furniture.has(placing) ? placing : null} uid=${index.furniture.has(placing) ? null : placing} assetBase=${assetBase()}
       primaryName=${() => primary()} timeZone=${() => fmtTz.timeZone()} onClose=${closePlacement} />` : null}
+    ${leaving ? html`<${Modal} size="sm" title=${tr('ed.leave.title')} onClose=${()=>decideLeave(false)} footer=${html`
+      <${Button} label=${tr('ed.stay')} onClick=${()=>decideLeave(false)} />
+      <${Button} variant="primary" label=${tr('ed.quit')} onClick=${()=>decideLeave(true)} />`}>
+      <p>${tr('ed.leave.desc')}</p></${Modal}>` : null}
   `;
 }
 

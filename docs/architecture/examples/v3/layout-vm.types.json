@@ -18,7 +18,8 @@
     "$.layout.data.agents[].name": "string",
     "$.layout.data.agents[].role": "string",
     "$.default.data.agents[].name": "string",
-    "$.default.data.agents[].role": "string"
+    "$.default.data.agents[].role": "string",
+    "$.allowNoDesk": "boolean"
   },
   "variants": {
     "$.layout.updatedBy": [
@@ -31,7 +32,8 @@
   "optional": [
     "$.layout.data.presence",
     "$.layout.data.agents[].appearance",
-    "$.default.data.agents[].appearance"
+    "$.default.data.agents[].appearance",
+    "$.allowNoDesk"
   ],
   "additional": {
     "$.agentsSeen[].automaticLook": {

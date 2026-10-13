@@ -122,9 +122,9 @@ let lastRestartAt = -Infinity;
 let om = null, omPromise = null;
 function officeMock() {
   if (!omPromise) {
-    const get = (f) => fetch(new URL(assetUrl('bureau/office/' + f), globalThis.location ? location.origin : 'http://localhost')).then((r) => r.json());
-    omPromise = Promise.all([get('manifest.example.json'), get('layout.example.json')])
-      .then(([manifest, layout]) => (om = createOfficeMock({ manifest, layout, scenario, version: config.apiVersion })));   // office-dev-14: D3/D4 in the configured contract
+    const get = (f,base='bureau/office/') => fetch(new URL(assetUrl(base + f), globalThis.location ? location.origin : 'http://localhost')).then((r) => r.json());
+    omPromise = Promise.all([get('manifest.example.json'), get('layout.example.json'),get('office-floors.json','mock/examples/')])
+      .then(([manifest, layout,floorDefaults]) => (om = createOfficeMock({ manifest, layout,floorDefaults, scenario, version: config.apiVersion })));   // office-dev-14: D3/D4 in the configured contract
   }
   return omPromise;
 }
@@ -176,7 +176,7 @@ function build2(topic) {
   const pr = /^project:(.+)$/.exec(topic);
   if (pr) return projects.buildProjectVM(projectsDb(), pr[1]) || undefined;
   if (topic === 'office') return om ? om.officeVM() : undefined;
-  if (topic === 'layout') return om ? om.layoutVM() : undefined;
+  if (topic === 'layout' || topic.startsWith('layout?floorId=')) return om ? om.layoutVM(new URLSearchParams(topic.split('?')[1]).get('floorId')) : undefined;
   if (topic === 'flows') return scenario === 'vide' ? { flows: [], counts: { total: 0, enabled: 0 } } : flowsDb().list();
   const fl = /^flow:(.+)$/.exec(topic);
   if (fl) return flowsDb().detail(decodeURIComponent(fl[1])) || undefined;
@@ -321,13 +321,14 @@ async function handle2(method, path, body) {
   if (p === '/api/v2/views/office' || p.startsWith('/api/v2/office/')) {
     await officeMock();
     if (method === 'GET' && p === '/api/v2/views/office') return (await viewDelay()) || read('office');
-    if (method === 'GET' && p === '/api/v2/office/layout') return (await viewDelay()) || read('layout');
+    const floor=url.searchParams.get('floorId');
+    if (method === 'GET' && p === '/api/v2/office/layout') return (await viewDelay()) || read(floor==null?'layout':'layout?floorId='+encodeURIComponent(floor));
     const rev = /^\/api\/v2\/office\/layout\/revisions\/(\d+)$/.exec(p);
-    if (method === 'GET' && rev) return officeCall(async () => ok(await om.getRevision(Number(rev[1]))));
+    if (method === 'GET' && rev) return officeCall(async () => ok(await om.getRevision(Number(rev[1]),floor)));
     if (method === 'PUT' && (p === '/api/v2/office/layout' || p === '/api/v2/office/layout/theme')) {
       return officeCall(async () => {
-        const result = p.endsWith('/theme') ? await om.putTheme(body || {}) : await om.putLayout(body || {});
-        republishMatching((t) => t === 'layout' || t === 'office');
+        const result = p.endsWith('/theme') ? await om.putTheme(body || {},floor) : await om.putLayout(body || {},floor);
+        republishMatching((t) => t === 'layout' || t.startsWith('layout?floorId=') || t === 'office');
         return { status: 200, body: { data: result, meta: { modelVersion: META.modelVersion, generatedAt: Date.now(), stale: [] } } };
       });
     }

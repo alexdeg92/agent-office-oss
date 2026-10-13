@@ -1,0 +1,352 @@
+[
+  {
+    "id": "rdc",
+    "kind": "lobby",
+    "allowNoDesk": true,
+    "layout": {
+      "version": 1,
+      "manifestVersion": 2,
+      "room": "lobby",
+      "theme": {
+        "mode": "auto",
+        "day": "day",
+        "night": "night",
+        "nightFrom": "19:00",
+        "nightTo": "07:00",
+        "season": null
+      },
+      "items": [
+        {
+          "uid": "floor-elevator",
+          "asset": "elevator-door",
+          "wall": "right",
+          "offset": 0
+        },
+        {
+          "uid": "floor-reception",
+          "asset": "reception-counter",
+          "x": 3,
+          "y": 1,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-pause-shelter",
+          "asset": "pause-shelter",
+          "x": 8,
+          "y": 7,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-ash-receptacle",
+          "asset": "ash-receptacle",
+          "x": 11,
+          "y": 6,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-waiting-left",
+          "asset": "armchair",
+          "x": 2,
+          "y": 3,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-waiting-right",
+          "asset": "armchair",
+          "x": 4,
+          "y": 3,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-waiting-rug",
+          "asset": "runner-rug",
+          "x": 2,
+          "y": 5,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-mail-cubbies",
+          "asset": "cube-shelf",
+          "x": 2,
+          "y": 0,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-welcome-tree",
+          "asset": "indoor-tree",
+          "x": 0,
+          "y": 0,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-reception-plant",
+          "asset": "monstera",
+          "x": 6,
+          "y": 1,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-waiting-light",
+          "asset": "arc-lamp",
+          "x": 0,
+          "y": 4,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-waiting-coffee",
+          "asset": "coffee-machine",
+          "x": 0,
+          "y": 6,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-terrace-bench",
+          "asset": "bench",
+          "x": 9,
+          "y": 2,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-terrace-planter",
+          "asset": "plant-large",
+          "x": 11,
+          "y": 3,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-terrace-light",
+          "asset": "lamp",
+          "x": 11,
+          "y": 5,
+          "orientation": "sw"
+        }
+      ],
+      "agents": [
+        {
+          "agentId": "main",
+          "match": {
+            "kind": "main"
+          },
+          "character": "timmy",
+          "variant": null,
+          "accessories": [
+            "headphones"
+          ],
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*subagent",
+          "match": {
+            "kind": "subagent"
+          },
+          "character": "subagent",
+          "variant": "teal",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*cron",
+          "match": {
+            "kind": "cron"
+          },
+          "character": "subagent",
+          "variant": "ochre",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*dm",
+          "match": {
+            "kind": "dm"
+          },
+          "character": "subagent",
+          "variant": "sage",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*channel",
+          "match": {
+            "kind": "channel"
+          },
+          "character": "subagent",
+          "variant": "sage",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        }
+      ]
+    }
+  },
+  {
+    "id": "gym",
+    "kind": "gym",
+    "allowNoDesk": true,
+    "layout": {
+      "version": 1,
+      "manifestVersion": 2,
+      "room": "gym",
+      "theme": {
+        "mode": "auto",
+        "day": "day",
+        "night": "night",
+        "nightFrom": "19:00",
+        "nightTo": "07:00",
+        "season": null
+      },
+      "items": [
+        {
+          "uid": "floor-elevator",
+          "asset": "elevator-door",
+          "wall": "right",
+          "offset": 0
+        },
+        {
+          "uid": "floor-treadmill",
+          "asset": "treadmill",
+          "x": 8,
+          "y": 6,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-weight-rack",
+          "asset": "weight-rack",
+          "x": 2,
+          "y": 3,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-exercise-bench",
+          "asset": "exercise-bench",
+          "x": 4,
+          "y": 7,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-exercise-mat",
+          "asset": "exercise-mat",
+          "x": 4,
+          "y": 4,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-stretch-mat",
+          "asset": "exercise-mat",
+          "x": 6,
+          "y": 4,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-gym-water",
+          "asset": "water-cooler",
+          "x": 0,
+          "y": 6,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-gym-storage",
+          "asset": "cube-shelf",
+          "x": 2,
+          "y": 0,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-gym-plant",
+          "asset": "monstera",
+          "x": 0,
+          "y": 0,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-gym-tree",
+          "asset": "indoor-tree",
+          "x": 11,
+          "y": 0,
+          "orientation": "sw"
+        },
+        {
+          "uid": "floor-gym-light",
+          "asset": "lamp",
+          "x": 11,
+          "y": 4,
+          "orientation": "sw"
+        }
+      ],
+      "agents": [
+        {
+          "agentId": "main",
+          "match": {
+            "kind": "main"
+          },
+          "character": "timmy",
+          "variant": null,
+          "accessories": [
+            "headphones"
+          ],
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*subagent",
+          "match": {
+            "kind": "subagent"
+          },
+          "character": "subagent",
+          "variant": "teal",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*cron",
+          "match": {
+            "kind": "cron"
+          },
+          "character": "subagent",
+          "variant": "ochre",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*dm",
+          "match": {
+            "kind": "dm"
+          },
+          "character": "subagent",
+          "variant": "sage",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        },
+        {
+          "agentId": "*channel",
+          "match": {
+            "kind": "channel"
+          },
+          "character": "subagent",
+          "variant": "sage",
+          "name": null,
+          "role": null,
+          "station": "auto",
+          "appearance": "auto"
+        }
+      ]
+    }
+  }
+]

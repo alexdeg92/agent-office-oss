@@ -134,6 +134,12 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
     // enumerable/public source snapshot or canonical TeamMember rows.
     Object.defineProperty(snapshot, 'privateMemberSessionKeys', { enumerable: false, value: Object.freeze(memberSessionKeys) });
     Object.defineProperty(snapshot, 'privateMemberSessionRefs', { enumerable: false, value: Object.freeze(memberSessionRefs) });
+    // Do not publish linked host/team occupants from the partially initialized
+    // join. Identity links can arrive before the first member registry snapshot
+    // during boot; callers can keep the runtime-only OfficeVM until both
+    // configured readers have delivered their first complete snapshot.
+    Object.defineProperty(snapshot, 'sourcesReady', { enumerable: false, value:
+      (!herdrReader || h !== null) && (!teamReader || t !== null) });
     return Object.freeze(snapshot);
   };
   const start = () => {

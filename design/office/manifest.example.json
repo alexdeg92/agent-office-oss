@@ -1521,6 +1521,53 @@
       ]
     },
     {
+      "id": "lobby",
+      "label": "Entrée et terrasse",
+      "cols": 12,
+      "rows": 10,
+      "anchor": {
+        "x": 971,
+        "y": 298
+      },
+      "size": {
+        "w": 2134,
+        "h": 1373
+      },
+      "entrance": {
+        "x": 6,
+        "y": 9
+      },
+      "images": {
+        "day": "assets/Office/floors/lobby/day.webp",
+        "night": "assets/Office/floors/lobby/night.webp"
+      },
+      "activitySpots": [
+        {
+          "id": "lobby-waiting",
+          "kind": "idle",
+          "capacity": 4,
+          "points": [
+            {
+              "x": 2.5,
+              "y": 5.5
+            },
+            {
+              "x": 3.5,
+              "y": 5.5
+            },
+            {
+              "x": 4.5,
+              "y": 5.5
+            },
+            {
+              "x": 5.5,
+              "y": 5.5
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "gym",
       "label": "Gym",
       "cols": 12,
@@ -1538,8 +1585,8 @@
         "y": 9
       },
       "images": {
-        "day": "assets/Office/floors/gym/day.webp",
-        "night": "assets/Office/floors/gym/night.webp"
+        "day": "assets/Office/floors/gym-rich/day.webp",
+        "night": "assets/Office/floors/gym-rich/night.webp"
       },
       "activitySpots": [
         {

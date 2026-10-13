@@ -24,7 +24,7 @@ Connect OpenClaw, Claude Code and Codex side by side, or explore with the includ
 <table>
   <tr>
     <td width="33%"><a href="docs/readme/hero-light.webp"><img src="docs/readme/hero-light.webp" alt="Live Bureau with agents, subagents and activity indicators"></a><br><strong>Bureau · Live office</strong><br>See who is working, thinking or waiting. Subagents are listed under the agent that launched them.</td>
-    <td width="33%"><a href="docs/readme/teams.webp"><img src="docs/readme/teams.webp" alt="Second floor of the office with a four-member team grouped under its lead"></a><br><strong>Floors and teams</strong><br>The office grows by floor, with an entrance and a gym. A team sits together, grouped under its lead.</td>
+    <td width="33%"><a href="docs/readme/lobby.webp"><img src="docs/readme/lobby.webp" alt="Furnished ground-floor lobby with reception desk, lounge armchairs, glass facade and an outdoor smoking terrace, with idle agents taking a break"></a><br><strong>Floors and teams</strong><br>Idle agents take breaks in the ground-floor lobby, on its terrace or in the <a href="docs/readme/gym.webp">gym</a>. A <a href="docs/readme/teams.webp">team</a> sits together on its own floor, grouped under its lead.</td>
     <td width="33%"><a href="docs/readme/connectors.webp"><img src="docs/readme/connectors.webp" alt="Connector gallery with Claude Code and Codex connected"></a><br><strong>Connectors · Several runtimes</strong><br>Connect OpenClaw, Claude Code and Codex at the same time, each with its own instances.</td>
   </tr>
   <tr>
@@ -54,7 +54,7 @@ Connect OpenClaw, Claude Code and Codex side by side, or explore with the includ
 ## What’s new in 1.2.0
 
 - **Several runtimes at once.** Claude Code and Codex adapters join OpenClaw. Their sessions and transcripts appear in the office and the logs, next to each other; Claude Code subagents are shown under the session that started them.
-- **Floors and teams.** The Bureau has a ground-floor entrance, office floors and a gym. Teams read from an agent-team-pm store (`AO_TEAM_STORE_ROOT`), optionally joined with Herdr presence, are grouped under their lead and seated together.
+- **Floors and teams.** The Bureau has a furnished ground-floor lobby (reception, lounge, glass facade and an outdoor smoking terrace), office floors and a gym, where idle agents go on break. Teams read from an agent-team-pm store (`AO_TEAM_STORE_ROOT`), optionally joined with Herdr presence, are grouped under their lead and seated together.
 - **Multi-user access.** Optional roles (administrator, editor, reader, or your own), invitations and per-user permission exceptions.
 - **External access.** A guided plan for local, LAN, private-network, public-domain, split-origin and tunnel access, with server-side checks. It never edits DNS or proxy files.
 - **Settings.** Provider cards for connectors, per-runtime agent management, a diagnostic tab, and a reworked phone layout.

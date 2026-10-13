@@ -123,6 +123,7 @@ function walk(dir, base = dir) {
 
 function plan() {
   const pairs = FILES.map(([src, dst]) => [path.join(ROOT, src), path.join(DEST, dst)]);
+  pairs.push([path.join(ROOT,'design','office','floors.example.json'),path.join(EXAMPLES_DEST,'office-floors.json')]);
   for (const e of EXAMPLES) pairs.push([path.join(ROOT, 'docs', 'architecture', 'examples', e + '.json'), path.join(EXAMPLES_DEST, e + '.json')]);
   const shipped = shippedAssetKeys();
   for (const g of ASSET_GROUPS) {

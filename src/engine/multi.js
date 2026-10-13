@@ -200,6 +200,8 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
     legacyAliasConflict(kind,value) {rememberLegacyAliases();return aliases.overflow || aliases.seen.has(aliasHash(kind,value));},
     on: events.on.bind(events), removeListener: events.removeListener.bind(events), quarantine, instances,
     agents, detectedAgents: union('detectedAgents','agent',agent), primaryAgent,
+    configuredAgentIds: () => enabled().flatMap(i => (i.engine.configuredAgentIds?.() || []).map(agentId => id(i, 'agent', agentId))),
+    autoAddedAgentIds: () => enabled().flatMap(i => (i.engine.autoAddedAgentIds?.() || []).map(agentId => id(i, 'agent', agentId))),
     identityAgents: hostId => enabled().flatMap(i => (i.engine.identityAgents?.(hostId) || []).map(row => ({ ...row, id: id(i, 'agent', row.id) }))),
     identitySessions: hostId => enabled().flatMap(i => (i.engine.identitySessions?.(hostId) || []).map(row => ({ ...row,
       id: id(i, 'session', row.id), sessionKey: id(i, 'session', row.sessionKey), agentId: id(i, 'agent', row.agentId) }))),

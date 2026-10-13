@@ -5,7 +5,7 @@
 // are reproducible. Pure; no DOM.
 import { indexManifest } from './assets.js';
 import { resolveOccupants, validateLayout, toVocabulary, canonicalRole, canonicalRuleId } from './layout-rules.js';
-import { planFloors, validateFloors } from './floors.js';
+import { planFloors, validateFloors, floorLayout, saveFloor } from './floors.js';
 import { createMockLayoutStore } from './mock-store.js';
 
 const MIN = 60_000;
@@ -42,7 +42,8 @@ const chip = (id, name, state) => ({ id: `per_${id.replace(/[^a-z0-9]/gi, '').pa
 /** The mock's stored layout carries the seen-agent period explicitly (O8 default, 30 minutes), so 3.0 reads show the optional field. */
 const withPresence = (l) => structuredClone(l.presence ? l : { ...l, presence: { seenMinutes: 30 } });
 
-export function createOfficeMock({ manifest, layout, scenario = '1', now = () => Date.now(), mainName = 'Morgan', timeZone = undefined, version = 2 }) {
+export function createOfficeMock({ manifest, layout, floorDefaults = [], scenario = '1', now = () => Date.now(), mainName = 'Morgan', timeZone = undefined, version = 2 }) {
+  if(floorDefaults.length)layout={...layout,floors:floorDefaults.map(f=>({id:f.id,kind:f.kind,layout:{room:f.layout.room,theme:f.layout.theme,items:f.layout.items}}))};
   // The contract version this mock speaks (api-v3.md D3/D4): 2 → 2.x names (main, *cron, dm:…), 3 → 3.0 names (primary,
   // *scheduled, direct:…). Internally the mock keeps 2.x ids; every VM, cue and layout is projected on the way out,
   // and layouts written in either vocabulary are accepted (layout-rules.js reads both).
@@ -52,7 +53,7 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
   // O8 presence, like the server (operations.md §4): 3.0 reads show it; a 2.x read doesn't, and a 2.x save keeps it.
   const playout = (d) => { const out = toVocabulary(d, v3 ? '3.0' : '2.x'); if (!v3 && out) delete out.presence; return out; };
   const keepPresence = (d) => (v3 || !d || d.presence !== undefined || !data()?.presence ? d : { ...d, presence: data().presence });
-  const pvm = (vm) => vm && ({ ...vm, layout: { ...vm.layout, data: playout(vm.layout.data) }, default: vm.default && { ...vm.default, data: playout(vm.default.data) },
+  const pvm = (vm) => vm && ({ allowNoDesk:false,...vm, layout: { ...vm.layout, data: playout(vm.layout.data) }, default: vm.default && { ...vm.default, data: playout(vm.default.data) },
     agentsSeen: (vm.agentsSeen ?? []).map((a) => ({ ...a, id: pid(a.id), role: prole(a.role) })) });
   const index = indexManifest(manifest);
   const store = createMockLayoutStore({
@@ -132,6 +133,8 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
   journal.push({ id: `le_${++seq}`, at: t0 - 5 * MIN, count: 1, actor: { kind: 'system', name: 'Système' }, text: { key: 'liveEvent.cron.fired', params: { job: 'Résumé du matin' } }, kind: 'cron.fired' });
 
   const data = () => store.vmNow().layout.data;
+  const scoped = (vm,id) => id == null ? vm : {...vm,allowNoDesk:floorDefaults.find(f=>f.id===id)?.allowNoDesk ?? false,
+    layout:{...vm.layout,data:floorLayout(vm.layout.data,index,id)},default:{...vm.default,data:floorLayout(vm.default.data,index,id)}};
 
   return {
     /** Advance the script; returns the cue frames to emit (SSE `cue`). */
@@ -270,22 +273,22 @@ export function createOfficeMock({ manifest, layout, scenario = '1', now = () =>
 
     /** LayoutVM (api.md §3.10 + proposal §5: default, revisions, agentsSeen). */
     /** LayoutVM (api.md §3.10). Synchronous; `await` works too. */
-    layoutVM: () => {
+    layoutVM: (floor = null) => {
       const vm = store.vmNow();
       recordSeen(sources());
       const ids = new Set(seenLog.keys());
-      return pvm({ ...vm, agentsSeen: [...seenLog.values(), ...(vm.agentsSeen ?? []).filter((a) => !ids.has(a.id))].sort((a, b) => b.lastSeenAt - a.lastSeenAt) });
+      return pvm(scoped({ ...vm, agentsSeen: [...seenLog.values(), ...(vm.agentsSeen ?? []).filter((a) => !ids.has(a.id))].sort((a, b) => b.lastSeenAt - a.lastSeenAt) },floor));
     },
-    getRevision: (rev) => { const r = store.getRevision(rev); return r && (typeof r.then === 'function' ? r.then((x) => x && { ...x, data: playout(x.data) }) : { ...r, data: playout(r.data) }); },
+    getRevision: (rev,floor=null) => store.getRevision(rev).then(x=>({...x,data:playout(floor==null?x.data:floorLayout(x.data,index,floor))})),
     /** PUT /api/v2/office/layout → CommandResult; throws {status, error} like the API. */
-    async putLayout(body) {
-      try { const r = await store.put({ ...body, data: keepPresence(body.data) }); layoutRev = r.revision; return r && r.vm ? { ...r, vm: pvm(r.vm) } : r; }
-      catch (e) { if (e?.error?.current?.vm) e.error.current.vm = pvm(e.error.current.vm); throw e; }
+    async putLayout(body,floor=null) {
+      try { const next=keepPresence(body.data);const r = await store.put({ ...body, data: floor==null?next:saveFloor(data(),index,floor,next) }); layoutRev = r.revision; return r && r.vm ? { ...r, vm: pvm(scoped(r.vm,floor)) } : r; }
+      catch (e) { if (e?.error?.current?.vm) e.error.current.vm = pvm(scoped(e.error.current.vm,floor)); throw e; }
     },
     /** PUT /api/v2/office/layout/theme (proposal §4): replace the theme only, same concurrency rule. */
-    async putTheme({ expectedRevision, theme }) {
-      const r = await store.put({ expectedRevision, data: { ...data(), theme } });   // data() is stored: presence kept
-      return r && r.vm ? { ...r, vm: pvm(r.vm) } : r;
+    async putTheme({ expectedRevision, theme },floor=null) {
+      const local=floor==null?data():floorLayout(data(),index,floor);
+      return this.putLayout({expectedRevision,data:{...local,theme}},floor);
     },
     /** Demo/test hook: another device saves meanwhile. */
     externalEdit: (fn) => store.externalEdit(fn),

@@ -154,11 +154,14 @@
 .ao-ghost-img { opacity: 0.6; pointer-events: none; }
 .ao-ghost-img.is-bad { opacity: 0.45; filter: grayscale(1) sepia(1) hue-rotate(-40deg) saturate(3); }
 .ao-ghost-img[hidden] { display: none; }
+.ao-office:not([data-editing]) .ao-edit-svg,
+.ao-office:not([data-editing]) .ao-ghost-img { display: none; }
 .ao-sprite.ao-selected { filter: drop-shadow(0 0 2px var(--bu-accent)) drop-shadow(0 0 6px color-mix(in oklab, var(--bu-accent) 60%, transparent)); }
 .ao-sprite.ao-highlight { filter: drop-shadow(0 0 4px color-mix(in oklab, var(--bu-accent) 70%, transparent)); }
 .ao-office[data-editing] .ao-viewport { cursor: default; }
 .ao-office[data-editing] .ao-layer--scene .ao-sprite, .ao-office[data-editing] .ao-layer--wall .ao-sprite { cursor: pointer; }
 .ao-office[data-editing] .ao-controls [data-page-control] { display: none; }
+.ao-office[data-editing][data-edit-mode="layout"] :is(.ao-char, .ao-plate, .ao-marker, .ao-ring, .ao-cue) { visibility: hidden; pointer-events: none; }
 /* Hidden tab (O4): every CSS animation pauses; scene.js stops frame loops and idle swivels. */
 .ao-office[data-paused] *, .ao-office[data-paused] *::before, .ao-office[data-paused] *::after { animation-play-state: paused !important; }
 /* Targets (O4, explorer-qa-01 Q01-07): stage controls and nameplates are ≥ 44 × 44 px for every pointer, the
