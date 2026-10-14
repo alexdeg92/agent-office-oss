@@ -28,6 +28,12 @@ const validZone = (tz) => { try { new Intl.DateTimeFormat('en', { timeZone: tz }
 
 const str = (min, max) => s.string().min(min).max(max);
 const Look = s.object({ character: str(1, 64), variant: str(1, 64).nullable(), accessories: s.array(str(1, 64)).max(8) }, { extra: 'reject' });
+const OfficePresence = s.object({
+  finishedSessionWindowMinutes: s.int().min(1).max(1440).optional(),
+  agentPresenceWindowMinutes: s.int().min(1).max(1440).optional(),
+  idleRelocationMinutes: s.int().min(1).max(1440).optional(),
+}, { extra: 'reject' });
+const OfficeConfig = s.object({ presence: OfficePresence }, { extra: 'reject' });
 const AccessConfig = s.object({
   mode: s.enumOf(['local', 'lan', 'private', 'public-same-origin', 'public-split-origin', 'tunnel']),
   apiPublicUrl: str(1, 2048).nullable(), uiOrigins: s.array(str(1, 2048)).max(16), domain: str(1, 253).nullable(),
@@ -51,6 +57,7 @@ const ConfigShape = {
   enrichers: s.array(s.enumOf(['discord'])).max(8).optional(),   // G7: the selected interlocutor enrichers (default ['discord'])
   // architect-56: what Agent Office installs into the runtime's agents (default: the project tag); false = opt out
   integrations: s.object({ projet: s.boolean() }, { extra: 'reject' }).optional(),
+  office: OfficeConfig.optional(),
   agents: s.object({ primary: s.string().refine((v) => AGENT_ID.test(v), 'agent id').nullable(),
     looks: s.record(Look) }, { extra: 'reject' }),
 };

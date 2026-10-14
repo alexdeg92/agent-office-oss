@@ -1,11 +1,11 @@
 {
   "keys": [
-    "gh:alexdeg92/agent-office-oss",
+    "gh:example-org/example-repo",
     "sg:discord-user:100000000000000001",
     "sg:group:Automations"
   ],
   "overrides": {
-    "gh:alexdeg92/agent-office-oss": {
+    "gh:example-org/example-repo": {
       "name": "Agent Office (refonte)",
       "status": "in-review",
       "labels": [

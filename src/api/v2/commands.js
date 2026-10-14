@@ -196,7 +196,11 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
     const def = runtime && runtime.definition;
     return def && def.sessionKeyFor ? def.sessionKeyFor(agentId, CHAT_REF) : CHAT_REF;
   };
-  topics.define('chat', { build: () => buildChatVM({ sessionKey: chatKey(), transcript: engine.transcript(chatKey()), pending, errors, local, senderContext: { runtime: runtime?.definition?.id || 'generic', operator: store?.owner, agent: (() => { const a = engine.primaryAgent(); return a ? { ...a, id: 'agent:' + a.id } : null; })(), people: store?.persons.senderPeople?.() || store?.persons.list() || [] } }) });
+  topics.define('chat', { build: () => buildChatVM({ sessionKey: chatKey(), transcript: engine.transcript(chatKey()), pending, errors, local,
+    avatarFor: views?.chatAvatarFor,
+    senderContext: { runtime: runtime?.definition?.id || 'generic', operator: store?.owner,
+      agent: (() => { const a = engine.primaryAgent(); return a ? { ...a, id: 'agent:' + a.id } : null; })(),
+      people: store?.persons.senderPeople?.() || store?.persons.list() || [], sessionOf: key => engine.session(key) } }) });
   r.get('/views/chat', authed, async (req, res) => {
     const key = chatKey();
     req.authorize?.();

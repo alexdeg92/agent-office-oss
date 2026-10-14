@@ -6,6 +6,7 @@
     "$.owner.reason",
     "$.network.publicUrl.value",
     "$.network.active.publicUrl",
+    "$.office",
     "$.agents[].name",
     "$.agents[].detectedName",
     "$.agents[].nameSource",

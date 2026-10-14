@@ -1,0 +1,137 @@
+{
+  "data": {
+    "floorId": "1",
+    "categoryId": "",
+    "search": "",
+    "categories": {
+      "label": {
+        "key": "office.store.category"
+      },
+      "options": [
+        {
+          "id": "",
+          "label": {
+            "key": "office.store.all"
+          },
+          "count": 53
+        },
+        {
+          "id": "poste",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.poste"
+          }
+        },
+        {
+          "id": "assise",
+          "count": 8,
+          "label": {
+            "key": "office.store.category.assise"
+          }
+        },
+        {
+          "id": "rangement",
+          "count": 5,
+          "label": {
+            "key": "office.store.category.rangement"
+          }
+        },
+        {
+          "id": "plante",
+          "count": 5,
+          "label": {
+            "key": "office.store.category.plante"
+          }
+        },
+        {
+          "id": "equipement",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.equipement"
+          }
+        },
+        {
+          "id": "mur",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.mur"
+          }
+        },
+        {
+          "id": "sol",
+          "count": 4,
+          "label": {
+            "key": "office.store.category.sol"
+          }
+        },
+        {
+          "id": "deco",
+          "count": 4,
+          "label": {
+            "key": "office.store.category.deco"
+          }
+        }
+      ]
+    },
+    "itemIds": [
+      "desk",
+      "chair",
+      "sofa",
+      "rug",
+      "plant-large",
+      "plant-small",
+      "shelf",
+      "coffee-machine",
+      "server-rack",
+      "meeting-table",
+      "lamp",
+      "winter-garland",
+      "autumn-garland",
+      "whiteboard",
+      "window",
+      "standing-desk",
+      "armchair",
+      "tall-bookcase",
+      "monstera",
+      "arc-lamp",
+      "framed-art",
+      "l-desk",
+      "dual-monitor-desk",
+      "laptop-table",
+      "beanbag",
+      "bench",
+      "bar-stool",
+      "cafe-table",
+      "coffee-table",
+      "filing-cabinet",
+      "cube-shelf",
+      "wall-clock",
+      "corkboard",
+      "dashboard-screen",
+      "neon-sign",
+      "cactus-trio",
+      "indoor-tree",
+      "fridge",
+      "water-cooler",
+      "printer",
+      "charging-dock",
+      "runner-rug",
+      "round-rug",
+      "desk-lamp",
+      "arcade-cabinet",
+      "elevator-door",
+      "reception-counter",
+      "pause-shelter",
+      "ash-receptacle",
+      "treadmill",
+      "weight-rack",
+      "exercise-bench",
+      "exercise-mat"
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791888000000,
+    "stale": []
+  }
+}

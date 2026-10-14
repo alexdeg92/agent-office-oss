@@ -1,0 +1,39 @@
+{
+  "$comment": "Shape sidecar for chat-vm.json (api.md §3.3).",
+  "nullable": [
+    "$.turnPending",
+    "$.messages[].title",
+    "$.messages[].status",
+    "$.messages[].statusLabel",
+    "$.messages[].avatar",
+    "$.messages[].senderInfo.name",
+    "$.messages[].senderInfo.channel",
+    "$.messages[].senderInfo.avatarHint",
+    "$.messages[].meta",
+    "$.messages[].senderInfo.delegation.label",
+    "$.messages[].meta.model",
+    "$.messages[].meta.tokens",
+    "$.messages[].meta.durationMs"
+  ],
+  "types": {
+    "$.messages[].title": "string",
+    "$.messages[].status": "string",
+    "$.messages[].senderInfo.name": "string",
+    "$.messages[].senderInfo.channel": "string",
+    "$.messages[].senderInfo.avatarHint": "string"
+  },
+  "additional": {
+    "$.messages[].senderInfo.delegation": {
+      "sessionKey": "agent:atlas:subagent:review",
+      "label": "Review the changes"
+    }
+  },
+  "variants": {
+    "$.turnPending": [
+      {
+        "turnId": "turn-fixture",
+        "since": 1791223000000
+      }
+    ]
+  }
+}

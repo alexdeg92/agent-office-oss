@@ -1,12 +1,14 @@
 # API contract (v2)
 
-**Contract version 2.8** (2026-10-10: adapter-declared canonical health checks and remedies; 2.7: sender identity and participants; 2.5, 2026-10-06: first-run setup §5.7; 2.4: named session-group refs; 2.3: project images; 2.2: S6.1 live findings and review R8; 2.1 merged the office-dev, projects and frontend proposals). This document is the single source of truth for the HTTP and SSE wire format between the server (architect) and its consumers (frontend `/v2`, office-dev, projects). Only the architect edits it; proposals go through the PM.
+**Contract version 2.10** (2026-10-13: source-aware projects and server-shaped team rosters; 2.9: typed subagent results and backend-resolved chat author appearances; 2.8: adapter-declared canonical health checks and remedies; earlier history below). This document is the single source of truth for the HTTP and SSE wire format between the server and its consumers. Only the architect edits it; proposals go through the PM.
 
-**Contract 3.4** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.8 until the UI has moved (`migration-v3.md`).
+**Contract 3.7** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.10 until the UI has moved (`migration-v3.md`).
 
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
+| 2.10 | 2026-10-13 | Projects add source descriptors/brands, backend-selected source filters, status/count/capability values and empty-state labels. TeamProject adds server-shaped roster groups/members/portraits, task/summary counts and column labels. For permission-scoped Projects reads, topic revisions are opaque payload-derived tokens and SSE sends snapshots only (§4.3). Same projection on v3; examples and shared schemas regenerated. |
+| 2.9 | 2026-10-13 | Chat messages add `kind`, structured `body`, backend-resolved `avatar`, and nullable result metadata. Trusted adapter-projected delegated output is `subagent-result` on the assistant side with task title, canonical status and `statusLabel`; the original Markdown body is preserved. Same ChatVM shape on 3.6. Examples `chat-vm` and SessionVM event variant updated. |
 | T-0102 additive | 2026-10-12 | Backend floor-scoped LayoutVM/topic, commands and history via `floorId`; `allowNoDesk?: boolean` supplies editor validation policy. Floor saves preserve the other layouts and global appearance rules. Same addition on v3; §3.10. |
 | 2.8 | 2026-10-10 | Add canonical adapter-declared `HealthCheckVM` rows, bounded automatic/one-click/guided remedies and audit outcomes; `POST /health/checks/:id/fix` and `POST /health/fix-all`. Santé uses localized explanations instead of raw source/path names. Unknown session classifications remain generic and count once. **T-0053 additive:** `OccupantVM.isNew?: boolean` marks an auto-added agent during its first 24 hours; absent or false means no marker. |
 | 2.7 | 2026-10-09 | Locked missing-secrets recovery page; strict named partial-login boot errors; first-run DB owner and code-gated resumption/amendment/recovery; adapter-owned detection/discovery and connect capability; explicit `agent:<id>` peer occupants and role `agent`; runtime-scoped display names; reviewed installation plans with safe descriptor I/O and rollback; network guide; config v2 with strict v1 reader. Setup route examples and `SetupVM` schema are executable. Same additions in contract 3.2. |
@@ -91,6 +93,7 @@ Example (stale drag):
 | `GET /api/v2/meta` (no auth) | `MetaVM` | — |
 | `GET /api/v2/me` | `MeVM` | — |
 | `GET /api/v2/views/office` | `OfficeVM` | `office` |
+| `GET /api/v2/views/office/characters?scope&search` | `OfficeCharactersVM` | — |
 | `GET /api/v2/views/chat` | `ChatVM` | `chat` |
 | `GET /api/v2/views/flows` | `FlowListVM` | `flows` |
 | `GET /api/v2/views/flows/:jobId` | `FlowDetailVM` | `flow:<jobId>` |
@@ -101,7 +104,7 @@ Example (stale drag):
 | `GET /api/v2/views/skills` | `SkillListVM` | `skills` |
 | `GET /api/v2/views/skills/:name` | `SkillDetailVM` | `skill:<name>` |
 | `GET /api/v2/views/health` | `HealthVM` | `health` |
-| `GET /api/v2/views/projects?filter` | `BoardVM` | `projects` / `projects?filter=<f>` |
+| `GET /api/v2/views/projects?filter&source` | `BoardVM` | `projects` / `projects?filter=<f>&source=<source-id>` |
 | `GET /api/v2/views/projects/:id` | `ProjectVM` | `project:<id>` |
 | `GET /api/v2/views/projects/:id/history?cursor&limit` | `Page<HistoryItemVM>` | — (new events arrive in `ProjectVM.recentHistory`) |
 | `GET /api/v2/views/project-candidates` | `CandidatesVM` (2.1) | — (one-shot) |
@@ -130,7 +133,7 @@ interface Kpi { id: string; label: LabelRef; value: number | null; unit: Unit; s
 ```ts
 interface MetaVM {
   bootId: string; // opaque process identity; stable until the owning process restarts
-  modelVersion: number; apiVersion: 2; contractVersion: '2.8'; serverVersion: string;
+  modelVersion: number; apiVersion: 2; contractVersion: '2.9'; serverVersion: string;
   env: 'production' | 'staging' | 'dev';     // mock mode is allowed only when meta is 404 or env !== 'production'
   capabilities: {                            // R3-10: two independent switches
     openclawWrites: boolean;                 // false when PORTAL_READONLY=1 (flows, skills, restart, chat)
@@ -155,7 +158,7 @@ interface MeVM { email: string; displayName: string /* 2.2: owner's name (PORTAL
                gateway: 'up' | 'down'; capabilities: MetaVM['capabilities']; sessionExpiresAt: Ms }
 ```
 ```json
-{ "data": { "bootId": "fixture-process-before-restart", "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.8", "serverVersion": "2026.10.5-s6", "env": "staging",
+{ "data": { "bootId": "fixture-process-before-restart", "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.9", "serverVersion": "2026.10.5-s6", "env": "staging",
   "capabilities": { "openclawWrites": false, "storeWrites": true }, "readonly": true,
   "labels": { "agentState.working": "Exécute", "projectStatus.in-progress": "En cours", "healthSub.cores": "Sur {n} cœurs" },
   "enums": { "projectStatus": ["idea", "todo", "in-progress", "in-review", "shipped"] } },
@@ -228,40 +231,62 @@ Authoritative example: `docs/architecture/examples/office-vm.json`. On 2026.9.8,
 interface ChatVM {
   sessionKey: SessionKey;                    // the portal's chat session ('agent:main:explicit:portal-chat' expected)
   turnPending: { turnId: string; since: Ms } | null;
-  messages: Collection<{ id: string; role: 'user' | 'assistant' | 'error'; at: Ms; text: string; senderInfo?: Sender;
-                         meta: { model: string | null; tokens: number | null; durationMs: number | null } | null }>;   // last 50, chronological
+  messages: Collection<{ id: string; kind: 'message' | 'subagent-result'; role: 'user' | 'assistant' | 'error'; at: Ms;
+    text: string; body: { text: string }; title: string | null; status: 'completed' | 'failed' | 'running' | 'unknown' | null;
+    statusLabel: LabelRef | null; collapsedByDefault: boolean; avatar: AppearanceLook | null; senderInfo?: Sender;
+    meta: { model: string | null; tokens: number | null; durationMs: number | null } | null }>;   // last 50, chronological
 }
 ```
+`kind: 'subagent-result'` is emitted only when the owning adapter has verified internal/delegated provenance; matching text in a human-authored message remains `kind: 'message'`. Its `role` is `assistant`, `title` is the adapter-supplied task label when known, `status` is canonical, and `statusLabel` uses `chat.result.status.<status>`. `body.text` and `text` contain the same original Markdown source, including GFM tables; rendering and safe HTML policy belong to the client. Results start collapsed. `avatar` is the resolved office appearance for an agent author and null when unavailable; clients do not infer a portrait from names or IDs.
+
+Authoritative example: `docs/architecture/examples/chat-vm.json`.
 ```json
 {
   "data": {
-    "sessionKey": "agent:main:explicit:portal-chat",
+    "sessionKey": "agent:atlas:explicit:portal-chat",
     "turnPending": null,
     "messages": [
       {
-        "id": "m_1",
+        "id": "ev:0:0",
+        "kind": "message",
         "role": "user",
         "at": 1791223000000,
         "text": "Bonjour",
-        "meta": null,
+        "body": {
+          "text": "Bonjour"
+        },
+        "title": null,
+        "status": null,
+        "statusLabel": null,
+        "collapsedByDefault": false,
+        "avatar": null,
         "senderInfo": {
           "kind": "human",
-          "id": "per_operator",
-          "name": "Camille",
+          "id": "human:owner",
+          "name": "Mira",
           "runtime": "demo",
           "channel": null,
           "avatarHint": null
-        }
+        },
+        "meta": null
       },
       {
-        "id": "m_2",
+        "id": "ev:1:0",
+        "kind": "message",
         "role": "assistant",
-        "at": 1791223004000,
-        "text": "Bonjour Owner !",
-        "meta": {
-          "model": "gpt-5.5",
-          "tokens": 120,
-          "durationMs": 3900
+        "at": 1791223005000,
+        "text": "La vérification est en cours.",
+        "body": {
+          "text": "La vérification est en cours."
+        },
+        "title": null,
+        "status": null,
+        "statusLabel": null,
+        "collapsedByDefault": false,
+        "avatar": {
+          "character": "subagent",
+          "variant": "sage",
+          "accessories": []
         },
         "senderInfo": {
           "kind": "agent",
@@ -270,7 +295,48 @@ interface ChatVM {
           "runtime": "demo",
           "channel": null,
           "avatarHint": null
+        },
+        "meta": {
+          "model": "model-a",
+          "tokens": 42,
+          "durationMs": 100
         }
+      },
+      {
+        "id": "ev:2:0",
+        "kind": "subagent-result",
+        "role": "assistant",
+        "at": 1791223009000,
+        "text": "| Check | Result |\n| --- | --- |\n| tests | **pass** |",
+        "body": {
+          "text": "| Check | Result |\n| --- | --- |\n| tests | **pass** |"
+        },
+        "title": "Review the changes",
+        "status": "completed",
+        "statusLabel": {
+          "key": "chat.result.status.completed"
+        },
+        "collapsedByDefault": true,
+        "avatar": {
+          "character": "fox",
+          "variant": null,
+          "accessories": [
+            "glasses"
+          ]
+        },
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas:subagent:review",
+          "name": "Review the changes",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": {
+            "sessionKey": "agent:atlas:subagent:review",
+            "label": "Review the changes"
+          }
+        },
+        "meta": null
       }
     ]
   },
@@ -280,7 +346,7 @@ interface ChatVM {
     "stale": [],
     "topic": {
       "id": "chat",
-      "rev": 7
+      "rev": 4
     }
   }
 }
@@ -396,7 +462,7 @@ interface SessionVM {
   subagents: Collection<Sender>;           // delegated agents; delegation.sessionKey links to their trace
   events: Collection<TraceEventVM>;          // 2.1: chronological, keyed; id = 'ev:<messageIndex>:<partIndex>' (stable across fetches)
 }
-type TraceEventVM = TraceEvent & { id: string; senderInfo?: Sender };   // data-model §2.1; appends arrive as upserts on ['events']
+type TraceEventVM = TraceEvent & { id: string; senderInfo?: Sender };   // data-model §2.1; `subagent-result` carries title, status and body; appends arrive as upserts on ['events']
 ```
 Authoritative example: `docs/architecture/examples/session-vm.json`.
 ```json
@@ -480,14 +546,23 @@ The builders are the projects module's `buildBoardVM` / `buildProjectVM` / `pres
 ```ts
 interface BoardVM {
   filter: 'all' | 'at-risk' | 'with-timmy' | 'archived';   // 2.1: 'archived' lists archived projects (restore lives there)
+  sourceFilterId: string | null; sourceFilters: Collection<{ id: string; label: LabelRef; count: number; selected: boolean; source: ProjectSourceDescriptorVM }>;
+  emptyStateLabel: LabelRef | null;
   columns: Collection<{ id: ProjectStatus; count: number; cards: Collection<ProjectCardVM> }>;   // all 5 statuses, in order, even when empty
 }
+interface ProjectSourceDescriptorVM { id: string; kind: string; runtime: string | null; label: LabelRef;
+  brand: { mark: string; providerName: string | null; logo: string | null; logoDark?: string; color: string | null; foreground: string | null } | null }
+interface ProjectCountsVM { sessions: number | null; agents: number | null; activity: number | null }
+interface ProjectCapabilitiesVM { read: boolean; write: boolean; comments: 'read-write' | 'read-only' | 'unsupported';
+  history: 'read-write' | 'read-only' | 'unsupported'; repository: 'read-write' | 'read-only' | 'unsupported' }
 interface ProjectCardVM {
   id: ProjectId; name: string; priority: Priority; revision: number; status: ProjectStatus;
   thumb: ThumbVM;                            // 2.3 (projects' image proposal, PM decision after Owner's iPad review)
   flags: { visible: FlagVM[]; hiddenCount: number };   // every unacked, uncleared risk, then up to 3 others; acked risks omitted (projects.md)
   people: { visible: PersonChip[]; hiddenCount: number };   // 4 visible
   lastActivityAt: Ms;
+  origin?: 'orchestrator-team'; teamProject?: { teamId: string; label: string; readOnly: boolean; taskCount: number };
+  sourceDescriptors: Collection<ProjectSourceDescriptorVM>; statusLabel: LabelRef; counts: ProjectCountsVM; capabilities: ProjectCapabilitiesVM;
 }
 // 2.3: image priority screenshot of the project's live site (1200×630, cached 24 h) → GitHub OpenGraph card → a monogram tile.
 // ProjectCovers are no longer referenced. `accent` is hashed from the project id; `initials` is the fr-CA monogram.
@@ -502,6 +577,9 @@ type FlagVM =                                // R3-13: discriminated by kind; fe
 interface ProjectVM {
   id: ProjectId; revision: number; name: string; status: ProjectStatus; priority: Priority; archived: boolean;
   summary: string; summaryMeta: { author: ActorVM; at: Ms } | null;
+  teamProject?: { teamId: string; label: string; readOnly: boolean; taskCount: number; summaryLabel: LabelRef;
+    capabilities: { comments: 'read-only' | 'unsupported'; history: 'read-only' | 'unsupported'; repository: 'read-only' | 'unsupported' };
+    roster: TeamRosterVM; columns: Collection<TeamProjectColumnVM> } | null;
   thumb: ProjectCardVM['thumb'];
   flags: FlagVM[];                           // all, including acked risks; cleared risks excluded; order priority, risk, feature, label
   sources: Collection<{ id: string; kind: 'github' | 'workspace' | 'sessionGroup' | 'manual'; label: string;
@@ -510,8 +588,25 @@ interface ProjectVM {
   people: Collection<PersonChip & { role: string | null; origin: 'derived' | 'manual'; commitCount: number | null }>;
   recentHistory: Collection<HistoryItemVM>;  // newest 20 (after grouping); older pages via the history route. NOT history:{events,…} (R7-01)
   historyNextCursor: string | null;
+  sourceDescriptors: Collection<ProjectSourceDescriptorVM>; statusLabel: LabelRef;
+  counts: ProjectCountsVM; capabilities: ProjectCapabilitiesVM;
   lastActivityAt: Ms; createdAt: Ms;
 }
+interface TeamProjectTaskVM {
+  id: string; title: string; state: 'open' | 'claimed' | 'working' | 'review' | 'done' | 'blocked';
+  column: ProjectStatus; columnLabel: LabelRef; priority: Priority | null;
+  owner: { id: string; name: string } | null;
+  reviewers: Collection<{ id: string; name: string | null; verdict: 'go' | 'no-go' | 'pending' | 'unknown'; verdictLabel: LabelRef }>;
+  createdAt: Ms | null; updatedAt: Ms | null; lastActivityAt: Ms | null;
+}
+interface TeamProjectColumnVM { id: ProjectStatus; label: LabelRef; count: number; tasks: Collection<TeamProjectTaskVM> }
+interface TeamRosterVM { groups: Collection<{ id: string; label: string; order: number; parentGroupId: string | null;
+    memberIds: string[]; memberCount: number; memberCountLabel: LabelRef; depth: number }>;
+  members: Collection<{ id: string; order: number; parentId: string | null; groupId: string; rosterDepth: number;
+    roleLabel: string | null; parentLabel: string | null;
+    identity: { id: string; name: string; context: string | null; provider: string | null; teamId: string; parentId: string | null; status: string; statusLabel: LabelRef };
+    portrait: { look: AppearanceLook | null; avatarUrl: string | null }; source: ProjectSourceDescriptorVM | null }>;
+  memberCount: number; memberCountLabel: LabelRef }
 interface RepoVM {                           // R3-20: present as soon as a github source is linked
   state: 'pending' | 'ok' | 'error';         // pending: never fetched; error: last fetch failed (the last good data is kept)
   url: string; owner: string; name: string;
@@ -523,7 +618,15 @@ interface RepoVM {                           // R3-20: present as soon as a gith
 }
 interface HistoryItemVM { id: string; at: Ms; kind: HistoryKind; actor: ActorVM; text: LabelRef /* §3.9.1 */; group: number /* events merged, ≥ 1 */ }
 ```
+An enabled orchestrator team contributes one read-only project card unless its source adapter declares task writes. The card's `id` is stable and opaque, `origin` identifies the backend projection, and `teamProject.taskCount` is backend-computed. Its detail uses `ProjectVM.teamProject.columns`; tasks map `open → todo`, `claimed|working → in-progress`, `review → in-review`, `done → shipped`, and `blocked → in-progress`. The task's canonical `state` remains present alongside its mapped column. Owner, reviewer verdicts, priority, and last activity are projected from the canonical snapshot; task briefs, review notes, inbox bodies, source paths, and report references are never included. `teamProject.capabilities` declares comments as read-only and history/repository as unsupported where the source does not provide them. The comments read route returns a valid empty, non-writable `CommentThreadVM` for these projects. A project reader without `teams.read` sees no team cards and cannot read a team project's detail.
+
 History page: `Page<HistoryItemVM>`, newest first (`at` desc, `id` desc). Default limit 20, max 100. The cursor is over raw events, so a group can be split across pages.
+
+Board source chips are computed from the eligible backend project set. `source` selects one returned `sourceFilters[].id`; the VM carries selected state, counts, ordered cards, labels and source descriptors. Clients submit a selected id and render the returned projection. The registry is source-neutral: each source contributes its own stable id, kind, runtime, label and declared connector brand. Projects without a known count use `null`; zero means measured none.
+
+Runtime adapters may declare a `projectSource` capability. For workspace projects, the adapter attaches a source-private opaque `projectRef` and safe `projectLabel` to canonical sessions; neither the reference nor a filesystem path appears in a VM. The backend groups sessions only within the same connector identity, derives counts/latest activity from those sessions, and uses the adapter's connector label/brand and declared read/write/comment/history/repository capabilities. Claude Code and Codex currently contribute read-only workspace projects; unsupported history/repository features are declared as such rather than inferred by the client.
+
+Team-project roster groups and members are already presentation-shaped. `group.memberIds`, `order`, `parentId`, `groupId`, `rosterDepth`, role/parent labels, member counts and `portrait` are authoritative; clients render them without rebuilding parent chains or counts. Member identity uses the source's stable canonical ID, while session references and host-private IDs remain private. A portrait may have no character look or URL when no canonical appearance exists; the source brand remains available as provider context. Task summary, labels, counts and source capabilities are likewise server supplied. Task briefs, review notes, inbox bodies, source paths, and report references are never included.
 
 **Board 409 (PM, on frontend-02):** `error.current.vm` is always a `ProjectVM`, never a card. A board reverts its optimistic move and resyncs its board topic.
 
@@ -558,7 +661,7 @@ interface LayoutVM {
 }
 interface UiPrefs { uiTheme: 'system' | 'dark' | 'light' }
 ```
-`layout.data.idleRelocationMinutes` is optional and bounded to 1–1440; absence means 15 minutes. It is stored with the office layout. Both API versions preserve the value when an older client omits it. The backend picks a declared, reachable activity spot and publishes `activity`, `sceneTarget`, and any `sceneTravel`; the browser only animates those intents.
+`layout.data.idleRelocationMinutes` is a compatibility projection, bounded to 1–1440 and sourced from the authoritative Settings value `settings.office.idleRelocationMinutes` (default 15). It is not stored with the office layout. On upgrade, an existing layout value is migrated once into instance configuration when that Settings value is absent. Layout writes from older clients may include the field, but the server ignores it; both API versions return the current Settings value so the layout editor and placement engine agree. The backend picks a declared, reachable activity spot and publishes `activity`, `sceneTarget`, and any `sceneTravel`; the browser only animates those intents.
 Authoritative example: `docs/architecture/examples/layout-vm.json` (its `layout.data`, `default.data` and `manifest` are the design/office example files, verbatim). The shape checker treats `$.data.manifest` as opaque.
 
 `GET /office/layout?floorId=<id>` and its `layout?floorId=<id>` topic provide a backend-projected floor LayoutVM, including reset defaults, theme and validation policy. The same selector scopes layout/theme writes and revision reads. A scoped write merges that floor into the canonical root, preserves every other floor and global appearance rules, and returns a scoped VM (including on 409). Selectors are bounded and conflicting body/query values or a scoped `data.floors` registry are rejected. Existing authorization, readonly and revision guards apply. Clients render these values and send drafts unchanged; they do not generate defaults or merge the floor registry.
@@ -601,6 +704,25 @@ interface CandidateVM {
 }
 ```
 
+### 3.15 OfficeCharactersVM (T-0105)
+`GET /api/v2/views/office/characters?scope=office|all&search=<text>` returns the server-built character editor inventory. The same path is available on v3; row roles use that contract's occupant vocabulary. `scope` defaults to `office` (only current office occupants); `all` also includes detected, non-private agent rows. Search, grouping, order, labels, and counts are all projected by the server. The browser renders the returned rows without deriving structure.
+```ts
+interface OfficeCharactersVM {
+  scope: 'office' | 'all'; search: string; count: number; countLabel: LabelRef;
+  groups: Collection<{ id: string | null; label: LabelRef; count: number; countLabel: LabelRef; rows: OfficeCharacterRowVM[] }>;
+  emptyLabel: LabelRef;
+}
+interface OfficeCharacterRowVM {
+  id: string; role: OccupantRole; name: string; primary: boolean;
+  runtime: string | null; runtimeBrand: ConnectorMark | null;
+  state: AgentState | null; stateLabel: LabelRef; roleLabel: LabelRef;
+  look: AppearanceLook; automaticLook?: AppearanceLook; groupId: string | null;
+  order: number; inOffice: boolean; lastSeenAt: Ms | null;
+}
+type ConnectorMark = { monogram: string; color: string; logo?: string; logoDark?: string; providerName?: string };
+```
+Authoritative example: `docs/architecture/examples/office-characters-vm.json`. Readers without `logs:read` receive only the summary-role inventory; private conversation rows and their titles are omitted, timestamps are null, and all counts are recomputed after that boundary.
+
 ## 4. SSE stream
 
 ### 4.1 Topics and identity (R3-03)
@@ -622,17 +744,18 @@ A **topic id** is `name` or `name:<param>` or `name?<k>=<v>[&…]`, with params 
 - **Stream ids** are random (`str_` + 22 base62 chars) and scoped to the authenticated session. Another session's stream id → 404 `not_found`.
 
 ### 4.3 Revisions (R3-02)
-- Each topic id has **one server-wide revision counter**, shared by every stream, starting at 1 when the server first builds that topic's VM. It's held in memory, so a server restart starts topics over at 1; the `hello` frame then carries a new `serverEpoch`, and clients discard their revisions.
-- A **snapshot** carries the topic's **current** revision (not 1). A **delta** carries `rev` and `baseRev = rev - 1`.
-- **Client rule:** apply a delta only if `baseRev` equals the client's revision for that topic. Otherwise call `resync` and ignore deltas for that topic until the snapshot arrives.
+- For ordinary topics, each topic id has **one server-wide revision counter**, shared by every stream, starting at 1 when the server first builds that topic's VM. It's held in memory, so a server restart starts topics over at 1; the `hello` frame then carries a new `serverEpoch`, and clients discard their revisions.
+- A **snapshot** carries the topic's **current** revision (not 1). On ordinary topics, a **delta** carries `rev` and `baseRev = rev - 1`.
+- **Client rule:** on ordinary topics, apply a delta only if `baseRev` equals the client's revision for that topic. Otherwise call `resync` and ignore deltas for that topic until the snapshot arrives.
 - **GET** responses that back a topic include `meta.topic {id, rev}`. A client may render a GET result and then wait for the snapshot; it must not apply deltas on top of a GET result whose `rev` differs from their `baseRev`.
 - **Entity revisions** (`Project.revision`, `layout.revision`) are unrelated to topic revisions and are used only for command concurrency (§5).
+- **Permission-scoped Projects exception (2.10 / 3.7):** `projects` board and `project:<id>` detail revisions are deterministic safe-integer tokens derived from the exact VM projected for that principal. They are **opaque equality tokens**, not counters: they may decrease, recur, or differ across principals; clients must not order them or infer hidden changes from them. The corresponding GET metadata and SSE snapshot use the same token. These scoped topics send snapshots only, never deltas. A client refreshes/render-replaces on each snapshot and may use token equality only to recognize an unchanged projected payload. This does not change entity `Project.revision` or command `expectedRevision`.
 
 ### 4.4 Frames
 Each frame has `event: <type>`, `id: <streamId>:<seq>` (seq starts at 1 per stream and increases by 1 per frame) and `data: <JSON>`.
 ```ts
 type SseFrame =
-  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.8'; serverTime: Ms; resumed: boolean; topics: string[];
+  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.9'; serverTime: Ms; resumed: boolean; topics: string[];
       rejected?: { topic: string; issue: 'unknown-topic' }[] /* 2.4: unknown topics asked at open */ }
   | { type: 'snapshot'; topic: string; rev: number; data: unknown }
   | { type: 'delta'; topic: string; rev: number; baseRev: number; ops: DeltaOp[] }
@@ -962,3 +1085,22 @@ The core delegates discovery to `adapter.setup.discover`; the adapter reconciles
 `OccupantVM.automaticLook` and `LayoutVM.agentsSeen[].automaticLook` optionally carry the durable automatic assignment in the same shape as `look`. Owner rules still determine the effective `look`; the additional field lets editor/Store previews reuse the automatic assignment after name/station edits, reset and owner overrides. Both 2.x and 3.0 include it; no new unauthenticated route is added.
 
 Agent rules in `layout.data.agents[]` and `default.data.agents[]` may carry `appearance: 'auto' | 'manual'`. Both authoritative LayoutVM examples and the shipped seed explicitly show auto; the field is optional for legacy clients. Appearance edits explicitly set manual, including choosing the old seed style or no accessories. Name/station edits keep auto. Legacy exact owner rules and changed wildcard styles remain manual; untouched shipped seed styles use auto. Automatic allocation is stored once by canonical agent identity in `office_automatic_looks`, chooses a least-used installed family atomically, and persists through absence, seen-inventory retention, reloads and restarts. New installed families affect new assignments only. Hashes choose ties, variants and optional supported gear; no ID-specific runtime code is used. The existing inventory cap remains 200; OfficeVM roster rows are bounded separately at 64 with an explicit overflow count.
+
+
+### Desk communication (T-0122)
+
+Office occupants may carry nullable `communication: {id, mode: "desk"|"meeting", peerIds: string[], expiresAt: timestamp, screen: "message-sent"|"message-received", surface: "monitor"|"bubble", label: LabelRef}`. Only callers with sessions.read receive communication metadata; peers must be visible canonical occupants. The engine reads canonical sender identities from each occupant’s exact session transcript. It never inspects message text, guesses peers from names/providers/team membership, or carries transcript text in the scene. Evidence expires after two minutes; the server refreshes the VM at expiry.
+
+`screenIntent: {screen: "message-sent"|"message-received"|"coding"|"terminal"|"browsing"|"writing"|"thinking"|"waiting"|"blocked"|null, surface: "monitor"|"bubble"|"none", label: LabelRef|null}` provides the display directly. A computer target uses the monitor; an occupant away from a computer uses an overhead marker. The browser only selects registered animation frames, respecting reduced motion and visibility.
+
+Ordinary exchanges retain the supplied desk/home or current activity target. Optional persisted `layout.data.communicationMeetingPercent` (integer 0–100, default 10) deterministically samples a conversation by exact session and canonical peer identities. A physical meeting requires same-floor participants, no current activity, and two reachable registered table seats; no additional standing tiles or desks are invented. `sceneTarget` carries each authoritative meeting point; the home desk stays reserved. Each table hosts one pair, and expired communication restores normal backend targets.
+
+### 3.16 Store navigation (OfficeStoreVM, v2/v3)
+
+`GET /api/v{2,3}/views/office/store?floorId=1&section=mobilier&category=` requires both Store and Office read authority. It returns `{floorId, sectionId, categoryId, sections, categories, floors, itemIds}`. Each control is `{label:LabelRef, options:[{id,label:LabelRef,count:number|null}]}` in backend display order. `categories` is null when the section has no category filter; `floors` is null unless the selected section customizes a floor. `categoryId` is null when the category control is absent. Floor counts are null: no occupant identity/activity is exposed through the catalogue. The section IDs retain existing Store URL vocabulary (mobilier, decoration, personnages, couleurs, accessoires, themes). Invalid section/category/floor selections return 400.
+
+The engine projects installed manifest entries, including lazy packs, into section/category options and ordered filtered item IDs. The VM supplies the current selected IDs and authoritative floor labels/order from the actor-scoped Office projection. An explicitly addressed valid floor is included even if currently empty/unoccupied. The browser sends its selection and renders the controls; it does not derive options, counts, category membership or floor visibility. Layout drafts, dirty navigation confirmation, save/version checks and floor-scoped transport remain the existing Layout API. The frontend uses a guarded one-shot GET (not a new SSE topic) and refreshes it with the Office topic revision. Example: `examples/office-store-vm.json`; v3 uses the same shape.
+
+### OfficePaletteVM — Customize catalogue
+
+`GET /api/v2/views/office/palette?floorId=1&category=&search=` (same v3 path) requires Office read. Bounded selection: valid floor id, category <=64 characters, search <=120. Invalid selections return 400. The engine projects all installed furniture and decoration, including lazy registrations, as `{floorId,categoryId,search,categories:{label:LabelRef,options:[{id,label:LabelRef,count}]},itemIds}`. Empty category means all. Category counts describe the full catalogue; search matches normalized registered names/label/id. The backend owns options, category order, counts, membership and item order. The browser sends selections and maps supplied item IDs to registered display assets only. This static catalogue has no occupant/session data; layout changes retain the existing authenticated floor-scoped write/version API. Examples: `office-palette-vm.json` (v2/v3).

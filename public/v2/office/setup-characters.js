@@ -15,8 +15,17 @@ import { buildQuery } from '../config.js';
 import { html, render, useState, useEffect, useMemo, useRef } from '../lib.js';
 import { config } from '../config.js';
 import { indexManifest, poseImage, accessoryLayers, resolveUrl } from './assets.js';
-import { s, labelOf } from './strings.js';
+import { s, labelOf, locale, intlLocale } from './strings.js';
 import * as M from './setup-looks.js';
+
+/** Localized grammatical relation used by the appearance heading (French elides before vowels). */
+function nameRelation(name, loc = locale()) {
+  const text = String(name ?? '');
+  const initial = Array.from(text.trim())[0]?.toLocaleLowerCase(intlLocale(loc));
+  const key = loc === 'fr' && /^[aeiouyàâäæéèêëîïôöœùûüÿ]/u.test(initial ?? '')
+    ? 'setup.nameRelation.elided' : 'setup.nameRelation';
+  return s(key, { name: text }, loc);
+}
 
 const CSS = new URL('./setup-characters.css' + buildQuery, import.meta.url).href;
 const POSES = ['idle', 'working', 'thinking', 'celebrating'];
@@ -78,20 +87,40 @@ export const Figure = ({ index, look, pose, assetBase, label, cls, thumbnail = f
   const thumb = v?.thumbnail ?? ch?.thumbnail;
   const paths = thumbnail && thumb ? [thumb] : lookLayers(index, look, pose);
   return html`<span class=${'ao-sc-figure ' + (cls || '')} role=${label ? 'img' : undefined} aria-label=${label || undefined}
-    aria-hidden=${label ? undefined : 'true'}>${paths.map((p, i) => html`<img key=${i} src=${resolveUrl(p, assetBase)} alt="" draggable="false" loading=${thumbnail ? 'lazy' : undefined} decoding="async" />`)}</span>`;
+    aria-hidden=${label ? undefined : 'true'}>${paths.map((p, i) => html`<img key=${p + ':' + i} src=${resolveUrl(p, assetBase)} alt="" draggable="false" loading=${thumbnail ? 'lazy' : undefined} decoding="async" />`)}</span>`;
 };
 
-export function SetupCharacters({ agents = [], value = null, onChange, manifest: given = null, assetBase = config.assetBase, selected = null, onSelect = null, embedded = false }) {
+/** Render the registered item alone, framing transparent padding after decode. */
+function AccessoryThumbnail({ accessory, assetBase }) {
+  const path = accessory.thumbnail ?? Object.values(accessory.images ?? {}).find(poses => typeof poses.idle === 'string')?.idle;
+  const source = path ? { url: resolveUrl(path, assetBase), box: null, canvas: null } : null;
+  const ref = useRef(null), [decoded, setDecoded] = useState(null), [failedKey, setFailedKey] = useState(null);
+  const key = source?.url, failed = !source || failedKey === key;
+  const ready = !failed && decoded?.key === key && decoded.style;
+  useEffect(() => {
+    let live = true, off;
+    if (source && !failed) loadModule(() => import('./avatar-framing.js' + buildQuery)).then(({ observeAvatar }) => {
+      if (live && ref.current) off = observeAvatar(ref.current, source, style => { if (live) setDecoded({ key, style }); }, () => { if (live) setFailedKey(key); });
+    }).catch(() => { if (live) setFailedKey(key); });
+    return () => { live = false; off?.(); };
+  }, [key, failed]);
+  return html`<span class="ao-sc-gear" aria-hidden="true" data-accessory=${accessory.id} data-thumbnail-ready=${ready ? 'true' : 'false'} data-thumbnail-error=${failed ? 'true' : undefined}>
+    ${failed ? html`<span class="ao-sc-gear__fallback">${labelOf(accessory, 'accessory')}</span>` : ready ? null : html`<span class="bu-compact-progress"></span>`}
+    ${source && !failed ? html`<img key=${key} ref=${ref} src=${source.url} alt="" draggable="false" decoding="async" onError=${() => setFailedKey(key)} style=${{ ...(ready ? decoded.style : {}), visibility: ready ? 'visible' : 'hidden' }} />` : null}
+  </span>`;
+}
+
+export function SetupCharacters({ agents = [], value = null, onChange, manifest: given = null, assetBase = config.assetBase, selected = null, onSelect = null, embedded = false, externalSelection = false, previewPose = null, onPreviewPoseChange = null, previewInStage = false }) {
   useCss();
   const m = useManifest(given, assetBase);
   if (!agents.length) return html`<section class="ao-sc"><p class="ao-sc__help">${s('setup.noAgents')}</p></section>`;
   if (m.error) return html`<section class="ao-sc"><p class="ao-sc__help" role="alert">${s('setup.failed')}</p>
     <button type="button" class="bu-btn" onClick=${m.retry}>${s('office.retry')}</button></section>`;
   if (!m.manifest) return html`<section class="ao-sc" aria-busy="true"><p class="ao-sc__help" role="status">${s('setup.loading')}</p></section>`;
-  return html`<${Step} agents=${agents} value=${value} onChange=${onChange} manifest=${m.manifest} assetBase=${assetBase} selected=${selected} onSelect=${onSelect} embedded=${embedded} />`;
+  return html`<${Step} agents=${agents} value=${value} onChange=${onChange} manifest=${m.manifest} assetBase=${assetBase} selected=${selected} onSelect=${onSelect} embedded=${embedded} externalSelection=${externalSelection} previewPose=${previewPose} onPreviewPoseChange=${onPreviewPoseChange} previewInStage=${previewInStage} />`;
 }
 
-function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect, embedded }) {
+function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect, embedded, externalSelection, previewPose, onPreviewPoseChange, previewInStage }) {
   const index = useMemo(() => indexManifest(manifest), [manifest]);
   // Controlled when the caller passes both `value` and `onChange` (the Bureau editor, the setup flow): the looks shown
   // are always derived from `value`, and an edit only calls onChange. There is no internal copy that an echo could
@@ -105,7 +134,9 @@ function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect
   const [ownCurrent, setOwnCurrent] = useState(agents[0].id);
   const current = selected && agents.some((a) => a.id === selected) ? selected : ownCurrent;
   const setCurrent = (id) => { setOwnCurrent(id); onSelect?.(id); };
-  const [pose, setPose] = useState('idle');
+  const [ownPose, setOwnPose] = useState('idle');
+  const pose = previewPose ?? ownPose;
+  const setPose = next => { setOwnPose(next); onPreviewPoseChange?.(next); };
   const [say, setSay] = useState('');
   const [hint, setHint] = useState(null);
   useEffect(() => { if (!agents.some((a) => a.id === current)) setCurrent(agents[0].id); }, [agentsKey]);
@@ -150,16 +181,16 @@ function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect
     e.currentTarget.closest('.ao-sc__agents')?.querySelectorAll('.ao-sc__agent')[j]?.focus();
   }
 
-  return html`<section class=${'ao-sc' + (embedded ? ' ao-sc--embedded' : '')} aria-labelledby=${embedded ? 'ao-sc-editing' : 'ao-sc-title'}>
+  return html`<section class=${'ao-sc' + (embedded ? ' ao-sc--embedded' : '') + (externalSelection ? ' ao-sc--external' : '')} aria-labelledby=${embedded ? 'ao-sc-editing' : 'ao-sc-title'}>
     ${embedded ? null : html`<h2 class="ao-sc__title" id="ao-sc-title">${s('setup.title')}</h2>
     <p class="ao-sc__help">${s('setup.help')}</p>`}
     <div class="ao-sc__grid">
       <div class="ao-sc__agents">
         ${embedded ? null : html`<p class="ao-sc__label" id="ao-sc-agents">${s('setup.agents')}</p>`}
-        ${embedded ? html`<label class="bu-field ao-sc__pick"><span class="bu-field__label">${s('setup.agents')}</span>
+        ${embedded && !externalSelection ? html`<label class="bu-field ao-sc__pick"><span class="bu-field__label">${s('setup.agents')}</span>
           <select class="bu-select" value=${agent.id} onChange=${(e) => setCurrent(e.currentTarget.value)}>
             ${agents.map((a) => html`<option key=${a.id} value=${a.id}>${a.name} · ${summary(looks[a.id])}</option>`)}</select></label>` : null}
-        ${groups.map((g) => html`${g.label ? html`<p class="ao-sc__group" id=${'ao-sc-group-' + g.id}>${g.label}</p>` : null}
+        ${externalSelection ? null : groups.map((g) => html`${g.label ? html`<p class="ao-sc__group" id=${'ao-sc-group-' + g.id}>${g.label}</p>` : null}
         <ul class="ao-sc__list" aria-labelledby=${g.label ? 'ao-sc-group-' + g.id : embedded ? undefined : 'ao-sc-agents'} aria-label=${!g.label && embedded ? s('setup.agents') : undefined}>${g.items.map(({ a, i }) => html`<li key=${a.id}>
           <button type="button" id=${'ao-sc-agent-' + i} class="ao-sc__agent" title=${embedded ? `${a.note ?? ''} · ${summary(looks[a.id])}` : undefined} aria-current=${a.id === agent.id ? 'true' : undefined}
             tabindex=${a.id === agent.id ? 0 : -1} onClick=${() => setCurrent(a.id)} onKeyDown=${(e) => onAgentKey(e, i)}>
@@ -170,10 +201,10 @@ function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect
           </button></li>`)}</ul>`)}
       </div>
       <div class="ao-sc__editor" role="group" aria-labelledby="ao-sc-editing">
-        <h3 class="ao-sc__subtitle" id="ao-sc-editing">${s('setup.editing', { name: agent.name })}</h3>
+        <h3 class="ao-sc__subtitle" id="ao-sc-editing">${s('setup.editing', { relation: nameRelation(agent.name) })}</h3>
         <div class="ao-sc__preview">
-          <${Figure} index=${index} look=${look} pose=${pose} assetBase=${assetBase} cls="ao-sc-figure--lg"
-            label=${s('setup.preview', { name: agent.name, character: summary(look), pose: s('setup.pose.' + pose) })} />
+          ${previewInStage ? null : html`<${Figure} index=${index} look=${look} pose=${pose} assetBase=${assetBase} cls="ao-sc-figure--lg"
+            label=${s('setup.preview', { name: agent.name, character: summary(look), pose: s('setup.pose.' + pose) })} />`}
           <label class="bu-field ao-sc__pose"><span class="bu-field__label">${s('setup.pose')}</span>
             <select class="bu-select" value=${pose} onChange=${(e) => setPose(e.currentTarget.value)}>
               ${POSES.map((p) => html`<option key=${p} value=${p}>${s('setup.pose.' + p)}</option>`)}</select></label>
@@ -194,13 +225,13 @@ function Step({ agents, value, onChange, manifest, assetBase, selected, onSelect
         <fieldset class="ao-sc__set"><legend class="ao-sc__label">${s('setup.accessories')}</legend>
           ${slots.map(([slot, items]) => html`<div key=${slot} class="ao-sc__slot" role="group" aria-labelledby=${'ao-sc-slot-' + slot}>
             <span class="ao-sc__slotlabel" id=${'ao-sc-slot-' + slot}>${s('ed.slot.' + slot)}</span>
-            ${items.map((a) => html`<button key=${a.id} type="button" class="bu-btn bu-btn--sm ao-sc__acc" aria-pressed=${look.accessories.includes(a.id) ? 'true' : 'false'}
+            ${items.map((a) => html`<button key=${a.id} type="button" class=${'bu-btn bu-btn--sm ao-sc__acc' + (externalSelection ? ' ao-sc__acc--visual' : '')} aria-label=${accLabel(a)} title=${externalSelection ? accLabel(a) : undefined} aria-pressed=${look.accessories.includes(a.id) ? 'true' : 'false'}
               onClick=${() => {
                 const r = M.withAccessory(index, look, a.id);
                 setHint(r.replaced ? s('setup.set.replaced', { name: agent.name, old: accLabel(index.accessories.get(r.replaced)), accessory: accLabel(a) }) : null);
                 update(r.look, r.replaced ? s('setup.set.replaced', { name: agent.name, old: accLabel(index.accessories.get(r.replaced)), accessory: accLabel(a) })
                   : s(r.added ? 'setup.set.added' : 'setup.set.removed', { name: agent.name, accessory: accLabel(a) }));
-              }}>${accLabel(a)}</button>`)}
+              }}>${externalSelection ? html`<${AccessoryThumbnail} accessory=${a} assetBase=${assetBase} />` : accLabel(a)}</button>`)}
           </div>`)}
           ${look.accessories.length ? null : html`<p class="ao-sc__note">${s('setup.noAccessories')}</p>`}
           ${hint ? html`<p class="ao-sc__note">${hint}</p>` : null}

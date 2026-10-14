@@ -9,6 +9,8 @@ import { assetUrl, config } from '../config.js';
 import * as v3 from './v3.js';
 import { schemaForPath, schemaForTopic } from '../vmcheck.js';
 import { META, PROPOSED_AGENT } from './meta.js';
+import { fr as storeLabels } from '../office/store-labels.js';
+Object.assign(META.labels,storeLabels);
 import { buildHealth, withIssue } from './health.js';
 import { diff } from './diff.js';
 import * as projects from './projects.js';
@@ -262,7 +264,12 @@ export async function handle(method, path, body) {
 async function handle2(method, path, body) {
   const url = new URL(path, 'http://mock');
   const p = url.pathname;
-  if (method === 'GET' && p === '/api/v2/meta') return ok(META);
+  if (method === 'GET' && p === '/api/v2/meta') {
+    // Branding is internal fixture data for the standalone Bureau harness,
+    // not a MetaVM field. Keep mock responses on the same contract as the API.
+    const { brand, ...runtime } = META.runtime || {};
+    return ok({ ...META, runtime: META.runtime ? runtime : null });
+  }
   // ---- First-run setup (F8, G4 proposal; mock/setup.js) ----
   if (p === '/api/v2/setup' || p.startsWith('/api/v2/setup/')) {
     // ?setup-lent=<ms>: a slow runtime, so a test can change the connection while a check or a discovery is in flight (R20-02).
@@ -318,6 +325,22 @@ async function handle2(method, path, body) {
     if (cursor) { const page = logsDb().page(kind, cursor, undefined, { heartbeats: heartbeat === 'include', connector, agent }); return page ? ok(page) : fail(400, 'validation_failed', 'Certaines valeurs sont invalides.', [{ field: 'cursor', issue: 'invalid' }]); }
     const q = new URLSearchParams([...(agent ? [['agent', agent]] : []), ...(connector ? [['connector', connector]] : []), ...(heartbeat === 'include' ? [['heartbeat', 'include']] : []), ...(kind ? [['kind', kind]] : [])]).toString();
     return read(q ? 'logs?' + q : 'logs');
+  }
+  if (method === 'GET' && p === '/api/v2/views/office/palette') {
+    const {mockPalette}=await loadModule(() => import('./palette.js' + buildQuery));
+    try {return (await viewDelay()) || ok(await mockPalette({floorId:url.searchParams.get('floorId') || '1',category:url.searchParams.get('category') || '',search:url.searchParams.get('search') || ''}));}
+    catch {return fail(400,'validation_failed','Sélection invalide.');}
+  }
+  if (method === 'GET' && p === '/api/v2/views/office/store') {
+    await officeMock();
+    const response=await fetch(assetUrl('mock/examples/office-store-catalog.json'));
+    if(!response.ok)return fail(503,'upstream_unavailable','Catalogue indisponible.');
+    const catalog=await response.json(),section=url.searchParams.get('section') || 'mobilier',category=url.searchParams.get('category') || '';
+    const value=Object.hasOwn(catalog,section)&&Object.hasOwn(catalog[section],category) ? catalog[section][category] : null;
+    if(!value)return fail(400,'validation_failed','Sélection invalide.');
+    const vm=structuredClone(value);vm.floorId=url.searchParams.get('floorId') || '1';
+    if(vm.floors)vm.floors.options=om.officeVM().rosterFloors.map(floor=>({id:floor.id,label:floor.label,count:null}));
+    return (await viewDelay()) || ok(vm);
   }
   if (p === '/api/v2/views/office' || p.startsWith('/api/v2/office/')) {
     await officeMock();

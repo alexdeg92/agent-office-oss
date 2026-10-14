@@ -61,13 +61,13 @@ test('persisted automatic looks: scene, roster and editor agree; owner edit save
     await p.waitFor(`document.querySelector('.ao-controls [data-page-control]')`);
     await p.eval(`document.querySelector('.ao-controls [data-page-control]').click(); await officeBench.until(()=>document.querySelector('.ao-editbar'));
       [...document.querySelectorAll('.ao-editbar .bu-segmented__opt')].find(b=>b.textContent==='Personnages').click();`);
-    await p.waitFor('document.querySelector(".ao-sc__list")');
-    await p.eval(`[...document.querySelectorAll('.ao-sc__agent')].find(b=>b.querySelector('.ao-sc__name').textContent===${JSON.stringify(targetName)}).click();`);
+    await p.waitFor('document.querySelector(".ao-character-row")');
+    await p.eval(`[...document.querySelectorAll('.ao-character-row')].find(b=>b.querySelector('strong').textContent===${JSON.stringify(targetName)}).click();`);
     await p.waitFor(`document.querySelector('#ao-sc-editing').textContent.endsWith(${JSON.stringify(targetName)})`);
     assert.equal(await p.eval(`return document.querySelector('.ao-editpanel .ao-sc__card input:checked').value;`), target.look.character, 'editor starts with the same persisted family');
     await p.eval(`document.querySelector('.ao-editpanel .ao-sc__card input[value="fen"]').click();`);
     await p.waitFor('document.querySelector(".ao-editpanel .ao-sc__card input[value=fen]").checked');
-    await p.eval(`document.querySelector('.ao-editbar .bu-btn--primary').click();`);
+    await p.eval(`document.querySelector('.ao-characters__actions .bu-btn--primary').click();`);
     await p.waitFor('!document.querySelector(".ao-editbar")');
     await p.waitFor(`document.querySelector('.ao-char[data-occupant='+CSS.escape(${JSON.stringify(target.id)})+'] [data-layer=body][src*="/fen/"]')?.naturalWidth > 0`);
     assert.equal(await p.eval(`return document.querySelector('.ao-bureau__stage')?.dataset.floor`), await p.eval(`return new URLSearchParams(location.search).get('etage') || '1'`), 'the scene remains on the edited agent’s floor');

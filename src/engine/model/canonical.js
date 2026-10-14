@@ -125,6 +125,10 @@ const tr = (kind, extra) => s.object(Object.assign({ id: evId(), kind: s.literal
 const TraceEvent = s.discriminated('kind', {
   system: tr('system'), thinking: tr('thinking'), observation: tr('observation'),
   user: tr('user', { sender: strN() }),
+  // A trusted adapter-projected completion from a delegated agent. Native
+  // prompt/injection payloads are never admitted as human messages.
+  'subagent-result': tr('subagent-result', { title: s.string().max(120).nullable(),
+    status: s.enumOf(['completed', 'failed', 'running', 'unknown']), body: str() }),
   assistant: tr('assistant', { model: strN(), provider: strN(), outputTokens: nn().nullable(),
     stopReason: s.enumOf(['stop', 'toolUse', 'error', 'unrecognized']).nullable(), error: strN() }),
   tool: s.object({ id: evId(), kind: s.literal('tool'), at: nn(), senderInfo: Sender.optional(), callId: strN(), name: str(),

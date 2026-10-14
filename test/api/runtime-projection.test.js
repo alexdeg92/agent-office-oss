@@ -11,7 +11,7 @@ test('v2 final legacy projection keeps floor and roster occupant references alig
   const input = {
     occupants: [
       { id: scopedLegacyAgent, role: 'agent', parentId: null, groupId: scopedLegacyAgent },
-      { id: codexAgent, role: 'agent', parentId: scopedLegacyAgent, groupId: scopedLegacyAgent },
+      { id: codexAgent, role: 'agent', parentId: scopedLegacyAgent, groupId: scopedLegacyAgent, communication: {peerIds:[scopedLegacyAgent]} },
     ],
     rosterFloors: [{ id: '1', occupantIds: [scopedLegacyAgent, codexAgent], mobileLabelIds: [scopedLegacyAgent, codexAgent], items: [
       { kind: 'occupant', id: `occupant:${scopedLegacyAgent}`, occupantId: scopedLegacyAgent },
@@ -37,5 +37,6 @@ test('v2 final legacy projection keeps floor and roster occupant references alig
   assert.deepEqual(projected.rosterItems[0].previewOccupantIds, [codexAgent]);
   assert.deepEqual(projected.conversationIds, [codexAgent]);
   assert.equal(projected.occupants[1].parentId, 'agent:builder');
+  assert.deepEqual(projected.occupants[1].communication.peerIds, ['agent:builder']);
   assert.equal(projected.occupantsSummary, input.occupantsSummary, 'ordinary text is not rewritten');
 });

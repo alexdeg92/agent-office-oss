@@ -28,8 +28,9 @@ function framing(box, width, height) {
     left: `${50 - (box.x + box.w / 2) * scale}%`, top: `${50 - (box.y + box.h / 2) * scale}%` };
 }
 
-export function observeAvatar(image, source, accept) {
+export function observeAvatar(image, source, accept, onFailure = null) {
   let live = true, started = false;
+  const failed = () => { if (live) onFailure?.(); };
   const loaded = async () => {
     if (started) return;
     started = true;
@@ -37,12 +38,14 @@ export function observeAvatar(image, source, accept) {
       await image.decode();
       if (!live) return;
       const style = decodedFraming(image, source);
-      if (style) accept(style);
-    } catch { /* Keep the icon fallback. */ }
+      if (style) accept(style); else failed();
+    } catch { failed(); }
   };
   image.addEventListener('load', loaded);
+  image.addEventListener('error', failed);
   if (image.complete && image.naturalWidth > 0) void loaded();
-  return () => { live = false; image.removeEventListener('load', loaded); };
+  else if (image.complete && image.currentSrc) failed();
+  return () => { live = false; image.removeEventListener('load', loaded); image.removeEventListener('error', failed); };
 }
 
 export function decodedFraming(image, source) {

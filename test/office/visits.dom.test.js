@@ -1,9 +1,8 @@
 'use strict';
-// office-dev-22/24 in the Bureau (harness, scenario « visite », a Discord DM, API 2.x). A message → the person comes to
-// the agent's desk; while the exchange is in flight the agent swivels in his chair to face the visitor in seated talking
-// poses, and the « … » bubble alternates (the person's message first, then the agent's reply run, the person « En
-// attente »). The run over → no bubble, the agent back at his desk, the person idle for a minute, then walks out. A
-// second message within 10 min → both at the meeting table. Names stay visible. Reduced motion: people snap.
+// T-0122 B / deployed talk-at-desk hotfix: a legacy visit plan animates each
+// participant at their own station. Repeated messages or a legacy `meeting`
+// array do not admit a physical meeting. Canonical backend meeting targets are
+// covered by office-communication engine/API and real browser tests.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { launch, findChrome } = require('./helpers/browser');
@@ -15,11 +14,12 @@ after(async () => { await browser?.close(); });
 
 const read = `const sc = document.querySelector('.ao-bureau__stage').aoScene;
   const of = (id) => { const c = sc.chars.get(id); if (!c || c.leaving) return 'gone';
-    return { at: c.visit?.key ?? null, talk: c.visit?.talk ?? null, facing: c.visit?.facing ?? null, pose: sc._currentPose(c), drawn: c.renderedPose, deskTalk: !!c.deskTalk, seatMode: c.seatMode }; };
-  const pos = (id) => { const r = document.querySelector('.ao-char[data-occupant="' + id + '"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom }; };
+    return { at: c.visit?.key ?? null, talk: c.visit?.talk ?? null, pose: sc._currentPose(c), drawn: c.renderedPose,
+      deskTalk: !!c.deskTalk, seatMode: c.seatMode, point: c.pos, stationUid: c.occ.stationUid, targetUid: c.target?.uid }; };
   const m = of('main'), v = of('dm:camille');
-  return { main: m, visitor: v, dist: m !== 'gone' && v !== 'gone' ? Math.round(Math.hypot(pos('main').x - pos('dm:camille').x, pos('main').y - pos('dm:camille').y)) : null,
-    bubbles: [...document.querySelectorAll('.ao-plate[data-talking]')].map((p) => p.querySelector('.ao-plate__name').textContent),
+  return { main: m, visitor: v,
+    bubbles: [...document.querySelectorAll('.ao-life-bubble')].map((p) => p.textContent),
+    markers: [...sc.chars.values()].filter(c => !c.marker.hidden).map(c => c.id),
     names: [...document.querySelectorAll('.ao-plate__name')].map((n) => n.textContent),
     pills: [...document.querySelectorAll('.ao-roster')].map((r) => r.querySelector('.ao-roster__name').textContent + ':' + r.querySelector('.ao-roster__state').innerText.trim()) };`;
 // wait until nobody walks (the stage element carries its scene: aoScene)
@@ -27,45 +27,45 @@ const settle = `const sc0 = document.querySelector('.ao-bureau__stage').aoScene;
 // the clock moves by `ms` (the mock and the page read Date.now); `tick` advances the scenario one step
 const later = (ms, tick = false) => `window.__off = (window.__off ?? 0) + ${ms}; const B = window.officeBench; ${tick ? 'B.om.tick();' : ''} await B.publish('office'); await new Promise((r) => setTimeout(r, 300));`;
 
-describe('visits in the Bureau (office-dev-22, office-dev-24)', { skip, timeout: 120_000 }, () => {
-  it('message → talking with the agent at his desk (bubble alternates); over → idle, then out; again → meeting table', async () => {
+describe('desk conversations in the Bureau (T-0122 B)', { skip, timeout: 120_000 }, () => {
+  it('messages animate each participant at their own desk; repeats do not schedule a physical meeting', async () => {
     const p = await browser.page('/public/v2/office/bureau-dev.html?tick=600000&nom=Orion&scenario=visite');
     await p.eval(`const real = Date.now; Date.now = () => real() + (window.__off ?? 0);`);
     await p.waitFor(`document.querySelector('.ao-char[data-occupant="dm:camille"]')`);
-    // 1. the person's message: the visitor talks (bubble), the host turns in his chair to face them
+    // 1. A message animates both assigned desks, without overhead bubbles.
     const a = await p.eval(`await new Promise((r) => setTimeout(r, 800)); ${settle} ${read}`);
-    assert.deepEqual([a.visitor.at, a.visitor.talk, a.main.at, a.main.talk], ['d0', true, null, null]);
-    assert.equal(a.main.deskTalk, true);
-    assert.equal(a.main.seatMode, 'desk', 'the host stays seated');
-    assert.equal(a.visitor.facing, 'se', 'visitor faces the seated host');
-    assert.deepEqual([a.main.pose, a.main.drawn, a.visitor.pose], ['seated-talking-sw', 'sofa-sit-sw', 'talking-se'], 'the host uses the proven seated frame');
-    assert.ok(a.dist < 140, `side by side (${a.dist}px)`);
-    assert.deepEqual(a.bubbles, ['Camille']);
+    for (const row of [a.main,a.visitor]) {
+      assert.equal(row.at,null);assert.equal(row.deskTalk,true);assert.equal(row.seatMode,'desk');
+      assert.equal(row.targetUid,row.stationUid);assert.equal(row.pose,'seated-talking-sw');
+    }
+    assert.notEqual(a.main.stationUid,a.visitor.stationUid,'participants keep distinct own stations');
+    assert.deepEqual(a.bubbles,[]);assert.deepEqual(a.markers,[]);
     assert.deepEqual(a.names.sort(), ['Camille', 'Orion'], 'names stay visible');
     assert.deepEqual(a.pills, ['Orion:Travaille', 'Camille:Travaille']);
-    // 2. the agent's reply run (still running): his bubble; the person waits for the reply
+    // 2. Reply/waiting state changes screens; neither participant moves.
     const b = await p.eval(`${later(15_000)} ${read}`);
-    assert.deepEqual(b.bubbles, ['Orion']);
-    assert.deepEqual([b.visitor.talk, b.main.deskTalk], [true, true]);
+    assert.deepEqual(b.bubbles,[]);assert.deepEqual(b.markers,[]);
+    assert.deepEqual([b.main.point,b.visitor.point],[a.main.point,a.visitor.point]);
+    assert.deepEqual([b.visitor.deskTalk,b.main.deskTalk],[true,true]);
     assert.deepEqual(b.pills, ['Orion:Travaille', 'Camille:En attente']);
-    // 3. the run is over: no bubble, no talking; the agent back at his desk, the person idle where they stood
+    // 3. The exchange ends; both keep their home positions and stop talking.
     const c = await p.eval(`${later(1000, true)} ${settle} ${read}`);
     assert.deepEqual(c.bubbles, []);
-    assert.deepEqual([c.main.at, c.visitor.at, c.visitor.talk], [null, 'd0', false]);
-    assert.match(c.visitor.pose, /^idle/);
+    assert.deepEqual([c.main.at,c.visitor.at,c.main.deskTalk,c.visitor.deskTalk],[null,null,false,false]);
+    assert.deepEqual([c.main.point,c.visitor.point],[a.main.point,a.visitor.point]);
     assert.deepEqual(c.pills, ['Orion:Inactif', 'Camille:Inactif']);
     // 4. a minute later the person walks out
     const d = await p.eval(`${later(61_000)} await window.officeBench.until(() => { const c = document.querySelector('.ao-bureau__stage').aoScene.chars.get('dm:camille'); return !c || c.leaving; }, 10000); ${read}`);
     assert.equal(d.visitor, 'gone');
-    // 5. a second message within 10 minutes: a conversation → both at the meeting table, the person's bubble
-    const e0 = await p.eval(`${later(1000, true)} ${read}`);
-    assert.deepEqual(e0.bubbles, ['Camille'], 'the person’s message first');
-    const e = await p.eval(`${settle} ${read}`);
-    assert.deepEqual([e.main.at?.[0], e.visitor.at?.[0], e.main.talk, e.visitor.talk], ['t', 't', true, true]);
+    // 5. Even the old repeat-message meeting array keeps both at their desks.
+    const e = await p.eval(`${later(1000, true)} ${settle} ${read}`);
+    for(const row of [e.main,e.visitor]){assert.equal(row.at,null);assert.equal(row.targetUid,row.stationUid);assert.equal(row.deskTalk,true);}
+    assert.deepEqual(e.bubbles,[]);assert.deepEqual(e.markers,[]);
+    assert.deepEqual([e.main.point,e.visitor.point],[a.main.point,a.visitor.point]);
     await p.close();
   });
 
-  it('reduced motion: visitors and the agent snap to their spots (no walk)', async () => {
+  it('reduced motion: legacy meeting requests keep participants at their own desks', async () => {
     const p = await browser.page('/test/office/harness.html');
     await p.waitFor('window.H && window.H.ready');
     const r = await p.eval(`
@@ -74,14 +74,20 @@ describe('visits in the Bureau (office-dev-22, office-dev-24)', { skip, timeout:
       sc.setOccupants(H.occupants([{ id: 'main', role: 'main', sourceName: 'Orion', state: 'working', stateSince: Date.now() },
         { id: 'dm:camille', role: 'dm', sourceName: 'Camille', state: 'working', stateSince: Date.now() }]));
       await new Promise((r) => setTimeout(r, 500));
+      const at = (id) => { const c = sc.chars.get(id); return { walking: c.walking, there: !!c.target && Math.abs(c.pos.x - c.target.x) < 0.01 && Math.abs(c.pos.y - c.target.y) < 0.01, visit: c.el.dataset.visit ?? null, point: c.pos, stationUid:c.occ.stationUid,targetUid:c.target?.uid,deskTalk:!!c.deskTalk }; };
+      const home = {main:at('main'),visitor:at('dm:camille')};
       sc.setVisits({ hostId: 'main', desk: [], meeting: ['main', 'dm:camille'], talking: true, speaker: 'dm:camille' });
-      const at = (id) => { const c = sc.chars.get(id); return { walking: c.walking, there: !!c.target && Math.abs(c.pos.x - c.target.x) < 0.01 && Math.abs(c.pos.y - c.target.y) < 0.01, visit: c.el.dataset.visit ?? null }; };
       const now = { main: at('main'), visitor: at('dm:camille') };
       sc.setVisits(null);
       const back = at('main');
-      return { now, back };`);
-    assert.deepEqual(r.now, { main: { walking: false, there: true, visit: 'meeting' }, visitor: { walking: false, there: true, visit: 'meeting' } });
-    assert.deepEqual(r.back, { walking: false, there: true, visit: null });
+      return { home, now, back };`);
+    for(const id of ['main','visitor']){
+      assert.equal(r.now[id].walking,false);assert.equal(r.now[id].there,true);assert.equal(r.now[id].visit,null);
+      assert.equal(r.now[id].targetUid,r.home[id].stationUid);assert.deepEqual(r.now[id].point,r.home[id].point);
+      assert.equal(r.now[id].deskTalk,true);
+    }
+    assert.equal(r.back.walking,false);assert.equal(r.back.there,true);assert.equal(r.back.visit,null);
+    assert.equal(r.back.deskTalk,false);assert.deepEqual(r.back.point,r.home.main.point);
     await p.close();
   });
 });

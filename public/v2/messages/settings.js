@@ -1,5 +1,7 @@
 // Settings page owns its lazy dictionary. Every key and parameter has French/English parity.
 export const fr = {
+  "settings.office.title": "Présence au bureau",
+  "settings.office.units": "Durées en minutes.",
   "settings.connection.connectedOne": "1 fournisseur connecté",
   "settings.connection.connectedCount": "{n} fournisseurs connectés",
   "settings.connection.gatewayDescription": "Votre passerelle et ses agents",
@@ -337,6 +339,12 @@ export const fr = {
   "settings.instance.active": "Configuration réseau active",
   "settings.instance.host": "Adresse d’écoute",
   "settings.instance.cookieSecure": "Cookie sécurisé",
+  "settings.office.finishedSessionWindowMinutes": "Conversation terminée visible",
+  "settings.office.agentPresenceWindowMinutes": "Présence d’un agent",
+  "settings.office.idleRelocationMinutes": "Déplacement après inactivité",
+  "settings.office.help.finishedSessionWindowMinutes": "Durée pendant laquelle une conversation terminée reste visible dans le Bureau.",
+  "settings.office.help.agentPresenceWindowMinutes": "Durée pendant laquelle un agent sans activité récente reste visible.",
+  "settings.office.help.idleRelocationMinutes": "Délai avant qu’un agent inactif change de place.",
   "settings.yes": "Oui",
   "settings.no": "Non",
   "settings.refresh.title": "Actualiser et abandonner les modifications ?",
@@ -344,6 +352,7 @@ export const fr = {
   "settings.confirmation.required": "Confirmez le plan et sélectionnez au moins un agent avant de continuer.",
   "settings.mode.readonly": "Lecture seule",
   "settings.derivedField": "Ce champ est calculé à partir du mode réseau.",
+  "settings.office.managed": "Cette durée est définie par la configuration du serveur.",
   "settings.envOverride": "Ce champ est défini par {variable}. Modifiez cette variable dans la configuration du service.",
   "settings.detection.config": "Configuration du moteur trouvée.",
   "settings.detection.presence": "Moteur présent sur cette machine.",
@@ -377,6 +386,8 @@ export const fr = {
   "settings.diagnostic.currentBuild": "Version à jour"
 };
 export const en = {
+  "settings.office.title": "Office presence",
+  "settings.office.units": "Durations in minutes.",
   "settings.connection.connectedOne": "1 connected provider",
   "settings.connection.connectedCount": "{n} connected providers",
   "settings.connection.gatewayDescription": "Your gateway and its agents",
@@ -714,6 +725,12 @@ export const en = {
   "settings.instance.active": "Active network configuration",
   "settings.instance.host": "Listen address",
   "settings.instance.cookieSecure": "Secure cookie",
+  "settings.office.finishedSessionWindowMinutes": "Finished conversation visibility",
+  "settings.office.agentPresenceWindowMinutes": "Agent presence",
+  "settings.office.idleRelocationMinutes": "Move after inactivity",
+  "settings.office.help.finishedSessionWindowMinutes": "How long a finished conversation stays visible in the office.",
+  "settings.office.help.agentPresenceWindowMinutes": "How long an agent without recent activity stays visible.",
+  "settings.office.help.idleRelocationMinutes": "How long an idle agent waits before moving to another spot.",
   "settings.yes": "Yes",
   "settings.no": "No",
   "settings.refresh.title": "Refresh and discard changes?",
@@ -721,6 +738,7 @@ export const en = {
   "settings.confirmation.required": "Confirm the plan and select at least one agent before continuing.",
   "settings.mode.readonly": "Read-only",
   "settings.derivedField": "This field is derived from the network mode.",
+  "settings.office.managed": "This duration is set by the server configuration.",
   "settings.envOverride": "This field is set by {variable}. Change that variable in the service configuration.",
   "settings.detection.config": "Runtime configuration found.",
   "settings.detection.presence": "Runtime present on this machine.",

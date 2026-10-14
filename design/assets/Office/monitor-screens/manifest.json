@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "contract": "bureau-monitor-screens-v1",
+  "id": "monitor-screens",
+  "name": {
+    "fr": "Écrans de poste",
+    "en": "Desk monitor screens"
+  },
+  "status": "design-asset-pack",
+  "license": "MIT",
+  "provenance": {
+    "directionReference": "Owner-approved image_gen.imagegen monitor-state preview, 2026-10-13",
+    "geometrySource": "Office/furniture/monitor@on.png",
+    "geometrySourceSha256": "a753c6b186f062c26cbc30e5f2935e5f840b9be20e17e75fd3d17f30fa0ebde8",
+    "assembly": "Editable state pictograms are authored as SVG and composited inside the production screen polygon; the original monitor bezel, stand, canvas and alpha are preserved."
+  },
+  "canvas": {
+    "width": 307,
+    "height": 325,
+    "artScale": 2,
+    "anchor": {
+      "x": 103,
+      "y": 177
+    },
+    "anchorReference": "../furniture/monitor.png",
+    "sameCanvasAsOnVariant": true
+  },
+  "monitor": {
+    "objectBounds": {
+      "left": 109,
+      "top": 8,
+      "right": 294,
+      "bottom": 212
+    },
+    "coordinateSpace": "307x325 image px"
+  },
+  "screen": {
+    "center": {
+      "x": 171,
+      "y": 78
+    },
+    "polygon": [
+      [
+        116,
+        18
+      ],
+      [
+        227,
+        77
+      ],
+      [
+        227,
+        137
+      ],
+      [
+        116,
+        78
+      ]
+    ],
+    "coordinateSpace": "307x325 image px"
+  },
+  "dayNight": {
+    "strategy": "Reuse the same high-contrast indigo display art by day and night. The renderer-selected monitor base remains responsible for the existing monitor illumination."
+  },
+  "states": [
+    {
+      "id": "message-sent",
+      "fr": "Message envoyé",
+      "en": "Message sent",
+      "kind": "chat-sent",
+      "frames": [
+        {
+          "file": "frames/message-sent-1.png",
+          "source": "frames/message-sent-1.svg",
+          "durationMs": 700,
+          "sha256": "af16747a5108a909b6b5f45efb6f7cf7e896fbb1b335eb244742490dcb7729b7"
+        },
+        {
+          "file": "frames/message-sent-2.png",
+          "source": "frames/message-sent-2.svg",
+          "durationMs": 700,
+          "sha256": "7b5685e7f70b0c7b98923c6c86c080cb8d416c1231525d9a2c6e4c90c7f5547f"
+        }
+      ]
+    },
+    {
+      "id": "message-received",
+      "fr": "Message reçu",
+      "en": "Message received",
+      "kind": "chat-received",
+      "frames": [
+        {
+          "file": "frames/message-received-1.png",
+          "source": "frames/message-received-1.svg",
+          "durationMs": 700,
+          "sha256": "efb479f26810d8e95d3238d43339ebe679773bac5c145128b73fa03021a42701"
+        },
+        {
+          "file": "frames/message-received-2.png",
+          "source": "frames/message-received-2.svg",
+          "durationMs": 700,
+          "sha256": "f3650ae9a4295bd49cb44b247b32e36a17813833232acf7d24b8f3b059167a61"
+        }
+      ]
+    },
+    {
+      "id": "coding",
+      "fr": "Code en cours",
+      "en": "Coding",
+      "kind": "coding",
+      "frames": [
+        {
+          "file": "frames/coding-1.png",
+          "source": "frames/coding-1.svg",
+          "durationMs": 700,
+          "sha256": "82db0cbd27ca73e2e8acb67ac81f13f5c81ca0e2349a6c6a58a109cce53a4638"
+        },
+        {
+          "file": "frames/coding-2.png",
+          "source": "frames/coding-2.svg",
+          "durationMs": 700,
+          "sha256": "b4fbb6ac062d0d457a6b28d748d1e222c0ca065f58faa12121be682ae77faa9e"
+        }
+      ]
+    },
+    {
+      "id": "terminal",
+      "fr": "Terminal actif",
+      "en": "Executing in terminal",
+      "kind": "terminal",
+      "frames": [
+        {
+          "file": "frames/terminal-1.png",
+          "source": "frames/terminal-1.svg",
+          "durationMs": 700,
+          "sha256": "cc76001a30bbfccdfee6eba992a040b1442f2311882dfeb59ce890ebffad2175"
+        },
+        {
+          "file": "frames/terminal-2.png",
+          "source": "frames/terminal-2.svg",
+          "durationMs": 700,
+          "sha256": "a3d353e6510339f276883e8fb94b5251366228faccf41fba77c49c29641ee8ff"
+        }
+      ]
+    },
+    {
+      "id": "browsing",
+      "fr": "Recherche web",
+      "en": "Researching",
+      "kind": "browsing",
+      "frames": [
+        {
+          "file": "frames/browsing-1.png",
+          "source": "frames/browsing-1.svg",
+          "durationMs": 700,
+          "sha256": "45f0f29597cde465d9a8c48e1125b7e3288664da75beb0e1b51a5aefcf50a4ad"
+        },
+        {
+          "file": "frames/browsing-2.png",
+          "source": "frames/browsing-2.svg",
+          "durationMs": 700,
+          "sha256": "91c2e15d6416f30660454f827342b2a677287efcfe9a6f5cf212562c973928d4"
+        }
+      ]
+    },
+    {
+      "id": "writing",
+      "fr": "Rédaction",
+      "en": "Writing",
+      "kind": "writing",
+      "frames": [
+        {
+          "file": "frames/writing-1.png",
+          "source": "frames/writing-1.svg",
+          "durationMs": 700,
+          "sha256": "a32eb0a4980e20c525b6d8dedd7e390171d59ea47cec03b90098c8f0e4dcf3c6"
+        },
+        {
+          "file": "frames/writing-2.png",
+          "source": "frames/writing-2.svg",
+          "durationMs": 700,
+          "sha256": "137706c3f698b2b37c7ac71788d0e82469fd0ecd5721950487f1085fca18d5d5"
+        }
+      ]
+    },
+    {
+      "id": "thinking",
+      "fr": "Réflexion",
+      "en": "Thinking",
+      "kind": "thinking",
+      "frames": [
+        {
+          "file": "frames/thinking-1.png",
+          "source": "frames/thinking-1.svg",
+          "durationMs": 700,
+          "sha256": "1ea6d24f32d65bb222aa738ea3806fb25c1bcb27543f8ed244f2cfb5aa7aafc2"
+        },
+        {
+          "file": "frames/thinking-2.png",
+          "source": "frames/thinking-2.svg",
+          "durationMs": 700,
+          "sha256": "b21cd2680ae70c8a0644c21de11d0000ebb2ed45c6c996a8834a57850c4b3189"
+        }
+      ]
+    },
+    {
+      "id": "waiting",
+      "fr": "En attente",
+      "en": "Waiting",
+      "kind": "waiting",
+      "frames": [
+        {
+          "file": "frames/waiting-1.png",
+          "source": "frames/waiting-1.svg",
+          "durationMs": 700,
+          "sha256": "5f8b2c9e24c2c311de9e94444506e7cf7249a1f6fefa26221201766469a9df50"
+        },
+        {
+          "file": "frames/waiting-2.png",
+          "source": "frames/waiting-2.svg",
+          "durationMs": 700,
+          "sha256": "c5ef1e2479eadffb21c38927af3d41633dcb27abf659d557ee11eeb1d2090d2b"
+        }
+      ]
+    },
+    {
+      "id": "blocked",
+      "fr": "Bloqué",
+      "en": "Blocked",
+      "kind": "blocked",
+      "frames": [
+        {
+          "file": "frames/blocked-1.png",
+          "source": "frames/blocked-1.svg",
+          "durationMs": 700,
+          "sha256": "4244336132e85cc4f0e3ab5921e90a74d168aa1dee584090ee204a1451dbc37b"
+        },
+        {
+          "file": "frames/blocked-2.png",
+          "source": "frames/blocked-2.svg",
+          "durationMs": 700,
+          "sha256": "0e4d29b0c65735b4dd41255d03cfab972de237c52a1797530483ffb0f707da65"
+        }
+      ]
+    }
+  ]
+}

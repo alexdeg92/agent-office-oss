@@ -131,7 +131,7 @@ for (const theme of ['light', 'dark']) for (const [width, height] of [[1440, 900
       assert.equal(shell.position, 'fixed'); assert.equal(shell.height, height);
       assert.equal(await h.page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehavior), 'none');
       assert.match(await h.page.locator('meta[name=viewport]').getAttribute('content'), /interactive-widget=resizes-content/);
-      const fixed = h.page.locator('.ao-shop__tabs, .ao-shop__agents, .ao-shop__preview, .ao-shop__savebar, .bu-bottombar');
+      const fixed = h.page.locator('.ao-shop__navigation, .ao-shop__agents, .ao-shop__preview, .ao-shop__savebar, .bu-bottombar');
       const boxes = () => fixed.evaluateAll(es => es.map(e => e.getBoundingClientRect().toJSON()).filter(r => r.height));
       const before = await boxes();
       const catalogue = h.page.locator('.ao-shop__catalogue');
@@ -355,7 +355,7 @@ for (const theme of ['light', 'dark']) for (const [width, height] of [[1440, 900
       assert.equal(persisted.after.data.theme.nightFrom, '00:00');
       assert.equal(persisted.after.data.theme.nightTo, '07:15'); assert.equal(persisted.after.data.theme.season, season || null);
       assert.deepEqual(persisted.after.data.items, persisted.before.data.items, 'theme save preserves selected-floor furniture');
-      const fixed = h.page.locator('.ao-theme-preview,.ao-shop__tabs,.ao-shop__savebar,.bu-bottombar');
+      const fixed = h.page.locator('.ao-theme-preview,.ao-shop__navigation,.ao-shop__savebar,.bu-bottombar');
       const boxes = () => fixed.evaluateAll(es => es.map(e => e.getBoundingClientRect().toJSON()).filter(r => r.height));
       const before = await boxes();
       const body = h.page.locator('.ao-theme-controls');

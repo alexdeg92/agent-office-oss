@@ -13,7 +13,7 @@ function add(method,path,{kind='permissions',resource=null,level='read',command=
   }
 }
 for(const [path,resource] of [
-  ['/views/office','office'],['/views/chat','chat'],['/views/flows','flows'],['/views/flows/:jobId','flows'],
+  ['/views/office','office'],['/views/office/characters','office'],['/views/chat','chat'],['/views/flows','flows'],['/views/flows/:jobId','flows'],
   ['/orchestrators','orchestrators'],['/teams','teams'],
   ['/views/logs','logs'],['/views/sessions/:key','logs'],['/views/interlocutors/:id','logs'],['/views/access','access'],
   ['/views/skills','skills'],['/views/skills/:name','skills'],['/views/health','health'],
@@ -21,6 +21,8 @@ for(const [path,resource] of [
   ['/views/projects/:id/comments','projects'],['/views/project-candidates','projects'],['/project-covers/:file','projects'],['/shots/:file','projects'],
   ['/office/layout','store'],['/office/layout/revisions/:rev','store'],['/prefs','store'],
 ])add('GET',path,{resource});
+add('GET','/views/office/palette',{requirements:[{resource:'office',level:'read'}],reason:'office'});
+add('GET','/views/office/store',{requirements:[{resource:'store',level:'read'},{resource:'office',level:'read'}],reason:'store'});
 for(const [method,path,resource,command,writeClass,agent] of [
   ['POST','/flows','flows.create','flows.create','openclaw'],['PATCH','/flows/:jobId','flows.edit','flows.edit','openclaw'],
   ['PUT','/flows/:jobId/enabled','flows.enable','flows.setEnabled','openclaw'],['POST','/flows/:jobId/runs','flows.run','flows.run','openclaw'],['DELETE','/flows/:jobId','flows.delete','flows.delete','openclaw'],

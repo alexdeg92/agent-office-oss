@@ -1,17 +1,15 @@
 export { screen, marker, bubble, tickScreens } from './monitor-screens.js';
-// Canonical spatial intents are backend data. This module only projects them
-// into the renderer's coordinates and chooses authored animation frames.
+// Backend targets rendered with authored animation frames.
 import { label as labelRef } from '../i18n.js';
 
-export function label(c) { return c.occ.activity ? labelRef(c.occ.activity.label) : ''; }
+export function label(c) { return c.occ.communication ? labelRef(c.occ.communication.label) : c.occ.activity ? labelRef(c.occ.activity.label) : ''; }
 
 const projected = (t, id) => t && ({ ...t.point, uid: t.stationUid ?? `intent:${id}`, mode: t.mode,
     seatIndex: t.seatIndex, facing: t.facing, approachPoint: t.approachPoint,
     seatContact: t.seatContact });
 export function target(c) { return projected(c.occ.sceneTarget, c.id); }
 
-// This cache records animation playback only. VM floor membership, counts,
-// eligibility, destinations and journey identity remain backend-owned.
+// Playback cache only; the backend owns membership, destinations and journey IDs.
 export function setTravel(scene) {
   const memory = scene._travelMemory, seed = !memory.initialized;
   memory.initialized = true;
@@ -42,9 +40,13 @@ export function departure(scene, c) {
 export function pose(c) {
   if (c.walking) return null;
   if (c.occ.state === 'idle' && (c.target?.mode ?? c.seatMode) === 'desk' &&
-      !c.occ.activity && !c.activity && !c.deskTalk && !c.social && !c.cue && !c.egg && !c.reaction && !c.wave)
+      !c.occ.activity && !c.occ.communication && !c.activity && !c.deskTalk && !c.social && !c.cue && !c.egg && !c.reaction && !c.wave)
     return 'life-sleep-ne';
-  if (!c.occ.activity) return null;
+  if (!c.occ.activity) {
+    if (!c.occ.communication || c.wave || c.cue || c.egg || c.reaction) return null;
+    if (c.target?.mode === 'sofa') return 'sofa-sit-sw';
+    return c.occ.communication.surface === 'monitor' ? 'working-ne' : c.target?.facing === 'se' ? 'talking-se' : 'talking';
+  }
   if (c.target?.mode === 'sofa') return 'sofa-sit-sw';
   if (c.occ.activity.kind === 'gym') return `egg-curl-${c._sipRest ? 'high' : 'low'}-sw`;
   if (c.occ.activity.kind === 'smoke') return 'egg-smoke-sw';

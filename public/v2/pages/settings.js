@@ -246,7 +246,9 @@ export function SettingsPage({match}) {
     return()=>cancelAnimationFrame(frame);
   },[tab,match.query.connecteur,!!vm]);
   useEffect(() => { if ((tab==='users'||tab==='roles')&&!R.canManageUsers(me)) services.router.setQuery({onglet:'diagnostic'}); },[tab,me?.user?.id,me?.permissions?.users,me?.permissionRevision?.user,me?.permissionRevision?.permissions]);
-  useEffect(() => {
+  // Canonicalize the selection before the control becomes interactive. A
+  // passive default-to-all effect could overwrite a first-paint selection.
+  useLayoutEffect(() => {
     if (tab !== 'agents' || !vm) return;
     if (!match.query.connecteur) services.router.setQuery({connecteur:'all'});
     else {
@@ -498,7 +500,8 @@ export function SettingsPage({match}) {
       if (tab === 'instance') {
         const d=draftsRef.current.instance;
         const instance=R.changedFields(d.instance,vmRef.current.instance);
-        if (Object.keys(instance).length) { result=await settingsCommand('instance',{expectedRevision:vmRef.current.revision,...instance},'PUT'); adopt(result.vm); }
+        const office=R.changedFields(d.office,vmRef.current.office);
+        if (Object.keys(instance).length || Object.keys(office).length) { result=await settingsCommand('instance',{expectedRevision:vmRef.current.revision,...instance,...(Object.keys(office).length?{office}:{})},'PUT'); adopt(result.vm); }
         if (d.network && JSON.stringify(d.network) !== JSON.stringify(R.initialDrafts(vmRef.current).instance.network)) {
           result=await settingsCommand('network',{expectedRevision:vmRef.current.revision,...d.network,publicUrl:d.network.publicUrl.trim() || null},'PUT');
         }

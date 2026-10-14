@@ -42,10 +42,32 @@ function knownSender(sender, ctx = {}) {
   return { ...sender, name: nameOf(person?.name, ctx.nameOf?.(sender.id), sender.name), avatarHint: person?.avatarUrl || (person ? 'person:' + person.id : null) || ctx.avatarOf?.(sender.id) || sender.avatarHint || null };
 }
 function projectEvents(events, ctx = {}) {
-  return (events || []).map((e) => {
+  const projected = [];
+  const byId = new Map();
+  for (const e of events || []) {
     const senderInfo = knownSender(e.senderInfo || resolveSender({ ...e, role: e.kind }, ctx), ctx);
-    return { ...e, senderInfo, ...(e.kind === 'user' ? { sender: senderInfo.name || nameOf(e.sender) } : {}) };
-  });
+    const row = { ...e, senderInfo, ...(e.kind === 'user' ? { sender: senderInfo.name || nameOf(e.sender) } : {}) };
+    // Runtime adapters may surface a stable event id more than once (for example,
+    // a child completion redelivered in its parent transcript). Preserve the
+    // first event's position and content, filling only absent display metadata
+    // from later copies. This keeps every VM Collection keyed without making
+    // duplicate delivery overwrite an earlier event.
+    if (typeof row.id !== 'string' || !row.id) { projected.push(row); continue; }
+    const index = byId.get(row.id);
+    if (index == null) { byId.set(row.id, projected.length); projected.push(row); continue; }
+    const prior = projected[index];
+    const merged = { ...prior };
+    if ((merged.sender == null || merged.sender === '') && row.sender) merged.sender = row.sender;
+    if (prior.senderInfo && row.senderInfo) {
+      const sender = { ...prior.senderInfo };
+      for (const field of ['name', 'avatarHint', 'delegation']) if (sender[field] == null || sender[field] === '') {
+        if (row.senderInfo[field] != null && row.senderInfo[field] !== '') sender[field] = row.senderInfo[field];
+      }
+      merged.senderInfo = sender;
+    }
+    projected[index] = merged;
+  }
+  return projected;
 }
 function participantsOf(events) {
   const people = new Map();

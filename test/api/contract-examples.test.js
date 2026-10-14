@@ -59,7 +59,7 @@ describe('contract-shape checker (strict, S6.2: R8-08/09)', () => {
 
 describe('contract examples (docs/architecture/examples)', () => {
   it('the minimum set the PM asked for exists', () => {
-    for (const n of ['project-vm', 'board-vm', 'candidates-vm', 'import-request', 'import-result', 'office-vm', 'layout-vm', 'error-409-project']) assert.ok(names.includes(n), n);
+    for (const n of ['project-vm', 'board-vm', 'candidates-vm', 'import-request', 'import-result', 'office-vm', 'chat-vm', 'layout-vm', 'error-409-project']) assert.ok(names.includes(n), n);
   });
 
   it('responses use the one success envelope or the one error format (api.md §2)', () => {
@@ -112,11 +112,15 @@ describe('contract examples (docs/architecture/examples)', () => {
     for (const c of loadExample('candidates-vm').data.candidates) assert.equal(c.id, c.key);
   });
 
-  it('LayoutVM embeds the office layout example verbatim and the current manifest version', () => {
+  it('LayoutVM embeds the office layout plus its effective Settings timing and current manifest version', () => {
     const vm = loadExample('layout-vm').data;
     const read = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'design', 'office', f), 'utf8'));
-    assert.deepEqual(vm.layout.data, read('layout.example.json'));
-    assert.deepEqual(vm.default.data, read('layout.example.json'));
+    const persisted = read('layout.example.json');
+    const withoutProjection = ({ idleRelocationMinutes, ...data }) => data;
+    assert.deepEqual(withoutProjection(vm.layout.data), persisted);
+    assert.deepEqual(withoutProjection(vm.default.data), persisted);
+    assert.equal(vm.layout.data.idleRelocationMinutes, 15, 'the current layout carries the default effective Settings value');
+    assert.equal(vm.default.data.idleRelocationMinutes, 15, 'the reset layout carries the same effective Settings value');
     // the manifest is opaque in the contract (its shape is manifest.schema.json, owned by office-dev) and changes with
     // every art batch: only its version must match; the example's copy is a snapshot (re-synced at contract changes)
     assert.equal(vm.manifest.version, read('manifest.example.json').version);

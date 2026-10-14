@@ -452,8 +452,33 @@ function resolveOccupants(layout, index, sources, { assignLook, stationAssignmen
     return (canonicalRuleId(a.id) ?? a.id).localeCompare(canonicalRuleId(b.id) ?? b.id);
   });
   const activeOrder = stationOrder.filter(active), inactiveOrder = stationOrder.filter(row => !active(row));
+  const homeOwnerByStation = new Map();
+  // Authored choices outrank saved claims. This keeps an idle row's stale pin
+  // from becoming a competing home for a station explicitly assigned in the
+  // layout. For duplicate saved homes, the most recently idle claimant wins.
+  for (const o of stationOrder) if (typeof o._explicitWant === 'string' && desks.includes(o._explicitWant)
+    && !homeOwnerByStation.has(o._explicitWant)) homeOwnerByStation.set(o._explicitWant, o.id);
+  for (const o of inactiveOrder) if (typeof o._savedWant === 'string' && desks.includes(o._savedWant)
+    && !homeOwnerByStation.has(o._savedWant)) homeOwnerByStation.set(o._savedWant, o.id);
+  for (const o of activeOrder) if (typeof o._savedWant === 'string' && desks.includes(o._savedWant)
+    && !homeOwnerByStation.has(o._savedWant)) homeOwnerByStation.set(o._savedWant, o.id);
   for (const field of ['_explicitWant', '_savedWant']) {
-    for (const o of activeOrder) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])) {
+    for (const o of activeOrder) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])
+      && homeOwnerByStation.get(o[field]) === o.id) {
+      o.stationUid = o[field]; taken.add(o[field]);
+    }
+  }
+  // Keep an idle occupant's explicitly or privately assigned home station when
+  // spare desks remain after every active occupant has a workstation. Under
+  // genuine pressure active workers may borrow that station; `_homeWant`
+  // below still preserves the owner's return target.
+  let activeNeeds = activeOrder.filter(o => !o.stationUid).length;
+  for (const field of ['_explicitWant', '_savedWant']) {
+    for (const o of inactiveOrder) {
+      if (o.stationUid || !o[field] || !desks.includes(o[field]) || taken.has(o[field])
+        || homeOwnerByStation.get(o[field]) !== o.id) continue;
+      const free = desks.reduce((count, uid) => count + Number(!taken.has(uid)), 0);
+      if (free <= activeNeeds) continue;
       o.stationUid = o[field]; taken.add(o[field]);
     }
   }
@@ -461,7 +486,10 @@ function resolveOccupants(layout, index, sources, { assignLook, stationAssignmen
   // desk is scarce, active display states always retain a workstation.
   for (const o of activeOrder) if (!o.stationUid) {
     const d = desks.find(u => !taken.has(u));
-    if (d) { o.stationUid = d; taken.add(d); }
+    if (d) {
+      o.stationUid = d; taken.add(d);
+      if (homeOwnerByStation.has(d) && homeOwnerByStation.get(d) !== o.id) o._borrowedHome = true;
+    }
   }
   for (const uid of [...new Set(reservedStationUids)].sort()) if (desks.includes(uid) && !taken.has(uid)) taken.add(uid);
   // Decide which idle/unknown occupants remain seated before honoring saved
@@ -469,10 +497,12 @@ function resolveOccupants(layout, index, sources, { assignLook, stationAssignmen
   // free desk and evict a more recently idle occupant, defeating longest-idle
   // relocation. The source state is the displayed canonical state; runtime
   // bookkeeping flags do not override it.
-  const inactiveSurvivors = inactiveOrder.slice(0, desks.filter(uid => !taken.has(uid)).length);
+  const inactiveSurvivors = [...inactiveOrder.filter(o => o.stationUid),
+    ...inactiveOrder.filter(o => !o.stationUid).slice(0, desks.filter(uid => !taken.has(uid)).length)];
   const survivingIds = new Set(inactiveSurvivors.map(o => o.id));
   for (const field of ['_explicitWant', '_savedWant']) {
-    for (const o of inactiveSurvivors) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])) {
+    for (const o of inactiveSurvivors) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])
+      && homeOwnerByStation.get(o[field]) === o.id) {
       o.stationUid = o[field]; taken.add(o[field]);
     }
   }
@@ -484,6 +514,23 @@ function resolveOccupants(layout, index, sources, { assignLook, stationAssignmen
   }
   for (const o of inactiveOrder) {
     if (!survivingIds.has(o.id)) o.stationUid = null;
+    const savedWant = typeof o._savedWant === 'string' && desks.includes(o._savedWant)
+      && homeOwnerByStation.get(o._savedWant) === o.id ? o._savedWant : null;
+    const explicitWant = typeof o._explicitWant === 'string' && homeOwnerByStation.get(o._explicitWant) === o.id ? o._explicitWant : null;
+    o._homeWant = [explicitWant, savedWant].find(uid => typeof uid === 'string' && desks.includes(uid))
+      || (o._borrowedHome ? null : o.stationUid);
+    delete o._explicitWant;
+    delete o._savedWant;
+  }
+  for (const o of activeOrder) {
+    const savedWant = typeof o._savedWant === 'string' && desks.includes(o._savedWant)
+      && homeOwnerByStation.get(o._savedWant) === o.id ? o._savedWant : null;
+    const explicitWant = typeof o._explicitWant === 'string' && homeOwnerByStation.get(o._explicitWant) === o.id ? o._explicitWant : null;
+    // A stale duplicate pin is only a preference. Once allocation gives this
+    // active row another station, its physical/home target must follow the
+    // station it actually owns; otherwise two occupants can render at one desk.
+    o._homeWant = [explicitWant, savedWant].find(uid => typeof uid === 'string' && desks.includes(uid) && uid === o.stationUid)
+      || (o._borrowedHome ? null : o.stationUid);
     delete o._explicitWant;
     delete o._savedWant;
   }

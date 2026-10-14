@@ -13,6 +13,7 @@ import { config, configure, buildQuery } from '../config.js';
 import * as fmt from '../fmt.js';
 import { toApiError } from '../api.js';
 import { Toasts } from '../components/ui.js';
+import {mockPalette} from '../mock/palette.js';
 import { META } from '../mock/meta.js';
 import { BureauPage } from './page.js';
 import { SPRITE } from '../icons.js';
@@ -21,6 +22,8 @@ import { createOfficeMock } from './mock-office.js';
 const q = new URLSearchParams(location.search);
 const dev = location.pathname.includes('/public/v2/office/');
 const designBase = dev ? '../../../design/' : config.assetBase;
+const mockRuntimeBrand = { monogram: META.runtime.brand.mark, color: META.runtime.brand.color,
+  logo: dev ? 'public/v2/assets/connectors/openclaw.svg' : META.runtime.brand.logo, providerName: META.runtime.brand.providerName };
 for (const href of dev ? ['css/bureau.css', 'components/bundle.css'] : ['bureau.css', 'bundle.css']) {
   const l = document.createElement('link');
   l.rel = 'stylesheet';
@@ -79,8 +82,18 @@ const clientFor = (floor = null) => {
   });
   return clients.get(floor);
 };
+services.officePaletteVM=mockPalette;
 services.officeApi = clientFor();
 services.officeAssetBase = designBase;
+// The standalone page has no app backend; the DOM-test server supplies the endpoint contract.
+// This browser adapter only sends the mock VMs and renders the server-built CharactersVM.
+services.officeCharacterVM = async (params = {}, officeVM = null) => {
+  const response = await fetch('/__test__/office-characters', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ params, office: officeVM || await om.officeVM(), layout: await om.layoutVM(), runtimeName: META.runtime.name,
+      runtimeBrand: mockRuntimeBrand, version: q.get('api') === '3' ? 3 : 2 }) });
+  if (!response.ok) throw { status: response.status, error: { code: 'upstream_failed' } };
+  return response.json();
+};
 services.cueListeners ??= new Set();
 setInterval(async () => {
   const cues = om.tick();

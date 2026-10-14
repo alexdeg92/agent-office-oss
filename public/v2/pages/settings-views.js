@@ -253,6 +253,12 @@ export function Instance({vm, draft, onChange, disabled}) {
         definition=${key === 'locale' ? {type:'select',options:[option('fr','settings.locale.fr'),option('en','settings.locale.en')]} : null}
         field=${vm.instance[key]} value=${draft.instance?.[key]??''} maxLength=${key === 'name' ? '80' : undefined} disabled=${disabled} onChange=${value => patch('instance',key,value)} />`)}
     </div></section>` : null}
+    ${vm.office ? html`<section class="ao-settings__group" aria-labelledby="settings-office-title"><h2 class="bu-heading-sm" id="settings-office-title">${msg('settings.office.title')}</h2><p class="bu-caption bu-text-secondary">${msg('settings.office.units')}</p><div class="ao-settings__fields">
+      ${Object.entries(vm.office).map(([key,field])=>{const id='settings-office-'+key,row=id+'-row';return html`<${SettingRow} key=${key} id=${row} label=${settingsLabel(field.label)} description=${settingsLabel(field.help)}
+        details=${field.reason?html`<p class="bu-caption">${settingsLabel(field.reason)}</p>`:null}
+        control=${html`<${TextInput} id=${id} type="number" width="short" min=${field.minimum} max=${field.maximum} step="1" labelledBy=${row+'-label'} describedBy=${row+'-description'}
+          value=${draft.office?.[key]??''} disabled=${disabled||!field.editable} onValueChange=${value=>patch('office',key,value===''?null:Number(value))} />`} />`;})}
+    </div></section>` : null}
     ${vm.network ? html`<section class="ao-settings__group" aria-labelledby="settings-network"><h2 class="bu-heading-sm" id="settings-network">${msg('settings.instance.network')}</h2><div class="ao-settings__fields">
       <${SettingsField} id="settings-network-mode" name=${msg('settings.instance.mode')} definition=${{type:'select',options:networkOptions()}}
         field=${vm.network.mode} value=${draft.network?.mode??''} disabled=${disabled} onChange=${value => patch('network','mode',value)} />

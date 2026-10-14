@@ -16,7 +16,7 @@ async function fixture(t,options={}) {
 test('real guarded Settings edits and rotates the actual user without changing historical owner or instance files',async t=>{
   const {h,user,admin,confirm}=await fixture(t),before=[h.paths.file,h.paths.secrets].map(f=>fs.readFileSync(f,'utf8'));
   const old=h.cookie,session=h.auth.sessionOf({headers:{cookie:old}});
-  let vm=(await h.get(BASE)).json.data;assert.equal(vm.owner.email.value,user().email);assert.equal(vm.owner.revision,user().permission_revision);assert.equal(vm.instance,null);
+  let vm=(await h.get(BASE)).json.data;assert.equal(vm.owner.email.value,user().email);assert.equal(vm.owner.revision,user().permission_revision);assert.equal(vm.instance,null);assert.equal(vm.office,null);
   assert.equal((await h.put(BASE+'/owner',{expectedRevision:user().permission_revision,displayName:'Nouveau nom'})).status,403);
   assert.equal((await h.post(BASE+'/reauth',{password:h.password})).status,401,'historical owner password cannot confirm this user');
   assert.equal((await confirm()).status,200);
@@ -34,8 +34,9 @@ test('real guarded Settings edits and rotates the actual user without changing h
 test('real Settings config writes use explicit grants and shared monotonic confirmation, not historical owner status',async t=>{
   const {h,grants,confirm}=await fixture(t);
   assert.equal((await h.put(BASE+'/instance',{expectedRevision:1,name:'Refusé'})).status,403);
+  assert.equal((await h.put(BASE+'/instance',{expectedRevision:1,office:{idleRelocationMinutes:40}})).status,403);
   grants([{resource:'settings.instance',level:'write'},{resource:'settings.network',level:'write'}]);
-  const saved=await h.put(BASE+'/instance',{expectedRevision:1,name:'Nouvel atelier'});assert.equal(saved.status,200,saved.text);
+  const saved=await h.put(BASE+'/instance',{expectedRevision:1,name:'Nouvel atelier',office:{idleRelocationMinutes:40}});assert.equal(saved.status,200,saved.text);assert.equal(saved.json.data.vm.office.idleRelocationMinutes.value,40);
   const body={expectedRevision:2,mode:'local',port:18800,publicUrl:null};assert.equal((await h.put(BASE+'/network',body)).status,403);
   assert.equal((await confirm()).status,200);h.clock.elapsed=300000;assert.equal((await h.put(BASE+'/network',body)).status,403);
   assert.equal((await confirm()).status,200);const network=await h.put(BASE+'/network',body);assert.equal(network.status,200,network.text);assert.equal(network.json.data.vm.network.restartRequired,true);

@@ -249,7 +249,8 @@ function planFloors(index, base, occupants, homeAssignments = {}) {
     });
     const resolvedById = new Map(resolvedOrdered.map(row => [row.id, row]));
     const resolved = f.occupants.map(o => resolvedById.get(o.id));
-    f.occupants = f.occupants.map((o,i) => ({ ...o, stationUid: resolved[i].stationUid, floorId: f.id }));
+    f.occupants = f.occupants.map((o,i) => ({ ...o, stationUid: resolved[i].stationUid, floorId: f.id,
+      ...(Object.hasOwn(resolved[i], '_homeWant') ? { _homeWant: resolved[i]._homeWant } : {}) }));
   }
   for (const { unit, floorId: id } of overflowTeams) {
     const f = groups.get(id), ids = new Set(unit.people.map(o => o.id));
@@ -286,7 +287,8 @@ function planFloors(index, base, occupants, homeAssignments = {}) {
       floorId: lead.floorId,
       stations: Object.fromEntries(unit.people.flatMap(person => {
         const placed = placedById.get(person.id);
-        return placed?.stationUid ? [[placementToken(person.id), placed.stationUid]] : [];
+        const stationUid = placed && Object.hasOwn(placed, '_homeWant') ? placed._homeWant : placed?.stationUid;
+        return stationUid ? [[placementToken(person.id), stationUid]] : [];
       })),
     };
   }

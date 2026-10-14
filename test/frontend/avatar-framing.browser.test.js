@@ -6,11 +6,37 @@ import { openLayoutBrowser, visit, browserSkipReason } from './helpers/layout-br
 const options = { skip: browserSkipReason(), timeout: 90000 };
 const evidence = new URL('../../design/reports/avatar-01/', import.meta.url);
 
+test('Settings retains a connector selected immediately after opening Agents', options, async () => {
+  const h = await openLayoutBrowser(), p = h.page;
+  try {
+    await visit(p, h.origin, '/parametres?mock=1', '#settings-section-form');
+    await p.evaluate(async () => {
+      document.querySelector('#settings-tab-agents').click();
+      // Act on the first mounted selector, before passive effects. Navigation
+      // is guarded asynchronously, so one animation frame is not a mount signal.
+      const selector = await new Promise(resolve => {
+        const mounted = () => document.querySelector('#settings-agent-runtime');
+        if (mounted()) return resolve(mounted());
+        const observer = new MutationObserver(() => {
+          if (mounted()) { observer.disconnect(); resolve(mounted()); }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+      selector.value = 'openclaw';
+      selector.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await p.waitForTimeout(300); // Allow pending passive route effects to flush.
+    assert.equal(new URL(p.url()).searchParams.get('connecteur'), 'openclaw');
+    assert.equal(await p.locator('#settings-agent-runtime').inputValue(), 'openclaw');
+    assert.ok(await p.locator('[data-testid="settings-agent-row-0"]').count(), 'selected connector keeps its configured row');
+  } finally { await h.close(); }
+});
+
 test('avatar keeps its sized icon while the image renderer chunk loads', options, async () => {
   const h = await openLayoutBrowser(), p = h.page;
-  let release;
+  let release, decoderRequests = 0;
   const held = new Promise(resolve => { release = resolve; });
-  await p.route('**/office/avatar-framing.js*', async route => { await held; await route.continue(); });
+  await p.route('**/office/avatar-framing.js*', async route => { decoderRequests++; await held; await route.continue(); });
   try {
     await visit(p, h.origin, '/parametres?mock=1', '#settings-section-form');
     await p.locator('#settings-tab-agents').click();
@@ -26,6 +52,19 @@ test('avatar keeps its sized icon while the image renderer chunk loads', options
     await p.waitForFunction(() => document.querySelector('[data-testid=settings-agent-row-0] [data-avatar-ready="true"] img')?.naturalWidth > 0);
     const [result] = await pixels(p, '[data-testid=settings-agent-row-0] .ao-character-avatar');
     assert.ok(result.coverage > .15 && result.dx < .13 && result.dy < .13, 'decoded sprite replaces the lazy-loading fallback');
+  } catch (error) {
+    // This fixture contains only synthetic mock data. Preserve route/row evidence
+    // so a missing Settings target is not mistaken for an avatar decoder fault.
+    const state = await p.evaluate(() => ({
+      path: location.pathname + location.search,
+      connector: document.querySelector('#settings-agent-runtime')?.value ?? null,
+      rowCount: document.querySelectorAll('[data-testid^="settings-agent-row-"]').length,
+      avatarCount: document.querySelectorAll('.ao-character-avatar').length,
+      targetAvatarCount: document.querySelectorAll('[data-testid="settings-agent-row-0"] .ao-character-avatar').length,
+    }));
+    await mkdir(evidence, { recursive: true });
+    await writeFile(new URL('lazy-failure.json', evidence), JSON.stringify({ ...state, decoderRequests }, null, 2));
+    throw error;
   } finally { release(); await h.close(); }
 });
 

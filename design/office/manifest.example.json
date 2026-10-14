@@ -2020,7 +2020,11 @@
       },
       "pending": [
         "desk-se (orientation se)"
-      ]
+      ],
+      "names": {
+        "fr": "Poste de travail",
+        "en": "Desk"
+      }
     },
     {
       "id": "chair",
@@ -2039,6 +2043,10 @@
       "size": {
         "w": 132,
         "h": 200
+      },
+      "names": {
+        "fr": "Chaise",
+        "en": "Chair"
       }
     },
     {
@@ -2101,6 +2109,10 @@
             }
           ]
         }
+      },
+      "names": {
+        "fr": "Canapé",
+        "en": "Sofa"
       }
     },
     {
@@ -2121,6 +2133,10 @@
       "size": {
         "w": 503,
         "h": 264
+      },
+      "names": {
+        "fr": "Tapis",
+        "en": "Rug"
       }
     },
     {
@@ -2140,6 +2156,10 @@
       "size": {
         "w": 169,
         "h": 257
+      },
+      "names": {
+        "fr": "Grande plante",
+        "en": "Large plant"
       }
     },
     {
@@ -2159,6 +2179,10 @@
       "size": {
         "w": 93,
         "h": 110
+      },
+      "names": {
+        "fr": "Petite plante",
+        "en": "Small plant"
       }
     },
     {
@@ -2189,7 +2213,11 @@
       },
       "pending": [
         "shelf-se (orientation se)"
-      ]
+      ],
+      "names": {
+        "fr": "Bibliothèque",
+        "en": "Bookcase"
+      }
     },
     {
       "id": "coffee-machine",
@@ -2219,7 +2247,11 @@
       },
       "pending": [
         "coffee-machine-se (orientation se)"
-      ]
+      ],
+      "names": {
+        "fr": "Machine à café",
+        "en": "Coffee machine"
+      }
     },
     {
       "id": "server-rack",
@@ -2246,6 +2278,10 @@
           "y": 0.5
         },
         "facing": "sw"
+      },
+      "names": {
+        "fr": "Baie serveur",
+        "en": "Server rack"
       }
     },
     {
@@ -2288,7 +2324,11 @@
       },
       "pending": [
         "talking-se (standing, facing SE) for the meeting scene: walking-se stands in until then"
-      ]
+      ],
+      "names": {
+        "fr": "Table de réunion",
+        "en": "Meeting table"
+      }
     },
     {
       "id": "lamp",
@@ -2311,6 +2351,10 @@
       "layerBias": 0.1,
       "images": {
         "sw@on": "assets/Office/furniture/lamp@on.png"
+      },
+      "names": {
+        "fr": "Lampadaire",
+        "en": "Floor lamp"
       }
     },
     {
@@ -2331,6 +2375,10 @@
         "side": "left",
         "length": 5,
         "elevation": 110
+      },
+      "names": {
+        "fr": "Guirlande d’hiver",
+        "en": "Winter garland"
       }
     },
     {
@@ -2351,6 +2399,10 @@
         "side": "left",
         "length": 5,
         "elevation": 110
+      },
+      "names": {
+        "fr": "Guirlande d’automne",
+        "en": "Autumn garland"
       }
     },
     {
@@ -2371,6 +2423,10 @@
         "side": "right",
         "length": 2,
         "elevation": 48
+      },
+      "names": {
+        "fr": "Tableau blanc",
+        "en": "Whiteboard"
       }
     },
     {
@@ -2394,6 +2450,10 @@
       },
       "images": {
         "sw@night": "assets/Office/furniture/window@night.png"
+      },
+      "names": {
+        "fr": "Fenêtre",
+        "en": "Window"
       }
     },
     {

@@ -139,6 +139,27 @@ describe('S7c · async chat over the chat topic', () => {
     assert.ok(turn.includes('--session-key=' + chat.data.sessionKey), 'chat follows the exact fenced/dispatch session');
     for (const body of [{ text: '' }, { text: 'x'.repeat(8001) }, { text: 'a', extra: 1 }]) assert.equal((await h.request('POST', '/api/v2/chat/messages', body)).status, 400);
   });
+
+  it('the command-buffer reply is consumed when the transcript publishes the same primary reply', async () => {
+    const sessionKey = 'agent:main:explicit:portal-chat';
+    const answer = 'Réponse factice.';
+    const h = await startServer(sc, { handlers: { 'sessions.get': params => {
+      assert.equal(params.key, sessionKey);
+      return { messages: [
+        { role: 'user', timestamp: sc.now + 1, content: 'Bonjour' },
+        { role: 'assistant', timestamp: sc.now + 2, content: answer },
+      ] };
+    } } });
+    try {
+      assert.equal((await h.post('/api/v2/chat/messages', { text: 'Bonjour' })).status, 202);
+      await waitFor(async () => (await h.get('/api/v2/views/chat')).json.data.turnPending === null, { what: 'the buffered chat reply to finish' });
+      const chat = (await h.get('/api/v2/views/chat')).json.data;
+      const replies = chat.messages.filter(m => m.role === 'assistant' && m.text === answer);
+      assert.equal(replies.length, 1, JSON.stringify(chat.messages));
+      assert.match(replies[0].id, /^ev:/, 'the transcript event replaces the provisional command-buffer row');
+      assert.ok(!chat.messages.some(m => m.id.startsWith('reply_')));
+    } finally { await h.stop(); }
+  });
 });
 
 describe('S7c · a failed chat turn becomes an error message', () => {

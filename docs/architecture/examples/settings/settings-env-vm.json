@@ -345,6 +345,50 @@
       "active": false,
       "status": "not-checked",
       "checkedAt": null
+    },
+    "office": {
+      "finishedSessionWindowMinutes": {
+        "value": 15,
+        "source": "default",
+        "editable": true,
+        "reason": null,
+        "label": {
+          "key": "settings.office.finishedSessionWindowMinutes"
+        },
+        "help": {
+          "key": "settings.office.help.finishedSessionWindowMinutes"
+        },
+        "minimum": 1,
+        "maximum": 1440
+      },
+      "agentPresenceWindowMinutes": {
+        "value": 60,
+        "source": "default",
+        "editable": true,
+        "reason": null,
+        "label": {
+          "key": "settings.office.agentPresenceWindowMinutes"
+        },
+        "help": {
+          "key": "settings.office.help.agentPresenceWindowMinutes"
+        },
+        "minimum": 1,
+        "maximum": 1440
+      },
+      "idleRelocationMinutes": {
+        "value": 15,
+        "source": "default",
+        "editable": true,
+        "reason": null,
+        "label": {
+          "key": "settings.office.idleRelocationMinutes"
+        },
+        "help": {
+          "key": "settings.office.help.idleRelocationMinutes"
+        },
+        "minimum": 1,
+        "maximum": 1440
+      }
     }
   },
   "meta": {

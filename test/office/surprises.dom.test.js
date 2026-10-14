@@ -67,7 +67,7 @@ test('26b: normal leave and return use A*; loading/decode races and removal rele
  }finally{await b.close();}
 });
 test('26b: twelve occupants across two scenes obey global caps; two room actors share a host without new timers',{skip:!findChrome(),timeout:120000},async()=>{
- const b=await launch();try{const p=await b.page('/test/office/harness.html');await p.waitFor('window.H?.ready');const r=await p.eval(`
+ const b=await launch();try{const p=await b.page('/test/office/harness.html');await p.waitFor('window.H?.ready');await p.viewport(1400,1600);const r=await p.eval(`
   const make=(el,offset)=>{const sc=new H.OfficeScene(el,{manifest:H.manifest,layout:H.layout,assetBase:H.assetBase,life:{intervalMs:600000}});sc.setReducedMotion(true);sc.setOccupants(H.occupants(Array.from({length:6},(_,i)=>({id:offset+i?'subagent:'+ (offset+i):'main',role:offset+i?'subagent':'main',sourceName:'Agent '+(offset+i),state:'idle',stateSince:Date.now()}))));sc._lifeTimer();sc._lifeTimer=()=>{};return sc;};
   const el=document.createElement('div');el.style.cssText='width:1000px;height:700px';document.body.append(el);const a=make(stage,0),b=make(el,6),ca=[...a.chars.values()],cb=[...b.chars.values()];
   const egg=await a.surprise(ca[0].id,'gym',{arrowMs:600000});const second=await b.surprise(cb[0].id,'smoke');

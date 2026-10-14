@@ -27,6 +27,11 @@ test('Codex-only synthetic instance reaches AO_READY and loads its first session
   fs.writeFileSync(path.join(root,'config.json'),JSON.stringify(config));fs.writeFileSync(path.join(root,'secrets.json'),JSON.stringify({version:3,sessionSecret:'s'.repeat(48),runtimes:{codex:{}}}));
  }});t.after(()=>h.stop());
  assert.match(h.output,/AO_READY \{"mode":"app"/);const logs=await h.get('/api/v3/views/logs');assert.equal(logs.status,200);assert.ok(logs.json.data.items.length>0);const log=logs.json.data.items.find(row=>row.kind==='conversation');assert.equal(log?.tokens,73,'Journaux exposes the session-local Codex total');assert.equal(log?.tokensKnown,true);
+ const board=await h.get('/api/v3/views/projects');assert.equal(board.status,200,board.text);const card=board.json.data.columns.flatMap(row=>row.cards).find(row=>row.name==='agent-office');assert.ok(card,'a workspace project is contributed from Codex sessions');assert.equal(card.capabilities.write,false);assert.equal(card.sourceDescriptors[0].runtime,'codex');
+ const detail=await h.get('/api/v3/views/projects/'+encodeURIComponent(card.id));assert.equal(detail.status,200,detail.text);assert.equal(detail.json.data.counts.sessions,1);assert.equal(detail.json.data.counts.agents,1);assert.equal(detail.json.data.capabilities.history,'unsupported');assert.equal(JSON.stringify(detail.json.data).includes('/synthetic/private/agent-office'),false);
+ const legacyBoard=await h.get('/api/v2/views/projects');assert.equal(legacyBoard.status,200,legacyBoard.text);assert.equal(legacyBoard.json.data.columns.flatMap(row=>row.cards).some(row=>row.id===card.id),false,'legacy v2 does not publish runtime source cards');assert.equal(legacyBoard.json.data.sourceFilters.some(row=>row.source.kind==='runtime'),false);
+ const legacyDetail=await h.get('/api/v2/views/projects/'+encodeURIComponent(card.id));assert.equal(legacyDetail.status,404,'legacy v2 detail treats runtime projects as absent');
+ const selected3=await h.get('/api/v3/views/projects?source='+encodeURIComponent(card.sourceDescriptors[0].id));assert.equal(selected3.status,200,selected3.text);assert.equal(selected3.json.data.sourceFilterId,card.sourceDescriptors[0].id);assert.equal(selected3.json.data.columns.reduce((n,row)=>n+row.count,0),1);
 });
 
 test('legacy environment-owner cookie retains rich Office details before identity migration',async t=>{
@@ -58,7 +63,41 @@ test('Codex rollout reader uses synthetic session_meta/turn_context/response_ite
  assert.equal(JSON.stringify(trace).includes(privateRoot),false);assert.equal(JSON.stringify(files.stats).includes('SYNTHETIC_PRIVATE_PROMPT'),false);
  const loaded=files.rows().find(row=>row.key===rows[0].key);assert.equal(loaded.projectName,'agent-office');assert.equal(loaded.cwd,undefined);assert.equal(loaded.model,'gpt-synthetic-codex');assert.equal(files.rows().map(row=>row.usage).sort((a,b)=>a-b).join(','),'15,29');
  const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home,include:[],exclude:[],agentGrouping:'project'}}},{now:()=>NOW});const engine=createEngine({adapter:runtime.definition,now:()=>NOW});t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
- assert.equal(engine.agents().length,1);assert.equal(engine.agents()[0].name,'agent-office');assert.equal(engine.sessions().length,2);assert.deepEqual(engine.sessions().map(session=>session.usage.total).sort((a,b)=>a-b),[15,29]);assert.ok(engine.sessions().every(session=>session.tokensKnown===true),'session-local Codex totals are known when the rollout includes token_count');assert.ok(engine.sessions().every(session=>session.run.status==='idle'&&session.run.evidenceLevel==='observed'),'completed assistant turns supply observed idle evidence');assert.equal(engine.transcript(engine.sessions()[0].key).messageCount,2);
+ assert.equal(engine.agents().length,1);assert.equal(engine.agents()[0].name,'agent-office');assert.equal(engine.sessions().length,2);assert.deepEqual(engine.sessions().map(session=>session.usage.total).sort((a,b)=>a-b),[15,29]);assert.ok(engine.sessions().every(session=>session.tokensKnown===true),'session-local Codex totals are known when the rollout includes token_count');assert.ok(engine.sessions().every(session=>session.run.status==='idle'&&session.run.evidenceLevel==='observed'),'completed assistant turns supply observed idle evidence');assert.ok(engine.sessions().every(session=>session.projectRef==='project:'+require('node:crypto').createHash('sha256').update('/synthetic/private/agent-office').digest('hex')&&session.projectLabel==='agent-office'),'canonical sessions carry only opaque workspace identity and safe label');assert.ok(engine.sessions().every(session=>session.cwd===null),'raw working directories remain private');assert.equal(engine.transcript(engine.sessions()[0].key).messageCount,2);
+});
+
+test('Codex reads appended rollout bytes incrementally while retaining exchanges across chunks', async t => {
+ const h=fixture(t),file=h.file('2026/10/10','rollout-incremental.jsonl',[meta(),ctx(),message('user','Synthetic first exchange','first-user'),message('assistant','Synthetic first answer','first-assistant')]);
+ const files=createFiles({home:h.home,now:()=>NOW,agentGrouping:'project'});t.after(()=>files.close());
+ const rows=await files.scan(),key=rows[0].key;let trace=await files.read(key);
+ assert.deepEqual(trace.events.map(event=>event.text),['Synthetic first exchange','Synthetic first answer']);
+ const appended=[];
+ for(let n=0;n<10;n++){
+  appended.push(message('user',`Synthetic appended question ${n} `+'x'.repeat(30*1024),`append-user-${n}`));
+  appended.push(message('assistant',`Synthetic appended answer ${n}`,`append-assistant-${n}`));
+ }
+ fs.appendFileSync(file,appended.map(row=>JSON.stringify(row)).join('\n')+'\n');
+ const size=fs.statSync(file).size;await files.scan();
+ for(let attempt=0;attempt<8 && (files.rows().find(row=>row.key===key)?.loadedSize||0)<size;attempt++) trace=await files.read(key);
+ assert.equal(files.rows().find(row=>row.key===key).loadedSize,size,'bounded forward reads eventually consume the appended file');
+ assert.equal(trace.events.length,22,'all exchanges remain within the canonical event cap');
+ for(let n=0;n<10;n++){
+  assert.ok(trace.events.some(event=>event.text===`Synthetic appended answer ${n}`),`appended answer ${n} remains in the accumulated transcript`);
+ }
+ assert.ok(trace.events.some(event=>event.text==='Synthetic first exchange'),'the original history is retained after incremental reads');
+});
+
+test('Codex workspace without a safe basename has no synthetic hash project title', async t => {
+ const h=fixture(t);h.file('2026/10/10','rollout-synthetic-root.jsonl',[meta('/'),ctx('gpt-synthetic-codex','/'),message('user','Synthetic root workspace prompt','u-root')]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home,include:[],exclude:[],agentGrouping:'project'}}},{now:()=>NOW});const engine=createEngine({adapter:runtime.definition});t.after(()=>runtime.close());runtime.attach(engine);
+ await startAndWait(runtime,engine);
+ assert.equal(engine.sessions().length,1,'the transcript remains available');
+ assert.equal(engine.sessions()[0].projectLabel,null,'the adapter does not turn an opaque cwd hash into a project label');
+ assert.equal(engine.agents()[0].name,'Codex project','canonical agent display uses a stable neutral fallback');
+ assert.equal(runtime.files.rows().length,1,'the session remains available even though it has no safe project label');
+ const projects=require('../../src/projects/runtime-sources').collectRuntimeProjects({sessions:engine.sessions(),agents:engine.agents(),
+  connectorOf:()=>({id:'codex',adapter:'codex',name:'Codex',projectSource:A.definition.projectSource}),idKey:'synthetic-id-key-with-more-than-32-characters'});
+ assert.deepEqual(projects.projects,[],'no synthetic project card is created');
 });
 
 test('Codex project grouping follows the latest turn worktree instead of the session initial cwd',async t=>{
@@ -227,7 +266,7 @@ test('Codex lifecycle state survives long completed histories and display-event 
  assert.equal(overflow.activity?.kind,'waiting','the 65th live command survives both the event-history window and completion of the 64 tracked ids');
 });
 
-test('Codex byte-sampled transcripts reset non-ID state and quarantine unresolved head obligations',async t=>{
+test('Codex incremental reads consume lifecycle records beyond the first bounded chunk',async t=>{
  const h=fixture(t);
  const filler=Array.from({length:700},(_,i)=>({type:'response_item',timestamp:new Date(NOW-10000+i).toISOString(),payload:{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:`Completed sample ${i} ${'x'.repeat(320)}`} ]}}));
  const event=(type,command_id)=>({type:'event_msg',timestamp:new Date(NOW).toISOString(),payload:{type,...(command_id===undefined?{}:{command_id})}});
@@ -240,20 +279,20 @@ test('Codex byte-sampled transcripts reset non-ID state and quarantine unresolve
  // inside the omitted byte interval rather than accidentally sampling it.
  const gapPrefix=filler.slice(0,150),gapSuffix=filler.slice(150);
  const cases=[
-  {name:'hidden command start',head:[],middle:[event('exec_command_begin','hidden-in-gap')],tail:[handoff],expect:'unknown'},
-  {name:'head task boundary cannot authorize a hidden tail command',head:[event('task_complete')],middle:[event('exec_command_begin','hidden-after-head')],tail:[handoff],expect:'unknown'},
-  {name:'accepted hidden background-exec limitation at task boundary',head:[],middle:[event('exec_command_begin','unseen-background')],tail:[event('task_complete')],activity:null,execution:'idle'},
-  {name:'head question answered in gap',head:[question],middle:[{type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'user',status:'completed',content:[{type:'input_text',text:'Yes'}]}}],tail:[handoff],activity:null,execution:'unknown'},
+  {name:'observed command start followed by handoff',head:[],middle:[event('exec_command_begin','hidden-in-gap')],tail:[handoff],activityKind:'waiting',execution:'idle'},
+  {name:'command starts after an earlier task boundary',head:[event('task_complete')],middle:[event('exec_command_begin','hidden-after-head')],tail:[handoff],activityKind:'waiting',execution:'idle'},
+  {name:'observed background exec remains pending across a task boundary',head:[],middle:[event('exec_command_begin','unseen-background')],tail:[event('task_complete')],activityKind:'waiting',execution:'idle'},
+  {name:'head question answered in order',head:[question],middle:[{type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'user',status:'completed',content:[{type:'input_text',text:'Yes'}]}}],tail:[handoff],activity:null,execution:'idle'},
   {name:'tail execution replaces head reply wait',head:[question],middle:[{type:'response_item',timestamp:new Date(NOW-1).toISOString(),payload:{type:'message',role:'user',status:'completed',content:[{type:'input_text',text:'Yes'}]}}],tail:[event('exec_command_begin','tail-command')],activityKind:'executing',activitySince:NOW,execution:'running'},
-  {name:'head foreground turn reset',head:[event('task_started')],middle:[event('task_complete')],tail:[handoff],activity:null,execution:'unknown'},
-  {name:'unresolved exact command',head:[event('exec_command_begin','head-open'),handoff],middle:[],tail:[event('exec_command_end','different-id')],expect:'unknown'},
-  {name:'exact command completed in tail',head:[event('exec_command_begin','head-closed'),handoff],middle:[],tail:[event('exec_command_end','head-closed'),handoff],activity:null,execution:'unknown'},
+  {name:'head foreground turn reset',head:[event('task_started')],middle:[event('task_complete')],tail:[handoff],activity:null,execution:'idle'},
+  {name:'unresolved exact command',head:[event('exec_command_begin','head-open'),handoff],middle:[],tail:[event('exec_command_end','different-id')],activityKind:'waiting',execution:'idle'},
+  {name:'exact command completed in tail',head:[event('exec_command_begin','head-closed'),handoff],middle:[],tail:[event('exec_command_end','head-closed'),handoff],activity:null,execution:'idle'},
   {name:'closed head ID reused by a tail command',head:[event('exec_command_begin','reused-id')],middle:[],tail:[event('exec_command_end','reused-id'),event('exec_command_begin','reused-id')],activityKind:'executing',activitySince:NOW,execution:'running'},
-  {name:'unresolved exact tool',head:[toolStart],middle:[],tail:[handoff],expect:'unknown'},
-  {name:'exact tool completed in tail',head:[toolStart],middle:[],tail:[toolEnd,handoff],activity:null,execution:'unknown'},
+  {name:'unresolved exact tool',head:[toolStart],middle:[],tail:[handoff],activityKind:'waiting',execution:'idle'},
+  {name:'exact tool completed in tail',head:[toolStart],middle:[],tail:[toolEnd,handoff],activity:null,execution:'idle'},
   {name:'tail task completion closes sequential head tools',head:[toolStart],middle:[],tail:[event('task_complete')],activity:null,execution:'idle'},
-  {name:'unbounded command overflow',head:Array.from({length:65},(_,i)=>event('exec_command_begin',`head-${i}`)),middle:[],tail:[handoff],expect:'unknown'},
-  {name:'anonymous command obligation',head:[event('exec_command_begin')],middle:[],tail:[handoff],expect:'unknown'},
+  {name:'bounded command tracking overflow remains conservatively waiting',head:Array.from({length:65},(_,i)=>event('exec_command_begin',`head-${i}`)),middle:[],tail:[handoff],activityKind:'waiting',execution:'idle'},
+  {name:'anonymous command obligation stays pending through handoff',head:[event('exec_command_begin')],middle:[],tail:[handoff],activityKind:'waiting',execution:'idle'},
  ];
  const filesToRead=[];
  for(const [index,item] of cases.entries()) {
@@ -267,19 +306,16 @@ test('Codex byte-sampled transcripts reset non-ID state and quarantine unresolve
   filesToRead.push({item,filename});
  }
  const files=createFiles({home:h.home,now:()=>NOW}),rows=await files.scan();t.after(()=>files.close());
- const read=async filename=>{const row=rows.find(item=>item.filename===filename);assert.ok(row);await files.read(row.key);return row;};
+ const read=async filename=>{const row=rows.find(item=>item.filename===filename);assert.ok(row);for(let n=0;n<8&&(row.loadedSize||0)<row.size;n++)await files.read(row.key);assert.equal(row.loadedSize,row.size,`bounded reads consume ${path.basename(filename)}`);return row;};
  for(const {item,filename} of filesToRead) {
   const row=await read(filename);
-  if(item.expect) {assert.equal(row.execution?.status,item.expect,`${item.name}: uncertainty cannot become false waiting/executing/idle`);assert.equal(row.activity,null,`${item.name}: uncertain head state is not exposed as live activity`);}
-  else {
-   if(item.activityKind) {assert.equal(row.activity?.kind,item.activityKind,`${item.name}: tail activity is authoritative`);assert.equal(row.activity?.since,item.activitySince,`${item.name}: activity time comes from the tail`);}
-   else assert.equal(row.activity,item.activity,`${item.name}: tail activity is authoritative`);
-   assert.equal(row.execution?.status,item.execution,`${item.name}: tail execution evidence is authoritative`);
-  }
+  if(item.activityKind) {assert.equal(row.activity?.kind,item.activityKind,`${item.name}: current lifecycle records determine activity`);if(item.activitySince!==undefined)assert.equal(row.activity?.since,item.activitySince,`${item.name}: activity time comes from the record`);}
+  else assert.equal(row.activity,item.activity,`${item.name}: current lifecycle records determine activity`);
+  assert.equal(row.execution?.status,item.execution,`${item.name}: execution follows the complete ordered stream`);
  }
 });
 
-test('Codex unknown after an omitted append clears cached activity instead of becoming fresh Working',async t=>{
+test('Codex incremental append observes lifecycle records rather than treating them as an omitted gap',async t=>{
  let clock=Date.now();const h=fixture(t),filename=h.file('2026/10/10','rollout-append-gap.jsonl',[
   meta(),ctx(),{type:'event_msg',timestamp:new Date(clock-1000).toISOString(),payload:{type:'task_started'}},
  ]);
@@ -297,12 +333,12 @@ test('Codex unknown after an omitted append clears cached activity instead of be
  assert.ok(eventOffset>64*1024&&eventOffset<fileRow.size-(MAX_READ-64*1024),'the appended command start is truly inside the omitted bytes');
  clock+=1;await runtime.cycle();
  assert.equal(engine.activity(session.key),null,'uncertain parser output clears the old observed activity lease');
- assert.equal(engine.session(session.key).run.status,'unknown','an omitted lifecycle boundary cannot mint fresh run evidence');
+ assert.equal(engine.session(session.key).run.status,'idle','all appended lifecycle records are consumed in order');
  for(const version of [2,3]) {
   const vm=buildOfficeVM({engine,canReadSessions:true,now:clock,tracker:createStateTracker(),actorOf:()=>({kind:'system',name:'System'}),P:version===3?project3x:undefined});
   const row=vm.occupants.find(occupant=>occupant.sessionKey===session.key);
   assert.ok(!row||row.state!=='working',`v${version} never promotes this unknown sample to Working`);
-  if(row)assert.equal(row.execution.evidence.level,'unknown');
+  if(row)assert.equal(row.execution.evidence.level,'observed');
  }
 });
 

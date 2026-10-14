@@ -1,7 +1,5 @@
 import { loadModule } from './build-update.js';
-// Dev/test validates received VMs against shared server schemas. Issues are value-free and
-// recorded on __AO_VM_ISSUES; strict tests can throw. Production never loads the validator.
-
+// Dev/test-only schema validation; diagnostics omit values.
 import { config, buildQuery } from './config.js';
 
 let validateVM = null;
@@ -29,11 +27,13 @@ export function schemaForPath(path) {
   if (p === '/api/v2/me') return 'me';
   if (p === '/api/v2/office/layout') return 'layout';
   if (p === '/api/v2/prefs') return 'prefs';
+  if (p === '/api/v2/views/office/palette') return 'officePalette';
+  if (p === '/api/v2/views/office/store') return 'officeStore';
   const m = /^\/api\/v2\/views\/([a-z-]+)(\/[^/]+)?(\/(?:history|comments))?$/.exec(p);
   if (!m) return null;
   const [, view, one, history] = m;
   if (history) return view === 'projects' ? (history === '/comments' ? 'comments' : 'history') : null;
-  const single = { projects: 'project', sessions: 'session', skills: 'skill', flows: 'flow', interlocutors: 'interlocutor' };
+  const single = { projects: 'project', sessions: 'session', skills: 'skill', flows: 'flow', interlocutors: 'interlocutor', office: 'officeCharacters' };
   const list = { health: 'health', projects: 'projects', 'project-candidates': 'candidates', logs: 'logs', skills: 'skills', flows: 'flows', access: 'access', office: 'office', chat: 'chat' };
   return one ? single[view] || null : list[view] || null;
 }

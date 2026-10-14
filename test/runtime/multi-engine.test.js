@@ -127,6 +127,18 @@ test('write commands bind to one instance and reject conflicting ownership witho
   await controller.runtime.commands.flowRun(scopedId('one','flow','same-native-flow'));assert.deepEqual(calls[1],['one','same-native-flow']);
 });
 
+test('adapter project-session identity maps the canonical agent to its native session and scopes the result', t => {
+  const runtimeDefinition = { ...definition };
+  const store = { owner: null, persons: { senderPeople: () => [] }, quarantine: { loadAll: () => [] }, flushQuarantine() {} };
+  const controller = createMultiRuntimeController({ cfg: { primaryAgent: scopedId('two', 'agent', 'nova'), runtimeInstances: ['one', 'two'].map(id => ({
+    id, adapter: 'demo', enabled: true, config: { adapter: 'demo' }, cfg: { agentNames: {}, hiddenAgents: [], configuredAgents: null },
+  })) }, store, resolveAdapter: () => ({ definition: runtimeDefinition, createRuntime: () => ({ definition: runtimeDefinition, attach() {}, close() {} }) }) });
+  t.after(() => controller.close());
+  const agentId = scopedId('two', 'agent', 'nova');
+  const key = controller.runtime.definition.sessionKeyFor(agentId, 'ao-projet-world-weather', { purpose: 'project' });
+  assert.equal(key, scopedId('two', 'session', 'demo:nova:ao-projet-world-weather'));
+});
+
 test('a rejected start retries independently with capped backoff while another source stays live',async t=>{
   let attempts=0;
   const resolveAdapter=id=>({definition,createRuntime(){return{definition,attach(){},close(){},async start(engine){if(id==='flaky' && ++attempts===1)throw Error('synthetic');engine.ingestCanonical('agents',createDemoTeam({now:()=>NOW}).agents());}};}});

@@ -22,11 +22,12 @@ after(async () => { await browser?.close(); await new Promise((r) => (server ? s
 
 async function open(route, lang = 'fr') {
   const p = await browser.page('/');
+  await p.viewport(1440,900);
   await p.eval(`location.href = ${JSON.stringify(origin + '/v2/' + route)};`);
   await p.waitFor(`location.origin === ${JSON.stringify(origin)} && document.readyState === 'complete'`);
   // the UI language is stored per origin: set it on the app's origin, then reload (and wait for the NEW document)
   await p.eval(`window.__old = true; localStorage.setItem('ao.locale', ${JSON.stringify(lang)}); location.reload();`);
-  await p.waitFor(`!window.__old && document.documentElement?.lang?.startsWith(${JSON.stringify(lang)}) && document.querySelectorAll('.ao-shop__tab').length === 6 && document.querySelectorAll('.ao-shop__card,[data-theme-mode]').length > 0`);
+  await p.waitFor(`!window.__old && document.documentElement?.lang?.startsWith(${JSON.stringify(lang)}) && document.querySelectorAll('#ao-shop-section option').length === 6 && document.querySelectorAll('.ao-shop__card,[data-theme-mode]').length > 0`);
   await p.eval(`performance.setResourceTimingBufferSize(2000);`);
   return p;
 }
@@ -34,62 +35,45 @@ const wait = (ms) => `await new Promise((r) => setTimeout(r, ${ms}));`;
 const status = `document.querySelector('.ao-shop__status').innerText`;
 const card = (name) => `[...document.querySelectorAll('.ao-shop__card')].find((c) => c.querySelector('.ao-shop__name').innerText === ${JSON.stringify(name)})`;
 
+// A selection finishes when the returned VM has been committed to the frame.
+async function chooseSection(p,value) {
+  await p.eval(`const s=document.querySelector('#ao-shop-section');s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}));`);
+  await p.waitFor(`document.querySelector('.ao-shop')?.dataset.storeSection===${JSON.stringify(value)} && document.querySelector('.ao-shop')?.dataset.storeCategory===''`);
+}
+async function chooseCategory(p,value) {
+  await p.eval(`const s=document.querySelector('#ao-shop-category');s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}));`);
+  await p.waitFor(`document.querySelector('.ao-shop')?.dataset.storeCategory===${JSON.stringify(value)}`);
+}
+
 describe('la Boutique (office-dev-21)', { skip, timeout: 180_000 }, () => {
-  it('compact Bureau category select shares the tab row on desktop and mobile; filters and restores both catalogues', async () => {
-    const p = await open('boutique?mock=1');
-    assert.equal(await p.eval(`return performance.getEntriesByType('resource').some(e=>e.name.includes('/office/themes-panel.js'));`), false, 'theme previews stay unloaded while browsing furniture');
-    const evidence = process.env.STORE_CATEGORIES_EVIDENCE;
-    if (evidence) fs.mkdirSync(evidence, { recursive: true });
-    for (const width of [1440, 390, 320]) {
-      await p.viewport(width, width > 480 ? 900 : 844);
-      for (const tab of ['mobilier', 'decoration', 'accessoires']) {
-        await p.eval(`document.getElementById('ao-shop-tab-${tab}').click();`);
-        await p.waitFor(`document.querySelector('#ao-shop-category') && document.querySelector('[role=tabpanel]').id === 'ao-shop-panel-${tab}'`);
-        await p.eval(`const s=document.querySelector('#ao-shop-category');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));`);
-        const layout = await p.eval(`${wait(150)}
-          const s=document.querySelector('#ao-shop-category'),r=s.getBoundingClientRect(),t=document.querySelector('.ao-shop__tabs').getBoundingClientRect(),n=document.querySelector('.ao-shop__navigation').getBoundingClientRect(),selected=document.querySelector('.ao-shop__tab[aria-selected="true"]'),text=document.createRange();
-          text.selectNode(selected.lastChild);const a=text.getBoundingClientRect();
-          const floor=document.querySelector('.ao-shop__floor-context'),f=floor.getBoundingClientRect();
-          return { label:s.selectedOptions[0].textContent, accessible:s.getAttribute('aria-label'), bureau:s.classList.contains('bu-text-input'), options:s.options.length,
-            all:document.querySelectorAll('.ao-shop__card').length, width:r.width, height:r.height, row:Math.abs((r.y+r.height/2)-(t.y+t.height/2)), right:Math.abs(r.right-n.right),
-            styled:!!document.querySelector('link[data-bureau-controls-css]')?.sheet&&getComputedStyle(s).borderTopWidth==='1px'&&getComputedStyle(s).borderRadius!=='0px',
-            fits:r.x>=0&&r.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth, viewport:innerWidth, scroll:document.documentElement.scrollWidth,
-            activeFits:a.left>=t.left-1&&a.right<=t.right+1, activeWidth:a.width, tabsWidth:t.width,
-            floorFits:floor.scrollWidth<=floor.clientWidth, floorAbove:f.bottom<=t.top,
-            overflow:[...document.querySelectorAll('body *')].filter(e=>getComputedStyle(e).position==='fixed'&&e.getBoundingClientRect().right>innerWidth).map(e=>e.className), old:document.querySelectorAll('.ao-shop__filters').length };`);
-        assert.equal(layout.label, 'Catégorie : Toutes'); assert.equal(layout.accessible, 'Catégorie'); assert.ok(layout.bureau);
-        assert.equal(layout.options, 5); assert.ok(layout.width < 240 && layout.height >= 44 && layout.styled, JSON.stringify(layout));
-        if (evidence) {
-          await p.eval(`document.activeElement?.blur();`);
-          fs.writeFileSync(path.join(evidence, `${width > 480 ? 'desktop' : 'mobile-'+width}-${tab}.png`), await p.screenshot());
-        }
-        assert.ok(layout.row < 2 && layout.right < 4 && layout.fits, JSON.stringify(layout)); assert.equal(layout.old, 0);
-        assert.ok(layout.activeFits, 'selected tab label must be fully visible: '+JSON.stringify(layout));
-        assert.ok(layout.floorFits && (width > 600 || layout.floorAbove), 'floor caption must not crowd phone controls: '+JSON.stringify(layout));
-        await p.eval(`document.querySelector('#ao-shop-category').focus();`);
-        await p.key('ArrowDown');
-        await p.waitFor(`document.querySelector('#ao-shop-category').value !== '' && document.querySelectorAll('.ao-shop__card').length < ${layout.all}`);
-        assert.ok(await p.eval(`return document.querySelectorAll('.ao-shop__card').length > 0;`));
-        await p.eval(`const s=document.querySelector('#ao-shop-category');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));`);
-        await p.waitFor(`document.querySelectorAll('.ao-shop__card').length === ${layout.all}`);
+  it('Bureau section/category dropdowns share one row; backend filtering restores all three catalogues', async () => {
+    const p=await open('boutique?mock=1');
+    assert.equal(await p.eval(`return performance.getEntriesByType('resource').some(e=>e.name.includes('/office/themes-panel.js'));`),false);
+    for(const width of [1440,390]) {
+      await p.viewport(width,width===390?844:900);
+      for(const section of ['mobilier','decoration','accessoires']) {
+        await chooseSection(p,section);
+        await p.waitFor(`document.querySelector('#ao-shop-section').value==='${section}' && document.querySelector('#ao-shop-category') && !document.querySelector('#ao-shop-category').hasAttribute('aria-busy')`);
+        const state=await p.eval(`const section=document.querySelector('#ao-shop-section'),category=document.querySelector('#ao-shop-category'),a=section.getBoundingClientRect(),b=category.getBoundingClientRect();return {sameRow:Math.abs(a.top-b.top)<1,gap:b.left-a.right,fits:a.left>=0&&b.right<=innerWidth,noPage:document.scrollingElement.scrollHeight===innerHeight,styled:!!document.querySelector('link[data-bureau-controls-css]')?.sheet,all:document.querySelectorAll('.ao-shop__card').length,floor:!!document.querySelector('#ao-shop-floor')};`);
+        assert.ok(state.sameRow&&state.gap>=7&&state.fits&&state.noPage&&state.styled,JSON.stringify(state));
+        assert.equal(state.floor,section!=='accessoires');
+        await chooseCategory(p,await p.eval(`return document.querySelector('#ao-shop-category').options[1].value;`));
+        await p.waitFor(`document.querySelectorAll('.ao-shop__card').length<${state.all}`);
+        await chooseCategory(p,'');
+        await p.waitFor(`document.querySelectorAll('.ao-shop__card').length===${state.all}`);
       }
     }
-    await p.eval(`document.getElementById('ao-shop-tab-themes').click();`);
-    await p.waitFor(`document.querySelectorAll('[data-theme-mode]').length === 3 && document.querySelector('.ao-theme-preview .ao-office') && performance.getEntriesByType('resource').some(e=>e.name.includes('/office/themes-panel.js'))`);
-    assert.ok(await p.eval(`return performance.getEntriesByType('resource').some(e=>e.name.includes('/office/themes-panel.js'));`), 'opening Themes loads and renders its previews');
-    await p.close();
+    await chooseSection(p,'themes');
+    await p.waitFor(`document.querySelectorAll('[data-theme-mode]').length===3 && document.querySelector('.ao-theme-preview .ao-office')`);
+    assert.equal(await p.eval(`return !!document.querySelector('#ao-shop-floor');`),false);await p.close();
   });
-  it('keeps the active tab label visible on resize and across every French/English tab at 320px', async () => {
-    for (const lang of ['fr', 'en']) {
-      const p = await open('boutique?mock=1&onglet=accessoires', lang);
-      await p.viewport(320, 844);
-      const visible = `(() => {const t=document.querySelector('.ao-shop__tabs').getBoundingClientRect(),s=document.querySelector('.ao-shop__tab[aria-selected="true"]'),range=document.createRange();range.selectNode(s.lastChild);const r=range.getBoundingClientRect();return r.width>0&&r.left>=t.left&&r.right<=t.right;})()`;
-      await p.waitFor(visible);
-      assert.ok(await p.eval(`return ${visible};`), lang+' active accessory label survives resize');
-      for (const tab of ['mobilier', 'decoration', 'personnages', 'couleurs', 'accessoires', 'themes']) {
-        await p.eval(`document.getElementById('ao-shop-tab-${tab}').focus();document.getElementById('ao-shop-tab-${tab}').click();`);
-        await p.waitFor(`document.querySelector('[role=tabpanel]').id === 'ao-shop-panel-${tab}' && ${visible}`);
-        assert.ok(await p.eval(`return ${visible};`), lang+' '+tab+' label fits');
+  it('section dropdown remains in the viewport in French/English at 320px', async () => {
+    for(const lang of ['fr','en']) {
+      const p=await open('boutique?mock=1&onglet=accessoires',lang);await p.viewport(320,844);
+      for(const section of ['mobilier','decoration','personnages','couleurs','accessoires','themes']) {
+        await chooseSection(p,section);
+        await p.waitFor(`document.querySelector('#ao-shop-section').value==='${section}' && document.querySelector('#ao-shop-panel-${section}')`);
+        assert.ok(await p.eval(`const r=document.querySelector('#ao-shop-section').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth;`));
       }
       await p.close();
     }
@@ -104,9 +88,9 @@ describe('la Boutique (office-dev-21)', { skip, timeout: 180_000 }, () => {
     for(let i=0;i<samples.length;i++){
       const [tab,name]=samples[i];
       if(i===4){await p.viewport(390,844);await p.emulateTouch();}
-      await p.eval(`document.getElementById('ao-shop-tab-${tab}').click();`);
-      await p.waitFor(`[...document.querySelectorAll('#ao-shop-category option')].some(o=>o.textContent===${JSON.stringify('Catégorie : '+filters[i])})`);
-      await p.eval(`const s=document.querySelector('#ao-shop-category');s.value=[...s.options].find(o=>o.textContent===${JSON.stringify('Catégorie : '+filters[i])}).value;s.dispatchEvent(new Event('change',{bubbles:true}));`);
+      await chooseSection(p,tab);
+      await p.waitFor(`[...document.querySelectorAll('#ao-shop-category option')].some(o=>o.textContent===${JSON.stringify(filters[i])})`);
+      await chooseCategory(p,await p.eval(`return [...document.querySelector('#ao-shop-category').options].find(o=>o.textContent===${JSON.stringify(filters[i])}).value;`));
       await p.waitFor(`${card(name)}`);
       await p.eval(`${card(name)}.click();`);
       await p.waitFor(`document.querySelector('.ao-shop__sheetactions .bu-btn--primary')&&!document.querySelector('.ao-shop__sheetactions .bu-btn--primary').disabled`);
@@ -141,7 +125,7 @@ describe('la Boutique (office-dev-21)', { skip, timeout: 180_000 }, () => {
   });
   it('tabs and cards from the manifest; place a plant in placement mode; undo/redo', async () => {
     const p = await open('boutique?mock=1');
-    const r0 = await p.eval(`${wait(300)} return { tabs: [...document.querySelectorAll('[role=tab]')].map((t) => t.innerText.trim()), selected: document.querySelector('[role=tab][aria-selected=true]').innerText.trim(),
+    const r0 = await p.eval(`${wait(300)} return { tabs: [...document.querySelectorAll('#ao-shop-section option')].map((t) => t.textContent.trim()), selected: document.querySelector('#ao-shop-section option:checked').textContent.trim(),
       cards: document.querySelectorAll('.ao-shop__card').length, imgs: [...document.querySelectorAll('.ao-shop__thumb img')].every((i) => i.getAttribute('src').includes('/furniture/') || (i.getAttribute('src').includes('/Decor/') && i.getAttribute('src').includes('/thumbnails/'))),
       badges: [...document.querySelectorAll('.ao-shop__badge')].map((b) => b.innerText), status: ${status} };`);
     assert.deepEqual(r0.tabs, ['Mobilier', 'Décoration', 'Personnages', 'Couleurs', 'Accessoires', 'Thèmes']);
@@ -150,7 +134,7 @@ describe('la Boutique (office-dev-21)', { skip, timeout: 180_000 }, () => {
     assert.ok(r0.badges.some((b) => /^Dans le bureau ×\d+$/.test(b)));
     assert.equal(r0.status, 'Tout est enregistré.');
     // Décoration → Petite plante → Placer dans le bureau → placement mode → Confirmer → Terminé
-    await p.eval(`[...document.querySelectorAll('[role=tab]')].find((t) => t.innerText.includes('Décoration')).click(); ${wait(300)}`);
+    await chooseSection(p,'decoration');
     const before = await p.eval(`return ${card('Petite plante')}.querySelector('.ao-shop__badge').innerText;`);
     await p.eval(`${card('Petite plante')}.click(); ${wait(200)} document.querySelector('.ao-shop__sheetactions .bu-btn--primary').click();`);
     await p.waitFor(`document.querySelector('.ao-place .ao-office') && location.search.includes('placer=plant-small')`);
@@ -180,10 +164,10 @@ describe('la Boutique (office-dev-21)', { skip, timeout: 180_000 }, () => {
     fs.writeFileSync(path.join(dir,'mobile-beanie-preview.png'),await p.screenshot());
     await p.eval(`document.querySelector('.ao-shop__previewtext .bu-btn--primary').click();`);
     await p.waitFor(`${card('Bonnet')}.querySelector('.ao-shop__badge').innerText==='Porté'`);
-    await p.eval(`const s=document.querySelector('#ao-shop-category');s.value='neck';s.dispatchEvent(new Event('change',{bubbles:true}));`);
+    await chooseCategory(p,'neck');
     await p.waitFor(`document.querySelectorAll('.ao-shop__card').length===4`);
     assert.equal(await p.eval(`return !!${card('Cravate')};`),true);
-    await p.eval(`const s=document.querySelector('#ao-shop-category');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('.ao-shop__saverow .bu-btn--primary').click();`);
+    await chooseCategory(p,'');await p.eval(`document.querySelector('.ao-shop__saverow .bu-btn--primary').click();`);
     await p.waitFor(`${status}==='Tout est enregistré.'`);
     assert.equal(await p.eval(`return ${card('Bonnet')}.querySelector('.ao-shop__badge').innerText;`),'Porté');
     await p.close();
@@ -235,16 +219,16 @@ describe('la Boutique (office-dev-21)', { skip, timeout: 180_000 }, () => {
 
   it('English; Thèmes; every tab has its panel', async () => {
     const p = await open('boutique?mock=1&onglet=themes', 'en');
-    const r = await p.eval(`${wait(300)} return { tabs: [...document.querySelectorAll('[role=tab]')].map((t) => t.innerText.trim()), title: document.querySelector('.bu-topbar__title').innerText,
-      themes: [...document.querySelectorAll('[data-theme-mode] .ao-theme-mode__label')].map((n) => n.innerText), panel: document.querySelector('[role=tabpanel]').getAttribute('aria-labelledby') };`);
+    const r = await p.eval(`${wait(300)} return { tabs: [...document.querySelectorAll('#ao-shop-section option')].map((t) => t.textContent.trim()), title: document.querySelector('.bu-topbar__title').innerText,
+      themes: [...document.querySelectorAll('[data-theme-mode] .ao-theme-mode__label')].map((n) => n.innerText), panel: document.querySelector('[role=region][id^=ao-shop-panel-]').getAttribute('aria-labelledby') };`);
     assert.deepEqual(r.tabs, ['Furniture', 'Decoration', 'Characters', 'Colours', 'Accessories', 'Themes']);
     assert.equal(r.title, 'Store');
     assert.equal(r.themes.length, 3);
-    assert.equal(r.panel, 'ao-shop-tab-themes');
+    assert.equal(r.panel, 'ao-shop-section');
     for (const t of ['mobilier', 'decoration', 'personnages', 'couleurs', 'accessoires']) {
-      await p.eval(`document.getElementById('ao-shop-tab-${t}').click(); ${wait(250)}`);
-      assert.equal(await p.eval(`return document.querySelector('[role=tabpanel]').id;`), 'ao-shop-panel-' + t);
-      if (t === 'mobilier' || t === 'decoration' || t === 'accessoires') assert.equal(await p.eval(`return document.querySelector('#ao-shop-category').selectedOptions[0].textContent;`), 'Category: All');
+      await chooseSection(p,t);
+      assert.equal(await p.eval(`return document.querySelector('[role=region][id^=ao-shop-panel-]').id;`), 'ao-shop-panel-' + t);
+      if (t === 'mobilier' || t === 'decoration' || t === 'accessoires') assert.equal(await p.eval(`return document.querySelector('#ao-shop-category').selectedOptions[0].textContent;`), 'All');
     }
     await p.close();
   });

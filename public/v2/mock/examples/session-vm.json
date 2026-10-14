@@ -102,6 +102,28 @@
           "channel": null,
           "avatarHint": null
         }
+      },
+      {
+        "id": "ev:3:0",
+        "kind": "subagent-result",
+        "at": 1791223012000,
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas:subagent:review",
+          "name": "Review the changes",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": {
+            "sessionKey": "agent:atlas:subagent:review",
+            "label": "Review the changes"
+          }
+        },
+        "text": "| Check | Result |\n| --- | --- |\n| tests | **pass** |",
+        "truncated": false,
+        "title": "Review the changes",
+        "status": "completed",
+        "body": "| Check | Result |\n| --- | --- |\n| tests | **pass** |"
       }
     ],
     "participants": [

@@ -1,8 +1,6 @@
 export { loadStyles } from './workspace-mobile.js';
 import { Button, TextArea } from '../components/bureau/index.js';
 import { useSmallWorkspace } from './workspace-mobile.js';
-import { SenderAvatar } from '../components/sender.js';
-import { senderName } from '../sender.js';
 // Discuter (frontend-22: the Bureau chat, design/components/Chat): ChatVM from
 // GET /api/v2/views/chat, kept fresh by the `chat` topic (api.md §3.3); POST /api/v2/chat/messages → 202 (§5.2).
 // One fixed session, the last 50 messages, one pending turn at a time. The page states only what the VM proves:
@@ -16,7 +14,7 @@ import { msg, agentName } from '../i18n.js';
 import * as fmt from '../fmt.js';
 import { post } from '../api.js';
 import { Frame, Icon, Skeleton, ErrorState } from '../components/ui.js';
-import { Markdown } from '../components/markdown.js';
+import { ChatMessage } from '../components/chat-message.js';
 
 const DRAFT_KEY = 'ao.chat.draft';
 const readDraft = () => { try { return localStorage.getItem(DRAFT_KEY) || ''; } catch { return ''; } };
@@ -138,7 +136,7 @@ export function ChatPage() {
 `}>
             ${c.messages.length ? html`<ol class="ao-chat__messages">${c.messages.map((m, i) => html`
               ${i === 0 || fmt.dayKey(m.at) !== fmt.dayKey(c.messages[i - 1].at) ? html`<li key=${'d' + m.id} class="bu-msg bu-msg--system ao-chat__day"><span class="bu-msg__bubble">${fmt.longDate(m.at, now)}</span></li>` : null}
-              <li key=${m.id} class=${'ao-chat__msg ao-chat__msg--' + m.role}><${Message} m=${m} now=${now} onRetry=${m.role === 'error' && lastUserText && !pending ? () => onDraft(lastUserText) : null} /></li>`)}
+              <li key=${m.id} class=${'ao-chat__msg ao-chat__msg--' + m.role}><${ChatMessage} m=${m} now=${now} onRetry=${m.role === 'error' && lastUserText && !pending ? () => onDraft(lastUserText) : null} /></li>`)}
             </ol>`
             : html`<div class="bu-empty ao-chat__empty"><img class="ao-illus" src=${assetUrl('bureau/assets/Illustrations/new-chat-thread.webp')} alt="" width="400" height="300" />
                 <p class="bu-empty__title">${msg('chat.empty')}</p><p class="bu-empty__text">${msg('chat.empty.text', { agent: agentName() })}</p></div>`}
@@ -148,25 +146,6 @@ export function ChatPage() {
 }
 
 const Avatar = ({ state }) => html`<span class="bu-avatar bu-avatar--agent" data-agent-state=${state} aria-hidden="true"><${Icon} name="agent" /></span>`;
-
-function Message({ m, now, onRetry }) {
-  const metaParts = m.meta ? [m.meta.model, m.meta.durationMs != null ? fmt.duration(m.meta.durationMs) : null, m.meta.tokens != null ? fmt.tokens(m.meta.tokens) : null].filter(Boolean) : [];
-  const time = html`<time datetime=${new Date(m.at).toISOString()} title=${fmt.dateTime(m.at, now)}>${fmt.time(m.at)}</time>`;
-  if (m.role === 'user') {
-    return html`<div class="bu-msg bu-msg--user">
-      <div class="bu-msg__head"><${SenderAvatar} event=${m} /><span class="bu-msg__who">${senderName(m, msg('chat.you'))}</span><span class="bu-msg__meta">${time}${m.id.startsWith('pending_') ? ' · ' + msg('chat.sent') : ''}</span></div>
-      <div class="bu-msg__bubble">${m.text}</div></div>`;
-  }
-  const error = m.role === 'error';
-  return html`<div class=${'bu-msg bu-msg--agent' + (error ? ' bu-msg--error' : '')}>
-    <div class="bu-msg__head"><${Avatar} state=${error ? 'error' : undefined} />
-      <span class="bu-msg__who">${error ? msg('chat.failed') : senderName(m, agentName())}</span>
-      <span class="bu-msg__meta">${time}${metaParts.length ? ' · ' + metaParts.join(' · ') : ''}</span></div>
-    ${error ? html`<div class="bu-msg__bubble"><p>${m.text}</p>
-        ${onRetry ? html`<button type="button" class="bu-btn bu-btn--sm ao-chat__retry" onClick=${onRetry}><${Icon} name="undo" />${msg('chat.retry')}</button>` : null}</div>`
-      : html`<div class="bu-msg__bubble bu-prose"><${Markdown} source=${m.text} headingOffset=${3} /></div>`}
-  </div>`;
-}
 
 /** The pending turn, as known: running since `since`; with an interrupted link, its end is unconfirmed. */
 function Pending({ pending, now, link }) {

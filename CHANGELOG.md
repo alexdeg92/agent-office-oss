@@ -2,6 +2,43 @@
 
 All notable changes to Agent Office are documented in this file. The format is based on Keep a Changelog, and versions follow Semver. `packaging/release.sh` copies the matching section into `dist/RELEASE_NOTES.md`.
 
+## 1.2.3 - 2026-10-14
+
+This release makes customizing the office comfortable on a phone, shows sub-agent results properly in the chat, and fixes session history for Claude Code and Codex.
+
+### Customize
+
+- **Live character preview:** while you customize an agent, a large preview replaces the office map and updates as you pick the character, colour, accessories or pose. Accessories are shown as pictures.
+- **Phone layout:** Disposition and Thème open on a full-screen catalogue with search and a category menu; the map appears only to place an item or preview the theme. The toolbar fits on one line and « Plus d'actions » lets you switch floors.
+- **Store:** Floor, Section and Category are dropdowns (one row on desktop) instead of a scrolling tab strip.
+- **Characters:** the roster lists the agents present in the office, grouped under their lead, with search; lists scroll inside their frame.
+- **Presence timings** (finished sessions, agent presence, idle relocation) are editable in Settings.
+
+### Chat
+
+- **Sub-agent results** appear as collapsible cards on the agent's side, with the sub-agent's portrait, task title and state, instead of looking like your own messages.
+- **Agent portraits** from the office are used as chat avatars.
+- **Tables and bold text** render inside messages; wide tables scroll sideways and no longer trap vertical touch scrolling.
+
+### Office
+
+- Idle agents keep their own desk unless the floor is full; borrowed desks return to their owner and agents no longer overlap.
+- Thinking agents at their desk show it on their monitor; the « ? » glyph is gone.
+- Desk monitors raise a visible alarm when an agent is blocked.
+- Live updates carry exactly the same office state as a page load.
+
+### Projects (API)
+
+- API v3 exposes read-only Claude Code and Codex workspace projects and team sources, gated by read permissions with opaque identifiers. The v2 board is unchanged; the new Projects page will use v3.
+
+### Fixes
+
+- Claude Code and Codex session logs show the whole conversation instead of only the last exchange, with bounded, fair incremental reads of large transcripts.
+- Sessions and comments no longer fail on duplicated event identifiers, and summary requests no longer stay pending.
+- Choosing a connector in Settings is no longer reset to « all ».
+- Hidden and missing projects return identical not-found responses.
+- The public export rebuild includes the desk monitor manifest.
+
 ## 1.2.2 - 2026-10-13
 
 This release makes the office read like a real workplace: every agent has its own desk, you can see what each one is doing, and idle agents doze or take breaks.

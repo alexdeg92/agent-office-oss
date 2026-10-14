@@ -22,7 +22,9 @@
     "$.recentHistory[].session.people[].avatarUrl",
     "$.recentHistory[].session.people[].state",
     "$.recentHistory[].session.channel",
-    "$.cover"
+    "$.cover",
+    "$.counts.sessions",
+    "$.counts.activity"
   ],
   "types": {
     "$.summaryMeta.author.avatarUrl": "string",

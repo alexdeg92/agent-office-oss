@@ -38,7 +38,7 @@ export { shippedLayoutVM };
 // Localize generated titles; preserve given names.
 const titleSource = (ref) => (ref && services.meta?.labels?.[ref.key] != null ? fmt.interpolate(services.meta.labels[ref.key], ref.params ?? {}) : null);
 const nameOf = (o) => displayName(o, { primaryName: primaryName(), title: o.title ? L(o.title) : null, titleSource: titleSource(o.title) });
-const occupantsKey = (list) => list.map((o) => [o.id, o.state, o.stateSince, o.stationUid, o.presenceLabel ?? '', o.name, JSON.stringify(o.look), o.destination?.stationUid ?? '', JSON.stringify([o.sceneTarget, o.sceneTravel, o.activity, o.standingPoint])].join('\u0001')).join('\u0002');
+const occupantsKey = (list) => list.map((o) => [o.id, o.state, o.stateSince, o.stationUid, o.presenceLabel ?? '', o.name, JSON.stringify(o.look), o.destination?.stationUid ?? '', JSON.stringify([o.sceneTarget, o.sceneTravel, o.activity, o.standingPoint, o.communication, o.screenIntent])].join('\u0001')).join('\u0002');
 
 function useSceneRecovery() {
   const dispose = useRef(null);
@@ -266,13 +266,12 @@ function BureauContent({ match }) {
       ${editing ? null : canWrite ? html`<${ThemeToggle} lay=${floorLay} store=${currentStore} />`
         : html`<p class="ao-bureau__ro" id="ao-bureau-ro">${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}
     </div>
-    <div class="ao-bureau__editbar" id="ao-bureau-editbar"></div>
     `}>
     <div class="ao-bureau__main">
       <div class="ao-bureau__stagecol">
         <div class="ao-bureau__stagewrap">
           ${mobile ? html`<button type="button" class="bu-btn bu-btn--sm ao-floor-mobile-trigger" onClick=${() => setMobileSheet('floors')} aria-haspopup="dialog">${tr('office.floor.picker')}: ${floorLabel(currentFloor)}</button>` : null}
-          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${visiblePeople} lay=${floorLay} store=${currentStore} floor=${currentFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} travelMemory=${travelMemory.current} minimalLabels=${mobile && !editing} />
+          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : visiblePeople} lay=${floorLay} store=${currentStore} floor=${currentFloor} onSelectFloor=${selectFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} travelMemory=${travelMemory.current} minimalLabels=${mobile && !editing} />
           ${editing ? null : html`<button type="button" class="bu-btn bu-btn--sm bu-btn--icon ao-mobile-options" disabled=${mobile&&!controlsReady} aria-label=${i18n.msg('office.mobile.options')} onClick=${() => setMobileSheet('options')}><${Icon} name="plus" /></button>`}
         </div>
         ${editing || !mobile ? null : html`<${MobileSummary} summary=${vm.rosterSummary} kpis=${vm.kpis || []} unconfirmed=${unconfirmed} />
@@ -280,6 +279,7 @@ function BureauContent({ match }) {
 
         ${editing || mobile ? null : html`<${FloorPicker} floors=${floorPlan.floors} current=${currentFloor.id} onSelect=${selectFloor} />`}
       </div>
+      <div class="ao-bureau__editbar" id="ao-bureau-editbar"></div>
       <aside class="ao-bureau__side" aria-label=${editing ? tr('office.customize') : tr('office.rosterLabel')}>
         <div id="ao-bureau-editaside" hidden=${!editing}></div>
         ${editing ? null : html`<${Roster} occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} groupedFloors onJumpFloor=${selectFloor} hostAnnotation=${teamUI?.hostAnnotation} />`}
@@ -297,11 +297,11 @@ function BureauContent({ match }) {
         <div class="ao-office-options__actions">
           <${Button} label=${i18n.msg('office.mobile.center')} icon=${html`<${ViewIcon} center />`} onPress=${() => { if(mainScene.current){mainScene.current.cam.user=false;mainScene.current.fit();} }} />
           <${Button} label=${tr('scene.fullscreen')} icon=${html`<${ViewIcon} />`} onPress=${() => {closeMobileSheet();void mainScene.current?.toggleFullscreen();}} />
-          ${canWrite ? html`<${Button} label=${tr('office.customize')} icon=${html`<${Icon} name="pencil" />`} onPress=${()=>{closeMobileSheet();openShop({onglet:'personnages',etage:currentFloor.id});}} />` : null}
+          ${canWrite ? html`<${Button} label=${tr('office.customize')} icon=${html`<${Icon} name="pencil" />`} onPress=${()=>{closeMobileSheet();setEditing(true);}} />` : null}
         </div>
         ${canWrite ? html`<${ThemeToggle} lay=${floorLay} store=${currentStore} labelId="ao-mobile-theme-label" visibleLabel=${i18n.msg('office.mobile.lighting')} icons />` : html`<p class="ao-bureau__ro">${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}`}
     </${Modal}>` : null}
-    ${sel && !editing ? html`<${Drawer} o=${sel} lay=${detailLayout} unconfirmed=${unconfirmed} sourceStale=${!!sel.sourceStale} onClose=${() => select(null)} onBack=${mobile&&detailTeam ? backToTeam : null} teamLabel=${detailTeam?.conversationIds ? i18n.msg('office.mobile.backConversations') : detailTeam?.fromSheet ? i18n.msg('office.mobile.backTeam') : i18n.msg('office.mobile.team',{name:detailTeam?.name||''})} onCustomize=${canWrite ? () => (phone() ? openShop({ onglet: 'personnages', agent: sel.id, etage: currentFloor.id }) : setEditing({ agent: sel.id })) : null} />` : null}
+    ${sel && !editing ? html`<${Drawer} o=${sel} lay=${detailLayout} unconfirmed=${unconfirmed} sourceStale=${!!sel.sourceStale} onClose=${() => select(null)} onBack=${mobile&&detailTeam ? backToTeam : null} teamLabel=${detailTeam?.conversationIds ? i18n.msg('office.mobile.backConversations') : detailTeam?.fromSheet ? i18n.msg('office.mobile.backTeam') : i18n.msg('office.mobile.team',{name:detailTeam?.name||''})} onCustomize=${canWrite ? () => setEditing({ agent: sel.id }) : null} />` : null}
   </${Frame}>`;
 }
 
@@ -413,7 +413,7 @@ function ThemeToggle({ lay, store = officeApi(), labelId = 'ao-theme-label', vis
 }
 
 /** The scene: one OfficeScene per mount, fed from the VMs; cues from SSE `cue` frames. */
-function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, travelMemory, minimalLabels }) {
+function Stage({ vm, occupants, lay, store = officeApi(), floor, onSelectFloor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, travelMemory, minimalLabels }) {
   const latestOcc = useRef(occupants);
   latestOcc.current = occupants;
   const host = useRef(null);
@@ -446,8 +446,7 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
       scene.setPrimaryLabels(minimalLabels, floor?.mobileLabelIds ?? []);
       if(sceneHandle)sceneHandle.current=scene;
       host.current.aoScene = scene;   // test/QA handle (DevTools, DOM tests): the stage element carries its scene
-      // office-dev-21: on a phone Personnaliser opens the Boutique (catalog + full-screen placement); on desktop the editor.
-      if (canWrite) scene.addControl({ label: tr('office.customize'), text: true, icon: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>', onClick: () => (phone() ? openShop({ etage: floor?.id }) : setEditing(true)) });
+      if (canWrite) scene.addControl({ label: tr('office.customize'), text: true, icon: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>', onClick: () => setEditing(true) });
       // SSE cue frames (app.js forwards them to services.cueListeners).
       const listeners = (services.cueListeners ??= new Set());
       const onCue = (f) => protect(() => { f.signal ? sceneRef.current?.signal(f.occupantId, f.signal) : sceneRef.current?.cue(f.occupantId, f.cue, { partnerId: f.partnerId ?? null, interactionId: f.interactionId ?? null }); });
@@ -484,14 +483,18 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
   useEffect(() => {
     if (!editing || editorRef.current || !sceneRef.current) return;
     let alive = true;
+    const ownerScene=sceneRef.current;
     // The editor loads on first use.
-    loadModule(() => import('./editor.js' + buildQuery)).then(({ openEditor }) => openEditor({
-      scene: sceneRef.current, store, assetBase: assetBase(), primaryName: primaryName(), timeZone: fmtTz.timeZone(),
+    loadModule(() => import('./editor.js' + buildQuery)).then(({ openEditor }) => alive ? openEditor({
+      scene: ownerScene, isCurrent:()=>alive && sceneRef.current===ownerScene, store, assetBase: assetBase(), primaryName: primaryName(), timeZone: fmtTz.timeZone(),
       barHost: document.getElementById('ao-bureau-editbar'), asideHost: document.getElementById('ao-bureau-editaside'),
+      floorId:floor.id, floors:vm.rosterFloors,
+      getCharacterVM: services.officeCharacterVM,
       getOccupants: () => latest.current.occupants.map((o) => ({ id: o.id, role: o.role, sourceName: o.sourceName ?? o.name, automaticLook: o.automaticLook, state: o.state, stateSince: o.stateSince })),
       toast: (message, level) => toast({ level, message }),
       onOpenShop: () => openShop({ etage: floor?.id }),
       onExit: (result) => protect(() => {
+        if(!alive || sceneRef.current!==ownerScene) return;
         editorRef.current = null;
         const s = sceneRef.current;
         if (s) {
@@ -504,13 +507,16 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, selected, onSel
           s.setTravelIntents(latest.current.occupants, floor.id, travelMemory);
           s.setOccupants(named(latestOcc.current));
         }
-        setEditing(false);
+        if(result?.nextFloor) { setEditing({mode:result.mode});onSelectFloor(result.nextFloor); }
+        else setEditing(false);
         if (result?.saved) services.stream.resync?.('office');
       }),
-    })).then((ed) => {
+    }) : null).then((ed) => {
+      if(!ed) return;
       if (!alive) { ed.close({ saved: false }); return; }
       editorRef.current = ed;
-      if (editing.agent) { ed.agentSel = editing.agent; ed.setMode('characters'); }
+      if(editing.mode) ed.setMode(editing.mode);
+      if (editing.agent) { ed.selectCharacter(editing.agent); ed.setMode('characters'); }
     }, (err) => {
     // Failed editor loads return to browsing, explain the error and keep the control available.
       editorRef.current = null;

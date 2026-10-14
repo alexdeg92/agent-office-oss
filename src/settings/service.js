@@ -17,6 +17,17 @@ function body(value, keys) {
 }
 const text = (value, field, max = 80) => { if (typeof value !== 'string' || !value.trim() || value.length > max) throw invalid(field, 'invalid'); return value.trim(); };
 const { scopedId, parseId, INSTANCE_ID } = require('../runtime-ids');
+const { DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS } = require('../engine/derive/occupants');
+const OFFICE_TIMINGS = Object.freeze([
+  { key: 'finishedSessionWindowMinutes', env: 'AGENT_OFFICE_SESSION_PRESENCE_WINDOW_MS', default: DEFAULT_SESSION_PRESENCE_WINDOW_MS / 60000, unit: 'ms' },
+  { key: 'agentPresenceWindowMinutes', env: 'AGENT_OFFICE_AGENT_PRESENCE_WINDOW_MS', default: DEFAULT_AGENT_PRESENCE_WINDOW_MS / 60000, unit: 'ms' },
+  { key: 'idleRelocationMinutes', env: 'AGENT_OFFICE_IDLE_RELOCATION_MINUTES', default: 15, unit: 'minutes' },
+]);
+function validOfficeEnv(raw, unit) {
+  if (raw === undefined || raw === '') return null;
+  const value = Number(raw), minutes = unit === 'ms' ? value / 60000 : value;
+  return Number.isSafeInteger(value) && Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 1440 ? minutes : null;
+}
 function createSettings({ env, files: initialFiles, cfg, store, auth, controller = null, engine,
   paths, detect = null, probe = null, elapsed = () => Number(process.hrtime.bigint() / 1000000n), now = Date.now, derivePassword = hashPassword,
   supervisor = null, orchestratorTeams = null, bootId = cfg.bootId || require('../ops/boot-identity').BOOT_ID,
@@ -44,6 +55,43 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
   const modeEnv = env.HOST !== undefined ? 'HOST' : env.AO_PUBLIC_URL !== undefined ? 'AO_PUBLIC_URL' : null;
   const activeMode = (!modeEnv && initialFiles.config?.network?.mode) || networkMode(cfg);
   const readonly = () => !!(cfg.readonly || cfg.readonlyStore);
+  const legacyIdleRelocationMinutes = () => {
+    try {
+      // Read only: during Settings construction the layout router has not yet
+      // seeded a missing layout, and a compatibility probe must not create one.
+      const value = store.office?.active?.()?.data?.idleRelocationMinutes;
+      return Number.isInteger(value) && value >= 1 && value <= 1440 ? value : null;
+    } catch { return null; }
+  };
+  // One-time compatibility migration from the pre-Settings layout field. Once
+  // copied, the config value is authoritative and layout writes cannot replace it.
+  function migrateLegacyOfficeTiming() {
+    const config = files.config, legacy = legacyIdleRelocationMinutes();
+    if (readonly() || !config || ![2, 3].includes(config.version) || legacy == null
+      || Number.isInteger(config.office?.presence?.idleRelocationMinutes)) return;
+    const nextConfig = { ...structuredClone(config), office: { ...(config.office || {}), presence: {
+      ...(config.office?.presence || {}), idleRelocationMinutes: legacy } } };
+    const nextSecrets = structuredClone(files.secrets);
+    const out = IC.writeInstanceConfig(files.paths, nextConfig, nextSecrets, { replace: true, expectedDigest: publishedDigest,
+      commit: hash => store.withTx(() => { setRevision.run(revision() + 1); putHash.run(hash); }) });
+    files = { ...files, config: nextConfig, secrets: nextSecrets };
+    publishedDigest = out.digest;
+  }
+  migrateLegacyOfficeTiming();
+  function officeTimingEntries() {
+    return Object.fromEntries(OFFICE_TIMINGS.map(def => {
+      const fromEnv = validOfficeEnv(env[def.env], def.unit), configured = files.config?.office?.presence?.[def.key];
+      const fromFile = Number.isInteger(configured) ? configured : def.key === 'idleRelocationMinutes' ? legacyIdleRelocationMinutes() : null;
+      const source = fromEnv !== null ? 'env' : fromFile !== null ? 'file' : 'default';
+      return [def.key, { value: fromEnv ?? fromFile ?? def.default, source, env: def.env }];
+    }));
+  }
+  function officeTimings() {
+    const values = officeTimingEntries();
+    return { finishedSessionWindowMs: values.finishedSessionWindowMinutes.value * 60000,
+      agentPresenceWindowMs: values.agentPresenceWindowMinutes.value * 60000,
+      idleRelocationMinutes: values.idleRelocationMinutes.value };
+  }
   const currentEnv = () => IC.effectiveEnv(env, files);
   const ownerEnabled = () => cfg.authDatabase && !!store.users.owner();
   function active(req, sensitive = false) {
@@ -246,8 +294,14 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
       orchestrator:{detected:herdrFound,enabled:herdrEnabled,label:'herdr'},
       permissionOk,stale,restartRequired,readonly:readonly()});
     const c = confirmations.get(req.session?.sid), expiresAt = c && elapsed() < c.until ? c.expiresAt : null;
+    const timingEntries = officeTimingEntries();
+    const office = Object.fromEntries(OFFICE_TIMINGS.map(def => [def.key, { ...field(timingEntries[def.key].value,
+      timingEntries[def.key].source === 'env' ? def.env : null,
+      timingEntries[def.key].source === 'file', true),
+      ...(!readonly() && timingEntries[def.key].source === 'env' ? { reason: label('office.managed') } : {}), label: label('office.' + def.key), help: label('office.help.' + def.key), minimum: 1, maximum: 1440 }]));
     return { revision: revision(), readonly: readonly(), disabledReason: readonly() ? label('readonly') : null, reauth: { expiresAt, windowMs: 300000 },
       instance: { name: field(cfg.instanceName || 'Agent Office', 'AO_INSTANCE_NAME', !!conf), locale: field(cfg.instanceLocale.startsWith('en') ? 'en' : 'fr', 'AO_LOCALE', !!conf), timeZone: field(cfg.timeZone, 'AO_TIME_ZONE', !!conf) },
+      office,
       restart: { supported: !readonly() && supervisor.supported, command: supervisor.command, reason: readonly() ? label('readonly') : supervisor.reason },
       owner: { displayName: field(store.owner.name, 'PORTAL_DISPLAY_NAME', !!conf, ownerEnabled(), ownerEnabled() ? null : label('externalAccount')),
         email: field(ownerEnabled() ? dbOwner.email : cfg.loginEmail, IC.completeEnvLogin(env) ? 'PORTAL_EMAIL' : null, !!conf, ownerEnabled(), ownerEnabled() ? null : label('externalAccount')),
@@ -378,11 +432,23 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     }
     const config = base(), privateValues = secrets(); let fields = [], sensitive = false, dbChange = () => {}, runtimeChanged = false;
     if (command === 'instance') {
-      body(b, ['expectedRevision', 'name', 'locale', 'timeZone']);
+      body(b, ['expectedRevision', 'name', 'locale', 'timeZone', 'office']);
       for (const [key, variable] of [['name','AO_INSTANCE_NAME'], ['locale','AO_LOCALE'], ['timeZone','AO_TIME_ZONE']]) if (b[key] !== undefined) {
         const value = text(b[key], 'instance.'+key); envGuard('instance.'+key, variable, value, key === 'name' ? cfg.instanceName : key === 'locale' ? cfg.instanceLocale.split('-')[0] : cfg.timeZone);
         if (key === 'locale' && !['fr','en'].includes(value) || key === 'timeZone' && !IC.validZone(value)) throw invalid('instance.'+key, 'invalid');
         config.instance[key] = value; fields.push('instance.'+key);
+      }
+      if (b.office !== undefined) {
+        body(b.office, ['finishedSessionWindowMinutes', 'agentPresenceWindowMinutes', 'idleRelocationMinutes']);
+        const current = officeTimingEntries(), presence = { ...(config.office?.presence || {}) };
+        for (const def of OFFICE_TIMINGS) if (b.office[def.key] !== undefined) {
+          const value = b.office[def.key];
+          if (!Number.isInteger(value) || value < 1 || value > 1440) throw invalid('office.' + def.key, 'range');
+          envGuard('office.' + def.key, current[def.key].source === 'env' ? def.env : null, value, current[def.key].value);
+          presence[def.key] = value; fields.push('office.' + def.key);
+        }
+        if (!Object.keys(b.office).length) throw invalid('office', 'empty-change');
+        config.office = { ...(config.office || {}), presence };
       }
       if (!fields.length) throw invalid(null, 'empty-change');
     } else if (command === 'network') {
@@ -574,7 +640,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     return {ok:true,result,revision:revision(),vm:fresh};
   }
   auth.onRevoke(session => { if (session.allExcept) { for (const sid of confirmations.keys()) if (sid !== session.allExcept) confirmations.delete(sid); } else confirmations.delete(session.sid); });
-  return { vm, run, accessConfig: () => files.config?.access || null, accessRevision: () => files.config?.accessRevision ?? null,
+  return { vm, run, officeTimings, accessConfig: () => files.config?.access || null, accessRevision: () => files.config?.accessRevision ?? null,
     useAuthorization: value => { if(!value?.reauthentication)throw new Error('shared reauthentication required');authorization=value; }, startDetection: options => discovery.start(options), close: () => { discovery.close(); confirmations.clear(); integration.invalidate(); for (const helper of integrations.values()) helper.invalidate(); planOwners.clear(); }, revision };
 }
 module.exports = { createSettings };

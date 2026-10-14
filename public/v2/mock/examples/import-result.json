@@ -2,7 +2,7 @@
   "data": {
     "ok": true,
     "result": {
-      "created": [ { "key": "gh:alexdeg92/agent-office-oss", "id": "prj_k3v9q2m8x1c4d7fz" }, { "key": "sg:group:Automations", "id": "prj_m2n4p6q8r1s3t5v7" } ],
+      "created": [ { "key": "gh:example-org/example-repo", "id": "prj_k3v9q2m8x1c4d7fz" }, { "key": "sg:group:Automations", "id": "prj_m2n4p6q8r1s3t5v7" } ],
       "skipped": [ { "key": "sg:discord-user:100000000000000001", "reason": "unknown" } ]
     },
     "revision": null,

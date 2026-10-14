@@ -1,3 +1,4 @@
+import {mockPalette} from '../mock/palette.js';
 // Standalone demo: mock OfficeVM.occupants driving the scene (no API needed).
 // Query params: ?theme=auto|day|night  &reduced=1  &scenario=mix|all  &assets=<base>  &select=<id>
 import { OfficeScene } from './scene.js';
@@ -183,7 +184,7 @@ async function startEditing(mode) {
   document.getElementById('editdemo').hidden = false;
   editBtn.hidden = true;
   editor = await openEditor({
-    scene, store, assetBase: designBase, toast, timeZone: fmt.timeZone(),
+    scene, store, getPaletteVM:mockPalette, assetBase: designBase, toast, timeZone: fmt.timeZone(),
     barHost: document.getElementById('editbar'), asideHost: document.getElementById('editaside'),
     getOccupants: () => occupants,
     onExit: ({ saved, layout: next }) => {

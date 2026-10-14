@@ -37,3 +37,35 @@ test('overhead state markers move to computers, remaining only on away/walking o
  assert.equal(screens.bubble({target:{mode:'desk'},walking:false},'?'),null);
  assert.equal(screens.bubble({target:{mode:'stand'},walking:false},'?'),'?');
 });
+test('blocked/error alarms stay on desk monitors and remain overhead away or walking',()=>{
+ for(const state of ['blocked','error']){
+  assert.match(screens.screen({reducedMotion:true},{state},0),/blocked-1.png$/);
+  const c={occ:{state},target:{mode:'desk'},walking:false};
+  assert.equal(screens.marker(c,'alert'),null);assert.equal(screens.bubble(c,'!'),null);
+  c.walking=true;assert.equal(screens.marker(c,'alert'),'alert');
+  c.walking=false;c.target.mode='stand';assert.equal(screens.marker(c,'alert'),'alert');
+ }
+});
+test('backend screen intents keep alarms overhead until arrival and messages at the computer',()=>{
+ const c={occ:{screenIntent:{screen:'blocked',surface:'monitor'}},target:{mode:'desk'},walking:true};
+ assert.equal(screens.marker(c,'alert'),'alert');assert.equal(screens.bubble(c,'!'),'!');
+ c.walking=false;assert.equal(screens.marker(c,'alert'),null);assert.equal(screens.bubble(c,'!'),null);
+ c.occ.screenIntent={screen:'message-received',surface:'monitor'};
+ assert.match(screens.screen({reducedMotion:true},c.occ,1400),/message-received-1.png$/);
+ c.walking=true;assert.equal(screens.marker(c,null),'thought');
+ c.occ.screenIntent={screen:null,surface:'none'};assert.equal(screens.marker(c,'thought'),null);
+});
+test('fresh communication interrupts desk dozing and preserves the authored sofa pose',async()=>{
+ const {pose}=await import('../../public/v2/office/scene-intents.js');
+ const c={occ:{state:'idle'},target:{mode:'desk'},walking:false};assert.equal(pose(c),'life-sleep-ne');
+ c.occ.communication={surface:'monitor'};assert.equal(pose(c),'working-ne');
+ c.occ.communication.surface='bubble';c.target.mode='sofa';assert.equal(pose(c),'sofa-sit-sw');
+ c.target={mode:'stand',facing:'se'};assert.equal(pose(c),'talking-se');
+ c.wave=true;assert.equal(pose(c),null,'explicit foreground animation still wins');
+});
+
+test('the compact screen registry exports every registered frame through the art pipeline',()=>{
+ const {plan,DEST}=require('../../scripts/sync-design');const path=require('node:path');
+ const exports=new Set(plan().map(([,target])=>path.relative(DEST,target).split(path.sep).join('/')));
+ for(const state of manifest.states)for(const frame of state.frames)assert.ok(exports.has('assets/Office/monitor-screens/'+frame.file),frame.file);
+});

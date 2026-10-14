@@ -15,7 +15,7 @@ function legacyId(value) {
 // Only typed identity fields, never body/text, user labels or LabelRef params.
 const FIELDS = new Set(['id', 'key', 'agentId', 'subagentId', 'sessionKey', 'sessionId', 'mainSessionKey', 'parentKey', 'heartbeatOf', 'jobId', 'cronJobId', 'runId', 'ruleId', 'callId', 'explicitKey',
   'occupantId', 'parentId', 'groupId', 'rootId']);
-const ID_ARRAY_FIELDS = new Set(['childKeys', 'sessionKeys', 'occupantIds', 'mobileLabelIds', 'childIds', 'previewOccupantIds', 'conversationIds']);
+const ID_ARRAY_FIELDS = new Set(['childKeys', 'sessionKeys', 'occupantIds', 'mobileLabelIds', 'childIds', 'previewOccupantIds', 'conversationIds', 'peerIds']);
 function projectLegacy(value, type) {
   if (!value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(v => projectLegacy(v, type));

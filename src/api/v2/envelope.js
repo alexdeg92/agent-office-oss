@@ -1,8 +1,8 @@
 'use strict';
 // The one success envelope (api.md §2.1): { data, meta: { modelVersion, generatedAt, stale, topic? } }.
 const MODEL_VERSION = 1;          // data-model.md MODEL_VERSION
-const CONTRACT_VERSION = '2.8';   // Canonical health checks and adapter-declared remedies
-const CONTRACT_VERSION_V3 = '3.5';  // Provider-neutral team leadership projection
+const CONTRACT_VERSION = '2.10';  // Project source descriptors, server-owned source selection and team roster
+const CONTRACT_VERSION_V3 = '3.7'; // Project source descriptors, server-owned source selection and team roster
 
 function okBody(data, { engine, now = Date.now(), topic } = {}) {
   const stale = engine ? engine.sources().filter((s) => s.state !== 'fresh').map((s) => s.id) : [];

@@ -303,14 +303,31 @@ function buildBoardVM(projects, options = {}) {
   const persons = personMap(options.persons);
   const liveStates = options.liveStates || {};
   const agentFilter = filter === 'with-timmy' || filter === 'with-agent';
-  const selected = projects.filter((project) => {
+  const matchesBoardFilter = (project) => {
     const archived = project.archivedAt != null;
     if (filter === 'archived') return archived;
     if (archived) return false;
     if (filter === 'at-risk') return atRisk(project);
     if (agentFilter) return involvesTimmy(project, persons, options.timmyPersonId, options.primaryAgentId || undefined);
     return true;
-  });
+  };
+  const descriptorsOf = (project) => {
+    if (Array.isArray(project.sourceDescriptors)) return project.sourceDescriptors;
+    if (project.teamProject?.sourceDescriptor) return [project.teamProject.sourceDescriptor];
+    return (project.sources || []).map(source => ({ id: source.id, kind: source.kind, runtime: null,
+      label: labelRef(`project.source.${source.kind}`, { label: sourceLabel(source) }), brand: null }));
+  };
+  const eligible = projects.filter(matchesBoardFilter);
+  const sourceCounts = new Map();
+  for (const project of eligible) for (const source of descriptorsOf(project)) {
+    const previous = sourceCounts.get(source.id);
+    if (previous) previous.count++;
+    else sourceCounts.set(source.id, { id: source.id, label: source.label, source, count: 1 });
+  }
+  const sourceFilters = [...sourceCounts.values()].sort((a, b) => a.label.key.localeCompare(b.label.key) || a.id.localeCompare(b.id))
+    .map(row => ({ id: row.id, label: row.label, count: row.count, selected: row.id === (options.sourceFilterId || null), source: row.source }));
+  if (options.sourceFilterId && !sourceCounts.has(options.sourceFilterId) && !options.allowUnknownSourceFilter) throw validation('Filtre de source invalide.', 'source');
+  const selected = eligible.filter(project => !options.sourceFilterId || descriptorsOf(project).some(source => source.id === options.sourceFilterId));
   const columns = PROJECT_STATUSES.map((status) => {
     const cards = selected.filter((p) => p.status === status).sort(compareCards).map((project) => {
       const cover = (typeof options.coverOf === 'function' ? options.coverOf(project.id) : project.cover) || null;
@@ -326,11 +343,32 @@ function buildBoardVM(projects, options = {}) {
         flags: cardFlags(project.flags, options.portability),
         people: { visible: people.slice(0, CARD_PEOPLE_CAP), hiddenCount: Math.max(0, people.length - CARD_PEOPLE_CAP) },
         lastActivityAt: project.lastActivityAt,
+        ...(project.teamProject ? { origin: 'orchestrator-team', teamProject: {
+          teamId: project.teamProject.teamId, label: project.teamProject.label,
+          readOnly: project.teamProject.readOnly, taskCount: project.teamProject.taskCount,
+        } } : {}),
+        sourceDescriptors: descriptorsOf(project), statusLabel: statusRef(project.status),
+        counts: projectCounts(project, people), capabilities: projectCapabilities(project),
       };
     });
     return { id: status, count: cards.length, cards };
   });
-  return { columns, filter };
+  return { columns, filter, sourceFilterId: options.sourceFilterId || null, sourceFilters,
+    emptyStateLabel: selected.length ? null : { key: options.sourceFilterId ? 'project.empty.source' : 'project.empty.board' } };
+}
+
+function projectCounts(project, cardPeople = []) {
+  const sessions = Number.isSafeInteger(project.sessionCount) ? project.sessionCount : null;
+  const agents = Number.isSafeInteger(project.agentCount) ? project.agentCount
+    : Number.isSafeInteger(project.teamProject?.roster?.memberCount) ? project.teamProject.roster.memberCount
+    : Array.isArray(cardPeople) ? cardPeople.filter(person => person.kind === 'agent').length : null;
+  const activity = Number.isSafeInteger(project.activityCount) ? project.activityCount : null;
+  return { sessions, agents, activity };
+}
+
+function projectCapabilities(project) {
+  return { read: true, write: project.readOnly !== true, comments: project.commentCapability || 'read-write',
+    history: project.historyCapability || 'read-write', repository: project.repo ? 'read-only' : 'unsupported' };
 }
 
 function sourceLabel(source) {
@@ -439,6 +477,11 @@ function buildProjectVM(project, historyEvents, options = {}) {
     author: actorVm(project.summaryMeta.author, persons, liveStates, options.portability),
     at: project.summaryMeta.at,
   } : null;
+  const sourceDescriptors = project.teamProject?.sourceDescriptor ? [project.teamProject.sourceDescriptor]
+    : Array.isArray(project.sourceDescriptors) ? structuredClone(project.sourceDescriptors)
+      : (project.sources || []).map(source => source.sourceDescriptor || ({ id: source.id, kind: source.kind,
+        runtime: null, label: labelRef(`project.source.${source.kind}`, { label: sourceLabel(source) }), brand: null }));
+  const sessionCount = Object.values(stats).reduce((sum, value) => sum + (Number.isSafeInteger(value?.sessionCount) ? value.sessionCount : 0), 0);
   return {
     id: project.id,
     revision: project.revision,
@@ -459,16 +502,23 @@ function buildProjectVM(project, historyEvents, options = {}) {
       addedAt: source.addedAt,
       sessionCount: stats[source.id] && Number.isInteger(stats[source.id].sessionCount) ? stats[source.id].sessionCount : null,
     })),
+    sourceDescriptors,
+    statusLabel: statusRef(project.status),
+    counts: { sessions: Object.keys(stats).length ? sessionCount : null,
+      agents: people.filter(person => person.kind === 'agent').length,
+      activity: Number.isSafeInteger(project.activityCount) ? project.activityCount : null },
+    capabilities: projectCapabilities(project),
     repo: repoVm(project, options.locale),
     people,
     recentHistory: presentHistory(historyEvents || [], options),
     historyNextCursor: options.nextCursor ?? null,
     lastActivityAt: project.lastActivityAt,
     createdAt: project.createdAt,
+    ...(project.teamProject ? { teamProject: project.teamProject } : {}),
   };
 }
 
 module.exports = {
-  buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, presentHistory, compareCards, sourceLabel, initials, monogramAccent, thumbOf,
+  buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, presentHistory, compareCards, projectCapabilities, sourceLabel, initials, monogramAccent, thumbOf,
   atRisk, involvesTimmy,
 };

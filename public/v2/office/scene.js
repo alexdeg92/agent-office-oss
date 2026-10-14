@@ -3,7 +3,7 @@ import { loadModule } from '../build-update.js';
 import { project, unproject, imageBox, wallPoint, footprintFor, itemDepth, characterDepth, sortScene } from './geometry.js';
 import { buildGrid, findPath, nearestWalkable, isWalkable } from './pathfind.js';
 import {
-  viewFor, CUES, WALK_TILES_PER_S, CROSSFADE_MS, LOUNGE_AFTER_MS,
+  atComputer, viewFor, CUES, WALK_TILES_PER_S, CROSSFADE_MS, LOUNGE_AFTER_MS,
   SEATED_VIEW, SEATED_CUES, SOFA_VIEW, SWIVEL_MS, SELECT_WAVE_MS, IDLE_SWIVEL_EVERY_MS, IDLE_SWIVEL_HOLD_MS,
 } from './states.js';
 import { resolveTheme } from './theme.js';
@@ -614,6 +614,7 @@ export class OfficeScene {
       const prevState = c.occ?.state;
       const prevLook = JSON.stringify(c.occ?.look);
       const prevPresence = c.occ?.presence ?? null;
+      const communicationChanged = JSON.stringify(c.occ?.communication) !== JSON.stringify(o.communication) || JSON.stringify(c.occ?.screenIntent) !== JSON.stringify(o.screenIntent);
       const activityChanged = c.occ?.activity?.id !== o.activity?.id || c.occ?.activity?.kind !== o.activity?.kind;
       c.occ = o;
       if (activityChanged) { c._sipNext = null; c._sipRest = false; }
@@ -631,7 +632,7 @@ export class OfficeScene {
       if (prevState !== o.state && prevState) this._announce(c);
       else if (isNew && !first) this._announce(c, 'enter');
       this._retarget(c, false);
-      if (activityChanged || prevState !== o.state || prevLook !== JSON.stringify(o.look) || prevPresence !== (o.presence ?? null)) this._renderPose(c);
+      if (communicationChanged || activityChanged || prevState !== o.state || prevLook !== JSON.stringify(o.look) || prevPresence !== (o.presence ?? null)) this._renderPose(c);
       this._renderPlate(c);
     });
     for (const event of this._packSignals?.values() ?? []) if (ids.has(event.occupantId)) this.signal(event.occupantId, event);
@@ -1101,7 +1102,7 @@ export class OfficeScene {
 
   _renderMarker(c) {
     const view = viewFor(c.occ.state);
-    const kind = this._intents?.marker ? this._intents.marker(c, view.marker) : c.cue ? null : view.marker;
+    const kind = atComputer(c) ? null : this._intents?.marker ? this._intents.marker(c, view.marker) : c.cue ? null : view.marker;
     if (c.markerKind !== kind) {
       c.markerKind = kind;
       c.marker.innerHTML = kind ? markerHtml(kind) : '';
@@ -1403,8 +1404,8 @@ export class OfficeScene {
     }else{c.sleepLetters?.remove();c.sleepLetters=null;}
     const rawGlyph = action === 'sleep' ? null : c.reaction ? REACTIONS[c.reaction].symbol
       : action === 'highfive' ? '✦' : action === 'chat' ? '…' : action === 'wave' ? '👋'
-      : ({ waiting:'…', thinking:'?', error:'!' }[c.occ?.state]);
-    const glyph = this._intents?.bubble ? this._intents.bubble(c, rawGlyph) : rawGlyph;
+      : ({ waiting:'…', error:'!' }[c.occ?.state]);
+    const glyph = atComputer(c) ? null : this._intents?.bubble ? this._intents.bubble(c, rawGlyph) : rawGlyph;
     let bubble = c.plate.querySelector('.ao-life-bubble');
     if (glyph) {
       if (!bubble) { bubble = el('span','ao-life-bubble',{'aria-hidden':'true'}); c.plate.append(bubble); }
@@ -1655,7 +1656,7 @@ export class OfficeScene {
       const screen = this._intents?.screen(this, occ, this.now());
       setSrc(monitor, resolveUrl(screen || partImage(node.f.station.parts.monitor, mon === 'off' ? null : 'on'), this.assetBase));
       monitor.dataset.screen = screen ? screen.split('/').pop() : '';
-      if (screen) mon = 'on';
+      if (screen && mon === 'off') mon = 'on';
     }
     if (node.tint) {
       node.tint.hidden = mon !== 'error';
@@ -1676,7 +1677,7 @@ export class OfficeScene {
     const o = c.occ;
     // O8: a seen agent's plate says when it was last seen (« vu il y a 12 min »), as text, name and tooltip.
     const label = o.sourceStale ? o.stateLastLabelText
-      : o.presenceLabel ?? (o.activity && this._intents ? this._intents.label(c) : c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : o.stateLabelText);
+      : o.presenceLabel ?? ((o.activity || o.communication) && this._intents ? this._intents.label(c) : c.egg ? tr(`egg.${c.egg.kind}`) : c.activity ? tr(`life.${c.activity.kind}`) : o.stateLabelText);
     const shown = this._name(o);
     c.plate.setAttribute('aria-label', `${shown}, ${label}`);
     c.plate.dataset.state = o.state;

@@ -25,8 +25,8 @@
         },
         "thumb": {
           "kind": "screenshot",
-          "url": "https://shots.example/alexdeg92/agent-office-oss.png",
-          "repoLabel": "alexdeg92/agent-office-oss",
+          "url": "https://shots.example/example-org/example-repo.png",
+          "repoLabel": "example-org/example-repo",
           "initials": "AO",
           "accent": "indigo"
         },
@@ -61,10 +61,10 @@
           {
             "id": "src_7hq2x9k4m1p3v8zd",
             "kind": "github",
-            "label": "alexdeg92/agent-office-oss",
+            "label": "example-org/example-repo",
             "ref": {
-              "owner": "alexdeg92",
-              "repo": "agent-office-oss"
+              "owner": "example-org",
+              "repo": "example-repo"
             },
             "addedAt": 1790000000000,
             "sessionCount": null
@@ -102,12 +102,12 @@
         ],
         "repo": {
           "state": "ok",
-          "url": "https://github.com/alexdeg92/agent-office-oss",
-          "owner": "alexdeg92",
-          "name": "agent-office-oss",
+          "url": "https://github.com/example-org/example-repo",
+          "owner": "example-org",
+          "name": "example-repo",
           "image": {
             "kind": "screenshot",
-            "url": "https://shots.example/alexdeg92/agent-office-oss.png",
+            "url": "https://shots.example/example-org/example-repo.png",
             "initials": "AO",
             "accent": "indigo"
           },
@@ -116,7 +116,7 @@
           "ci": {
             "state": "failing",
             "at": 1791221000000,
-            "url": "https://github.com/alexdeg92/agent-office-oss/actions/runs/1"
+            "url": "https://github.com/example-org/example-repo/actions/runs/1"
           },
           "commits": [
             {
@@ -248,7 +248,72 @@
         ],
         "historyNextCursor": "eyJhdCI6MTc5MTIxODAwMDAwMCwiaWQiOiJldnRfZjEifQ",
         "lastActivityAt": 1791223000000,
-        "createdAt": 1790000000000
+        "createdAt": 1790000000000,
+        "sourceDescriptors": [
+          {
+            "id": "src_gh",
+            "kind": "github",
+            "runtime": null,
+            "label": {
+              "key": "project.source.label",
+              "params": {
+                "label": "example-org/example-repo"
+              }
+            },
+            "brand": null
+          },
+          {
+            "id": "src_ws",
+            "kind": "workspace",
+            "runtime": null,
+            "label": {
+              "key": "project.source.label",
+              "params": {
+                "label": "dev/project/agent-office-redesign"
+              }
+            },
+            "brand": null
+          },
+          {
+            "id": "src_sg",
+            "kind": "sessionGroup",
+            "runtime": null,
+            "label": {
+              "key": "project.source.label",
+              "params": {
+                "label": "Agent Office"
+              }
+            },
+            "brand": null
+          },
+          {
+            "id": "src_man",
+            "kind": "manual",
+            "runtime": null,
+            "label": {
+              "key": "project.source.label",
+              "params": {
+                "label": "manuel"
+              }
+            },
+            "brand": null
+          }
+        ],
+        "statusLabel": {
+          "key": "projectStatus.in-progress"
+        },
+        "counts": {
+          "sessions": 17,
+          "agents": 1,
+          "activity": null
+        },
+        "capabilities": {
+          "read": true,
+          "write": true,
+          "comments": "read-write",
+          "history": "read-write",
+          "repository": "read-only"
+        }
       }
     }
   }

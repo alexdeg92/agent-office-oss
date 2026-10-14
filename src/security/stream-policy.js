@@ -1,7 +1,7 @@
 'use strict';
 const {ApiError}=require('../api/v2/errors');
 // One authority snapshot for admission; live identity and fingerprint checks on every send.
-function createStreamPolicy({store,auth,topics,project,filterFrame,mayExposeSources=()=>false,now=Date.now}) {
+function createStreamPolicy({store,auth,topics,project,filterFrame,revision=null,fingerprint=null,mayExposeSources=()=>false,now=Date.now}) {
   if(typeof project!=='function'||typeof filterFrame!=='function')throw new TypeError('stream projection callbacks required');
   function capture(req) {
     const ticket=req.humanStreamTicket;
@@ -42,6 +42,8 @@ function createStreamPolicy({store,auth,topics,project,filterFrame,mayExposeSour
     capture,valid,can,
     mayExposeSources:binding=>valid(binding)&&mayExposeSources(store.users.byId(binding.userId)),
     project:(binding,raw,vm)=>{if(!can(binding,raw))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});return project(store.users.byId(binding.userId),raw,vm);},
+    revision:(binding,raw,vm)=>{if(!can(binding,raw))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});return revision?revision(store.users.byId(binding.userId),raw,vm):null;},
+    fingerprint:(binding,raw,vm)=>{if(!can(binding,raw))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});return fingerprint?fingerprint(store.users.byId(binding.userId),raw,vm):null;},
     frame:(binding,type,data)=>valid(binding)?filterFrame(store.users.byId(binding.userId),type,data):null,
   };
 }

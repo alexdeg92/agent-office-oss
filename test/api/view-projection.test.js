@@ -16,7 +16,7 @@ const {TOPICS,ROUTES}=require('../../src/security/route-declarations');
 const {declareRoute,trackMounts,assertRouteCoverage}=require('../../src/security/route-policy');
 const {errorMiddleware}=require('../../src/api/v2/errors');
 const EX=path.resolve(__dirname,'../../docs/architecture/examples');
-const FILES={meta:'meta-vm',office:'office-vm',flows:'flow-list-vm',flow:'flow-detail-vm',access:'access-vm',interlocutor:'interlocutor-vm',logs:'logs-page',session:'session-vm',skills:'skill-list-vm',skill:'skill-detail-vm',health:'health-vm',projects:'board-vm',project:'project-vm',history:'history-page',candidates:'candidates-vm',layout:'layout-vm',comments:'comment-thread-vm',orchestrators:'orchestrators-vm',teams:'teams-vm'};
+const FILES={meta:'meta-vm',office:'office-vm',officeCharacters:'office-characters-vm',officeStore:'office-store-vm',flows:'flow-list-vm',flow:'flow-detail-vm',access:'access-vm',interlocutor:'interlocutor-vm',logs:'logs-page',session:'session-vm',skills:'skill-list-vm',skill:'skill-detail-vm',health:'health-vm',projects:'board-vm',project:'project-vm',history:'history-page',candidates:'candidates-vm',layout:'layout-vm',comments:'comment-thread-vm',orchestrators:'orchestrators-vm',teams:'teams-vm'};
 const me=()=>({email:'historical@example.invalid',displayName:'Historical owner',gateway:'up',capabilities:{openclawWrites:true,storeWrites:true},sessionExpiresAt:Date.now()+60000});
 const example=(name,version)=>{
   if(name==='layoutRevision'){const layout=example('layout',version).layout;return {revision:layout.revision,updatedAt:layout.updatedAt,updatedBy:layout.updatedBy,data:layout.data};}
@@ -27,6 +27,44 @@ const example=(name,version)=>{
   const file=name==='settings'?path.join(EX,'settings','settings-vm.json'):version===3&&fs.existsSync(v3)?v3:path.join(EX,FILES[name]+'.json');
   return JSON.parse(fs.readFileSync(file,'utf8')).data;
 };
+function boardWithPrivateSourceProjects(version, selectedKind=null) {
+  const board=example('projects',version),column=board.columns.find(row=>row.cards.length);
+  const sources=[
+    {id:'runtime:runtime-codex',kind:'runtime',runtime:'codex',label:{key:'project.source.label',params:{label:'project-from-private-workspace'}},brand:null,
+      cardId:'runtimeprj_private_workspace',name:'project-from-private-workspace'},
+    {id:'team-source:team:private-canary',kind:'orchestrator-team',runtime:null,label:{key:'project.source.label',params:{label:'private-team-name'}},brand:null,
+      cardId:'teamprj_private_team',name:'private-team-name',origin:'orchestrator-team'},
+    ...['workspace','sessionGroup'].map(kind=>({id:'legacy:'+kind,kind,runtime:null,
+      label:{key:'project.source.label',params:{label:'private-'+kind}},brand:null,cardId:'legacyprj_'+kind,name:'private-'+kind})),
+  ];
+  for(const source of sources){
+    const card=structuredClone(column.cards[0]);
+    const sharedSource=structuredClone(board.sourceFilters.find(row=>row.source?.kind==='github')?.source);
+    card.id=source.cardId;card.name=source.name;card.sourceDescriptors=[{id:source.id,kind:source.kind,runtime:source.runtime,label:source.label,brand:source.brand},sharedSource];
+    if(source.origin)card.origin=source.origin;
+    column.cards.push(card);column.count++;
+    const sharedFilter=board.sourceFilters.find(row=>row.id===sharedSource.id);if(sharedFilter)sharedFilter.count++;
+    board.sourceFilters.push({id:source.id,label:source.label,count:1,selected:source.kind===selectedKind,source:{id:source.id,kind:source.kind,runtime:source.runtime,label:source.label,brand:source.brand}});
+  }
+  if(selectedKind){
+    const selected= sources.find(row=>row.kind===selectedKind);
+    board.sourceFilterId=selected.id;
+    for(const filter of board.sourceFilters)filter.selected=filter.id===selected.id;
+    for(const row of board.columns){row.cards=row.cards.filter(item=>item.id===selected.cardId);row.count=row.cards.length;}
+  }
+  return board;
+}
+function boardForSourceProbe(version, sourceId) {
+  const known=new Map([['runtime:runtime-codex','runtime'],['team-source:team:private-canary','orchestrator-team'],
+    ['legacy:workspace','workspace'],['legacy:sessionGroup','sessionGroup']]);
+  const board=boardWithPrivateSourceProjects(version,known.get(sourceId)||null);
+  if(!known.has(sourceId)){
+    board.sourceFilterId=sourceId;
+    for(const filter of board.sourceFilters)filter.selected=false;
+    for(const column of board.columns){column.cards=[];column.count=0;}
+  }
+  return board;
+}
 let hash;before(async()=>{hash=await hashPassword('synthetic-projection-password');});
 function fixture(t) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ao-view-projection-')),store=openStore({dir,instance:'test',ownerName:'Admin',log:()=>{}});
@@ -191,33 +229,151 @@ test('the explicit permission-state example validates and unknown raw fields fai
   assert.throws(()=>f.projector.project(f.reader,'office',raw),/invalid raw view projection/);
   assert.throws(()=>f.projector.project(f.admin,'office',example('office',3),{version:4}),/unsupported projection contract/);
 });
-test('real HTTP aliases and protected versioned SSE hubs use identical shared projections and clear on revocation',async t=>{
+test('projects-only HTTP and SSE projections withhold restricted source identities and filters on both contracts',async t=>{
   const f=fixture(t),auth=createAuth({secret:'synthetic-projection-secret',ttlMs:60000,identity:{users:f.store.users,state:f.store.rbac.state},allowMultiUser:true});
+  f.set(f.reader,'projects','read');f.set(f.reader,'logs','none');f.set(f.reader,'settings.runtimes','none');f.set(f.reader,'teams','none');
+  assert.equal(f.store.policy.can(f.reader,'projects','read'),true);
+  assert.equal(f.store.policy.can(f.reader,'logs','read'),false);
+  assert.equal(f.store.policy.can(f.reader,'settings.runtimes','read'),false);
+  assert.equal(f.store.policy.can(f.reader,'teams','read'),false);
   const topics=createVersionedTopics({2:{P:{version:2}},3:{P:{version:3}}},{policyDeclarations:TOPICS,resourceRegistry:f.store.registry});
   topics.define('office',{build:(params,P)=>example('office',P.version)});let logBuilds=0;
   topics.define('logs',{build:()=>{logBuilds++;return example('logs',3);}});
+  topics.define('projects',{params:['filter','agent','source'],build:(params,P)=>params.source
+    ?boardForSourceProbe(P.version,params.source):boardWithPrivateSourceProjects(P.version)});
   const app=trackMounts(express()),r=express.Router(),streams=[];
   declareRoute(r,'get','/views/office',ROUTES.get('GET /views/office'),{store:f.store,auth},(req,res)=>{
     const version=req.baseUrl==='/api/v3'?3:2;
     res.json({data:f.projector.project(req.user,'office',topics.current('office',version).vm,{version})});
+  });
+  declareRoute(r,'get','/views/projects',ROUTES.get('GET /views/projects'),{store:f.store,auth},(req,res)=>{
+    const version=req.baseUrl==='/api/v3'?3:2;
+    const topicId=typeof req.query.source==='string'?'projects?source='+encodeURIComponent(req.query.source):'projects';
+    res.json({data:f.projector.project(req.user,'projects',topics.current(topicId,version).vm,{version})});
   });
   app.use(['/api/v2','/api/v3'],r);app.use(errorMiddleware());assertRouteCoverage(app,f.store.registry);
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   f.cleanup.push(async()=>{for(const {hub} of streams)hub.closeAll();topics.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
   const cookie='taco_sess='+auth.signSession({userId:f.reader.id,authGeneration:f.reader.auth_generation,sid:'synthetic-projection-session',exp:Date.now()+60000});
   for(const version of [2,3]) {
+    const legacyBoard=example('projects',version),legacyCard=legacyBoard.columns.flatMap(column=>column.cards)[0];
+    const legacySources=['workspace','sessionGroup'].map(kind=>({id:'legacy:'+kind,kind,runtime:null,
+      label:{key:'project.source.label',params:{label:'private-'+kind}},brand:null}));
+    legacyCard.sourceDescriptors=[...(legacyCard.sourceDescriptors||[]),...legacySources];
+    legacyCard.counts={sessions:17,agents:1,activity:8};
+    legacyBoard.sourceFilters.push(...legacySources.map(source=>({id:source.id,label:source.label,count:1,selected:false,source})));
+    const legacyProjected=f.projector.project(f.reader,'projects',legacyBoard,{version});
+    const visibleLegacyCard=legacyProjected.columns.flatMap(column=>column.cards).find(card=>card.id===legacyCard.id);
+    assert.ok(visibleLegacyCard,'a normal project card stays readable');
+    assert.ok(visibleLegacyCard.sourceDescriptors.every(source=>!['workspace','sessionGroup'].includes(source.kind)));
+    assert.deepEqual(visibleLegacyCard.counts,{sessions:null,agents:null,activity:null},'source-derived counts are withheld');
+    assert.ok(legacyProjected.sourceFilters.every(source=>!['workspace','sessionGroup'].includes(source.source.kind)));
+    const legacyDetail=example('project',version);
+    const legacyDetails=legacyDetail.sourceDescriptors.filter(source=>['workspace','sessionGroup'].includes(source.kind));
+    assert.ok(legacyDetails.length,'fixture includes legacy source descriptors');
+    const legacyDetailProjected=f.projector.project(f.reader,'project',legacyDetail,{version});
+    assert.ok(legacyDetailProjected.sourceDescriptors.every(source=>!['workspace','sessionGroup'].includes(source.kind)));
+    assert.ok(legacyDetailProjected.sources.every(source=>!['workspace','sessionGroup'].includes(source.kind)));
+    assert.deepEqual(legacyDetailProjected.counts,{sessions:null,agents:null,activity:null});
+    assert.ok(legacyDetailProjected.people.every(person=>person.origin==='manual'||person.kind==='git'));
+
+    f.projector.project(f.reader,'projects',boardWithPrivateSourceProjects(version),{version});
     const hub=createStreamHub({topics:topics.of(version),engine:{sources:()=>[]},systemState:()=>({gateway:'up'}),contractVersion:version+'.0',modelVersion:1,authorizationEvents:f.store.authorizationEvents,
       security:createStreamPolicy({store:f.store,auth,topics:topics.of(version),project:(user,id,vm)=>f.projector.project(user,id,vm,{version}),filterFrame:(user,type,data)=>f.projector.frame(user,type,data,{version})})});
-    const req=Object.assign(new EventEmitter(),{headers:{cookie},query:{topics:'office,logs'}});req.session=auth.sessionOf(req);
+    const req=Object.assign(new EventEmitter(),{headers:{cookie},query:{topics:'office,logs,projects,projects?source=runtime%3Aruntime-codex,projects?source=runtime%3Aabsent,projects?source=team-source%3Ateam%3Aprivate-canary,projects?source=team-source%3Ateam%3Aabsent,projects?source=legacy%3Aworkspace,projects?source=legacy%3Aworkspace-absent,projects?source=legacy%3AsessionGroup,projects?source=legacy%3AsessionGroup-absent'}});req.session=auth.sessionOf(req);
     const res=new EventEmitter();res.lines=[];res.writeHead=()=>{};res.write=line=>{res.lines.push(String(line));return true;};res.destroy=res.end=()=>{res.ended=true;};
     streams.push({hub,res});hub.open(req,res);
     const wire=res.lines.join(''),frame=wire.split('\n\n').find(line=>line.includes('event: snapshot'));
     const snapshot=JSON.parse(frame.split('\ndata: ')[1]);
     const http=await fetch('http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/office',{headers:{cookie}});
     assert.equal(http.status,200);assert.deepEqual((await http.json()).data,snapshot.data);assert.match(wire,/permission-denied/);
+    const projectFrame=wire.split('\n\n').find(line=>line.includes('event: snapshot')&&line.includes('"topic":"projects"'));
+    assert.ok(projectFrame,wire);
+    const projectSnapshot=JSON.parse(projectFrame.split('\ndata: ')[1]);
+    const projectsHttp=await fetch('http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/projects',{headers:{cookie}});
+    assert.equal(projectsHttp.status,200);const projectsBody=(await projectsHttp.json()).data;
+    assert.deepEqual(projectsBody,projectSnapshot.data,`v${version} HTTP and stream share the principal projection`);
+    const projectsJson=JSON.stringify(projectsBody);
+    for(const privateValue of ['project-from-private-workspace','runtime:runtime-codex','private-team-name','team-source:team:private-canary'])assert.equal(projectsJson.includes(privateValue),false);
+    assert.equal(projectsBody.sourceFilters.some(row=>['runtime','orchestrator-team'].includes(row.source?.kind)),false);
+    for(const [sourceId,kind,encoded,absentId,privateLabel] of [
+      ['runtime:runtime-codex','runtime','runtime%3Aruntime-codex','runtime:absent','project-from-private-workspace'],
+      ['team-source:team:private-canary','orchestrator-team','team-source%3Ateam%3Aprivate-canary','team-source:team:absent','private-team-name'],
+      ['legacy:workspace','workspace','legacy%3Aworkspace','legacy:workspace-absent','private-workspace'],
+      ['legacy:sessionGroup','sessionGroup','legacy%3AsessionGroup','legacy:sessionGroup-absent','private-sessionGroup'],
+    ]){
+      const filteredTopic='projects?source='+encoded;
+      const filteredFrame=wire.split('\n\n').find(line=>line.includes('event: snapshot')&&line.includes('"topic":"'+filteredTopic+'"'));
+      assert.ok(filteredFrame,wire);
+      const filteredSnapshot=JSON.parse(filteredFrame.split('\ndata: ')[1]);
+      const filteredHttp=await fetch('http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/projects?source='+encoded,{headers:{cookie}});
+      assert.equal(filteredHttp.status,200);const filteredBody=(await filteredHttp.json()).data;
+      assert.deepEqual(filteredBody,filteredSnapshot.data);
+      assert.equal(filteredBody.sourceFilterId,null,`revoked ${kind} filter is not echoed`);
+      assert.equal(filteredBody.sourceFilters.some(row=>row.id===sourceId),false);
+      assert.equal(JSON.stringify(filteredBody).includes(privateLabel),false);
+      const absentEncoded=encodeURIComponent(absentId);
+      const absentFrame=wire.split('\n\n').find(line=>line.includes('event: snapshot')&&line.includes('"topic":"projects?source='+absentEncoded+'"'));
+      assert.ok(absentFrame,wire);
+      const absentSnapshot=JSON.parse(absentFrame.split('\ndata: ')[1]);
+      const absentHttp=await fetch('http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/projects?source='+absentEncoded,{headers:{cookie}});
+      assert.equal(absentHttp.status,filteredHttp.status,`${kind} restricted and absent probes have the same HTTP status`);
+      const absentBody=(await absentHttp.json()).data;
+      assert.deepEqual(filteredBody,absentBody,`${kind} restricted and absent probes are indistinguishable over HTTP`);
+      assert.deepEqual(filteredSnapshot.data,absentSnapshot.data,`${kind} restricted and absent probes are indistinguishable over SSE`);
+    }
+    for(const kind of ['runtime','orchestrator-team']){
+      const selected=f.projector.project(f.reader,'projects',boardWithPrivateSourceProjects(version,kind),{version});
+      assert.equal(selected.sourceFilterId,null,'revoked source filter is not echoed');
+    }
+    const mixedRaw=boardWithPrivateSourceProjects(version),sharedFilter=mixedRaw.sourceFilters.find(row=>row.source?.kind==='github');
+    const mixedProjected=f.projector.project(f.reader,'projects',mixedRaw,{version});
+    assert.equal(mixedProjected.sourceFilters.find(row=>row.id===sharedFilter.id).count,sharedFilter.count-2,
+      'counts on a still-visible source exclude projects hidden through another source');
+    const emptyPrivate=boardWithPrivateSourceProjects(version);
+    for(const column of emptyPrivate.columns){column.cards=column.cards.filter(card=>card.id.startsWith('runtimeprj_')||card.id==='teamprj_private_team');column.count=column.cards.length;}
+    emptyPrivate.sourceFilters=emptyPrivate.sourceFilters.filter(row=>['runtime','orchestrator-team'].includes(row.source?.kind));
+    emptyPrivate.emptyStateLabel=null;
+    const emptyProjected=f.projector.project(f.reader,'projects',emptyPrivate,{version});
+    assert.deepEqual(emptyProjected.sourceFilters,[]);
+    assert.deepEqual(emptyProjected.emptyStateLabel,{key:'project.empty.board'},'hidden cards do not suppress the authorized empty state');
+    const privateDetail=example('project',version);
+    privateDetail.name='project-from-private-workspace';
+    privateDetail.sourceDescriptors=[{id:'runtime:runtime-codex',kind:'runtime',runtime:'codex',
+      label:{key:'project.source.label',params:{label:'project-from-private-workspace'}},brand:null}];
+    assert.throws(()=>f.projector.project(f.reader,'project',privateDetail,{version}),{code:'not_found'});
+    const visibleSources=user=>f.projector.project(user,'projects',boardWithPrivateSourceProjects(version),{version}).sourceFilters
+      .map(row=>row.source?.kind).filter(kind=>['runtime','orchestrator-team'].includes(kind)).sort();
+    assert.deepEqual(visibleSources(f.admin),['orchestrator-team','runtime'],'fully authorized user retains source filters');
+    f.set(f.reader,'logs','read');f.set(f.reader,'settings.runtimes','none');f.set(f.reader,'teams','read');
+    assert.deepEqual(visibleSources(f.reader),['orchestrator-team'],'runtime metadata still needs runtime visibility');
+    f.set(f.reader,'logs','none');f.set(f.reader,'settings.runtimes','read');
+    assert.deepEqual(visibleSources(f.reader),['orchestrator-team'],'runtime metadata still needs Logs');
+    f.set(f.reader,'logs','read');f.set(f.reader,'settings.runtimes','read');f.set(f.reader,'teams','none');
+    assert.deepEqual(visibleSources(f.reader),['runtime'],'team metadata independently needs Teams read');
+    f.set(f.reader,'logs','none');f.set(f.reader,'settings.runtimes','none');
   }
   assert.equal(logBuilds,0);
   f.store.userManagement.overrides(f.reader.id,{expectedRevision:1,permissions:[{resource:'office',level:'none'}]},f.ctx);
   for(const {hub,res} of streams){assert.equal(res.ended,true);assert.equal(hub._streams.size,0);}
   for(const version of [2,3])assert.equal((await fetch('http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/office',{headers:{cookie}})).status,403);
+});
+test('projected topic versions are payload-derived and stable after topic churn',t=>{
+  const f=fixture(t);f.set(f.reader,'projects','read');
+  const raw=boardWithPrivateSourceProjects(3),changed=structuredClone(raw);
+  const hidden=changed.columns.flatMap(row=>row.cards).find(row=>row.origin==='orchestrator-team');
+  hidden.name='changed private task source';hidden.lastActivityAt=Date.now();hidden.counts={sessions:500,agents:20,activity:900};
+  const before=f.projector.project(f.reader,'projects',raw,{version:3});
+  const after=f.projector.project(f.reader,'projects',changed,{version:3});
+  assert.deepEqual(after,before,'private runtime source changes do not alter the projects-only payload');
+  const rev=f.projector.revision(f.reader,'projects',before,3);
+  const hash=f.projector.fingerprint(f.reader,'projects',before,3);
+  assert.equal(f.projector.revision(f.reader,'projects',after,3),rev,'hidden-source churn retains its revision');
+  assert.equal(f.projector.fingerprint(f.reader,'projects',after,3),hash,'hidden-source churn retains its full SSE fingerprint');
+  for(let i=0;i<4096;i++)f.projector.revision(f.reader,'projects?source=synthetic-'+i,before,3);
+  assert.equal(f.projector.revision(f.reader,'projects',after,3),rev,'4,096 distinct topics cannot evict/reset a revision');
+  const visible={...after,emptyStateLabel:{key:'project.empty.board'}};
+  assert.notEqual(f.projector.revision(f.reader,'projects',visible,3),rev,'a visible payload change receives a different wire revision');
+  assert.notEqual(f.projector.fingerprint(f.reader,'projects',visible,3),hash,'SSE distinguishes visible changes with the full digest');
+  assert.equal(f.projector.revision(f.reader,'projects',after,3),rev,'returning to the same visible payload restores its deterministic revision');
 });

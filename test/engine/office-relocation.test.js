@@ -111,8 +111,8 @@ test('saved idle pins select the most recently idle survivor before assigning de
     stationAssignments: { 'old-idle': 'st-2', 'new-idle': 'st-timmy' },
   });
   const byId = new Map(resolved.map(row => [row.id, row]));
-  assert.equal(byId.get('active').stationUid, 'st-timmy');
-  assert.equal(byId.get('new-idle').stationUid, 'st-2', 'the newer idle occupant survives even when its saved desk was taken by active work');
+  assert.equal(byId.get('active').stationUid, 'st-2', 'active work uses the other free desk before borrowing an idle occupant home');
+  assert.equal(byId.get('new-idle').stationUid, 'st-timmy', 'the newest idle occupant keeps its saved home while another desk can serve active work');
   assert.equal(byId.get('old-idle').stationUid, null, 'the longest-idle occupant is the overflow candidate');
 });
 

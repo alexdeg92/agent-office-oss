@@ -1,0 +1,611 @@
+{
+  "vm": {
+    "floorId": "1",
+    "categoryId": "",
+    "search": "",
+    "categories": {
+      "label": {
+        "key": "office.store.category"
+      },
+      "options": [
+        {
+          "id": "",
+          "label": {
+            "key": "office.store.all"
+          },
+          "count": 53
+        },
+        {
+          "id": "poste",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.poste"
+          }
+        },
+        {
+          "id": "assise",
+          "count": 8,
+          "label": {
+            "key": "office.store.category.assise"
+          }
+        },
+        {
+          "id": "rangement",
+          "count": 5,
+          "label": {
+            "key": "office.store.category.rangement"
+          }
+        },
+        {
+          "id": "plante",
+          "count": 5,
+          "label": {
+            "key": "office.store.category.plante"
+          }
+        },
+        {
+          "id": "equipement",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.equipement"
+          }
+        },
+        {
+          "id": "mur",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.mur"
+          }
+        },
+        {
+          "id": "sol",
+          "count": 4,
+          "label": {
+            "key": "office.store.category.sol"
+          }
+        },
+        {
+          "id": "deco",
+          "count": 4,
+          "label": {
+            "key": "office.store.category.deco"
+          }
+        }
+      ]
+    },
+    "itemIds": [
+      "desk",
+      "chair",
+      "sofa",
+      "rug",
+      "plant-large",
+      "plant-small",
+      "shelf",
+      "coffee-machine",
+      "server-rack",
+      "meeting-table",
+      "lamp",
+      "winter-garland",
+      "autumn-garland",
+      "whiteboard",
+      "window",
+      "standing-desk",
+      "armchair",
+      "tall-bookcase",
+      "monstera",
+      "arc-lamp",
+      "framed-art",
+      "l-desk",
+      "dual-monitor-desk",
+      "laptop-table",
+      "beanbag",
+      "bench",
+      "bar-stool",
+      "cafe-table",
+      "coffee-table",
+      "filing-cabinet",
+      "cube-shelf",
+      "wall-clock",
+      "corkboard",
+      "dashboard-screen",
+      "neon-sign",
+      "cactus-trio",
+      "indoor-tree",
+      "fridge",
+      "water-cooler",
+      "printer",
+      "charging-dock",
+      "runner-rug",
+      "round-rug",
+      "desk-lamp",
+      "arcade-cabinet",
+      "elevator-door",
+      "reception-counter",
+      "pause-shelter",
+      "ash-receptacle",
+      "treadmill",
+      "weight-rack",
+      "exercise-bench",
+      "exercise-mat"
+    ]
+  },
+  "items": [
+    {
+      "id": "desk",
+      "category": "poste",
+      "label": "Poste de travail",
+      "names": {
+        "fr": "Poste de travail",
+        "en": "Desk"
+      }
+    },
+    {
+      "id": "chair",
+      "category": "assise",
+      "label": "Chaise",
+      "names": {
+        "fr": "Chaise",
+        "en": "Chair"
+      }
+    },
+    {
+      "id": "sofa",
+      "category": "assise",
+      "label": "Canapé",
+      "names": {
+        "fr": "Canapé",
+        "en": "Sofa"
+      }
+    },
+    {
+      "id": "rug",
+      "category": "sol",
+      "label": "Tapis",
+      "names": {
+        "fr": "Tapis",
+        "en": "Rug"
+      }
+    },
+    {
+      "id": "plant-large",
+      "category": "plante",
+      "label": "Grande plante",
+      "names": {
+        "fr": "Grande plante",
+        "en": "Large plant"
+      }
+    },
+    {
+      "id": "plant-small",
+      "category": "plante",
+      "label": "Petite plante",
+      "names": {
+        "fr": "Petite plante",
+        "en": "Small plant"
+      }
+    },
+    {
+      "id": "shelf",
+      "category": "rangement",
+      "label": "Bibliothèque",
+      "names": {
+        "fr": "Bibliothèque",
+        "en": "Bookcase"
+      }
+    },
+    {
+      "id": "coffee-machine",
+      "category": "equipement",
+      "label": "Machine à café",
+      "names": {
+        "fr": "Machine à café",
+        "en": "Coffee machine"
+      }
+    },
+    {
+      "id": "server-rack",
+      "category": "equipement",
+      "label": "Baie serveur",
+      "names": {
+        "fr": "Baie serveur",
+        "en": "Server rack"
+      }
+    },
+    {
+      "id": "meeting-table",
+      "category": "poste",
+      "label": "Table de réunion",
+      "names": {
+        "fr": "Table de réunion",
+        "en": "Meeting table"
+      }
+    },
+    {
+      "id": "lamp",
+      "category": "deco",
+      "label": "Lampadaire",
+      "names": {
+        "fr": "Lampadaire",
+        "en": "Floor lamp"
+      }
+    },
+    {
+      "id": "winter-garland",
+      "category": "mur",
+      "label": "Guirlande d’hiver",
+      "names": {
+        "fr": "Guirlande d’hiver",
+        "en": "Winter garland"
+      }
+    },
+    {
+      "id": "autumn-garland",
+      "category": "mur",
+      "label": "Guirlande d’automne",
+      "names": {
+        "fr": "Guirlande d’automne",
+        "en": "Autumn garland"
+      }
+    },
+    {
+      "id": "whiteboard",
+      "category": "mur",
+      "label": "Tableau blanc",
+      "names": {
+        "fr": "Tableau blanc",
+        "en": "Whiteboard"
+      }
+    },
+    {
+      "id": "window",
+      "category": "mur",
+      "label": "Fenêtre",
+      "names": {
+        "fr": "Fenêtre",
+        "en": "Window"
+      }
+    },
+    {
+      "id": "standing-desk",
+      "category": "poste",
+      "label": "Bureau debout",
+      "names": {
+        "fr": "Bureau debout",
+        "en": "Standing desk"
+      }
+    },
+    {
+      "id": "armchair",
+      "category": "assise",
+      "label": "Fauteuil",
+      "names": {
+        "fr": "Fauteuil",
+        "en": "Armchair"
+      }
+    },
+    {
+      "id": "tall-bookcase",
+      "category": "rangement",
+      "label": "Bibliothèque haute",
+      "names": {
+        "fr": "Bibliothèque haute",
+        "en": "Tall bookcase"
+      }
+    },
+    {
+      "id": "monstera",
+      "category": "plante",
+      "label": "Monstera",
+      "names": {
+        "fr": "Monstera",
+        "en": "Monstera"
+      }
+    },
+    {
+      "id": "arc-lamp",
+      "category": "deco",
+      "label": "Lampadaire arqué",
+      "names": {
+        "fr": "Lampadaire arqué",
+        "en": "Arc floor lamp"
+      }
+    },
+    {
+      "id": "framed-art",
+      "category": "mur",
+      "label": "Cadre géométrique",
+      "names": {
+        "fr": "Cadre géométrique",
+        "en": "Geometric framed art"
+      }
+    },
+    {
+      "id": "l-desk",
+      "category": "poste",
+      "label": "Bureau en L",
+      "names": {
+        "fr": "Bureau en L",
+        "en": "L-shaped desk"
+      }
+    },
+    {
+      "id": "dual-monitor-desk",
+      "category": "poste",
+      "label": "Bureau à deux écrans",
+      "names": {
+        "fr": "Bureau à deux écrans",
+        "en": "Dual-monitor desk"
+      }
+    },
+    {
+      "id": "laptop-table",
+      "category": "poste",
+      "label": "Table pour portable",
+      "names": {
+        "fr": "Table pour portable",
+        "en": "Laptop table"
+      }
+    },
+    {
+      "id": "beanbag",
+      "category": "assise",
+      "label": "Pouf",
+      "names": {
+        "fr": "Pouf",
+        "en": "Beanbag"
+      }
+    },
+    {
+      "id": "bench",
+      "category": "assise",
+      "label": "Banc",
+      "names": {
+        "fr": "Banc",
+        "en": "Bench"
+      }
+    },
+    {
+      "id": "bar-stool",
+      "category": "assise",
+      "label": "Tabouret haut",
+      "names": {
+        "fr": "Tabouret haut",
+        "en": "Bar stool"
+      }
+    },
+    {
+      "id": "cafe-table",
+      "category": "poste",
+      "label": "Table de café",
+      "names": {
+        "fr": "Table de café",
+        "en": "Cafe table"
+      }
+    },
+    {
+      "id": "coffee-table",
+      "category": "poste",
+      "label": "Table basse",
+      "names": {
+        "fr": "Table basse",
+        "en": "Coffee table"
+      }
+    },
+    {
+      "id": "filing-cabinet",
+      "category": "rangement",
+      "label": "Classeur",
+      "names": {
+        "fr": "Classeur",
+        "en": "Filing cabinet"
+      }
+    },
+    {
+      "id": "cube-shelf",
+      "category": "rangement",
+      "label": "Étagère à cubes",
+      "names": {
+        "fr": "Étagère à cubes",
+        "en": "Cube shelving"
+      }
+    },
+    {
+      "id": "wall-clock",
+      "category": "mur",
+      "label": "Horloge",
+      "names": {
+        "fr": "Horloge",
+        "en": "Wall clock"
+      }
+    },
+    {
+      "id": "corkboard",
+      "category": "mur",
+      "label": "Tableau de liège",
+      "names": {
+        "fr": "Tableau de liège",
+        "en": "Corkboard"
+      }
+    },
+    {
+      "id": "dashboard-screen",
+      "category": "mur",
+      "label": "Écran mural",
+      "names": {
+        "fr": "Écran mural",
+        "en": "Wall dashboard"
+      }
+    },
+    {
+      "id": "neon-sign",
+      "category": "mur",
+      "label": "Enseigne Agent Office",
+      "names": {
+        "fr": "Enseigne Agent Office",
+        "en": "Agent Office sign"
+      }
+    },
+    {
+      "id": "cactus-trio",
+      "category": "plante",
+      "label": "Trio de cactus",
+      "names": {
+        "fr": "Trio de cactus",
+        "en": "Cactus trio"
+      }
+    },
+    {
+      "id": "indoor-tree",
+      "category": "plante",
+      "label": "Arbre d’intérieur",
+      "names": {
+        "fr": "Arbre d’intérieur",
+        "en": "Indoor tree"
+      }
+    },
+    {
+      "id": "fridge",
+      "category": "equipement",
+      "label": "Réfrigérateur",
+      "names": {
+        "fr": "Réfrigérateur",
+        "en": "Fridge"
+      }
+    },
+    {
+      "id": "water-cooler",
+      "category": "equipement",
+      "label": "Distributeur d’eau",
+      "names": {
+        "fr": "Distributeur d’eau",
+        "en": "Water cooler"
+      }
+    },
+    {
+      "id": "printer",
+      "category": "equipement",
+      "label": "Imprimante",
+      "names": {
+        "fr": "Imprimante",
+        "en": "Printer"
+      }
+    },
+    {
+      "id": "charging-dock",
+      "category": "equipement",
+      "label": "Station de recharge",
+      "names": {
+        "fr": "Station de recharge",
+        "en": "Robot charging dock"
+      }
+    },
+    {
+      "id": "runner-rug",
+      "category": "sol",
+      "label": "Tapis long",
+      "names": {
+        "fr": "Tapis long",
+        "en": "Runner rug"
+      }
+    },
+    {
+      "id": "round-rug",
+      "category": "sol",
+      "label": "Tapis rond",
+      "names": {
+        "fr": "Tapis rond",
+        "en": "Round rug"
+      }
+    },
+    {
+      "id": "desk-lamp",
+      "category": "deco",
+      "label": "Lampe de bureau",
+      "names": {
+        "fr": "Lampe de bureau",
+        "en": "Desk lamp"
+      }
+    },
+    {
+      "id": "arcade-cabinet",
+      "category": "equipement",
+      "label": "Borne d’arcade",
+      "names": {
+        "fr": "Borne d’arcade",
+        "en": "Arcade cabinet"
+      }
+    },
+    {
+      "id": "elevator-door",
+      "category": "equipement",
+      "label": "Porte d’ascenseur",
+      "names": {
+        "fr": "Porte d’ascenseur",
+        "en": "Elevator door"
+      }
+    },
+    {
+      "id": "reception-counter",
+      "category": "poste",
+      "label": "Comptoir d’accueil",
+      "names": {
+        "fr": "Comptoir d’accueil",
+        "en": "Reception counter"
+      }
+    },
+    {
+      "id": "pause-shelter",
+      "category": "assise",
+      "label": "Abri de pause",
+      "names": {
+        "fr": "Abri de pause",
+        "en": "Outdoor pause shelter"
+      }
+    },
+    {
+      "id": "ash-receptacle",
+      "category": "deco",
+      "label": "Cendrier extérieur",
+      "names": {
+        "fr": "Cendrier extérieur",
+        "en": "Outdoor ash receptacle"
+      }
+    },
+    {
+      "id": "treadmill",
+      "category": "equipement",
+      "label": "Tapis roulant",
+      "names": {
+        "fr": "Tapis roulant",
+        "en": "Treadmill"
+      }
+    },
+    {
+      "id": "weight-rack",
+      "category": "rangement",
+      "label": "Support à haltères",
+      "names": {
+        "fr": "Support à haltères",
+        "en": "Weight rack"
+      }
+    },
+    {
+      "id": "exercise-bench",
+      "category": "assise",
+      "label": "Banc d’entraînement",
+      "names": {
+        "fr": "Banc d’entraînement",
+        "en": "Exercise bench"
+      }
+    },
+    {
+      "id": "exercise-mat",
+      "category": "sol",
+      "label": "Tapis d’exercice",
+      "names": {
+        "fr": "Tapis d’exercice",
+        "en": "Exercise mat"
+      }
+    }
+  ]
+}

@@ -9,18 +9,64 @@ const defaults = ({ home = path.join(os.homedir(), '.claude'), include = [], exc
 const filters = s.array(s.string().min(1).max(256).refine(v => !/[\x00-\x1f/\\]/.test(v) && !['.', '..'].includes(v), 'project directory key')).max(2000);
 const optionsSchema = s.object({ home: s.string().min(1).max(4096).refine(v => path.isAbsolute(v) && !/[\x00-\x1f]/.test(v), 'absolute directory'),
   include: filters, exclude: filters, agentGrouping: s.enumOf(['project', 'runtime']) }, { extra: 'reject' });
-const definition = { id: 'claude-code', name: 'Claude Code', identity: { sessionRef: 'transcript session id; private cross-source matching only' }, mark: { monogram: 'CC', color: '#a34a2c', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' }, gatewayLabel: 'Transcripts', eventPrefix: 'claude.', schemas: {}, routes: {},
+const definition = { id: 'claude-code', name: 'Claude Code', identity: { sessionRef: 'transcript session id; private cross-source matching only' }, projectSource: { kind: 'runtime', projectRefField: 'projectRef', projectLabelField: 'projectLabel', capabilities: { read: true, write: false, comments: 'unsupported', history: 'unsupported', repository: 'unsupported' } }, mark: { monogram: 'CC', color: '#a34a2c', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' }, gatewayLabel: 'Transcripts', eventPrefix: 'claude.', schemas: {}, routes: {},
   normalise: { session: x => ({ session: x }), runtimeHealth: () => ({ version: null, pluginsLoaded: null, eventLoop: null }) }, classifySession: () => ({ kind: 'unrecognized', agentId: null }), presence: 'agents',
   transcriptBounds: { sessions: BOUNDS.cacheSessions, bytes: BOUNDS.cacheBytes },
   capabilities: () => ({ agents: true, sessions: true, transcripts: true, flows: { read: false, write: false }, skills: { list: false, detail: false, toggle: false },
     channels: false, interlocutors: false, chat: false, restart: false, costs: false, subagents: true, sessionGroups: false }) };
-const agentName = (row, options, files) => options.agentGrouping === 'runtime' ? 'Claude Code' : row.projectName || 'Project ' + files.agentId(row.project).slice(8, 20);
+const agentName = (row, options) => options.agentGrouping === 'runtime' ? 'Claude Code' : row.projectName || 'Claude Code project';
 const fileSignature = row => `${row.dev}:${row.ino}:${row.size}:${row.mtime}`;
+function selectDueRows({ continuationRows, changedRows, newRows, limit, lastScheduled = new Map(), sortDue, now = Date.now }) {
+  const chosen = [], chosenKeys = new Set();
+  const fair = (rows, rotateBeforeMtime = false) => [...rows].sort((a, b) => Number(b.mtime >= now() - 30000) - Number(a.mtime >= now() - 30000)
+    || (rotateBeforeMtime && (lastScheduled.get(a.key) || 0) !== (lastScheduled.get(b.key) || 0)
+      ? (lastScheduled.get(a.key) || 0) - (lastScheduled.get(b.key) || 0)
+      : 0)
+    || b.mtime - a.mtime || (lastScheduled.get(a.key) || 0) - (lastScheduled.get(b.key) || 0) || sortDue(a, b));
+  const take = (rows, count, rotateBeforeMtime = false) => {
+    if (count <= 0 || chosen.length >= limit) return;
+    const candidates = fair(rows, rotateBeforeMtime).filter(row => !chosenKeys.has(row.key));
+    for (const row of chooseTailsByAgent(candidates, Math.min(count, candidates.length))) {
+      chosen.push(row); chosenKeys.add(row.key);
+    }
+  };
+
+  // Reserve one bounded read for changed files and one for never-read files
+  // whenever those classes are due. Then rotate among continuations so a full
+  // cache of partial transcripts cannot monopolize every poll.
+  const reservedChanged = changedRows.length ? 1 : 0;
+  const reservedNew = newRows.length ? 1 : 0;
+  const continuationSlots = Math.max(0, limit - reservedChanged - reservedNew);
+  if (continuationSlots > 0 && continuationRows.length) {
+    // Recent continuations remain the first choice overall, but one slot ages
+    // across the entire continuation queue so a continuously fresh subset
+    // cannot starve older partial histories.
+    const oldestScheduled = [...continuationRows].sort((a, b) => (lastScheduled.get(a.key) || 0) - (lastScheduled.get(b.key) || 0)
+      || Number(b.mtime >= now() - 30000) - Number(a.mtime >= now() - 30000)
+      || b.mtime - a.mtime || sortDue(a, b))[0];
+    take([oldestScheduled], 1, true);
+    take(continuationRows, continuationSlots - 1, true);
+  }
+  take(changedRows, reservedChanged);
+  take(newRows, reservedNew);
+
+  // Fill any spare capacity while retaining per-agent diversity and the same
+  // oldest-scheduled-first order in each class.
+  while (chosen.length < limit) {
+    const before = chosen.length;
+    take(changedRows, 1);
+    take(newRows, 1);
+    take(continuationRows, 1, true);
+    if (chosen.length === before) break;
+  }
+  return chosen;
+}
 function createRuntime(cfg, { now = Date.now } = {}) {
   const options = defaults(cfg.runtimeConfig?.claudeCode || { home: cfg.claudeHome }), files = createFiles({ ...options, now });
   let engine, timer, closed = false, cycling = false, retryAt = 0, scanFailures = 0, overflowSeen = 0, healthFailure = null, failureTarget = null;
   const failures = new Set();
-  const last = new Map();
+  const last = new Map(), lastScheduled = new Map();
+  let scheduleSequence = 0;
   const loaded = new Set();
   const readRetries = new Map();
   const report = error => { healthFailure = error.code === 'EFORMAT' ? 'format' : error.code === 'ENOENT' ? 'missing' : 'unreadable'; engine?.notifyHealth?.(); };
@@ -34,7 +80,7 @@ function createRuntime(cfg, { now = Date.now } = {}) {
       if (row.projectName && (!group.named || group.named.mtime < row.mtime)) group.named = row;
       grouped.set(row.agentId, group);
     }
-    engine.ingestCanonical('agents', [...grouped.values()].map(({ latest: r, named }) => ({ id: r.agentId, name: agentName(named || r, options, files),
+    engine.ingestCanonical('agents', [...grouped.values()].map(({ latest: r, named }) => ({ id: r.agentId, name: agentName(named || r, options),
       displayName: r.displayName || null, summary: r.summary || null,
       workspace: null, model: r.model ? { primary: r.model, provider: null } : null, fallbackModels: [], isPrimary: false, mainSessionKey: r.key })));
   }
@@ -53,7 +99,7 @@ function createRuntime(cfg, { now = Date.now } = {}) {
       return { key: r.key, sessionId: r.subagent ? null : r.sessionId,
         class: { kind: r.subagent ? 'subagent' : 'conversation', ruleId: PROFILE, agentId: r.agentId, channel: null, heartbeatOf: null, background: false, rawClassification: null,
           ...(r.subagent ? { subagentId: r.subagent } : {}) },
-        displayName: r.summarySource === 'title' ? r.displayName || null : task || r.displayName || null, summary: r.summary || null, summarySource: r.summarySource === 'title' ? 'runtime' : r.summary ? 'transcript' : null, projectLabel: r.projectName ? r.projectName.slice(0, 120) : null,
+        displayName: r.summarySource === 'title' ? r.displayName || null : task || r.displayName || null, summary: r.summary || null, summarySource: r.summarySource === 'title' ? 'runtime' : r.summary ? 'transcript' : null, projectLabel: r.projectName ? r.projectName.slice(0, 120) : null, projectRef: r.project ? files.projectRef(r.project) : null,
         model: r.model ? { id: r.model, provider: null } : null, provider: null, usage: { total: 0, input: null, output: null },
         updatedAt: r.at || Math.round(r.mtime), run: r.execution ? runFromTranscript(r.execution, now()) : unknownRun(), costUsd: null, parentKey: parent ? r.parentKey : null, childKeys: children.get(r.key) || [], goal: null, cwd: null,
         messageCount: null, interactive: !!r.subagent /* data-model: subagent sessions are interactive */, group: null,
@@ -89,13 +135,23 @@ function createRuntime(cfg, { now = Date.now } = {}) {
       for (const row of rows) { const retry = readRetries.get(row.key); if (retry?.signature && retry.signature !== fileSignature(row)) readRetries.delete(row.key); }
       engine.setSourceDown('capacity', !!files.stats.truncated || (files.stats.queueOverflow || 0)>overflowSeen, 'capacity-limited');overflowSeen=files.stats.queueOverflow || 0;
       const keys = new Set(rows.map(r => r.key));
-      for (const key of new Set([...last.keys(), ...loaded, ...failures])) if (!keys.has(key)) { last.delete(key); loaded.delete(key); failures.delete(key); readRetries.delete(key); engine.forgetTranscript(key,{activity:true}); }
+      for (const key of new Set([...last.keys(), ...loaded, ...failures, ...lastScheduled.keys()])) if (!keys.has(key)) { last.delete(key); loaded.delete(key); failures.delete(key); readRetries.delete(key); lastScheduled.delete(key); engine.forgetTranscript(key,{activity:true}); }
       if (!failures.size && healthFailure) { healthFailure = null; failureTarget = null; engine.notifyHealth?.(); }
       // Metadata only for the full index; recent tails are fair, bounded and lazy.
-      const dueRows = rows.filter(r => (r.mtime >= now() - 30000 || `${r.dev}:${r.ino}:${r.size}:${r.mtime}` !== last.get(r.key))
-        && now()>=(readRetries.get(r.key)?.at || 0))
-        .sort((a, b) => Number(b.mtime >= now() - 30000) - Number(a.mtime >= now() - 30000) || b.mtime - a.mtime || a.key.localeCompare(b.key));
-      const due = chooseTailsByAgent(dueRows, BOUNDS.tails);
+      // A successful bounded read can still cover only a prefix. Keep that
+      // continuation ahead of newly changed files so the next cycle advances
+      // its cursor instead of treating the unchanged signature as complete.
+      const continuationRows = rows.filter(r => r.initialized && !r.coverageComplete
+        && now()>=(readRetries.get(r.key)?.at || 0));
+      const changedRows = rows.filter(r => r.initialized && r.coverageComplete
+        && (r.mtime >= now() - 30000 || `${r.dev}:${r.ino}:${r.size}:${r.mtime}` !== last.get(r.key))
+        && now()>=(readRetries.get(r.key)?.at || 0));
+      const newRows = rows.filter(r => !r.initialized && now()>=(readRetries.get(r.key)?.at || 0));
+      const sortDue = (a, b) => Number(b.mtime >= now() - 30000) - Number(a.mtime >= now() - 30000)
+        || b.mtime - a.mtime || a.key.localeCompare(b.key);
+      const due = selectDueRows({ continuationRows, changedRows, newRows,
+        limit: Math.min(BOUNDS.tails, BOUNDS.cacheSessions), lastScheduled, sortDue, now });
+      for (const row of due) lastScheduled.set(row.key, ++scheduleSequence);
       publish(rows); engine.setGatewayConnected(true);
       for (const r of due) { if (closed) break; if ((await load(r.key, true)).ok) last.set(r.key, `${r.dev}:${r.ino}:${r.size}:${r.mtime}`); }
       // reads refresh titles, summaries and sub-agent tool-call links (T-0062): republish the whole snapshot
@@ -149,7 +205,7 @@ async function discover({runtime={},env={}}={}) {
     // One recent bounded window per project, within the existing tail cap.
     // Unsupported sessions keep an opaque fallback and cannot break discovery.
     for (const row of [...groups.values()].slice(0, BOUNDS.tails)) { try { await files.read(row.key); } catch {} }
-    return [...groups.values()].map(row => ({ id: row.agentId, name: agentName(row, options, files), displayName: row.displayName || null, summary: row.summary || null, workspace: null, model: null }));
+    return [...groups.values()].map(row => ({ id: row.agentId, name: agentName(row, options), displayName: row.displayName || null, summary: row.summary || null, workspace: null, model: null }));
   }
   finally { files.close(); }
 }
@@ -164,7 +220,7 @@ const setup = { connect: true, name: 'Claude Code', fields: fields.map(f => f.id
       return { ...values({ runtimeConfig: { claudeCode: { home } } }), home };
     },
     async probe({ runtime }) {
-      const files = createFiles({ ...defaults(runtime), readFromStart: true });
+      const files = createFiles({ ...defaults(runtime) });
       try {
         const rows = (await files.scan()).sort((a, b) => b.mtime - a.mtime || a.key.localeCompare(b.key));
         const sample = rows.slice(0, BOUNDS.tails), unsupportedRows = new Set();
@@ -201,4 +257,5 @@ const setup = { connect: true, name: 'Claude Code', fields: fields.map(f => f.id
       } finally { files.close(); }
     } } };
 const paths = env => ({ claudeHome: env.AO_CLAUDE_HOME || path.join(env.HOME || os.homedir(), '.claude') });
-module.exports = { definition, createRuntime, setup, paths, doctor: async ctx => ctx.add('runtime', 'runtime.claude', 'info', 'runtime.claude') };
+module.exports = { definition, createRuntime, setup, paths, selectDueRows,
+  doctor: async ctx => ctx.add('runtime', 'runtime.claude', 'info', 'runtime.claude') };

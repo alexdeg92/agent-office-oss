@@ -69,6 +69,9 @@ const OfficeTarget = obj({ kind: oneOf('station', 'lounge', 'standing', 'destina
   mode: oneOf('stand', 'desk', 'sofa'), seatIndex: s.int().min(0).nullable(), facing: oneOf('ne', 'se', 'sw') });
 const OfficeActivity = obj({ id: str(), kind: oneOf('idle', 'gym', 'smoke', 'coffee'), spotId: str(), since: ms(), label: LabelRef });
 const SceneTravel = obj({ id: str(), fromFloorId: str(), toFloorId: str(), departure: OfficeTarget, arrival: OfficeTarget });
+const ScreenId = oneOf('message-sent', 'message-received', 'coding', 'terminal', 'browsing', 'writing', 'thinking', 'waiting', 'blocked');
+const Communication = obj({ id: str().max(80), mode: oneOf('desk', 'meeting'), peerIds: arr(str()).max(63), expiresAt: ms(), screen: oneOf('message-sent', 'message-received'), surface: oneOf('monitor', 'bubble'), label: LabelRef });
+const ScreenIntent = obj({ screen: ScreenId.nullable(), surface: oneOf('monitor', 'bubble', 'none'), label: LabelRefN() });
 const OccupantVM = obj({
   id: str(), role: ROLE, name: str(), title: LabelRef /* 2.4, Q03-A01 */, roleLabel: LabelRef, state: s.enumOf(AGENT_STATE), stateSince: ms(),
   stationUid: strN(), look: AppearanceLook, automaticLook: AppearanceLook.optional(), ruleId: strN(),
@@ -77,7 +80,8 @@ const OccupantVM = obj({
   startedAt: ms().optional(), lastActivityAt: ms().optional(), tokensKnown: bool().optional(), execution: ExecutionVM,
   isNew: bool().optional(),
   parentId: strN() /* T-0062; authoritative roster tree */, parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef,
-  homeTarget: OfficeTarget.nullable().optional(), sceneTarget: OfficeTarget.nullable().optional(), activity: OfficeActivity.nullable().optional(), sceneTravel: SceneTravel.nullable().optional(),
+  communication: Communication.nullable().optional(), screenIntent: ScreenIntent.optional(),
+    homeTarget: OfficeTarget.nullable().optional(), sceneTarget: OfficeTarget.nullable().optional(), activity: OfficeActivity.nullable().optional(), sceneTravel: SceneTravel.nullable().optional(),
   visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(),
   standingPoint: obj({ x: nn(), y: nn() }).nullable(),
   exchanges: Exchanges,   // architect-55 (office-dev-22 §3): conversation occupants with a known transcript
@@ -105,7 +109,9 @@ const OfficeVM = obj({
 const { Sender } = require('../../../engine/model/sender');
 const ChatVM = obj({
   sessionKey: str(), turnPending: obj({ turnId: str(), since: ms() }).nullable(),
-  messages: collection(obj({ id: str(), role: oneOf('user', 'assistant', 'error'), at: ms(), text: str(), senderInfo: Sender.optional(),
+  messages: collection(obj({ id: str(), kind: oneOf('message', 'subagent-result'), role: oneOf('user', 'assistant', 'error'), at: ms(), text: str(), body: obj({ text: str() }),
+    title: strN(), status: oneOf('completed', 'failed', 'running', 'unknown').nullable(), statusLabel: LabelRefN(), collapsedByDefault: bool(),
+    avatar: AppearanceLook.nullable(), senderInfo: Sender.optional(),
     meta: obj({ model: strN(), tokens: nn().nullable(), durationMs: nn().nullable() }).nullable() })),
 });
 
@@ -168,6 +174,7 @@ const LogsPage = obj({ items: collection(LogRowVM), nextCursor: strN(), facets: 
 const tr = (kind, extra) => obj(Object.assign({ id: str(), kind: s.literal(kind), at: nn(), senderInfo: Sender.optional(), text: str(), truncated: bool() }, extra));
 const TraceEventVM = s.discriminated('kind', {
   system: tr('system'), thinking: tr('thinking'), observation: tr('observation'), user: tr('user', { sender: strN() }),
+  'subagent-result': tr('subagent-result', { title: strN(), status: oneOf('completed', 'failed', 'running', 'unknown'), body: str() }),
   assistant: tr('assistant', { model: strN(), provider: strN(), outputTokens: nn().nullable(), stopReason: s.enumOf(['stop', 'toolUse', 'error', 'unrecognized']).nullable(), error: strN() }),
   tool: obj({ id: str(), kind: s.literal('tool'), at: nn(), senderInfo: Sender.optional(), callId: strN(), name: str(),
     toolKind: oneOf('search', 'web', 'browser', 'exec', 'file-read', 'file-write', 'memory', 'message', 'image', 'other'),
@@ -238,15 +245,44 @@ const SOURCE_KIND = oneOf('github', 'workspace', 'sessionGroup', 'manual');
 const HistorySession = obj({ key: str(), label: LabelRef, summary: strN(), messages: nn().nullable(), tokens: nn(), route: str(),
   people: arr(PersonChip).optional(), channel: strN().optional() }).optional();
 const HistoryItemVM = obj({ id: str(), at: ms(), kind: str(), group: s.int().min(1), actor: ActorVM, text: LabelRef, session: HistorySession });
+const ConnectorBrandVM = obj({ mark: str(), providerName: strN(), logo: strN(), logoDark: strN().optional(), color: strN(), foreground: strN() });
+const ProjectSourceDescriptorVM = obj({ id: str(), kind: str(), runtime: strN(), label: LabelRef, brand: ConnectorBrandVM.nullable() });
+const ProjectCountsVM = obj({ sessions: nn().nullable(), agents: nn().nullable(), activity: nn().nullable() });
+const ProjectCapabilitiesVM = obj({ read: bool(), write: bool(), comments: oneOf('read-write', 'read-only', 'unsupported'),
+  history: oneOf('read-write', 'read-only', 'unsupported'), repository: oneOf('read-write', 'read-only', 'unsupported') });
+const RosterPortraitVM = obj({ look: AppearanceLook.nullable(), avatarUrl: strN() });
+const TeamRosterMemberVM = obj({ id: str(), order: nn(), parentId: strN(), groupId: str(), rosterDepth: nn(), roleLabel: strN(), parentLabel: strN(),
+  identity: obj({ id: str(), name: str(), context: strN(), provider: strN(), teamId: str(), parentId: strN(), status: str(), statusLabel: LabelRef }),
+  portrait: RosterPortraitVM, source: ProjectSourceDescriptorVM.nullable() });
+const TeamRosterGroupVM = obj({ id: str(), label: str(), order: nn(), parentGroupId: strN(), memberIds: arr(str()), memberCount: nn(), memberCountLabel: LabelRef, depth: nn() });
+const TeamRosterVM = obj({ groups: collection(TeamRosterGroupVM), members: collection(TeamRosterMemberVM), memberCount: nn(), memberCountLabel: LabelRef });
 const ProjectCardVM = obj({
   id: str(), name: str(), priority: PRIORITY, revision: nn(), status: STATUS, thumb: ThumbVM, cover: CoverVM,
   flags: obj({ visible: arr(FlagVM), hiddenCount: nn().nullable() }), people: obj({ visible: arr(PersonChip), hiddenCount: nn().nullable() }), lastActivityAt: msN(),
+  origin: oneOf('orchestrator-team').optional(),
+  teamProject: obj({ teamId: str(), label: str(), readOnly: bool(), taskCount: nn() }).optional(),
+  sourceDescriptors: collection(ProjectSourceDescriptorVM).optional(),
+  statusLabel: LabelRef.optional(), counts: ProjectCountsVM.optional(),
+  capabilities: ProjectCapabilitiesVM.optional(),
 });
-const BoardVM = obj({ filter: oneOf('all', 'at-risk', 'with-timmy', 'archived'),
+const TeamProjectReviewerVM = obj({ id: str(), name: strN(), verdict: oneOf('go', 'no-go', 'pending', 'unknown'), verdictLabel: LabelRef });
+const TeamProjectTaskVM = obj({ id: str(), title: str(), state: oneOf('open', 'claimed', 'working', 'review', 'done', 'blocked'),
+  column: STATUS, columnLabel: LabelRef, priority: PRIORITY.nullable(), owner: obj({ id: str(), name: str() }).nullable(),
+  reviewers: collection(TeamProjectReviewerVM), createdAt: msN(), updatedAt: msN(), lastActivityAt: msN() });
+const TeamProjectColumnVM = obj({ id: STATUS, label: LabelRef, count: nn(), tasks: collection(TeamProjectTaskVM) });
+const TeamProjectVM = obj({ teamId: str(), label: str(), readOnly: bool(), taskCount: nn(), summaryLabel: LabelRef,
+  capabilities: obj({ comments: oneOf('read-only', 'unsupported'), history: oneOf('read-only', 'unsupported'),
+    repository: oneOf('read-only', 'unsupported') }), roster: TeamRosterVM, columns: collection(TeamProjectColumnVM) });
+const SourceFilterVM = obj({ id: str(), label: LabelRef, count: nn(), selected: bool(), source: ProjectSourceDescriptorVM });
+const BoardVM = obj({ filter: oneOf('all', 'at-risk', 'with-timmy', 'archived'), sourceFilterId: strN().optional(),
+  sourceFilters: collection(SourceFilterVM).optional(), emptyStateLabel: LabelRef.nullable().optional(),
   columns: collection(obj({ id: STATUS, count: nn(), cards: collection(ProjectCardVM) })) });
 const ProjectVM = obj({
   id: str(), revision: nn(), name: str(), status: STATUS, priority: PRIORITY, archived: bool(),
   summary: strN(), summaryMeta: obj({ author: ActorVM, at: ms() }).nullable(), thumb: ThumbVM, cover: CoverVM, flags: arr(FlagVM),
+  teamProject: TeamProjectVM.nullable().optional(),
+  sourceDescriptors: collection(ProjectSourceDescriptorVM).optional(), statusLabel: LabelRef.optional(),
+  counts: ProjectCountsVM.optional(), capabilities: ProjectCapabilitiesVM.optional(),
   sources: collection(obj({ id: str(), kind: SOURCE_KIND, label: str(), ref: SourceRef.nullable(), addedAt: ms(), sessionCount: nn().nullable() })),
   repo: obj({ state: oneOf('pending', 'ok', 'error'), url: str(), owner: str(), name: str(), image: obj(ImageShape), defaultBranch: strN(), branch: strN(),
     ci: obj({ state: oneOf('passing', 'failing', 'running', 'none', 'unrecognized'), at: msN(), url: strN() }).nullable(),
@@ -273,7 +309,7 @@ const CandidatesVM = obj({ scannedAt: ms(), candidates: collection(obj({
 const FloorLayoutData = obj({ room: str(), theme: s.unknown(), items: arr(s.unknown()) });
 const FloorData = obj({ id: str(), kind: oneOf('office', 'lobby', 'gym'), layout: FloorLayoutData });
 const LayoutData = s.object({ version: s.literal(1), manifestVersion: nn(), room: str(), theme: s.unknown(), items: arr(s.unknown()), agents: arr(s.unknown()),
-  idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
+  communicationMeetingPercent: s.int().min(0).max(100).optional(), idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
 const LayoutRevisionVM = obj({ revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM, data: LayoutData });
 const LayoutVM = obj({
   allowNoDesk: bool().optional(),
@@ -284,6 +320,11 @@ const LayoutVM = obj({
   revisions: collection(obj({ id: str(), revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM })),
   agentsSeen: collection(obj({ id: str(), role: ROLE, name: str(), lastSeenAt: msN(), automaticLook: AppearanceLook.optional() })),
 });
+const OfficeCharacterRowVM = role => obj({ id: str(), role, name: str(), primary: bool(), runtime: strN(), runtimeBrand: Mark().nullable(), state: oneOf(...AGENT_STATE).nullable(),
+  stateLabel: LabelRef, roleLabel: LabelRef, look: AppearanceLook, automaticLook: AppearanceLook.optional(), groupId: strN(), order: nn(), inOffice: bool(), lastSeenAt: msN() });
+const OfficeCharactersVM = role => obj({ scope: oneOf('office', 'all'), search: str(), count: nn(), countLabel: LabelRef,
+  groups: collection(obj({ id: strN(), label: LabelRef, count: nn(), countLabel: LabelRef, rows: collection(OfficeCharacterRowVM(role)) })), emptyLabel: LabelRef });
+const OfficeCharactersVM2 = OfficeCharactersVM(ROLE);
 const UiPrefs = obj({ uiTheme: oneOf('system', 'dark', 'light'), locale: s.enumOf(['fr', 'en']).nullable() });
 
 // Topic name / route → VM schema
@@ -298,9 +339,14 @@ const SetupVM = obj({
   suggestedTimeZone: str(), locales: s.array(oneOf('fr', 'en')),
   integrations: collection(obj({ id: str(), adapters: s.array(str()), default: s.boolean() })),
 });
-const VM_SCHEMAS = { setup: SetupVM, meta: MetaVM, me: MeVM, office: OfficeVM, chat: ChatVM, flows: FlowListVM, flow: FlowDetailVM, access: AccessVM, interlocutor: InterlocutorVM,
+const StoreOptions = obj({label:LabelRef,options:collection(obj({id:str().max(64),label:LabelRef,count:nn().nullable()})).max(256)});
+const OfficeStoreVM = obj({floorId:str().max(8),sectionId:oneOf('mobilier','decoration','personnages','couleurs','accessoires','themes'),categoryId:strN(),
+  sections:StoreOptions,categories:StoreOptions.nullable(),floors:StoreOptions.nullable(),itemIds:arr(str()).max(2000)});
+const OfficePaletteVM = obj({floorId:str().max(8),categoryId:str().max(64),search:str().max(120),
+  categories:obj({label:LabelRef,options:collection(obj({id:str().max(64),label:LabelRef,count:nn()})).max(256)}),itemIds:arr(str()).max(2000)});
+const VM_SCHEMAS = { officePalette:OfficePaletteVM, officeStore:OfficeStoreVM, setup: SetupVM, meta: MetaVM, me: MeVM, office: OfficeVM, chat: ChatVM, flows: FlowListVM, flow: FlowDetailVM, access: AccessVM, interlocutor: InterlocutorVM,
   logs: LogsPage, session: SessionVM, skills: SkillListVM, skill: SkillDetailVM, health: HealthVM, projects: BoardVM, project: ProjectVM, history: HistoryPage,
-  candidates: CandidatesVM, layout: LayoutVM, layoutRevision: LayoutRevisionVM, prefs: UiPrefs, comments: CommentThreadVM };
+  candidates: CandidatesVM, layout: LayoutVM, layoutRevision: LayoutRevisionVM, officeCharacters: OfficeCharactersVM2, prefs: UiPrefs, comments: CommentThreadVM };
 
 // ==== Contract 3.0 (G5, api-v3.md): the VMs that differ, built from the same pieces; every other VM is the 2.x one ====
 const ROLE3 = oneOf('primary', 'agent', 'subagent', 'scheduled', 'direct', 'group', 'conversation', 'session');                   // D3 + T-0081
@@ -326,6 +372,7 @@ const OfficeVM3 = obj({
     destination: obj({ kind: oneOf('server', 'meeting'), stationUid: str() }).nullable(), sessionKey: strN(), tokens: nn().nullable(), lastSeenAt: msN(), exchanges: Exchanges,
     summary: str().max(320).optional(), model: str().optional(), project: str().optional(), runtime: str().optional(), startedAt: ms().optional(), lastActivityAt: ms().optional(), tokensKnown: bool().optional(), execution: ExecutionVM, parentId: strN() /* T-0062 */,
     parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef, visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(), standingPoint: obj({ x: nn(), y: nn() }).nullable(),
+    communication: Communication.nullable().optional(), screenIntent: ScreenIntent.optional(),
     homeTarget: OfficeTarget.nullable().optional(), sceneTarget: OfficeTarget.nullable().optional(), activity: OfficeActivity.nullable().optional(), sceneTravel: SceneTravel.nullable().optional(),
     hostAgentId: str().optional(), hostRole: oneOf('primary', 'delegate', 'unknown').optional(), hostStatus: oneOf('working', 'blocked', 'done', 'idle', 'waiting', 'unknown').optional() }))).max(MAX_OFFICE_OCCUPANTS),
   occupantOverflowCount: nn().optional(), rosterGroups: collection(RosterGroup), rosterItems: collection(RosterItem), rosterPreviewItems: collection(RosterItem), rosterOverflowCount: nn(), rosterSummary: RosterSummary, rosterAllLabel: LabelRef, rosterOverflowLabel: LabelRef, conversationIds: arr(str()), conversationCount: nn(), conversationLabel: LabelRef, stateLabels: s.record(LabelRef), visitIntent: VisitIntent.optional(), rosterFloors: collection(RosterFloor), unseatedTeams: collection(UnseatedTeam),
@@ -383,11 +430,12 @@ const FlowDetailVM3 = obj({
     tokens: obj({ total: nn(), input: nn(), output: nn() }).nullable(),
     delivery: obj({ status: strN(), delivered: bool().nullable(), channel: CHANNEL_REF.nullable() }), summary: str(), error: strN() })),
 });
-const BoardVM3 = obj({ filter: oneOf('all', 'at-risk', 'with-agent', 'archived'), agent: strN(),                                // D8
+const BoardVM3 = obj({ filter: oneOf('all', 'at-risk', 'with-agent', 'archived'), agent: strN(), sourceFilterId: strN().optional(),
+  sourceFilters: collection(SourceFilterVM).optional(), emptyStateLabel: LabelRef.nullable().optional(),
   columns: collection(obj({ id: STATUS, count: nn(), cards: collection(ProjectCardVM) })) });
 // O8: a 3.0 layout may carry presence { seenMinutes: 0–1440 } (2.x never shows it)
 const LayoutData3 = s.object({ version: s.literal(1), manifestVersion: nn(), room: str(), theme: s.unknown(), items: arr(s.unknown()), agents: arr(s.unknown()),
-  presence: obj({ seenMinutes: s.int().min(0).max(1440) }).optional(), idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
+  presence: obj({ seenMinutes: s.int().min(0).max(1440) }).optional(), communicationMeetingPercent: s.int().min(0).max(100).optional(), idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
 const LayoutRevisionVM3 = obj({ revision: s.int().min(1), updatedAt: ms(), updatedBy: ActorVM, data: LayoutData3 });
 const LayoutVM3 = obj({
   allowNoDesk: bool().optional(),
@@ -400,7 +448,7 @@ const LayoutVM3 = obj({
 });
 const SettingsVM = require('./settings-schema')(s, LabelRef);
 const { Request: SettingsFixAllRequest, Result: SettingsFixAllResult } = require('./settings-schema').fixAllSchemas(s, LabelRef);
-const VM_SCHEMAS_V3 = Object.assign({}, VM_SCHEMAS, { settings: SettingsVM, meta: MetaVM3, office: OfficeVM3, orchestrators: OrchestratorsVM3, teams: TeamsVM3, logs: obj({ items: collection(LogRowVM3), nextCursor: strN(), facets: LogsFacets.optional() }), session: SessionVM3,
+const VM_SCHEMAS_V3 = Object.assign({}, VM_SCHEMAS, { settings: SettingsVM, meta: MetaVM3, office: OfficeVM3, officeCharacters: OfficeCharactersVM(ROLE3), orchestrators: OrchestratorsVM3, teams: TeamsVM3, logs: obj({ items: collection(LogRowVM3), nextCursor: strN(), facets: LogsFacets.optional() }), session: SessionVM3,
   access: AccessVM3, interlocutor: InterlocutorVM3, flow: FlowDetailVM3, projects: BoardVM3, layout: LayoutVM3, layoutRevision: LayoutRevisionVM3 });
 const schemasFor = (version) => (version === 3 ? VM_SCHEMAS_V3 : VM_SCHEMAS);
 

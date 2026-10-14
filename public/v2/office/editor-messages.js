@@ -1,0 +1,3 @@
+// Customize-only copy loads with the editor, keeping the landing chunk bounded.
+import {registerMessages} from '../messages.js';
+registerMessages({fr:{'ed.searchShort':'Rechercher','ed.viewOffice':'Voir le bureau','ed.hideOffice':'Masquer le bureau','ed.catalogue':'Retour au catalogue','ed.placeConfirm':'Placer','ed.move':'Déplacer','ed.touchPlace':'Touchez la carte pour choisir un emplacement, puis placez l’élément.'},en:{'ed.searchShort':'Search','ed.viewOffice':'View office','ed.hideOffice':'Hide office','ed.catalogue':'Back to catalogue','ed.placeConfirm':'Place','ed.move':'Move','ed.touchPlace':'Tap the map to choose a location, then place the item.'}});

@@ -23,6 +23,34 @@ function findChrome() {
 function startServer() {
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (url === '/__test__/office-characters' && req.method === 'POST') {
+      const chunks = []; let size = 0; let tooLarge = false;
+      req.on('data', chunk => { size += chunk.length; if (size > 1_048_576) { tooLarge = true; return; } chunks.push(chunk); });
+      req.on('end', () => {
+        if (tooLarge) { res.writeHead(413).end(); return; }
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          const { officeDefaults } = require('../../../src/api/v2/vm/office');
+          const { buildOfficeCharactersVM } = require('../../../src/api/v2/vm/office-characters');
+          const { project2x } = require('../../../src/api/v2/project2x');
+          const { project3x } = require('../../../src/api/v2/project3x');
+          const defaults = officeDefaults();
+          const scope = body.params?.scope ?? 'office', search = body.params?.search ?? '';
+          if (!['office', 'all'].includes(scope) || typeof search !== 'string' || search.length > 120
+              || !Array.isArray(body.office?.occupants) || !body.layout?.layout?.data) {
+            res.writeHead(400).end(); return;
+          }
+          const vm = buildOfficeCharactersVM({ office: body.office, layout: body.layout.layout.data, rules: defaults.rules,
+            index: defaults.index, seen: body.layout.agentsSeen || [],
+            runtimeInfo: row => ({ name: row.runtime || body.runtimeName || null, brand: body.runtimeBrand || null }),
+            projection: body.version === 3 ? project3x : project2x, scope, search });
+          res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(vm));
+        } catch {
+          res.writeHead(400).end();
+        }
+      });
+      return;
+    }
     const file = path.normalize(path.join(ROOT, url));
     if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403).end(); return; }
     fs.readFile(file, (err, buf) => {

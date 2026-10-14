@@ -111,7 +111,7 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
     const backlog = Math.max(st.blockedBytes || 0, st.res?.writableLength || 0);
     const requiredSnapshot = type === 'snapshot' && (bytes > limits.frameBytes || bytes + st.pendingBytes + backlog > limits.pendingBytes);
     if (bytes > limits.frameBytes && !requiredSnapshot) {
-      if (type === 'delta') { snapshot(st, data.topic); return; }
+      if (type === 'delta') { snapshot(st, data.topic, { force: true }); return; }
       closeStream(st, 'frame-too-large', false); return;
     }
     if (requiredSnapshot && !warnings.has('oversized-snapshot')) {
@@ -130,14 +130,19 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
   // agent-identity-1: a stream reads each subscribed topic id through its own session's projection (`resolveTopic`):
   // frames carry the subscribed (wire) id, data and revisions come from the projected topic.
   const projected = (st, id) => st.view?.get(id) || id;
-  function snapshot(st, topicId) {
+  function snapshot(st, topicId, { force = false } = {}) {
     if(!current(st)||!canTopic(st,topicId))return;
     if (st.topics.has(topicId) && !authorizeQueuedTopic(st, topicId)) return;
     try {
       const cur = topics.current(projected(st, topicId));
       // The wire topic owns the authorization/schema policy; `cur.id` may be a private scoped cache key.
       const data = security ? security.project(st.binding,topicId,cur.vm) : cur.vm;
-      write(st, 'snapshot', { type: 'snapshot', topic: topicId, rev: cur.rev, data });
+      const revisionScoped = /^(?:projects(?:\?|$)|project:)/.test(topicId);
+      const rev = security&&revisionScoped ? security.revision(st.binding,topicId,data) : null;
+      const visibleHash = security&&revisionScoped ? security.fingerprint(st.binding,topicId,data) : null;
+      if(security&&visibleHash!=null&&!force&&st.projectedHashes.get(topicId)===visibleHash)return;
+      if(security&&visibleHash!=null)st.projectedHashes.set(topicId,visibleHash);
+      write(st, 'snapshot', { type: 'snapshot', topic: topicId, rev: rev??cur.rev, data });
     } catch (e) {
       // a detail topic whose entity vanished: tell the client through an empty snapshot is wrong; drop the topic
       st.topics.delete(topicId); st.view?.delete(topicId);
@@ -255,7 +260,7 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
     if (mine.length >= limits.perSession) mine[0].close('replaced', false);
     if (admission.size >= limits.global) throw new ApiError('rate_limited');
     const st = { id: mintStreamId(), sessionKey: sessionKeyOf(session), userId:binding?.userId || session.userId || null, binding, session: req.session || session, sid: session.sid || null, exp: session.exp, topics: new Set(ids),
-      seq: 0, buffer: [], bufferBytes: 0, pending: [], pendingBytes: 0, blocked: false, blockedBytes: 0, largeInFlight: false, snapshotWaiting: new Set(), view: new Map(ids.map((id) => [id, resolveTopic(id, session)])), inFlight: null, snapshotSending: false, drain: null, onDrain: null, res: null, disconnectedAt: null, closed: false, expiry: null, heartbeat: null, gc: null, rejected };
+      seq: 0, buffer: [], bufferBytes: 0, pending: [], pendingBytes: 0, blocked: false, blockedBytes: 0, largeInFlight: false, snapshotWaiting: new Set(), projectedHashes:new Map(), view: new Map(ids.map((id) => [id, resolveTopic(id, session)])), inFlight: null, snapshotSending: false, drain: null, onDrain: null, res: null, disconnectedAt: null, closed: false, expiry: null, heartbeat: null, gc: null, rejected };
     st.close = (reason, notify) => closeStream(st, reason, notify);
     streams.set(st.id, st); admission.set(st.id, st);
     attach(st, req, res);
@@ -282,12 +287,12 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
     const rejected = [];
     const add = list(body.add, 'add').map((r) => { const t = topics.parse(r); if (!t) { rejected.push({ topic: r.slice(0, 300), issue: 'unknown-topic' }); return null; } if(!canTopic(st,t.id) || !authorizeTopic(t, { ...authContext(st.session), session: st.session })){rejected.push({topic:t.id,issue:'permission-denied'});return null;}return t.id; }).filter(Boolean);
     const remove = list(body.remove, 'remove').map((r) => { const t = topics.parse(r); return t ? t.id : r; });
-    for (const id of remove) { st.topics.delete(id); st.view?.delete(id); st.snapshotWaiting.delete(id); }
+    for (const id of remove) { st.topics.delete(id); st.view?.delete(id); st.snapshotWaiting.delete(id); st.projectedHashes?.delete(id); }
     const fresh = add.filter((id) => !st.topics.has(id));
     if (st.topics.size + fresh.length > MAX_TOPICS) throw invalid('add', 'too-many');
-    for (const id of fresh) { st.topics.add(id); st.view.set(id, resolveTopic(id, req.session)); }
+    for (const id of fresh) { st.topics.add(id); st.view.set(id, resolveTopic(id, req.session)); st.projectedHashes?.delete(id); }
     res.json(okBody(rejected.length ? { topics: [...st.topics], rejected } : { topics: [...st.topics] }, { engine:!security||security.mayExposeSources(st.binding)?engine:null, now: now() }));
-    for (const id of fresh) snapshot(st, id);
+    for (const id of fresh) snapshot(st, id, { force: true });
   }
 
   // POST /api/v2/stream/:streamId/resync
@@ -301,7 +306,7 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
     if(!authorizeQueuedTopic(st,t.id))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
     if (!st.topics.has(t.id)) throw invalid('topic', 'not-subscribed');
     res.json(okBody({ queued: true }, { engine:!security||security.mayExposeSources(st.binding)?engine:null, now: now() }));
-    snapshot(st, t.id);
+    snapshot(st, t.id, { force: true });
   }
 
   // topic changes → every subscribed stream, connected or buffering for a resume

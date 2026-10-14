@@ -137,11 +137,9 @@ test('GET /views/health matches health-vm.json', async () => {
 });
 
 test('Discuter: GET /views/chat matches api.md §3.3; POST /chat/messages answers 202 { turnId }, a second one 409 turn-pending', async () => {
-  const ex = apiExample('3.3');
-  const nullable = ['$.data.turnPending', '$.data.messages[].meta', '$.data.messages[].meta.model', '$.data.messages[].meta.tokens', '$.data.messages[].meta.durationMs', '$.data.messages[].senderInfo.name', '$.data.messages[].senderInfo.channel', '$.data.messages[].senderInfo.avatarHint'];
   const r = await call('GET', '/api/v2/views/chat');
   assert.equal(r.status, 200);
-  assert.deepEqual(compareShape(ex, r.body, { strict: false, nullable }), []);
+  assert.deepEqual(compareExample('chat-vm', r.body, { envelope: true }), []);
   assert.ok(r.body.data.messages.every((m) => ['user', 'assistant', 'error'].includes(m.role)));
   const sent = await call('POST', '/api/v2/chat/messages', { text: 'Bonjour' });
   assert.equal(sent.status, 202);

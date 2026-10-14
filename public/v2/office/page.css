@@ -13,6 +13,10 @@
 .ao-bureau--editing .ao-bureau__side { max-height: none; overflow: visible; }
 .ao-bureau__side [hidden] { display: none !important; }
 .ao-bureau__editbar:empty { display: none; }
+.ao-bureau--editing .ao-bureau__main { grid-template-rows: auto minmax(0, 1fr); }
+.ao-bureau--editing .ao-bureau__stagecol { grid-column: 1; grid-row: 2; }
+.ao-bureau--editing .ao-bureau__editbar:not(:empty) { grid-column: 1; grid-row: 1; min-width: 0; }
+.ao-bureau--editing .ao-bureau__side { grid-column: 2; grid-row: 1 / span 2; }
 .ao-bureau__scrim { position: fixed; inset: 0; z-index: var(--bu-z-drawer); }
 
 /* Theme: the office's day/night (independent of the UI theme), on the right of the KPI strip. */
@@ -300,3 +304,150 @@
   .ao-team-office .bu-modal__body { max-height:calc(85svh - 10rem); overflow:auto; overscroll-behavior:contain; }
 }
 @media(prefers-reduced-motion:reduce) { .ao-team-task > summary::after { transition:none; } }
+
+/* Editor is a fixed frame: scene and inspector own separate scroll regions. */
+.ao-bureau--editing > .ao-frame__body { overflow: hidden; }
+.ao-bureau--editing .ao-bureau__main { height: 100%; min-height: 0; align-items: stretch; }
+.ao-bureau--editing .ao-bureau__stagecol, .ao-bureau--editing .ao-bureau__side { min-height: 0; height: 100%; }
+.ao-bureau--editing .ao-bureau__stagecol { overflow: auto; overscroll-behavior: contain; }
+.ao-bureau--editing .ao-bureau__side { overflow: hidden; }
+.ao-bureau--editing #ao-bureau-editaside { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+@media (max-width: 820px) {
+  .ao-bureau--editing .ao-bureau__main { grid-template-rows: minmax(8rem, 24%) auto minmax(0,1fr); gap: var(--bu-space-2); }
+  .ao-bureau--editing .ao-bureau__stagecol { overflow: hidden; }
+  .ao-bureau--editing .ao-bureau__stagecol { grid-column: 1; grid-row: 1; }
+  .ao-bureau--editing .ao-bureau__editbar:not(:empty) { grid-column: 1; grid-row: 2; }
+  .ao-bureau--editing .ao-bureau__stagewrap, .ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { min-height: 0; height: 100%; max-height: none; }
+  .ao-bureau--editing .ao-bureau__side { grid-column: 1; grid-row: 3; height: 100%; }
+  .ao-editpanel[data-mode="characters"] > section[aria-labelledby="ao-agents-title"] { grid-template-rows: auto minmax(4rem, .34fr) minmax(0,.66fr) auto auto; }
+}
+
+.ao-bureau--editing .ao-bureau__stagewrap { height: 100%; min-height: 0; }
+.ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { height: 100%; min-height: 0; aspect-ratio: auto; }
+.ao-editpanel[data-mode="characters"] > .ao-characters > section[aria-labelledby="ao-agents-title"] { display: grid; height: 100%; min-height: 0; overflow: hidden; }
+.ao-editpanel[data-mode="characters"] > .ao-characters > section[aria-labelledby="ao-agents-title"] > .ao-characters__fixed { min-height: 0; }
+.ao-editpanel[data-mode="characters"] .ao-characters__detailhead { min-width: 0; }
+@media (max-width: 820px) {
+  .ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { height: 100%; }
+}
+
+/* T-0105 mobile character editor: keep the approved Bureau header, room and tab bar while the editor gets
+   a compact scene preview, one-line mode switch and a bounded roster/detail frame. */
+@media (max-width: 600px) {
+  .ao-bureau--editing > .ao-frame__body { min-height: 0; padding-bottom: var(--bu-space-2); }
+  .ao-bureau--editing .ao-bureau__main { grid-template-rows: clamp(8rem, 21svh, 11rem) auto minmax(0, 1fr); }
+  .ao-bureau--editing .ao-bureau__stagecol { height: 100%; gap: 0; }
+  .ao-bureau--editing .ao-floor-mobile-trigger { display: none; }
+  .ao-bureau--editing .ao-bureau__stagewrap { height: 100%; min-height: 0; }
+  .ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { height: 100%; min-height: 0; border-radius: var(--bu-radius-card); }
+  .ao-bureau--editing .ao-bureau__side { height: 100%; min-height: 0; }
+  .ao-bureau--editing #ao-bureau-editaside { min-height: 0; }
+}
+
+/* Characters: on phones, make the roster and editor two deliberate screens instead of a cramped split panel. */
+.ao-editpanel[data-mode="characters"] > .ao-characters {
+  grid-template-rows: minmax(8rem, .58fr) minmax(8rem, .42fr) auto auto;
+}
+.ao-editpanel[data-mode="characters"] > .ao-characters > section[aria-labelledby="ao-agents-title"] {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.ao-character-profile, .ao-characters__back { display: none; }
+.ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__editor {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--bu-space-3);
+}
+.ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  max-height: none;
+}
+.ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__preview {
+  display: flex;
+  align-items: center;
+  gap: var(--bu-space-3);
+}
+.ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc-figure--lg { width: 88px; height: 124px; }
+.ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__pose { flex: 1; min-width: 0; }
+@media (min-width: 821px) and (max-height: 760px) {
+  .ao-editpanel[data-mode="characters"] > .ao-characters { grid-template-rows: minmax(8rem, 1.65fr) minmax(8rem, .35fr) auto auto; }
+}
+@media (max-width: 820px) {
+  .ao-editpanel[data-mode="characters"] > .ao-characters { grid-template-rows: minmax(0, 1fr) auto auto; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters > section[aria-labelledby="ao-agents-title"] {
+    display: grid;
+    grid-row: 1;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+  .ao-editpanel[data-mode="characters"] > .ao-characters > .ao-agentcard { display: none; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters.ao-characters--mobile-detail > section[aria-labelledby="ao-agents-title"] { display: none; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters.ao-characters--mobile-detail > .ao-agentcard {
+    display: flex;
+    grid-row: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--bu-space-2) var(--bu-space-4) var(--bu-space-4);
+    border-top: 0;
+  }
+  .ao-characters__back {
+    display: inline-flex;
+    align-self: flex-start;
+    min-height: 44px;
+    margin-inline-start: calc(-1 * var(--bu-space-2));
+    animation: ao-character-state-enter var(--bu-duration-base) var(--bu-ease-enter) both;
+  }
+  .ao-character-profile {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--bu-space-3);
+    padding: var(--bu-space-2) 0 var(--bu-space-3);
+    border-bottom: 1px solid var(--bu-border-subtle);
+    animation: ao-character-detail-enter var(--bu-duration-base) var(--bu-ease-enter) both;
+  }
+  .ao-character-profile__portrait { display: grid; place-items: center; width: 54px; height: 60px; overflow: hidden; }
+  .ao-character-profile__portrait img { width: 100%; height: 100%; object-fit: contain; }
+  .ao-character-profile__copy { min-width: 0; }
+  .ao-character-profile__copy h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ao-character-profile__copy p { margin: var(--bu-space-0-5) 0 0; color: var(--bu-text-secondary); font: var(--bu-type-caption); }
+  .ao-characters__desktop-title { display: none; }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external { overflow: visible; }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__editor { display: flex; }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__preview { width: auto; height: auto; min-height: 92px; justify-content: flex-start; }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc-figure--lg { width: 68px; height: 92px; }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__card {
+    display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 108px;
+    gap: var(--bu-space-1); padding: var(--bu-space-2); text-align: center;
+  }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__card .ao-sc-figure--sm { width: 32px; }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__card > span:last-child {
+    max-width: 100%; line-height: 1.25; overflow-wrap: anywhere; text-align: center;
+  }
+  .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__card img { width: 36px; height: 50px; }
+  .ao-editpanel[data-mode="characters"] .ao-characters__actions { justify-content: space-between; padding-bottom: max(var(--bu-space-3), env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ao-characters__back, .ao-character-profile { animation: none; }
+}
+
+/* Final mobile editor frame rules, scoped to editing so the regular Bureau page stays unchanged. */
+@media (max-width: 600px) {
+  .ao-bureau--editing .ao-bureau__main { grid-template-rows: clamp(8rem, 21svh, 11rem) auto minmax(0, 1fr); }
+  .ao-bureau--editing .ao-bureau__stagecol { grid-column: 1; grid-row: 1; height: 100%; gap: 0; }
+  .ao-bureau--editing .ao-bureau__editbar:not(:empty) { grid-column: 1; grid-row: 2; width: 100%; }
+  .ao-bureau--editing .ao-bureau__side { grid-column: 1; grid-row: 3; height: 100%; min-height: 0; }
+  .ao-bureau--editing .ao-bureau__side #ao-bureau-editaside { min-height: 0; }
+  .ao-bureau--editing .ao-bureau__stagewrap,
+  .ao-bureau--editing .ao-bureau__stagewrap > .ao-bureau__stage { height: 100%; min-height: 0; }
+  .ao-bureau--editing .ao-floor-mobile-trigger { display: none; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters > .ao-agentcard { display: none; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters.ao-characters--mobile-detail > .ao-agentcard { display: flex; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters > section[aria-labelledby="ao-agents-title"] { grid-template-rows: auto minmax(0, 1fr); }
+  .ao-editpanel[data-mode="characters"] > .ao-characters > section[aria-labelledby="ao-agents-title"] > .ao-characters__fixed { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  .ao-editpanel[data-mode="characters"] .ao-characters__heading { grid-column: 1 / -1; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters { grid-template-rows: minmax(0, 1fr) auto auto; }
+  .ao-editpanel[data-mode="characters"] > .ao-characters > .ao-characters__actions { display: grid; grid-template-columns: 1fr 1fr; }
+}

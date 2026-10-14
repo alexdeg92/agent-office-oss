@@ -35,6 +35,9 @@ const Session = s.object({
   summary: s.string().max(320).nullable().optional(),
   summarySource: s.enumOf(['transcript', 'runtime']).nullable().optional(),
   projectLabel: s.string().max(120).nullable().optional(),
+  // Private, adapter-normalised project identity. This is an opaque, stable
+  // source reference (never a path) used only by the Projects projection.
+  projectRef: s.string().min(1).max(256).nullable().optional(),
   tokensKnown: s.boolean().optional(),
   model: s.object({ id: s.string().min(1), provider: s.string().nullable() }, { extra: 'reject' }).nullable(),
   provider: s.string().nullable(),

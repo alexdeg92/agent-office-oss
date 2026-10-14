@@ -4,7 +4,7 @@
 // layout-rules.js (shared with the server); the store is the layout API (or mock-store.js).
 import { h, render } from 'preact';
 import { Frame } from '../components/ui.js';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import htm from 'htm';
 import {
   History, addItem, moveItem, removeItem, renameItem, duplicateItem, findFreeSpot, updateTheme,
@@ -13,15 +13,22 @@ import {
 } from './editor-model.js';
 import { poseImage, accessoryLayers, resolveUrl, furnitureImage, roomImage, themeFor } from './assets.js';
 import { STATES, viewFor } from './states.js';
-import { displayName } from './names.js';
-import { SetupCharacters } from './setup-characters.js';
-import { agentRows as sharedAgentRows, ruleView as sharedRuleView, patchAgent as sharedPatchAgent, looksOf as sharedLooksOf } from './agent-looks.js';
-import { defaultAccessoriesFor, canonicalRuleId, canonicalRole } from './layout-rules.js';
+import { SetupCharacters, Figure } from './setup-characters.js';
+import { ruleView as sharedRuleView, patchAgent as sharedPatchAgent, looksOf as sharedLooksOf } from './agent-looks.js';
+import { defaultAccessoriesFor } from './layout-rules.js';
 import { resolveTheme } from './theme.js';
 import { s as tr, labelOf, intlLocale } from './strings.js';
-import { reloadGuards } from '../services.js';
+import { services, reloadGuards } from '../services.js';
+import { Button, Select, TextInput, loadStyles } from '../components/bureau/index.js';
+import { ConnectorBrandMark } from '../pages/connector-brand.js';
+import { avatarSource, CharacterAvatar } from './avatar.js';
+import { label as labelVM, msg } from '../i18n.js';
+import './characters-messages.js';
+import './editor-messages.js';
+import * as api from '../api.js';
 
 const html = htm.bind(h);
+const mountedEditors=new WeakMap();
 
 /** Colours from server data (manifest swatches): hex, rgb() or hsl() only; anything else is dropped. */
 const COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+%?\s*)?\)|hsla?\(\s*[\d.]+(deg)?\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*(,\s*[\d.]+%?\s*)?\))$/i;
@@ -38,18 +45,17 @@ const ICON = {
   rename: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>',
   history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   boutique: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  save: '<path d="m5 12 4 4L19 6"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
+  back: '<path d="m15 18-6-6 6-6"/><path d="M20 12H9"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 };
 const Icon = ({ name }) => html`<svg class="bu-icon" viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: ICON[name] }}></svg>`;
 
 // UI text: strings.js (FR + EN), read at render time so a language switch applies on the next render.
-const CATEGORY_LABEL = (c) => tr(`ed.cat.${c}`);
 const SLOT_LABEL = (slot) => tr(`ed.slot.${slot}`);
-const DEFAULT_RULE_LABEL = (id) => tr(`ed.rule.${canonicalRuleId(id) ?? id}`);
-const ROLE_LABEL = (role) => tr(`role.${canonicalRole(role) ?? role}`);
 const furnitureLabel = (f) => labelOf(f, 'furniture');
 const DAY_MS = 86_400_000;
 
@@ -57,6 +63,8 @@ const DAY_MS = 86_400_000;
 class EditorController {
   constructor(opts) {
     this.o = opts;
+    opts.getPaletteVM ||= services.officePaletteVM || (params=>api.get(`/api/v2/views/office/palette?floorId=${encodeURIComponent(opts.floorId || '1')}&category=${encodeURIComponent(params.category)}&search=${encodeURIComponent(params.search)}`,{quiet:true}).then(response=>response.data));
+    opts.getCharacterVM ||= params=>api.get('/api/v2/views/office/characters?'+new URLSearchParams(params),{quiet:true}).then(response=>response.data);
     this.scene = opts.scene;
     this.index = this.scene.index;
     this.listeners = new Set();
@@ -67,7 +75,17 @@ class EditorController {
     this.modal = null;
     this.saving = false;
     this.agentSel = null;   // the first row (the primary agent) until one is picked
-    this.previewState = 'working';
+    this.characterMobileView = 'list';
+    this.characterVM = null;
+    this.characterScope = 'office';
+    this.characterSearch = '';
+    this.characterLoading = false;
+    this.characterError = false;
+    this.characterRequest = 0;
+    this.mobilePreview = false;
+    this.paletteVM = null; this.paletteError = false; this.paletteRequest = 0;
+    this.paletteCategory = ''; this.paletteSearch = '';
+    this.previewState = 'idle';
     this.announcement = '';
     this.notice = null;
     this.narrow = matchMedia(NARROW).matches;
@@ -75,6 +93,9 @@ class EditorController {
 
   async init() {
     this.vm = await this.o.store.get();
+    await this.loadCharacters();
+    await this.loadPalette();
+    if(this.o.isCurrent && !this.o.isCurrent()) {this.closed=true;return false;}
     this.history = new History(this.vm.layout.data);
     this.reloadGuard = { dirty: () => this.dirty || this.saving, confirm: () => {
       if (this.saving) return Promise.resolve(false);
@@ -85,12 +106,13 @@ class EditorController {
     this.scene.setPointerHandler((e) => this.onScenePointer(e));
     this.offCam = this.scene.onCamera(() => this.emit());
     this.mq = matchMedia(NARROW);
-    this.onMq = () => { this.narrow = this.mq.matches; if (this.narrow && this.mode === 'layout') this.mode = 'characters'; this.emit(); };
+    this.onMq = () => { this.narrow = this.mq.matches; this.emit(); };
     this.mq.addEventListener('change', this.onMq);
     this.onKey = (e) => this.onKeyDown(e);
     document.addEventListener('keydown', this.onKey, true);
     this.apply();
     reloadGuards.add(this.reloadGuard);
+    return true;
   }
 
   get draft() { return this.history.current; }
@@ -98,7 +120,7 @@ class EditorController {
   get errors() { return validateLayout(this.draft, this.index, {allowNoDesk:this.vm.allowNoDesk === true}); }
 
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
-  emit() { this.version = (this.version ?? 0) + 1; for (const fn of this.listeners) fn(); }
+  emit() { if(this.scene?.stage) this.markMode(); this.version = (this.version ?? 0) + 1; for (const fn of this.listeners) fn(); }
 
   say(text) { this.announcement = text; this.emit(); }
 
@@ -137,16 +159,55 @@ class EditorController {
   fixSelection() { if (this.selected && !this.draft.items.some((i) => i.uid === this.selected)) this.selected = null; }
 
   setMode(m) {
-    if (m === 'layout' && this.narrow) return;
-    this.cancelPlace();
-    this.mode = m;
-    this.highlight = null;
-    this.markMode();
-    this.apply();
+    if(this.mode === m || this.closed) return;
+    const update = () => {
+      this.cancelPlace(); this.mode = m; this.mobilePreview=false; this.highlight = null;
+      this.markMode(); this.apply();
+    };
+    this.modeTransition?.skipTransition();
+    if(!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) { update(); return; }
+    this.modeTransition = document.startViewTransition(async () => {
+      if(this.closed) return;
+      update();
+      await Promise.resolve();
+    });
+    this.modeTransition.ready.catch(()=>{});
+    this.modeTransition.updateCallbackDone.catch(()=>{});
+    this.modeTransition.finished.catch(()=>{});
+  }
+
+  async changeFloor(id) {
+    if(id === this.o.floorId || this.closed || this.changingFloor) return;
+    this.changingFloor = true;
+    const permitted = !this.reloadGuard.dirty() || await this.reloadGuard.confirm();
+    this.changingFloor = false;
+    if(!permitted || this.closed) { this.emit(); return; }
+    this.close({saved:false,nextFloor:id,mode:this.mode});
+  }
+
+  async loadPalette({category=this.paletteCategory,search=this.paletteSearch} = {}) {
+    if(!this.o.getPaletteVM) return;
+    this.paletteCategory=category; this.paletteSearch=search;
+    const request=++this.paletteRequest;
+    this.paletteLoading=true; this.paletteError=false; this.emit();
+    try {
+      const vm=await this.o.getPaletteVM({category,search});
+      if(this.closed || request !== this.paletteRequest) return;
+      this.paletteVM=vm;
+    } catch {
+      if(this.closed || request !== this.paletteRequest) return;
+      this.paletteError=true;
+    } finally {
+      if(!this.closed && request===this.paletteRequest) { this.paletteLoading=false;this.emit(); }
+    }
   }
 
   /** Presentation only: the stage hides occupants while the layout (furniture) is edited. */
-  markMode() { if (this.scene.stage) this.scene.stage.dataset.editMode = this.mode; }
+  markMode() {
+    if(!this.scene.stage) return;
+    this.scene.stage.dataset.editMode=this.mode;
+    this.scene.stage.dataset.editView=this.placing?'place':this.mobilePreview?'preview':'browse';
+  }
 
   // -- selection and item commands (Disposition) --
   select(uid, { focus = false } = {}) {
@@ -279,6 +340,7 @@ class EditorController {
   /** Pointer gesture from the palette: the ghost follows the pointer over the scene. */
   dragFromPalette(e, asset) {
     if (this.mode !== 'layout') return;
+    if(this.narrow) return;
     e.preventDefault();
     const startX = e.clientX, startY = e.clientY;
     let dragging = false;
@@ -305,6 +367,7 @@ class EditorController {
   onScenePointer(e) {
     if (this.mode !== 'layout') return false;
     if (this.placing) {
+      if(this.placing.via==='touch'){this.movePlaceTo(this.candAt(e.clientX,e.clientY));return true;}
       if (this.placing.via === 'keyboard') { this.movePlaceTo(this.candAt(e.clientX, e.clientY)); this.commitPlace(); return true; }
       return true;
     }
@@ -338,6 +401,8 @@ class EditorController {
       if (e.key === 'Tab') trapTab(e, document.querySelector('.ao-scrim [role=dialog]'));   // R7-08
       return;
     }
+    // An open action menu owns its keys before map selection/placement.
+    if(document.getElementById('ao-more-menu')) return;
     if (mod && !typing && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); return; }
     if (mod && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); this.redo(); return; }
     if (this.mode !== 'layout' || typing) return;
@@ -367,8 +432,44 @@ class EditorController {
 
   // -- Personnages --
   agentRows() {
-    // One implementation with the Boutique (agent-looks.js): rows keyed canonically, the existing rule's id kept.
-    return sharedAgentRows(this.draft, this.o.getOccupants(), this.vm.agentsSeen ?? this.o.inventory ?? [], DEFAULT_RULE_LABEL);
+    return (this.characterVM?.groups || []).flatMap(group => group.rows).map(row => ({ ...row, sourceName: row.name, live: row.inOffice }));
+  }
+  async loadCharacters() {
+    if (typeof this.o.getCharacterVM !== 'function') return;
+    const request = ++this.characterRequest;
+    this.characterLoading = true; this.characterError = false; this.emit();
+    try {
+      const vm = await this.o.getCharacterVM({ scope: this.characterScope, search: this.characterSearch });
+      if (request !== this.characterRequest || this.closed) return;
+      this.characterVM = vm;
+      const rows = this.agentRows();
+      if (!rows.some(row => row.id === this.agentSel)) this.agentSel = rows[0]?.id ?? null;
+    } catch (_) {
+      if (request === this.characterRequest && !this.closed) this.characterError = true;
+    } finally {
+      if (request === this.characterRequest && !this.closed) { this.characterLoading = false; this.emit(); }
+    }
+  }
+  setCharacterScope(scope) {
+    if (scope === this.characterScope) return;
+    this.characterScope = scope;
+    this.loadCharacters();
+  }
+  setCharacterSearch(search) {
+    this.characterSearch = search;
+    clearTimeout(this.characterSearchTimer);
+    this.characterSearchTimer = setTimeout(() => this.loadCharacters(), 160);
+    this.emit();
+  }
+  selectCharacter(id) {
+    this.agentSel = id;
+    this.characterMobileView = 'detail';
+    this.emit();
+  }
+  showCharacterList() {
+    this.characterMobileView = 'list';
+    this.emit();
+    requestAnimationFrame(() => document.querySelector('.ao-editpanel .ao-character-row[aria-pressed="true"]')?.focus());
   }
 
   /** The rule the agent editor writes to: its exact rule, created on first change from the resolved look. */
@@ -467,8 +568,9 @@ class EditorController {
     if (resolve) { resolve(true); this.emit(); } else this.close({ saved: false });
   }
 
-  close({ saved }) {
+  close({ saved, nextFloor = null, mode = this.mode }) {
     if (this.closed) return;   // exit runs once (R7-05)
+    this.modeTransition?.skipTransition();
     reloadGuards.delete(this.reloadGuard);
     this.reloadResolve?.(false); this.reloadResolve = null;
     this.cancelPlace();
@@ -476,10 +578,10 @@ class EditorController {
     this.mq.removeEventListener('change', this.onMq);
     this.offCam?.();
     this.scene.setPointerHandler(null);
-    if (this.scene.stage) delete this.scene.stage.dataset.editMode;
+    if (this.scene.stage) {delete this.scene.stage.dataset.editMode;delete this.scene.stage.dataset.editView;}
     this.scene.setEditing(false);
     this.closed = true;
-    this.o.onExit?.({ saved, layout: saved ? this.draft : this.vm.layout.data, revision: this.vm.layout.revision, vm: this.vm });
+    this.o.onExit?.({ saved, nextFloor, mode, layout: saved ? this.draft : this.vm.layout.data, revision: this.vm.layout.revision, vm: this.vm });
   }
 }
 
@@ -487,9 +589,9 @@ class EditorController {
 function useCtl(ctl) {
   const [, force] = useState(0);
   const seen = ctl.version;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const off = ctl.subscribe(() => force((n) => n + 1));
-    // Effects run after paint: catch up on changes emitted between this render and the subscription.
+    // Subscribe at DOM commit so a mode transition snapshots the matching panel.
     if (ctl.version !== seen) force((n) => n + 1);
     return off;
   }, [ctl]);
@@ -503,13 +605,15 @@ function EditorBar({ ctl }) {
   const saveBlocked = errors.length ? errors[0].message : !ctl.dirty ? tr('ed.nothingToSave') : null;
   const modes = ['layout', 'characters', 'theme'].map((id) => [id, tr(`ed.mode.${id}`)]);
   return html`
-    <div class="ao-editbar" role="toolbar" aria-label=${tr('ed.title')}>
+    <div class="ao-editbar" data-mode=${ctl.mode} role="toolbar" aria-label=${tr('ed.title')}>
       <h2 class="ao-editbar__title">${tr('ed.title')}</h2>
-      <div class="bu-segmented" role="group" aria-label=${tr('ed.mode')}>
+      ${ctl.narrow ? html`<span class="ao-editbar__modepick"><${Select} label=${tr('ed.mode')} value=${ctl.mode} options=${modes.map(([value,label]) => ({value,label}))} onValueChange=${value => ctl.setMode(value)} /></span>` : html`<div class="bu-segmented" role="group" aria-label=${tr('ed.mode')}>
         ${modes.map(([id, label]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(ctl.mode === id)}
-          disabled=${id === 'layout' && ctl.narrow} title=${id === 'layout' && ctl.narrow ? tr('ed.layoutNarrow') : null}
           onClick=${() => ctl.setMode(id)}>${label}</button>`)}
-      </div>
+      </div>`}
+      ${ctl.o.floors ? html`<span class="ao-editbar__floorpick"><${Select} testId="editor-floor" label=${tr('office.floor.picker')} value=${ctl.o.floorId}
+        disabled=${ctl.saving} options=${ctl.o.floors.map(floor=>({value:floor.id,label:labelVM(floor.label)}))}
+        onValueChange=${value=>void ctl.changeFloor(value)} /></span>` : null}
       <div class="ao-editbar__history">
         <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${tr('ed.undo')} title=${tr('ed.undo')} disabled=${!ctl.history.canUndo} onClick=${() => ctl.undo()}><${Icon} name="undo" /></button>
         <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${tr('ed.redo')} title=${tr('ed.redo')} disabled=${!ctl.history.canRedo} onClick=${() => ctl.redo()}><${Icon} name="redo" /></button>
@@ -517,16 +621,21 @@ function EditorBar({ ctl }) {
       ${ctl.dirty ? html`<span class="bu-chip bu-chip--warning" title=${tr('ed.dirty')}>${tr('ed.dirtyShort')}</span>` : null}
       <span class="ao-editbar__spacer"></span>
       <${MoreMenu} items=${[
+        ...(ctl.narrow && ctl.o.floors ? [{id:'floors',label:tr('office.floor.picker'),run:()=>{ctl.modal={kind:'floors'};ctl.emit();}}] : []),
+        ...(ctl.narrow && ctl.mode === 'characters' ? [
+          { id: 'undo', icon: 'undo', label: tr('ed.undo'), run: () => ctl.undo() },
+          { id: 'redo', icon: 'redo', label: tr('ed.redo'), run: () => ctl.redo() },
+        ] : []),
         { id: 'versions', icon: 'history', label: tr('ed.versions'), run: () => ctl.openVersions() },
         { id: 'reset', icon: 'rotate', label: tr('ed.reset'), run: () => { ctl.modal = { kind: 'reset' }; ctl.emit(); } },
         // office-dev-21: the Boutique (catalog, mobile-first placement); unsaved edits are saved or cancelled first
         ...(ctl.o.onOpenShop ? [{ id: 'boutique', icon: 'boutique', label: tr('ed.openShop'), run: () => { if (ctl.dirty) { ctl.say(tr('ed.openShopDirty')); ctl.emit(); return; } ctl.close({ saved: false }); ctl.o.onOpenShop(); } }] : []),
       ]} />
-      <button type="button" class="bu-btn bu-btn--ghost bu-btn--sm" onClick=${() => ctl.requestClose()}>${tr('ed.cancel')}</button>
+      ${ctl.mode === 'characters' ? null : html`<button type="button" class="bu-btn bu-btn--ghost bu-btn--sm ao-editbar__cancel" aria-label=${tr('ed.cancel')} title=${tr('ed.cancel')} onClick=${() => ctl.requestClose()}><${Icon} name="x" /><span class="ao-editbar__action-label">${tr('ed.cancel')}</span></button>
       <span class="ao-editbar__save" title=${saveBlocked ?? tr('ed.saveTitle')}>
-        <button type="button" class="bu-btn bu-btn--primary bu-btn--sm" disabled=${!!saveBlocked || ctl.saving} aria-describedby=${saveBlocked ? 'ao-save-why' : null} onClick=${() => ctl.save()}>${ctl.saving ? tr('ed.saving') : tr('ed.save')}</button>
+        <button type="button" class="bu-btn bu-btn--primary bu-btn--sm" aria-label=${tr('ed.save')} title=${tr('ed.save')} disabled=${!!saveBlocked || ctl.saving} aria-describedby=${saveBlocked ? 'ao-save-why' : null} onClick=${() => ctl.save()}><${Icon} name="save" /><span class="ao-editbar__action-label">${ctl.saving ? tr('ed.saving') : tr('ed.save')}</span></button>
       </span>
-      ${saveBlocked && ctl.dirty ? html`<span id="ao-save-why" class="ao-sr">${saveBlocked}</span>` : null}
+      ${saveBlocked && ctl.dirty ? html`<span id="ao-save-why" class="ao-sr">${saveBlocked}</span>` : null}`}
       <div class="ao-sr" aria-live="polite">${ctl.announcement}</div>
     </div>
     <${Modal} ctl=${ctl} />`;
@@ -539,14 +648,31 @@ function MoreMenu({ items }) {
   const btn = useRef(null);
   const menu = useRef(null);
   const focusItem = (i) => { const els = menu.current?.querySelectorAll('[role=menuitem]'); if (els?.length) els[(i + els.length) % els.length].focus(); };
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return undefined;
-    requestAnimationFrame(() => focusItem(0));
+    const element=menu.current;
+    element.showPopover?.();
+    const position=()=>{
+      const anchor=btn.current.getBoundingClientRect(),box=element.getBoundingClientRect();
+      const css=getComputedStyle(element),gutter=parseFloat(css.getPropertyValue('--bu-space-2')) || 8,gap=parseFloat(css.getPropertyValue('--bu-space-1')) || 4;
+      const w=window.visualViewport?.width || innerWidth,h=window.visualViewport?.height || innerHeight;
+      element.style.left=`${Math.max(gutter,Math.min(anchor.right-box.width,w-gutter-box.width))}px`;
+      element.style.top=`${Math.max(gutter,Math.min(anchor.bottom+gap+box.height<=h-gutter?anchor.bottom+gap:anchor.top-gap-box.height,h-gutter-box.height))}px`;
+    };
+    position();focusItem(0);
+    const escape=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}};
+    document.addEventListener('keydown',escape,true);
+    window.addEventListener('resize',position);
+    window.visualViewport?.addEventListener('resize',position);
     const away = (e) => { if (!menu.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
     document.addEventListener('pointerdown', away, true);
-    return () => document.removeEventListener('pointerdown', away, true);
+    return () => {
+      document.removeEventListener('pointerdown',away,true);document.removeEventListener('keydown',escape,true);
+      window.removeEventListener('resize',position);window.visualViewport?.removeEventListener('resize',position);
+      if(element.hidePopover && element.matches(':popover-open'))element.hidePopover();
+    };
   }, [open]);
-  const close = (refocus = true) => { setOpen(false); if (refocus) requestAnimationFrame(() => btn.current?.focus()); };
+  const close = (refocus = true) => { setOpen(false); if (refocus && btn.current?.isConnected) btn.current.focus({preventScroll:true}); };
   function onMenuKey(e) {
     const els = [...menu.current.querySelectorAll('[role=menuitem]')];
     const i = els.indexOf(document.activeElement);
@@ -556,9 +682,9 @@ function MoreMenu({ items }) {
     else if (e.key === 'Tab') close(false);
   }
   return html`<span class="ao-more">
-    <button type="button" class="bu-btn bu-btn--ghost bu-btn--sm" ref=${btn} aria-haspopup="menu" aria-expanded=${open ? 'true' : 'false'} aria-controls="ao-more-menu"
-      onClick=${() => setOpen(!open)} onKeyDown=${(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); } }}>${tr('ed.more')}<${Icon} name="chevron" /></button>
-    ${open ? html`<ul class="ao-more__menu" id="ao-more-menu" role="menu" aria-label=${tr('ed.more')} ref=${menu} onKeyDown=${onMenuKey}>
+    <button type="button" class="bu-btn bu-btn--ghost bu-btn--sm" ref=${btn} aria-label=${tr('ed.more')} title=${tr('ed.more')} aria-haspopup="menu" aria-expanded=${open ? 'true' : 'false'} aria-controls="ao-more-menu"
+      onClick=${() => setOpen(!open)} onKeyDown=${(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); } }}><span class="ao-more__label">${tr('ed.more')}</span><${Icon} name="chevron" /></button>
+    ${open ? html`<ul class="ao-more__menu" id="ao-more-menu" popover="manual" role="menu" aria-label=${tr('ed.more')} ref=${menu} onKeyDown=${onMenuKey}>
       ${items.map((it) => html`<li key=${it.id} role="none"><button type="button" role="menuitem" class="ao-more__item" tabindex="-1"
         onClick=${() => { setOpen(false); btn.current?.focus(); it.run(); }}>${it.icon ? html`<${Icon} name=${it.icon} />` : null}${it.label}</button></li>`)}
     </ul>` : null}
@@ -568,50 +694,58 @@ function MoreMenu({ items }) {
 // ---------- side panel ----------
 function EditorPanel({ ctl }) {
   useCtl(ctl);
-  return html`<div class="ao-editpanel">
+  return html`<div class="ao-editpanel" data-mode=${ctl.mode}>
     ${ctl.mode === 'layout' ? html`<${LayoutPanel} ctl=${ctl} />` : ctl.mode === 'characters' ? html`<${CharactersPanel} ctl=${ctl} />` : html`<${ThemePanel} ctl=${ctl} />`}
   </div>`;
 }
 
 function LayoutPanel({ ctl }) {
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState('all');
-  const idx = ctl.index;
-  const all = [...idx.furniture.values()];
-  const cats = ['poste', 'assise', 'rangement', 'plante', 'equipement', 'mur', 'sol', 'deco'].filter((c) => all.some((f) => f.category === c));
-  const norm = (s) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const list = all.filter((f) => (cat === 'all' || f.category === cat) && (!q || norm(furnitureLabel(f)).includes(norm(q)) || norm(f.label).includes(norm(q))));
+  if(ctl.narrow && ctl.placing) return html`<section class="ao-placement-panel" aria-label=${tr('ed.palette')}>
+    <p class="bu-field__hint">${msg('ed.touchPlace')}</p>
+    ${ctl.placing.check && !ctl.placing.check.ok ? html`<p class="ao-reason" role="status">${ctl.placing.check.reason}</p>`:null}
+    <div class="ao-placement-panel__actions"><${Button} label=${msg('ed.catalogue')} onPress=${()=>{ctl.cancelPlace();ctl.mobilePreview=false;ctl.emit();}} />
+    <${Button} label=${msg('ed.placeConfirm')} variant="primary" disabled=${!ctl.placing.check?.ok} onPress=${()=>ctl.commitPlace()} /></div>
+  </section>`;
+  if(ctl.narrow && ctl.mobilePreview) return html`<section class="ao-placement-panel">
+    <${Button} label=${msg('ed.catalogue')} icon=${html`<${Icon} name="back" />`} onPress=${()=>{ctl.mobilePreview=false;ctl.emit();}} />
+    <ul class="ao-placed">${ctl.draft.items.map(it=>html`<li data-placed=${it.uid}><${Button} class="bu-filter__item" pressed=${ctl.selected===it.uid} label=${itemName(ctl.draft,ctl.index,it.uid)} onPress=${()=>ctl.select(it.uid)} /></li>`)}</ul>
+  </section>`;
+  const idx = ctl.index,vm=ctl.paletteVM;
+  const list=(vm?.itemIds || []).map(id=>idx.furniture.get(id)).filter(Boolean);
   const draft = ctl.draft;
   const errors = ctl.errors;
   const desks = homeStations(draft, idx).length;
   const placing = ctl.placing;
   return html`
-    <section aria-labelledby="ao-pal-title">
-      <h3 class="ao-panel__title" id="ao-pal-title">${tr('ed.furniture')}</h3>
-      <div class="bu-input-group ao-search"><${Icon} name="search" />
-        <input class="bu-input bu-input--sm" type="search" placeholder=${tr('ed.search')} aria-label=${tr('ed.search')} value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
-      <nav class="bu-filter ao-cats" aria-label=${tr('ed.categories')}>
-        <ul class="bu-filter__list">
-          <li><button type="button" class="bu-filter__item" aria-current=${String(cat === 'all')} onClick=${() => setCat('all')}>${tr('ed.all')} <span class="bu-count">${all.length}</span></button></li>
-          ${cats.map((c) => html`<li><button type="button" class="bu-filter__item" aria-current=${String(cat === c)} onClick=${() => setCat(c)}>${CATEGORY_LABEL(c)} <span class="bu-count">${all.filter((f) => f.category === c).length}</span></button></li>`)}
-        </ul>
-      </nav>
-      <ul class="ao-palette" aria-label=${tr('ed.palette')}>
+    <section class="ao-layout-panel" aria-labelledby="ao-pal-title">
+      <div class="ao-palette-controls">
+      <div class="ao-palette-heading"><h3 class="ao-panel__title" id="ao-pal-title">${tr('ed.furniture')}</h3>
+        ${ctl.narrow ? html`<${Button} label=${msg('ed.viewOffice')} size="sm" onPress=${()=>{ctl.mobilePreview=true;ctl.emit();}} />`:null}</div>
+      <${TextInput} type="search" label=${tr('ed.search')} placeholder=${ctl.narrow?msg('ed.searchShort'):tr('ed.search')} maxLength=${120} value=${ctl.paletteSearch}
+        onValueChange=${search=>void ctl.loadPalette({search})} />
+      ${vm ? html`<${Select} testId="editor-category" label=${labelVM(vm.categories.label)} value=${ctl.paletteCategory}
+        options=${vm.categories.options.map(option=>({value:option.id,label:labelVM(option.label)+' · '+option.count}))}
+        onValueChange=${category=>void ctl.loadPalette({category})} />` : null}
+      ${ctl.paletteError ? html`<p role="status">${tr('shop.loadFailed')} <${Button} label=${tr('office.retry')} onPress=${()=>void ctl.loadPalette()} /></p>` : null}
+      </div>
+      <ul class="ao-palette" data-category=${vm?.categoryId} data-search=${vm?.search} aria-busy=${String(!!ctl.paletteLoading)} aria-label=${tr('ed.palette')}>
         ${list.map((f) => html`<li>
           <button type="button" class="bu-card bu-card--interactive ao-tile" aria-pressed=${String(placing?.asset === f.id && !placing.moveUid)}
             aria-label=${tr('ed.tileAria', { item: furnitureLabel(f), size: f.placement === 'wall' ? tr('ed.wallSize', { n: f.wall?.length ?? 1 }) : `${f.footprint.w} × ${f.footprint.d}` })}
-            onPointerDown=${(e) => ctl.dragFromPalette(e, f.id)}
+            data-palette-item=${f.id}
+            onClick=${ctl.narrow?()=>ctl.startPlace(f.id,{via:'touch'}):undefined}
+            onPointerDown=${ctl.narrow?undefined:(e) => ctl.dragFromPalette(e, f.id)}
             onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctl.startPlace(f.id, { via: 'keyboard' }); } }}>
             <span class="ao-tile__img"><img src=${resolveUrl(f.image, ctl.o.assetBase)} alt="" draggable="false" /></span>
             <span class="ao-tile__label">${furnitureLabel(f)}</span>
             <span class="ao-tile__fp">${f.placement === 'wall' ? tr('ed.wallShort', { n: f.wall?.length ?? 1 }) : `${f.footprint.w} × ${f.footprint.d}`}</span>
           </button></li>`)}
-        ${list.length ? null : html`<li class="ao-empty">${tr('ed.noMatch')}</li>`}
+        ${list.length ? null : html`<li class="ao-empty">${ctl.paletteLoading ? tr('office.loading') : tr('ed.noMatch')}</li>`}
       </ul>
       ${placing && placing.check && !placing.check.ok ? html`<p class="ao-reason" role="status"><${Icon} name="alert" />${placing.check.reason}</p>` : null}
       ${placing && placing.via === 'keyboard' ? html`<p class="bu-field__hint">${tr('ed.keysHelp')}</p>` : null}
     </section>
-    <section aria-labelledby="ao-placed-title">
+    <section class="ao-layout-placed" aria-labelledby="ao-placed-title">
       <h3 class="ao-panel__title" id="ao-placed-title">${tr('ed.placedTitle')} <span class="bu-count">${draft.items.length} / ${MAX_ITEMS}</span></h3>
       <p class="bu-field__hint">${tr('ed.capacity', { n: desks })} ${tr('ed.selectionHelp')}</p>
       <ul class="ao-placed">
@@ -631,12 +765,86 @@ function Problems({ errors }) {
   </section>`;
 }
 
+function CharacterPreview({ ctl, person }) {
+  const source = avatarSource(ctl.index, person.look, ctl.o.assetBase);
+  return html`<${CharacterAvatar} source=${source} size=${40} />`;
+}
+
+/** A presentation-only replacement for the map while one character is inspected. */
+function CharacterStage({ ctl }) {
+  useCtl(ctl);
+  const rows = ctl.agentRows();
+  const row = ctl.mode === 'characters' && ctl.characterMobileView === 'detail'
+    ? rows.find(person => person.id === ctl.agentSel) : null;
+  const look = row && sharedLooksOf(ctl.draft, ctl.index, rows)[row.id];
+  useLayoutEffect(() => {
+    if (!row || !look) return;
+    const stage = ctl.scene.stage, map = ctl.scene.viewport, controls = ctl.scene.controls;
+    const previous = [map, controls].map(node => node.inert);
+    stage.dataset.characterPreview = '';
+    map.inert = controls.inert = true;
+    return () => {
+      delete stage.dataset.characterPreview;
+      [map, controls].forEach((node, i) => { node.inert = previous[i]; });
+    };
+  }, [ctl, !!row, !!look]);
+  if (!row || !look) return null;
+  const text = tr('setup.preview', { name: row.name, character: characterSummary(ctl.index, { look }), pose: tr('setup.pose.' + ctl.previewState) });
+  return html`<div class="ao-stage-character" data-agent=${row.id} data-character=${look.character} data-variant=${look.variant ?? ''} data-accessories=${look.accessories.join(',')} data-pose=${ctl.previewState}>
+    <${Figure} index=${ctl.index} look=${look} pose=${ctl.previewState} assetBase=${ctl.o.assetBase} label=${text} cls="ao-stage-character__figure" />
+  </div>`;
+}
+
+function characterSummary(index, person) {
+  const character = index.characters.get(person.look?.character);
+  if (!character) return '';
+  const variant = character.variants?.find(item => item.id === person.look?.variant);
+  return variant ? `${labelOf(character, 'character')} · ${labelOf(variant, 'variant')}` : labelOf(character, 'character');
+}
+
+// Fit the initial viewport to complete rendered rows. All VM rows remain in
+// the scroller; this measures presentation geometry only.
+function CharacterList({ children, busy, live = false }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const list = ref.current, frame = list.parentElement;
+    const measure = () => {
+      const available = frame.clientHeight - list.previousElementSibling.offsetHeight;
+      let height = 0;
+      for (const row of list.querySelectorAll('.ao-character-row')) {
+        const bottom = row.offsetTop + row.offsetHeight + 1;
+        if (bottom <= available - 1) height = Math.max(height, bottom);
+      }
+      list.style.height = height > 0 ? Math.floor(height) + 'px' : '100%';
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    if (list.firstElementChild) observer.observe(list.firstElementChild);
+    return () => observer.disconnect();
+  }, [children]);
+  return html`<div ref=${ref} class="ao-characters__list" aria-busy=${busy ? 'true' : 'false'} aria-live=${live ? 'polite' : undefined}>${children}</div>`;
+}
+
 function CharactersPanel({ ctl }) {
   const idx = ctl.index;
   const rows = ctl.agentRows();
   const row = rows.find((r) => r.id === ctl.agentSel) ?? rows[0];
+  if (!row) return html`<div class="ao-characters ao-characters--empty">
+    <section aria-labelledby="ao-agents-title">
+      <div class="ao-characters__fixed">
+        <div class="ao-characters__heading"><h3 class="ao-panel__title" id="ao-agents-title">${tr('ed.agents')}</h3></div>
+        <label class="bu-input-group ao-search"><${Icon} name="search" /><${TextInput} type="search" value=${ctl.characterSearch} placeholder=${msg('office.characters.search')} label=${msg('office.characters.search')} onValueChange=${value => ctl.setCharacterSearch(value)} /></label>
+      </div>
+      <${CharacterList} busy=${ctl.characterLoading} live=${true}>
+        ${ctl.characterLoading ? html`<p class="ao-characters__empty ao-characters__state" role="status"><span class="bu-compact-progress" aria-hidden="true"></span>${msg('office.characters.loading')}</p>` : null}
+        ${ctl.characterError ? html`<p class="bu-banner bu-banner--warning ao-characters__state" role="alert">${msg('office.characters.loadError')} <${Button} label=${tr('office.retry')} size="sm" class="bu-btn bu-btn--sm" onPress=${() => ctl.loadCharacters()} /></p>` : null}
+        ${!ctl.characterLoading && !ctl.characterError ? html`<p class="ao-characters__empty">${labelVM(ctl.characterVM?.emptyLabel || { key: 'office.characters.emptyOffice' })}</p>` : null}
+      </${CharacterList}>
+    </section>
+    <div class="ao-characters__actions"><${Button} label=${tr('ed.cancel')} variant="ghost" class="bu-btn bu-btn--ghost" onPress=${() => ctl.requestClose()} /></div>
+  </div>`;
   const { rule } = ctl.ruleView(row);
-  const isDefault = !!row.isDefault;
   const desks = homeStations(ctl.draft, idx);
   // Generic desks are numbered in layout order so the options can be told apart (« Poste de travail 3 »).
   const stationOption = (u) => {
@@ -646,8 +854,7 @@ function CharactersPanel({ ctl }) {
     const same = desks.filter((d) => ctl.draft.items.find((i) => i.uid === d)?.asset === it?.asset);
     return same.length > 1 ? tr('ed.stationNumbered', { item: name, n: same.indexOf(u) + 1 }) : name;
   };
-  const nameOfRow = (r) => (r.isDefault ? r.sourceName : displayName({ id: r.id, role: r.role, name: ctl.draft.agents.find((a) => a.agentId === r.id)?.name, sourceName: r.sourceName }, { primaryName: ctl.o.primaryName ?? null }));
-  const shownName = nameOfRow(row);
+  const shownName = row.name;
   // O6: looks are edited with the setup step's component (one implementation for setup and the editor). Its value
   // is each row's effective look in the draft; a change is written to that row's rule, so undo, save, 409 and the
   // shared validator work as for any other edit. Explicit gear equal to the colour's defaults is stored as « default ».
@@ -662,35 +869,66 @@ function CharactersPanel({ ctl }) {
       ctl.patchAgent(r, { character: want.character, variant: want.variant, accessories }, null);
     }
   }
-  const agents = rows.map((r) => ({ id: r.id, name: nameOfRow(r), primary: canonicalRole(r.role) === 'primary' && !r.isDefault, group: r.isDefault ? 'defaults' : 'agents',
-    note: r.isDefault ? tr('ed.defaultRule') : r.live === false ? tr('ed.seenRecently', { role: ROLE_LABEL(r.role) }) : ROLE_LABEL(r.role) }));
-  return html`
+  const agents = rows.map((r) => ({ id: r.id, name: r.name, primary: r.primary, note: labelVM(r.roleLabel) }));
+  const mobileDetail = matchMedia(NARROW).matches && ctl.characterMobileView === 'detail';
+  return html`<div class=${'ao-characters' + (mobileDetail ? ' ao-characters--mobile-detail' : '')}>
     <section aria-labelledby="ao-agents-title">
-      <h3 class="ao-panel__title" id="ao-agents-title">${tr('ed.agents')}</h3>
-      <${SetupCharacters} embedded agents=${agents} value=${value} onChange=${onLooks} manifest=${ctl.vm.manifest} assetBase=${ctl.o.assetBase}
-        selected=${row.id} onSelect=${(id) => { ctl.agentSel = id; ctl.emit(); }} />
-      ${isDefault ? html`<p class="bu-field__hint">${tr('ed.defaultRuleHelp')}</p>` : null}
+      <div class="ao-characters__fixed">
+        <div class="ao-characters__heading"><h3 class="ao-panel__title" id="ao-agents-title">${tr('ed.agents')}</h3></div>
+        <label class="bu-input-group ao-search"><${Icon} name="search" /><${TextInput} type="search" value=${ctl.characterSearch} placeholder=${msg('office.characters.search')} label=${msg('office.characters.search')} onValueChange=${value => ctl.setCharacterSearch(value)} /></label>
+      </div>
+      <${CharacterList} busy=${ctl.characterLoading}>
+        ${ctl.characterError ? html`<p class="bu-banner bu-banner--warning" role="alert">${msg('office.characters.loadError')} <${Button} label=${tr('office.retry')} size="sm" class="bu-btn bu-btn--sm" onPress=${() => ctl.loadCharacters()} /></p>` : null}
+        ${(ctl.characterVM?.groups || []).map(group => html`<section key=${group.id ?? 'independent'} class="ao-character-group" aria-label=${labelVM(group.label)}>
+          <h4 class="ao-character-group__title">${labelVM(group.label)} <span class="bu-count">${labelVM(group.countLabel)}</span></h4>
+          <ul class="ao-character-list">${group.rows.map(person => html`<li key=${person.id}><${Button} label=${`${person.name} · ${labelVM(person.stateLabel || { key: 'agentState.unknown' })}`} variant="ghost" size="md" class="ao-character-row" pressed=${person.id === row.id} onPress=${() => ctl.selectCharacter(person.id)}>
+            <span class="ao-character-row__portrait">${(value[person.id] || person.look)?.character ? html`<${CharacterPreview} ctl=${ctl} person=${{ ...person, look: value[person.id] || person.look }} />` : null}</span>
+            <span class="ao-character-row__copy"><strong>${person.name}</strong><span class="ao-character-row__look">${characterSummary(idx, { ...person, look: value[person.id] || person.look })}</span>
+              <span class="ao-character-row__meta">${person.runtime || ''}${person.runtime && person.stateLabel ? ' · ' : ''}${labelVM(person.stateLabel || { key: 'agentState.unknown' })}</span></span>
+            ${person.runtimeBrand ? html`<${ConnectorBrandMark} brand=${person.runtimeBrand} className="ao-character-row__brand" label=${person.runtime} />` : null}
+            <span class="ao-character-row__check" aria-hidden="true">${person.id === row.id ? '✓' : ''}</span>
+          </${Button}></li>`)}</ul></section>`)}
+        ${!ctl.characterLoading && !ctl.characterVM?.count ? html`<p class="ao-characters__empty ao-characters__state">${labelVM(ctl.characterVM?.emptyLabel || { key: 'office.characters.emptyOffice' })}</p>` : null}
+      </${CharacterList}>
     </section>
-    <section class="ao-agentcard" aria-labelledby="ao-agentcard-title">
-      <h3 class="ao-panel__title" id="ao-agentcard-title">${tr('ed.detailsOf', { name: shownName })}</h3>
-      <label class="bu-field"><span class="bu-field__label">${tr('ed.name')}</span>
-        <input class="bu-input" maxlength=${NAME_MAX} disabled=${isDefault} placeholder=${isDefault ? tr('ed.namePlaceholderDefault') : displayName({ id: row.id, role: row.role, sourceName: row.sourceName }, { primaryName: ctl.o.primaryName ?? null })} value=${rule.name ?? ''}
-          onChange=${(e) => ctl.patchAgent(row, { name: e.target.value.trim() || null }, tr('ed.nameSet'))} />
-        <span class="bu-field__hint">${tr('ed.nameHelp')}</span></label>
-      <label class="bu-field"><span class="bu-field__label">${tr('ed.role')}</span>
-        <input class="bu-input" maxlength=${ROLE_MAX} placeholder=${ROLE_LABEL(row.role)} value=${rule.role ?? ''}
-          onChange=${(e) => ctl.patchAgent(row, { role: e.target.value.trim() || null }, tr('ed.roleSet'))} /></label>
-      <label class="bu-field"><span class="bu-field__label">${tr('ed.station')}</span>
-        <select class="bu-select" disabled=${isDefault} value=${rule.station ?? 'auto'}
-          onFocus=${() => { ctl.highlight = rule.station && rule.station !== 'auto' ? rule.station : null; ctl.mark(); }}
-          onBlur=${() => { ctl.highlight = null; ctl.mark(); }}
-          onChange=${(e) => { ctl.highlight = e.target.value === 'auto' ? null : e.target.value; ctl.patchAgent(row, { station: e.target.value }, tr('ed.stationSet')); }}>
-          <option value="auto">${tr('ed.stationAuto')}</option>
-          ${desks.map((u) => { const taken = ctl.draft.agents.find((a) => a.station === u && a.agentId !== row.id); const label = stationOption(u); return html`<option value=${u} disabled=${!!taken}>${taken ? tr('ed.stationTaken', { station: label }) : label}</option>`; })}
-        </select>
-        <span class="bu-field__hint">${isDefault ? tr('ed.stationHelpDefault') : tr('ed.stationHelp')}</span></label>
+    <section key=${row.id} class="ao-agentcard ao-characters__detail" aria-labelledby="ao-agentcard-title">
+      <${Button} label=${msg('office.characters.back')} icon=${html`<${Icon} name="back" />`} variant="ghost" class="bu-btn bu-btn--ghost ao-characters__back" onPress=${() => ctl.showCharacterList()} />
+      <div class="ao-character-profile">
+        <span class="ao-character-profile__portrait">${(value[row.id] || row.look)?.character ? html`<${CharacterPreview} ctl=${ctl} person=${{ ...row, look: value[row.id] || row.look }} />` : null}</span>
+        <div class="ao-character-profile__copy"><h3 class="ao-panel__title" id="ao-agentcard-title">${shownName}</h3>
+          <p>${row.runtime || ''}${row.runtime && row.stateLabel ? ' · ' : ''}${labelVM(row.stateLabel || { key: 'agentState.unknown' })}</p></div>
+        ${row.runtimeBrand ? html`<${ConnectorBrandMark} brand=${row.runtimeBrand} label=${row.runtime} />` : null}
+      </div>
+      <h3 class="ao-panel__title ao-characters__desktop-title" aria-hidden="true">${tr('ed.detailsOf', { name: shownName })}</h3>
+      <${SetupCharacters} embedded externalSelection=${true} previewPose=${ctl.previewState} onPreviewPoseChange=${pose => { ctl.previewState = pose; ctl.emit(); }} previewInStage=${ctl.characterMobileView === 'detail'} agents=${[agents.find(a => a.id === row.id)]} value=${{ [row.id]: value[row.id] }} onChange=${result => onLooks({ ...value, ...result })} manifest=${ctl.vm.manifest} assetBase=${ctl.o.assetBase} />
+      <details class="ao-character-identity"><summary>${msg('office.characters.identityAndPlacement')}</summary><div class="ao-character-identity__fields">
+        <label class="bu-field"><span class="bu-field__label">${tr('ed.name')}</span>
+          <${TextInput} maxLength=${NAME_MAX} placeholder=${row.name} value=${rule.name ?? ''}
+            onValueChange=${(value) => ctl.patchAgent(row, { name: value || null }, null)}
+            onBlur=${(event) => ctl.patchAgent(row, { name: event.currentTarget.value.trim() || null }, tr('ed.nameSet'))} />
+          <span class="bu-field__hint">${tr('ed.nameHelp')}</span></label>
+        <label class="bu-field"><span class="bu-field__label">${tr('ed.role')}</span>
+          <${TextInput} maxLength=${ROLE_MAX} placeholder=${labelVM(row.roleLabel)} value=${rule.role ?? ''}
+            onValueChange=${(value) => ctl.patchAgent(row, { role: value || null }, null)}
+            onBlur=${(event) => ctl.patchAgent(row, { role: event.currentTarget.value.trim() || null }, tr('ed.roleSet'))} /></label>
+        <label class="bu-field"><span class="bu-field__label">${tr('ed.station')}</span>
+          <${Select} value=${rule.station ?? 'auto'} options=${[
+            { value: 'auto', label: tr('ed.stationAuto') },
+            ...desks.map((u) => { const taken = ctl.draft.agents.find((a) => a.station === u && a.agentId !== row.id); const label = stationOption(u); return { value: u, label: taken ? tr('ed.stationTaken', { station: label }) : label, disabled: !!taken }; }),
+          ]}
+            onFocus=${() => { ctl.highlight = rule.station && rule.station !== 'auto' ? rule.station : null; ctl.mark(); }}
+            onBlur=${() => { ctl.highlight = null; ctl.mark(); }}
+            onChange=${(e) => { ctl.highlight = e.target.value === 'auto' ? null : e.target.value; ctl.patchAgent(row, { station: e.target.value }, tr('ed.stationSet')); }} />
+          <span class="bu-field__hint">${tr('ed.stationHelp')}</span></label>
+      </div></details>
     </section>
-    <${Problems} errors=${ctl.errors} />`;
+    ${ctl.mode === 'characters' ? html`<div class="ao-characters__actions">
+      <div class="ao-characters__status"><${Problems} errors=${ctl.errors} /></div>
+      <${Button} label=${tr('ed.cancel')} variant="ghost" class="bu-btn bu-btn--ghost" onPress=${() => ctl.requestClose()} />
+      <span class="ao-editbar__save" title=${ctl.errors[0]?.message || (!ctl.dirty ? tr('ed.nothingToSave') : tr('ed.saveTitle'))}><${Button} label=${ctl.saving ? tr('ed.saving') : tr('ed.save')} variant="primary" class="bu-btn bu-btn--primary" disabled=${!!ctl.errors.length || !ctl.dirty || ctl.saving} busy=${ctl.saving} onPress=${() => ctl.save()}>
+        <span>${ctl.saving ? tr('ed.saving') : tr('ed.save')}${ctl.dirty ? html`<span class="ao-save-dot" aria-hidden="true"></span>` : null}</span></${Button}></span>
+    </div>` : null}
+  </div>`;
 }
 
 function ThemePanel({ ctl }) {
@@ -706,9 +944,10 @@ function ThemePanel({ ctl }) {
   return html`
     <section aria-labelledby="ao-theme-title">
       <h3 class="ao-panel__title" id="ao-theme-title">${tr('ed.themeTitle')}</h3>
-      <div class="bu-segmented" role="group" aria-label=${tr('ed.themeGroup')}>
+      ${ctl.narrow ? html`<${Button} label=${msg(ctl.mobilePreview?'ed.hideOffice':'ed.viewOffice')} onPress=${()=>{ctl.mobilePreview=!ctl.mobilePreview;ctl.emit();}} />
+        <${Select} label=${tr('ed.themeGroup')} value=${mode} options=${['auto','day','night'].map(id=>({value:id,label:tr('office.theme.'+id)}))} onValueChange=${set} />` : html`<div class="bu-segmented" role="group" aria-label=${tr('ed.themeGroup')}>
         ${['auto', 'day', 'night'].map((id) => [id, tr(`office.theme.${id}`)]).map(([id, label]) => html`<button type="button" class="bu-segmented__opt" aria-pressed=${String(mode === id)} onClick=${() => set(id)}>${label}</button>`)}
-      </div>
+      </div>`}
       ${t.mode === 'auto' ? html`<div class="ao-night">
         <label class="bu-field"><span class="bu-field__label">${tr('ed.nightFrom')}</span><input class="bu-input" type="time" value=${t.nightFrom ?? '19:00'} onChange=${(e) => ctl.patchTheme({ nightFrom: e.target.value }, tr('ed.nightFromSet', { time: e.target.value }))} /></label>
         <label class="bu-field"><span class="bu-field__label">${tr('ed.nightTo')}</span><input class="bu-input" type="time" value=${t.nightTo ?? '07:00'} onChange=${(e) => ctl.patchTheme({ nightTo: e.target.value }, tr('ed.nightToSet', { time: e.target.value }))} /></label>
@@ -740,6 +979,7 @@ function ItemToolbar({ ctl }) {
   if (!at) return null;
   const canRotate = (f.orientations ?? ['sw']).length > 1;
   return html`<div class="ao-itembar" role="toolbar" aria-label=${tr('ed.itemActions', { item: itemName(ctl.draft, ctl.index, uid) })} style=${`left:${Math.round(at.x)}px;top:${Math.round(at.y)}px`}>
+    ${ctl.narrow ? html`<${Button} class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" label=${msg('ed.move')} iconOnly icon=${html`<${Icon} name="back" />`} size="sm" variant="ghost" onPress=${()=>{ctl.mobilePreview=false;ctl.startPlace(it.asset,{via:'touch',moveUid:uid});}} />`:null}
     <span class="ao-sr">${itemName(ctl.draft, ctl.index, uid)}</span>
     <span title=${canRotate ? tr('ed.rotateKey') : tr('ed.oneOrientation')}><button type="button" class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${tr('ed.rotate')} disabled=${!canRotate} onClick=${() => ctl.rotate(uid)}><${Icon} name="rotate" /></button></span>
     <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${tr('ed.duplicate')} title=${tr('ed.duplicate')} onClick=${() => ctl.duplicate(uid)}><${Icon} name="copy" /></button>
@@ -769,7 +1009,7 @@ function Modal({ ctl }) {
     const opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : ctl.saveOpener;
     const behind = [ctl.scene.stage, ctl.o.asideHost, ctl.o.barHost.querySelector('.ao-editbar')].filter(Boolean);
     for (const n of behind) n.inert = true;
-    requestAnimationFrame(() => first.current?.focus());
+    requestAnimationFrame(() => (first.current?.querySelector('select') || first.current)?.focus());
     return () => {
       for (const n of behind) n.inert = false;
       if (opener && opener.isConnected && !ctl.closed) opener.focus();
@@ -781,6 +1021,8 @@ function Modal({ ctl }) {
       <div class="bu-modal__header"><div style="flex:1"><h2 class="bu-modal__title" id="ao-modal-title">${title}</h2>${desc ? html`<p class="bu-modal__desc">${desc}</p>` : null}</div>
         <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost" aria-label=${tr('ed.close')} onClick=${() => ctl.closeModal()}><${Icon} name="x" /></button></div>
       `} foot=${html`<div class="bu-modal__footer">${footer}</div>`}>${body}</${Frame}></div>`;
+  if(m.kind==='floors') return frame(tr('office.floor.picker'),null,html`<div ref=${first} tabindex="-1"><${Select} testId="editor-floor-dialog" label=${tr('office.floor.picker')} value=${ctl.o.floorId}
+    options=${ctl.o.floors.map(floor=>({value:floor.id,label:labelVM(floor.label)}))} onValueChange=${value=>void ctl.changeFloor(value)} /></div>`,null);
   if (m.kind === 'leave') return frame(tr('ed.leave.title'), tr('ed.leave.desc'), null, html`
     <button type="button" class="bu-btn bu-btn--ghost" ref=${first} onClick=${() => ctl.closeModal()}>${tr('ed.stay')}</button>
     <button type="button" class="bu-btn bu-btn--danger" onClick=${() => ctl.confirmLeave()}>${tr('ed.quit')}</button>`);
@@ -824,21 +1066,23 @@ function Modal({ ctl }) {
  * @param {(result: {saved: boolean, layout: object, revision: number}) => void} [opts.onExit]
  */
 export async function openEditor(opts) {
+  await loadStyles();
   const ctl = new EditorController(opts);
-  await ctl.init();
+  if(await ctl.init() === false) return ctl;
+  if(opts.isCurrent && !opts.isCurrent()) {ctl.close({saved:false});return ctl;}
   const overlay = document.createElement('div');
   overlay.className = 'ao-editoverlay';
   opts.scene.stage.append(overlay);
+  mountedEditors.set(opts.barHost,ctl);mountedEditors.set(opts.asideHost,ctl);
   render(html`<${EditorBar} ctl=${ctl} />`, opts.barHost);
   render(html`<${EditorPanel} ctl=${ctl} />`, opts.asideHost);
-  render(html`<${ItemToolbar} ctl=${ctl} />`, overlay);
+  render(html`<${ItemToolbar} ctl=${ctl} /><${CharacterStage} ctl=${ctl} />`, overlay);
   // The opener becomes hidden while editing; start at the editor's mode controls
   // instead of leaving keyboard users to traverse the entire furniture catalogue.
-  opts.barHost.querySelector('.bu-segmented__opt[aria-pressed="true"]:not(:disabled)')?.focus({ preventScroll: true });
+  opts.barHost.querySelector('.ao-editbar__modepick select,.bu-segmented__opt[aria-pressed="true"]:not(:disabled)')?.focus({ preventScroll: true });
   const origExit = opts.onExit;
   ctl.o.onExit = (r) => {
-    render(null, opts.barHost);
-    render(null, opts.asideHost);
+    for(const host of [opts.barHost,opts.asideHost]) if(mountedEditors.get(host)===ctl){render(null,host);mountedEditors.delete(host);}
     render(null, overlay);
     overlay.remove();
     origExit?.(r);

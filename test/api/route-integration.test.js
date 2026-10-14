@@ -14,7 +14,7 @@ const {requestId}=require('../../src/api/v2/errors');
 const {auditMiddleware}=require('../../src/api/audit');
 const {openSse}=require('../helpers/sse-client');
 let hash;before(async()=>{hash=await hashPassword('synthetic-integration-password');});
-async function fixture(t,{settings=null,externalAccess=null,readonly=false,fullApp=false,apiOnly=true}={}) {
+async function fixture(t,{settings=null,externalAccess=null,orchestratorTeams=null,readonly=false,fullApp=false,apiOnly=true}={}) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ao-router-integration-')),store=openStore({dir,instance:'test',ownerName:'Historical admin',log:()=>{}});
   const admin=store.users.createOwner({email:'admin@example.invalid',personId:store.owner.id,passwordHash:hash});
   const ctx={userId:admin.id,authGeneration:0,requestId:'req_integration',authorize:()=>{}};
@@ -33,13 +33,13 @@ async function fixture(t,{settings=null,externalAccess=null,readonly=false,fullA
       tokenGate:createAgentTokenGate({tokens:store.tokens,audit:row=>store.audit.append(row),allowedAgent:()=>engine.primaryAgent()?.id,personOf:id=>store.persons.list().find(p=>p.links.agentId===id)?.id}),
       mountRoutes:a=>{
         require('../../src/ops/health').mountHealth(a,()=>({mode:'app',store,engine}));auth.mountRoutes(a,{isGwConnected:()=>true});links.mount(a);
-        api=mountV2(a,{auth,store,engine,cfg,runtime:null,settings,setup,externalAccess,enforceAuthorization:true});
+        api=mountV2(a,{auth,store,engine,cfg,runtime:null,settings,setup,externalAccess,orchestratorTeams,enforceAuthorization:true});
       }});
   } else {
     app=trackMounts(express());app.use(requestId,express.json());
     // Exercise real audit behavior; this legacy fixture checks core route registrations only.
     app.use((req,res,next)=>audit(req,res,next));
-    api=mountV2(app,{auth,store,engine,cfg,runtime:null,settings,externalAccess,enforceAuthorization:true});
+    api=mountV2(app,{auth,store,engine,cfg,runtime:null,settings,externalAccess,orchestratorTeams,enforceAuthorization:true});
   }
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+server.address().port;
@@ -90,6 +90,26 @@ test('actual HTTP topics, actor-specific me, command VMs, conflicts and revision
     const comment=await f.request('POST','/api/v'+version+'/projects/'+vm.id+'/comments',{body:'Un commentaire'});assert.equal(comment.status,201);assert.equal(comment.json.data.result.comment.author.id,f.user.person_id);assert.equal(comment.json.data.result.comment.editable,true);
     const adminThread=await f.request('GET','/api/v'+version+'/views/projects/'+vm.id+'/comments',undefined,f.admin);assert.equal(adminThread.status,200);assert.equal(adminThread.json.data.items[0].deletable,false);
     const deniedDelete=await f.request('DELETE','/api/v'+version+'/projects/'+vm.id+'/comments/'+comment.json.data.result.comment.id,{},f.admin);assert.equal(deniedDelete.status,403);
+  }
+});
+test('session projection collapses repeated canonical event ids before v2 and v3 collection validation',async t=>{
+  const f=await fixture(t),session=f.engine.sessions()[0],at=Date.now();
+  const senderInfo={kind:'agent',id:'agent:main:main',name:null,runtime:'openclaw',channel:null,avatarHint:null};
+  const trace={sessionKey:session.key,fetchedAt:at,messageCount:2,window:{from:0,to:2},events:[
+    {id:'ev:0:0',kind:'user',at,senderInfo,text:'First child completion',sender:null,truncated:false},
+    {id:'ev:0:0',kind:'user',at:at+1,senderInfo,text:'Redelivered child completion',sender:null,truncated:false},
+  ]};
+  const ingested=f.engine.ingestCanonical('transcript',trace,{key:session.key});
+  assert.equal(ingested.ok,true,JSON.stringify(ingested.issues));
+  f.engine.setReads({transcript:async()=>({ok:true})});
+  const {VM_SCHEMAS,VM_SCHEMAS_V3}=require('../../src/api/v2/vm/schemas'),validate=require('../../src/schema').validate;
+  for(const version of [2,3]){
+    const response=await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(session.key)}`);
+    assert.equal(response.status,200,JSON.stringify(response.json));
+    const vm=response.json.data;
+    assert.deepEqual(vm.events.map(event=>event.id),['ev:0:0']);
+    assert.equal(vm.events[0].text,'First child completion');
+    assert.equal(validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).session,vm).ok,true);
   }
 });
 test('actual RBAC Office responses withhold session overflow from readers without logs in v2 and v3',async t=>{
@@ -265,6 +285,25 @@ test('management readonly denials make no mutation and are audited',async t=>{
   const body={expectedRevision:0,name:'Read only',permissions:[]};
   const response=await f.request('POST','/api/v3/roles',confirmed('roles.create','new-role',body.name,body),f.admin);assert.equal(response.status,403);assert.equal(response.json.error.code,'readonly');
   assert.equal(f.store.rbac.roles().length,3);assert.equal(f.store.audit.recent().find(row=>row.command==='roles.create').outcome,'rejected');
+});
+test('team project comments require teams.read and mask inaccessible ids as not found',async t=>{
+  const {projectId}=require('../../src/projects/orchestrator-teams');
+  const teamId='team:comment-permission-fixture', id=projectId(teamId), now=Date.now();
+  const orchestratorTeams={hasTeamStore:true,teamCapabilities:{teamTasks:{read:true,write:false}},
+    getSnapshot:()=>({revision:1,observedAt:now,team:{id:teamId,label:'Private fixture team',status:'active',observedAt:now},
+      hosts:[],orchestrators:[],agents:[],identityLinks:[],members:[],tasks:[],reviews:[]})};
+  const f=await fixture(t,{orchestratorTeams});
+  for(const version of [2,3]) {
+    const visible=await f.request('GET',`/api/v${version}/views/projects/${encodeURIComponent(id)}/comments`,undefined,f.admin);
+    assert.equal(visible.status,200,JSON.stringify(visible));assert.deepEqual(visible.json.data.items,[]);
+    const hidden=await f.request('GET',`/api/v${version}/views/projects/${encodeURIComponent(id)}/comments`,undefined,f.user);
+    const unknown=await f.request('GET',`/api/v${version}/views/projects/${encodeURIComponent(projectId('team:unknown'))}/comments`,undefined,f.user);
+    assert.equal(hidden.status,404,JSON.stringify(hidden));assert.equal(hidden.status,unknown.status);
+    const stream=openSse(f.base,`/api/v${version}/stream?topics=${encodeURIComponent('comments:'+id)}`,{cookie:f.cookie(f.user)});
+    f.cleanup.push(()=>stream.close());
+    const hello=await stream.next(frame=>frame.event==='hello');
+    assert.ok(hello.data.rejected.some(row=>row.topic==='comments:'+encodeURIComponent(id)),JSON.stringify(hello.data));
+  }
 });
 test('management HTTP audit failure rolls back the mutation, and Settings exposes only the current session proof',async t=>{
   const raw=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../docs/architecture/examples/settings/settings-vm.json'),'utf8')).data;

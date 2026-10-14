@@ -205,7 +205,7 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
 }
 
 function projectOfficePlacement(office, { layout, index, projectOccupantId = id => id, now = Date.now(), tracker = null, planningOccupants = null,
-  homeAssignments = null, rememberHomeAssignments = null } = {}) {
+  homeAssignments = null, rememberHomeAssignments = null, engine = null, canReadSessions = false } = {}) {
   if (!office || !Array.isArray(office.occupants) || !layout || !index) return office;
   const { planOfficePlacement } = require('../../../engine/office/placement');
   // Limited views can hide session rows. Plan their visible subset against the
@@ -279,8 +279,10 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
       const host = office.occupants.find(candidate => candidate.id === office.visitIntent?.hostId);
       return { ...row, floorId: host?.floorId || place?.floorId || row.floorId, stationUid: null, standingPoint: null };
     }
+    const sharedTarget = !canReadSessions && population.find(candidate => candidate.id === row.id)?.sceneTarget;
+    const target = sharedTarget?.kind === 'visit' ? sharedTarget : place?.sceneTarget;
     return place ? { ...row, floorId: place.floorId, stationUid: place.stationUid,
-      standingPoint: place.standingPoint || null, homeTarget: place.homeTarget ?? null, sceneTarget: place.sceneTarget ?? null,
+      standingPoint: place.standingPoint || null, homeTarget: place.homeTarget ?? null, sceneTarget: target ?? null,
       activity: place.activity ?? null, sceneTravel: place.sceneTravel ?? null } : row;
   });
   const byFloor = new Map();
@@ -310,7 +312,8 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
       count: finalPeople.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: finalPeople.filter(row => ['idle', 'offline'].includes(row.state)).length } },
       idleCount: finalPeople.filter(row => ['idle', 'offline'].includes(row.state)).length, layout: floor.layout, capacity: floor.capacity };
   }).sort((a, b) => a.order - b.order);
-  return { ...rosterOffice, rosterFloors, unseatedTeams: visibleUnseatedTeams };
+  return require('../../../engine/office/communication').projectCommunication(
+    { ...rosterOffice, rosterFloors, unseatedTeams: visibleUnseatedTeams }, { engine, index, layout, now, canReadSessions });
 }
 
 function exactMemberLayoutRule(layout, row) {

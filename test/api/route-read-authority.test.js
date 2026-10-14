@@ -61,6 +61,75 @@ test('switch-on logs readers and admins edit agent rules; withheld users preserv
     f.set('logs','read');
   }
 });
+test('Store navigation requires Store and Office read authority on both API versions',async t=>{
+  const f=await fixture(t);
+  for(const version of [2,3]) {
+    const route='/api/v'+version+'/views/office/store';
+    for(const method of ['GET','HEAD']) {
+      assert.equal((await f.request(method,route)).status,200);
+      assert.equal((await f.request(method,route,undefined,null)).status,401,'cookie required before navigation projection');
+    }
+    for(const resource of ['store','office']) {
+      f.set(resource,'none');
+      for(const method of ['GET','HEAD'])assert.equal((await f.request(method,route)).status,403,resource+' denied for '+method);
+      f.set(resource,'read');assert.equal((await f.request('GET',route)).status,200);
+    }
+  }
+});
+test('Palette navigation requires Office read only, including implicit HEAD, on both API versions',async t=>{
+  const f=await fixture(t);
+  f.set('store','none');
+  for(const version of [2,3]) {
+    const route='/api/v'+version+'/views/office/palette';
+    for(const method of ['GET','HEAD']) {
+      assert.equal((await f.request(method,route)).status,200,'Office reader can browse without Store permission');
+      assert.equal((await f.request(method,route,undefined,null)).status,401);
+    }
+    f.set('office','none');
+    for(const method of ['GET','HEAD'])assert.equal((await f.request(method,route)).status,403);
+    f.set('office','read');
+    const allowed=await f.request('GET',route);assert.equal(allowed.status,200);
+    assert.ok(allowed.json.data.itemIds.length>0,'authorized request returns the actual registered catalogue');
+  }
+});
+test('office character inventory requires office read authority on both API versions',async t=>{
+  const f=await fixture(t);
+  for(const version of [2,3]) {
+    const path='/api/v'+version+'/views/office/characters';
+    const allowed=await f.request('GET',path,undefined,f.user);
+    assert.equal(allowed.status,200,JSON.stringify(allowed));
+    assert.equal(allowed.json.data.scope,'office');
+    f.set('office','none');
+    const denied=await f.request('GET',path);
+    assert.equal(denied.status,403,JSON.stringify(denied));
+    f.set('office','read');
+  }
+});
+test('office character inventory sanitizes legacy seen rows and withholds session timing without logs access',async t=>{
+  const f=await fixture(t);
+  f.set('logs','none');
+  const insert=f.store.db.prepare('INSERT INTO office_agents_seen (occupant_id,role,name,last_seen_at) VALUES (?,?,?,?)');
+  const seenAt=Date.now();
+  // Simulate pre-redaction persisted rows written by older versions, without automatic_look_json.
+  insert.run('conversation:legacy-chat','conversation','Private team 123456789012345678',seenAt);
+  insert.run('agent:legacy-token','agent','Claude key: sk-ant-api03-abcdefghijklmnop',seenAt);
+  for(const version of [2,3]) {
+    const res=await f.request('GET',`/api/v${version}/views/office/characters?scope=all`);
+    assert.equal(res.status,200,JSON.stringify(res));
+    const rows=res.json.data.groups.flatMap(group=>group.rows);
+    assert.ok(!rows.some(row=>row.id.includes('legacy-chat')||row.name==='Conversation'),'private conversation rows are omitted without logs access');
+    assert.ok(!JSON.stringify(rows).includes('123456789012345678'));
+    assert.ok(!JSON.stringify(rows).includes('sk-ant-api03-abcdefghijklmnop'));
+    assert.ok(rows.every(row=>row.lastSeenAt===null),'no session timing is exposed without logs access');
+    const data=res.json.data;
+    assert.equal(data.count,rows.length,'inventory count is recomputed after authorization');
+    assert.equal(data.countLabel.params.n,rows.length);
+    for(const group of data.groups) {
+      assert.equal(group.count,group.rows.length,'group count excludes filtered private rows');
+      assert.equal(group.countLabel.params.n,group.rows.length);
+    }
+  }
+});
 test('switch-on flow history and candidate scans require explicit read authority and remain available to authorized users',async t=>{
   const f=await fixture(t),job=f.engine.cronJobs()[0];assert.ok(job);
   const pulls=[];let scans=0;

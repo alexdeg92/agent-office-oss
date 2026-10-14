@@ -1,0 +1,54 @@
+{
+  "data": {
+    "scope": "office",
+    "search": "",
+    "count": 2,
+    "countLabel": { "key": "office.characters.count.other", "params": { "n": 2 } },
+    "groups": [
+      {
+        "id": "team-atlas",
+        "label": { "key": "team.named", "params": { "name": "Atlas" } },
+        "count": 2,
+        "countLabel": { "key": "office.characters.count.other", "params": { "n": 2 } },
+        "rows": [
+          {
+            "id": "agent:atlas",
+            "role": "agent",
+            "name": "Atlas",
+            "primary": false,
+            "runtime": "OpenClaw",
+            "runtimeBrand": { "monogram": "OC", "color": "#b54d31", "logo": "assets/connectors/openclaw.svg", "providerName": "OpenClaw" },
+            "state": "working",
+            "stateLabel": { "key": "agentState.working" },
+            "roleLabel": { "key": "occupantRole.agent" },
+            "look": { "character": "fen", "variant": "moss", "accessories": [] },
+            "automaticLook": { "character": "fen", "variant": "moss", "accessories": [] },
+            "groupId": "team-atlas",
+            "order": 0,
+            "inOffice": true,
+            "lastSeenAt": 1791223180000
+          },
+          {
+            "id": "subagent:scout",
+            "role": "subagent",
+            "name": "Scout",
+            "primary": false,
+            "runtime": "OpenClaw",
+            "runtimeBrand": { "monogram": "OC", "color": "#b54d31", "logo": "assets/connectors/openclaw.svg", "providerName": "OpenClaw" },
+            "state": "idle",
+            "stateLabel": { "key": "agentState.idle" },
+            "roleLabel": { "key": "occupantRole.subagent" },
+            "look": { "character": "filo", "variant": "sage", "accessories": [] },
+            "automaticLook": { "character": "filo", "variant": "sage", "accessories": [] },
+            "groupId": "team-atlas",
+            "order": 1,
+            "inOffice": true,
+            "lastSeenAt": 1791223100000
+          }
+        ]
+      }
+    ],
+    "emptyLabel": { "key": "office.characters.emptyOffice" }
+  },
+  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [] }
+}

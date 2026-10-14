@@ -1,7 +1,7 @@
 // SettingsVM is runtime-agnostic. Secrets live only in the current in-memory draft.
 export const SETTINGS_TABS = ['diagnostic', 'agents', 'connexion', 'access', 'instance', 'apparence', 'compte', 'users', 'roles'];
 export const settingsTab = value => value==='integrations' ? 'connexion' : SETTINGS_TABS.includes(value) ? value : 'diagnostic';
-export const diagnosticTab = section => ({runtimes: 'agents', connection: 'connexion', account: 'compte'})[section] || settingsTab(section);
+export const diagnosticTab = section => ({runtimes: 'agents', connection: 'connexion', account: 'compte', office: 'instance'})[section] || settingsTab(section);
 export const valuesOf = fields => Object.fromEntries(Object.entries(fields || {}).filter(([,f]) => f && typeof f === 'object' && 'value' in f).map(([k,f]) => [k, f.value]));
 export const activeRuntime = vm => vm.runtimes.find(r => r.selected)?.id || vm.runtimes.find(r => r.supported)?.id || '';
 export const agentRuntimeSelection = (vm, value) => value === 'all' ? 'all'
@@ -28,7 +28,7 @@ export function initialDrafts(vm) {
   return {
     agents: agentDraft(vm),
     connexion: {adapter: activeRuntime(vm), names:Object.fromEntries(vm.runtimes.map(r=>[r.id,r.name])), values: Object.fromEntries(vm.runtimes.map(r => [r.id, Object.fromEntries(r.fields.filter(f => !f.writeOnly).map(f => [f.id, r.values[f.id]?.value ?? '']))])), secrets: {}, enabled: Object.fromEntries(vm.runtimes.map(r => [r.id, r.enabled ?? r.selected])), herdrEnabled: !!vm.herdr?.enabled},
-    instance: {instance: vm.instance ? valuesOf(vm.instance) : null, network: vm.network ? {mode: vm.network.mode.value, port: vm.network.port.value, publicUrl: vm.network.publicUrl.value || ''} : null},
+    instance: {instance: vm.instance ? valuesOf(vm.instance) : null, office: vm.office ? valuesOf(vm.office) : null, network: vm.network ? {mode: vm.network.mode.value, port: vm.network.port.value, publicUrl: vm.network.publicUrl.value || ''} : null},
     compte: {owner: {displayName: owner.displayName?.value ?? '', email: owner.email?.value ?? ''}, password: '', confirmation: ''},
   };
 }

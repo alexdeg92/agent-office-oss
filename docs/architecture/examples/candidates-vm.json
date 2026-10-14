@@ -2,11 +2,11 @@
   "data": {
     "scannedAt": 1791223100000,
     "candidates": [
-      { "id": "gh:alexdeg92/agent-office-oss", "key": "gh:alexdeg92/agent-office-oss", "name": "Agent Office", "summary": "Tableau de bord de Timmy.",
+      { "id": "gh:example-org/example-repo", "key": "gh:example-org/example-repo", "name": "Agent Office", "summary": "Tableau de bord des agents.",
         "suggestedStatus": "in-progress", "confidence": "high", "reason": "Activité dans les 14 derniers jours.",
         "labels": ["perso"],
         "sources": [
-          { "kind": "github", "label": "alexdeg92/agent-office-oss", "ref": { "owner": "alexdeg92", "repo": "agent-office-oss" } },
+          { "kind": "github", "label": "example-org/example-repo", "ref": { "owner": "example-org", "repo": "example-repo" } },
           { "kind": "workspace", "label": "dev/project/agent-office-redesign", "ref": { "path": "dev/project/agent-office-redesign" } },
           { "kind": "sessionGroup", "label": "Agent Office", "ref": { "by": "group", "groupId": "Agent Office", "name": "Agent Office" } }
         ],

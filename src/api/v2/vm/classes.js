@@ -4,7 +4,7 @@
 const { defineEntity } = require('../../../model/entity');
 const { VM_SCHEMAS, VM_SCHEMAS_V3 } = require('./schemas');
 
-const NAMES = { settings: 'SettingsVM', setup: 'SetupVM', meta: 'MetaVM', me: 'MeVM', office: 'OfficeVM', orchestrators: 'OrchestratorsVM', teams: 'TeamsVM', chat: 'ChatVM', flows: 'FlowListVM', flow: 'FlowDetailVM', access: 'AccessVM',
+const NAMES = { officePalette:'OfficePaletteVM', officeStore: 'OfficeStoreVM', settings: 'SettingsVM', setup: 'SetupVM', meta: 'MetaVM', me: 'MeVM', office: 'OfficeVM', orchestrators: 'OrchestratorsVM', teams: 'TeamsVM', chat: 'ChatVM', flows: 'FlowListVM', flow: 'FlowDetailVM', access: 'AccessVM',
   interlocutor: 'InterlocutorVM', logs: 'LogsPageVM', session: 'SessionVM', skills: 'SkillListVM', skill: 'SkillDetailVM', health: 'HealthVM',
   projects: 'BoardVM', project: 'ProjectVM', history: 'HistoryPageVM', candidates: 'CandidatesVM', layout: 'LayoutVM', layoutRevision: 'LayoutRevisionVM', prefs: 'UiPrefs', comments: 'CommentThreadVM' };
 

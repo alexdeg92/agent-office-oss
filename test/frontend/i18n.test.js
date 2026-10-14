@@ -1,5 +1,7 @@
 // LabelRef rendering (BRIEF, PM on frontend-02): params are raw data; a param may itself be a LabelRef.
 import { test } from 'node:test';
+import '../../public/v2/office/characters-messages.js';
+import '../../public/v2/office/store-labels.js';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { setMeta, t, label, msg, rich, setLang, negotiate, messageKeys } from '../../public/v2/i18n.js';

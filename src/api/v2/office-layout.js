@@ -47,6 +47,7 @@ function structural(d) {
   // office-dev O8 (operations.md §4): presence { seenMinutes: integer 0–1440 }, optional
   if (d.presence !== undefined && !(obj(d.presence) && Object.keys(d.presence).every((k) => k === 'seenMinutes')
     && Number.isInteger(d.presence.seenMinutes) && d.presence.seenMinutes >= 0 && d.presence.seenMinutes <= 1440)) return 'presence';
+  if (d.communicationMeetingPercent !== undefined && (!Number.isInteger(d.communicationMeetingPercent) || d.communicationMeetingPercent < 0 || d.communicationMeetingPercent > 100)) return 'communicationMeetingPercent';
   if (d.idleRelocationMinutes !== undefined && (!Number.isInteger(d.idleRelocationMinutes) || d.idleRelocationMinutes < 1 || d.idleRelocationMinutes > 1440)) return 'idleRelocationMinutes';
   if (d.floors !== undefined) {
     if (!Array.isArray(d.floors) || d.floors.length > 128) return 'floors';
@@ -58,7 +59,7 @@ function structural(d) {
           && ((Number.isInteger(i.x) && Number.isInteger(i.y)) || (typeof i.wall === 'string' && Number.isInteger(i.offset))))) return 'floors';
     }
   }
-  for (const k of Object.keys(d)) if (!['version', 'manifestVersion', 'room', 'theme', 'items', 'agents', 'presence', 'idleRelocationMinutes', 'floors'].includes(k)) return k;
+  for (const k of Object.keys(d)) if (!['version', 'manifestVersion', 'room', 'theme', 'items', 'agents', 'presence', 'idleRelocationMinutes', 'communicationMeetingPercent', 'floors'].includes(k)) return k;
   return null;
 }
 
@@ -74,18 +75,32 @@ function asVersion(data, version) {
   return out;
 }
 // agentsSeen rows are stored canonical (R22-04; older rows may be 2.x): served in the caller's names
-function seenAs(x, version) {
+function canonicalSeen(x) {
   const lr = rulesLib();
   const id = lr.canonicalRuleId(x.id) || x.id;
   const role = lr.canonicalRole(x.role) || x.role;
+  const safe = {
+    id, role,
+    name: redactChatIdentity(x.name, { id, role, maxLength: 120 }) || 'Agent',
+    lastSeenAt: Number.isFinite(Number(x.lastSeenAt)) ? Number(x.lastSeenAt) : null,
+  };
+  // Older persisted rows predate automatic_look_json. Keep the optional schema field absent.
+  if (x.automaticLook && typeof x.automaticLook === 'object') safe.automaticLook = x.automaticLook;
+  return safe;
+}
+function seenAs(x, version) {
+  const lr = rulesLib();
+  const row = canonicalSeen(x);
+  const id = row.id;
+  const role = row.role;
   const teamAlias = { 'team-host': 'agent', host: 'agent', 'team-member': 'subagent', member: 'subagent' };
   if (version === 3) {
     const allowed = new Set(['primary', 'agent', 'subagent', 'scheduled', 'direct', 'group', 'conversation', 'session']);
     const safeRole = allowed.has(role) ? role : teamAlias[role] || 'agent';
     const safeId = id.replace(/^([a-z-]+):/, (match, prefix) => (teamAlias[prefix] || prefix) + ':');
-    return Object.assign({}, x, { id: safeId, role: safeRole, name: redactChatIdentity(x.name, { id, role, maxLength: 120 }) || 'Agent' });
+    return Object.assign({}, row, { id: safeId, role: safeRole });
   }
-  return Object.assign({}, x, { id: P2.occupantId(id), role: P2.occupantRole(role), name: redactChatIdentity(x.name, { id, role, maxLength: 120 }) || 'Agent' });
+  return Object.assign({}, row, { id: P2.occupantId(id), role: P2.occupantRole(role) });
 }
 
 function validate(data, hideAgents = false, previous = null) {
@@ -106,9 +121,17 @@ function validate(data, hideAgents = false, previous = null) {
  * @param {object} p  { r, store, topics, authed, guard, ok, actorOf, actorRefOf, now }
  *   actorOf(ref) → ActorVM; actorRefOf(req) → the ActorRef stored with a save
  */
-function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actorRefOf, timeZone = TZ, now = () => Date.now() }) {
+function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actorRefOf, timeZone = TZ, now = () => Date.now(), officeTimings = null }) {
   const off = officeDefaults();
   const active = () => store.office.active(() => off.layout);
+  const relocationMinutes = () => officeTimings?.().idleRelocationMinutes ?? 15;
+  // Kept in the layout wire shape for older clients, but persisted only in Settings.
+  const layoutViewData = data => ({ ...data, idleRelocationMinutes: relocationMinutes() });
+  const withoutLegacyRelocation = data => {
+    if (!data || !Object.hasOwn(data, 'idleRelocationMinutes')) return data;
+    const { idleRelocationMinutes, ...rest } = data; // eslint-disable-line no-unused-vars
+    return rest;
+  };
   const selectedFloor = value => {
     if (value == null) return null;
     const id = floorId(value);
@@ -125,13 +148,13 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
   };
   const vmOf = (version = 2, selected = null) => {
     const l = active(), t = now();
-    const data = selected ? floorLayout(l.data, off.index, selected) : l.data;
+    const data = layoutViewData(selected ? floorLayout(l.data, off.index, selected) : l.data);
     return {
       allowNoDesk: selected != null && floorKind(selected) !== 'office',
       layout: { id: l.id, name: l.name, revision: l.revision, updatedAt: l.updatedAt, updatedBy: actorOf(l.updatedBy), data: asVersion(data, version) },
       manifest: off.manifest,
       theme: resolveTheme(data.theme, t, typeof timeZone === 'function' ? timeZone() : timeZone),
-      default: { data: asVersion(selected ? floorLayout(off.layout, off.index, selected) : off.layout, version) },
+      default: { data: asVersion(layoutViewData(selected ? floorLayout(off.layout, off.index, selected) : off.layout), version) },
       revisions: store.office.revisions(l.id).map((x) => ({ id: String(x.revision), revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy) })),
       agentsSeen: store.office.seenRecent(t).map((x) => seenAs(x, version)),
     };
@@ -147,7 +170,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     const changes=[current.theme,...(current.floors??[]).map(f=>f.layout.theme)].map(theme=>resolveTheme(theme,t,zone).nextChangeAt).filter(at=>at!=null);
     const next=changes.length?Math.min(...changes):null;
     if (next == null) return;
-    themeTimer = setTimeout(() => { topics.invalidate('layout'); topics.invalidate('office'); armTheme(); }, Math.max(1000, Math.min(next - now() + 500, 2 ** 31 - 1)));
+    themeTimer = setTimeout(() => { topics.invalidate('layout'); topics.invalidate('office'); topics.invalidate('office-scope'); armTheme(); }, Math.max(1000, Math.min(next - now() + 500, 2 ** 31 - 1)));
     if (themeTimer.unref) themeTimer.unref();
   };
   armTheme();
@@ -172,7 +195,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     if (selected && data.floors !== undefined) throw invalid('data.floors', 'unexpected-field');
     let preserved = data;
     if (req.apiVersion !== 3 && data.presence === undefined && stored?.presence) preserved = { ...preserved, presence: stored.presence };
-    if (data.idleRelocationMinutes === undefined && stored?.idleRelocationMinutes !== undefined) preserved = { ...preserved, idleRelocationMinutes: stored.idleRelocationMinutes };
+    if (data.communicationMeetingPercent === undefined && stored?.communicationMeetingPercent !== undefined) preserved = { ...preserved, communicationMeetingPercent: stored.communicationMeetingPercent };
     if (!selected && data.floors === undefined && stored?.floors) preserved = { ...preserved, floors: stored.floors };
     const normalized = asVersion(preserved, 3);
     // A projected empty array means withheld. Preserve the current private rules on saves/restores.
@@ -187,9 +210,9 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     return b;
   };
   const commit = (req, res, data, selected = null) => {
-    const out = store.office.save({ expectedRevision: req.body.expectedRevision, data, actor: actorRefOf(req) });
+    const out = store.office.save({ expectedRevision: req.body.expectedRevision, data: withoutLegacyRelocation(data), actor: actorRefOf(req) });
     if (!out.ok) throw new ApiError('conflict', { current: { revision: out.current.revision, vm: vmOf(req.apiVersion, selected) } });
-    topics.invalidate('layout'); topics.invalidate('office'); armTheme();
+    topics.invalidate('layout'); topics.invalidate('office'); topics.invalidate('office-scope'); armTheme();
     ok(res, { ok: true, result: null, revision: out.layout.revision, vm: vmOf(req.apiVersion, selected) });
   };
 
@@ -203,7 +226,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     const x = store.office.revision(active().id, n);
     if (!x) throw new ApiError('not_found');
     const selected = requestFloor(req);
-    ok(res, { revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy), data: asVersion(selected ? floorLayout(x.data, off.index, selected) : x.data, req.apiVersion) }, null, 'layoutRevision');
+    ok(res, { revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy), data: asVersion(layoutViewData(selected ? floorLayout(x.data, off.index, selected) : x.data), req.apiVersion) }, null, 'layoutRevision');
   });
   r.put('/office/layout', authed, guard('store'), (req, res) => {
     const b = body(req, ['expectedRevision', 'data', 'floorId']);
@@ -216,7 +239,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     const b = body(req, ['expectedRevision', 'theme', 'floorId']);
     const selected = requestFloor(req), stored = active().data;
     const local = selected ? floorLayout(stored, off.index, selected) : stored;
-    const next = asVersion(Object.assign({}, local, { theme: b.theme }), 3);
+    const next = asVersion(withoutLegacyRelocation(Object.assign({}, local, { theme: b.theme })), 3);
     const data = selected ? mergeFloor(stored, selected, next) : next;
     validate(data,!!req.authorize&&!store.policy.can(req.user,'logs','read'),active().data);
     commit(req, res, data, selected);
@@ -237,4 +260,4 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
   return { active, refreshSettings: armTheme, close: () => clearTimeout(themeTimer) };
 }
 
-module.exports = { mountOfficeLayout, resolveTheme, structural, asVersion };
+module.exports = { mountOfficeLayout, resolveTheme, structural, asVersion, canonicalSeen };

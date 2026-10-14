@@ -26,7 +26,8 @@ module.exports = function settingsSchema(s, LabelRef) {
   const source = s.enumOf(['env', 'file', 'default']);
   const value = s.union([str(), s.number(), bool()]).nullable();
   const field = obj({ value, source, editable: bool(), reason: label() });
-  const section = s.enumOf(['diagnostic', 'runtimes', 'connection', 'integrations', 'instance', 'account']);
+  const officeField = obj({ value, source, editable: bool(), reason: label(), label: LabelRef, help: LabelRef, minimum: s.int().min(1).max(1440), maximum: s.int().min(1).max(1440) });
+  const section = s.enumOf(['diagnostic', 'runtimes', 'connection', 'integrations', 'instance', 'office', 'account']);
   const definition = obj({ id: str(), label: LabelRef, type: s.enumOf(['text', 'textarea', 'url', 'secret', 'number', 'boolean', 'select']), control: s.enumOf(['chips']).optional(),
     required: bool(), writeOnly: bool(), options: s.array(obj({ value: str(), label: LabelRef })) });
   const connectionField = obj({ value, source, editable: bool(), reason: label(), tokenSet: bool().optional() });
@@ -37,6 +38,7 @@ module.exports = function settingsSchema(s, LabelRef) {
     reauth: obj({ expiresAt: nn().nullable(), windowMs: s.literal(300000) }),
     restart: obj({ supported: bool(), command: nstr(), reason: label() }).nullable(),
     instance: obj({ name: field, locale: field, timeZone: field }).nullable(),
+    office: obj({ finishedSessionWindowMinutes: officeField, agentPresenceWindowMinutes: officeField, idleRelocationMinutes: officeField }).nullable(),
     owner: obj({ revision: nn().optional(), displayName: field, email: field, passwordChangeEnabled: bool(), reason: label() }),
     network: obj({ mode: field, host: field, port: field, publicUrl: field, cookieSecure: field,
       active: obj({ mode: str(), host: str(), port: s.int().min(1).max(65535), publicUrl: nstr(), cookieSecure: bool() }), restartRequired: bool() }).nullable(),

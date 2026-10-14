@@ -1,7 +1,6 @@
-// English for the server's label dictionary (MetaVM.labels, src/i18n/fr.js), until the server ships its own `en`
-// (ADR-001: en arrives with contract 3.0). Proposed to architect as src/i18n/en.js; this copy then goes away.
-// test/frontend/i18n.test.js fails when a server key has no English here, so the two stay in step.
+// English fallback for backend LabelRefs when MetaVM uses another locale.
 export const LABELS_EN = {
+  "settings.office.managed": "This duration is set by the server configuration.",
   "office.activity.idle": "On a break",
   "office.activity.gym": "At the gym",
   "office.activity.smoke": "On a break",

@@ -3,7 +3,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const {planOfficePlacement}=require('../../src/engine/office/placement.js');
-const {floorId,floorLayout,saveFloor,validateFloors}=require('../../src/engine/office/floors.js');
+const {floorId,floorLayout,saveFloor,validateFloors,placementToken}=require('../../src/engine/office/floors.js');
 const R=require('../../src/engine/office/layout-rules.js');
 const {buildGrid,isWalkable}=require('../../src/engine/office/pathfind.js');
 // The production caller supplies an art index; the planner does not import any browser module.
@@ -13,6 +13,14 @@ const index={manifest,rooms:new Map(manifest.rooms.map(x=>[x.id,x])),furniture:n
 const base=JSON.parse(fs.readFileSync(path.join(__dirname,'../../design/office/layout.example.json')));
 const member=(n,parentId=null)=>({id:'agent:foreign-'+n,role:'agent',parentId,teamId:parentId?'canonical-team':null,groupId:'roster-group',rosterOrder:100-n,state:'working',name:'Same name',context:'Retained',provider:'foreign-provider'});
 const team=n=>Array.from({length:n},(_,i)=>member(i,i?'agent:foreign-0':null));
+function deskPressureLayout(source,count){
+  const isStation=item=>!!index.furniture.get(item.asset)?.station;
+  const desks=source.items.filter(item=>index.furniture.get(item.asset)?.station?.kind==='desk').slice(0,count);
+  const result=structuredClone(source);result.items=source.items.filter(item=>!isStation(item)).concat(desks);
+  for(let i=desks.length;i<count;i++)result.items.push({uid:`pressure-desk-${i+1}`,asset:'desk',x:9,y:1,orientation:'sw'});
+  let filler=0;while(result.items.length<R.MAX_ITEMS)result.items.push({uid:`pressure-rug-${filler++}`,asset:'rug',x:0,y:0});
+  return result;
+}
 const freeze=v=>{if(v&&typeof v==='object'){Object.freeze(v);for(const x of Object.values(v))freeze(x);}return v;};
 
 test('backend placements preserve input identity/order/parent/team/status and seat PM plus nine atomically',()=>{
@@ -71,6 +79,139 @@ test('automatic team floors and stations are stable across poll order and a fres
   // Simulate a process restart by constructing a new planner with only the persisted contract.
   const restarted = planOfficePlacement({index,layout:base,occupants:[...teams].sort((a,b)=>b.id.localeCompare(a.id)),homeAssignments:structuredClone(pins)});
   assert.deepEqual(signature(restarted.placements), expected);
+});
+
+test('an idle pinned home desk is preserved with slack and lent only under full-floor pressure',()=>{
+  const layout=floorLayout(base,index,'1');
+  const occupants=Array.from({length:8},(_,i)=>({id:i?'agent:borrower-'+i:'main',role:i?'agent':'primary',
+    parentId:null,teamId:null,state:i?'working':'idle',stateSince:1000+i}));
+  // Five workers plus two idle occupants leave one spare desk. The primary's
+  // authored station stays reserved while active workers use the other desks.
+  const slack=R.resolveOccupants(layout,index,occupants.slice(0,7).map((row,i)=>({...row,state:i===0||i===6?'idle':'working'})));
+  const idlePrimary=slack.find(row=>row.id==='main');
+  assert.equal(idlePrimary.stationUid,'st-timmy');
+  assert.equal(slack.some(row=>row.id!=='main'&&row.stationUid==='st-timmy'),false);
+
+  // Seven active workers fill all seven desks, so one may borrow the idle
+  // primary's home. The home target itself remains pinned and is persisted so
+  // the primary reclaims it as soon as it becomes active.
+  const pressured=R.resolveOccupants(layout,index,occupants);
+  const primary=pressured.find(row=>row.id==='main');
+  assert.notEqual(primary.stationUid,'st-timmy');
+  assert.equal(primary._homeWant,'st-timmy');
+  const borrower=pressured.find(row=>row.stationUid==='st-timmy');
+  assert.ok(borrower&&borrower.id!=='main');
+  const saved=Object.fromEntries(pressured.map(row=>[row.id,Object.hasOwn(row,'_homeWant')?row._homeWant:row.stationUid]).filter(([,station])=>station));
+  const returned=R.resolveOccupants(layout,index,occupants.map(row=>({...row,state:'working'})),{stationAssignments:saved});
+  assert.equal(returned.find(row=>row.id==='main').stationUid,'st-timmy');
+  assert.notEqual(returned.find(row=>row.id===borrower.id).stationUid,'st-timmy');
+});
+
+test('a non-primary returning home owner beats an earlier-sorting borrower with a stale duplicate saved pin',()=>{
+  const layout=floorLayout(base,index,'1');
+  const owner='agent:z-home-owner', borrower='agent:a-borrower';
+  const occupants=[
+    {id:owner,role:'agent',state:'idle',stateSince:1},
+    {id:borrower,role:'agent',state:'working',stateSince:2},
+    ...Array.from({length:6},(_,i)=>({id:`agent:worker-${i}`,role:'agent',state:'working',stateSince:3+i})),
+  ];
+  // Reproduce the stale collision security found: an older build saved the
+  // temporarily borrowed station under both the owner and earlier-sorting
+  // borrower. The inactive owner's home wins while the duplicate is repaired.
+  const duplicatePins=Object.fromEntries(occupants.map(row=>[row.id,'st-3']));
+  const pressured=R.resolveOccupants(layout,index,occupants,{stationAssignments:duplicatePins});
+  const ownerWhileAway=pressured.find(row=>row.id===owner);
+  assert.equal(ownerWhileAway._homeWant,'st-3');
+  const borrowerWhileAway=pressured.find(row=>row.id===borrower);
+  assert.notEqual(borrowerWhileAway.stationUid,'st-3','borrower duplicate pin cannot steal an inactive owner home');
+  const saved=Object.fromEntries(pressured.map(row=>[row.id,Object.hasOwn(row,'_homeWant')?row._homeWant:row.stationUid]).filter(([,station])=>station));
+  assert.equal(saved[owner],'st-3');
+  assert.notEqual(saved[borrower],'st-3');
+
+  const returned=R.resolveOccupants(layout,index,occupants.map(row=>({...row,state:'working',stateSince:100})),{stationAssignments:saved});
+  assert.equal(returned.find(row=>row.id===owner).stationUid,'st-3','returning non-primary owner reclaims its saved home');
+  assert.notEqual(returned.find(row=>row.id===borrower).stationUid,'st-3');
+});
+
+test('full placement lends a non-primary home under pressure, persists ownership, and reclaims it',()=>{
+  const owner='agent:z-home-owner', borrower='agent:a-borrower';
+  const occupants=Array.from({length:8},(_,i)=>({id:!i?owner:i===1?borrower:`agent:worker-${i}`,role:'agent',teamId:'team:z-home-owner',
+    parentId:i?owner:null,state:i?'working':'idle',stateSince:i+1}));
+  // Keep the atomic team on one seven-desk floor. The eight-member unit uses
+  // the floor's overflow placement while the constrained generated template
+  // prevents a spare overflow floor from hiding the pressure case.
+  const pressureLayout=deskPressureLayout(base,7),key=placementToken('team:z-home-owner');
+  const homeAssignments={[key]:{floorId:'1',stations:{[placementToken(owner)]:'st-3',[placementToken(borrower)]:'st-3'}}};
+  const away=planOfficePlacement({index,layout:pressureLayout,occupants,homeAssignments});
+  const awayOwner=away.placements.find(row=>row.id===owner);
+  assert.equal(awayOwner.stationUid,null,'the idle owner has no desk while seven active teammates need all seven');
+  assert.equal(awayOwner.homeTarget.stationUid,'st-3');
+  assert.ok(away.placements.some(row=>row.id!==owner&&row.stationUid==='st-3'),'an active teammate temporarily borrows the home desk');
+  const persistedStations=Object.fromEntries(Object.values(away.homeAssignments).flatMap(unit=>Object.entries(unit.stations)));
+  assert.equal(persistedStations[placementToken(owner)],'st-3');
+  assert.notEqual(persistedStations[placementToken(borrower)],'st-3','borrowed station is never persisted as the borrower home');
+
+  const returned=planOfficePlacement({index,layout:pressureLayout,occupants:occupants.map(row=>({...row,state:'working',stateSince:100})),homeAssignments:away.homeAssignments});
+  assert.equal(returned.placements.find(row=>row.id===owner).stationUid,'st-3');
+  assert.equal(returned.placements.filter(row=>row.stationUid==='st-3').length,1);
+  assert.equal(new Set(returned.placements.map(row=>row.sceneTarget.stationUid).filter(Boolean)).size,7);
+});
+
+test('active duplicate saved homes use their allocated stations as unique scene targets',()=>{
+  const occupants=[{id:'agent:z-owner',role:'agent',state:'working',stateSince:20},
+    {id:'agent:a-worker',role:'agent',state:'working',stateSince:10}];
+  const homeAssignments=Object.fromEntries(occupants.map(row=>[placementToken(row.id),
+    {floorId:'1',stations:{[placementToken(row.id)]:'st-3'}}]));
+  const result=planOfficePlacement({index,layout:base,occupants,homeAssignments});
+  for(const row of result.placements)assert.equal(row.sceneTarget.stationUid,row.stationUid,
+    'an active occupant cannot target a duplicate saved desk it did not acquire');
+  assert.equal(new Set(result.placements.map(row=>row.sceneTarget.stationUid)).size,2);
+});
+
+test('an authored station claim displaces an idle stale pin for idle and working owners',()=>{
+  for(const state of ['idle','working']){
+    const occupants=[{id:'main',role:'primary',state,stateSince:20},
+      {id:'agent:a-borrower',role:'agent',state:'idle',stateSince:30}];
+    const homeAssignments=Object.fromEntries([occupants[1]].map(row=>[placementToken(row.id),
+      {floorId:'1',stations:{[placementToken(row.id)]:'st-timmy'}}]));
+    const result=planOfficePlacement({index,layout:base,occupants,homeAssignments,now:5000});
+    const owner=result.placements.find(row=>row.id==='main'), borrower=result.placements.find(row=>row.id==='agent:a-borrower');
+    assert.equal(owner.stationUid,'st-timmy');
+    assert.notEqual(borrower.stationUid,'st-timmy');
+    assert.equal(owner.sceneTarget.stationUid,owner.stationUid);
+    assert.equal(borrower.sceneTarget.stationUid,borrower.stationUid);
+    assert.equal(new Set([owner.sceneTarget.stationUid,borrower.sceneTarget.stationUid]).size,2);
+    assert.notEqual(borrower.homeTarget.stationUid,'st-timmy','a stale displaced home pin is not retained as the borrower home');
+  }
+});
+
+test('fixed-seed active and idle pin mixes keep allocations and seated targets unique',()=>{
+  const desks=R.homeStations(base,index);
+  for(let seed=1;seed<=24;seed++){
+    let state=seed;
+    const next=()=>{state=(state*48271)%2147483647;return state;};
+    const occupants=Array.from({length:6},(_,i)=>({id:`agent:property-${i}`,role:i===0?'primary':'agent',
+      state:next()%3===0?'idle':'working',stateSince:100+i}));
+    const homeAssignments=Object.fromEntries(occupants.map(row=>[placementToken(row.id),
+      {floorId:'1',stations:{[placementToken(row.id)]:desks[next()%desks.length]}}]));
+    const result=planOfficePlacement({index,layout:base,occupants,homeAssignments});
+    const seated=result.placements.filter(row=>row.stationUid);
+    assert.equal(new Set(seated.map(row=>`${row.floorId}:${row.stationUid}`)).size,seated.length,`seed ${seed}: allocation uniqueness`);
+    assert.equal(new Set(seated.map(row=>`${row.sceneTarget.floorId}:${row.sceneTarget.stationUid}`)).size,seated.length,`seed ${seed}: seated scene target uniqueness`);
+    for(const row of seated)assert.equal(row.sceneTarget.stationUid,row.stationUid,`seed ${seed}: target follows allocation`);
+  }
+});
+
+test('newer inactive owner wins duplicate saved-home claims over an older idle row',()=>{
+  const rows=[{id:'agent:a-older',role:'agent',state:'idle',stateSince:10},
+    {id:'agent:z-owner',role:'agent',state:'idle',stateSince:20}];
+  const resolved=R.resolveOccupants(floorLayout(base,index,'1'),index,rows,
+    {stationAssignments:{'agent:a-older':'st-3','agent:z-owner':'st-3'}});
+  const byId=new Map(resolved.map(row=>[row.id,row]));
+  assert.equal(byId.get('agent:z-owner').stationUid,'st-3');
+  assert.equal(byId.get('agent:z-owner')._homeWant,'st-3');
+  assert.notEqual(byId.get('agent:a-older').stationUid,'st-3');
+  assert.notEqual(byId.get('agent:a-older')._homeWant,'st-3');
 });
 
 test('deskless conversations follow canonical parent chains onto the host floor, including bridge/nested rows',()=>{

@@ -27,7 +27,7 @@ const FILES = [
   ['design/office/layout.example.json', 'office/layout.example.json'],
 ];
 // Authoritative contract examples (api.md 2.1, docs/architecture/examples/): the /v2 mocks are built from them.
-const EXAMPLES = ['project-vm', 'board-vm', 'candidates-vm', 'import-result', 'history-page', 'session-vm', 'error-409-project', 'health-vm', 'comment-thread-vm'];
+const EXAMPLES = ['office-palette-vm', 'office-store-vm', 'project-vm', 'board-vm', 'candidates-vm', 'import-result', 'history-page', 'session-vm', 'error-409-project', 'health-vm', 'comment-thread-vm'];
 const EXAMPLES_DEST = path.join(ROOT, 'public', 'v2', 'mock', 'examples');
 const ASSET_GROUPS = ['Logos', 'Office', 'Characters', 'Decor', 'Accessories', 'ProjectCovers', 'Illustrations'];
 const DERIVED = path.join(ROOT, 'design', 'derived', 'Illustrations');
@@ -95,6 +95,13 @@ function shippedAssetKeys() {
   // Lazy scene registries resolve paths against the office asset base rather than
   // naming bureau/ directly. Their declared image bundles must ship as well.
   for (const match of text.matchAll(/\bassets\/((?:Office|Characters|Logos|ProjectCovers|Illustrations)\/[A-Za-z0-9_@./+-]+)/g)) keys.add(match[1]);
+  if (text.includes('assets/Office/monitor-screens/frames/')) {
+    const screens = JSON.parse(fs.readFileSync(path.join(ROOT, 'design/assets/Office/monitor-screens/manifest.json'), 'utf8'));
+    for (const state of screens.states) for (const frame of state.frames) {
+      if (!/^frames\/[a-z-]+-[12]\.png$/.test(frame.file)) throw new Error('invalid monitor frame path');
+      keys.add('Office/monitor-screens/' + frame.file);
+    }
+  }
   if (text.includes('bureau/assets/Logos/')) {
     const logos = path.join(ROOT, 'design', 'assets', 'Logos');
     for (const rel of walk(logos)) keys.add('Logos/' + rel);

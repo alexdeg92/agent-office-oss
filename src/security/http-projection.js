@@ -39,6 +39,9 @@ function createHttpProjection({store,projector,reauthentication=null}) {
     }
     return value;
   }
+  function revision(req,topic,vm,version) {
+    return projector.revision(current(req),topic,vm,version);
+  }
   function error(err,req,res,next) {
     try {
       // Existing agent scopes remain a separate principal path, checked by the route guard.
@@ -55,6 +58,6 @@ function createHttpProjection({store,projector,reauthentication=null}) {
       return next(err);
     } catch(failure) {return next(failure);}
   }
-  return {data,error,mayExposeSources:req=>projector.mayExposeSources(current(req))};
+  return {data,error,revision,mayExposeSources:req=>projector.mayExposeSources(current(req))};
 }
 module.exports={createHttpProjection,COMMAND_VIEWS};

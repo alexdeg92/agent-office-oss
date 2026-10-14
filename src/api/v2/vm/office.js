@@ -440,7 +440,7 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
   const roster = projectOfficeRoster({ connection: { gateway: gw.connected ? 'up' : 'down', since: gw.since }, kpis,
     occupants: visitProjection.occupants, ...(canReadSessions ? { occupantOverflowCount } : {}),
     visitIntent: visitProjection.visitIntent, journal, layoutRevision: layout.revision, queue });
-  return projectOfficePlacement(roster, { layout: layout.layout, index: layout.index, projectOccupantId: P.occupantId, now, tracker });
+  return projectOfficePlacement(roster, { layout: layout.layout, index: layout.index, projectOccupantId: P.occupantId, now, tracker, engine, canReadSessions });
 }
 
 module.exports = { buildOfficeVM, createStateTracker, officeDefaults, exchangesOf, EXCHANGE_WINDOW_MS };

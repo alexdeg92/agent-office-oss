@@ -111,9 +111,9 @@ function createMultiRuntimeController({ cfg: initial, store, cliEnv, resolveAdap
       definitionFor(key) { return engine.owner(key, parseId(key)?.entity || 'session').instance?.runtime.definition || {}; },
       get definition() {
         const selected = chosen();
-        return { ...(selected?.runtime?.definition || {}), sessionKeyFor(agentId, ref) {
+        return { ...(selected?.runtime?.definition || {}), sessionKeyFor(agentId, ref, options) {
           const { instance: i, local } = engine.owner(agentId, 'agent');
-          return i?.runtime.definition.sessionKeyFor ? scopedId(i.id, 'session', i.runtime.definition.sessionKeyFor(local, ref)) : null;
+          return i?.runtime.definition.sessionKeyFor ? scopedId(i.id, 'session', i.runtime.definition.sessionKeyFor(local, ref, options)) : null;
         } };
       },
       start(_, hooks = {}) {

@@ -152,9 +152,9 @@ test('the Store keeps the selected floor in its editor adapter and return path',
   const h = await openLayoutBrowser(), p = h.page;
   try {
     await p.setViewportSize({ width: 1440, height: 900 });
-    await visit(p, h.origin, '/boutique?etage=2&onglet=mobilier&mock=foule', '.ao-shop__floor-context');
-    assert.equal(await p.locator('.ao-shop__floor-context').getAttribute('data-floor-context'), '2');
-    assert.match(await p.locator('.ao-shop__floor-context').innerText(), /Étage 2/);
+    await visit(p, h.origin, '/boutique?etage=2&onglet=mobilier&mock=foule', '#ao-shop-floor');
+    assert.equal(await p.locator('#ao-shop-floor').inputValue(), '2');
+    assert.match(await p.locator('#ao-shop-floor option:checked').innerText(), /Étage 2/);
     await p.locator('.ao-shop__back').click();
     await p.waitForFunction(() => new URL(location.href).searchParams.get('etage') === '2');
     await p.waitForFunction(() => document.querySelector('.ao-bureau__stage')?.dataset.floor === '2');

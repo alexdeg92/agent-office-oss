@@ -1,0 +1,109 @@
+{
+  "data": {
+    "sessionKey": "agent:atlas:explicit:portal-chat",
+    "turnPending": null,
+    "messages": [
+      {
+        "id": "ev:0:0",
+        "kind": "message",
+        "role": "user",
+        "at": 1791223000000,
+        "text": "Bonjour",
+        "body": {
+          "text": "Bonjour"
+        },
+        "title": null,
+        "status": null,
+        "statusLabel": null,
+        "collapsedByDefault": false,
+        "avatar": null,
+        "senderInfo": {
+          "kind": "human",
+          "id": "human:owner",
+          "name": "Mira",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        },
+        "meta": null
+      },
+      {
+        "id": "ev:1:0",
+        "kind": "message",
+        "role": "assistant",
+        "at": 1791223005000,
+        "text": "La vérification est en cours.",
+        "body": {
+          "text": "La vérification est en cours."
+        },
+        "title": null,
+        "status": null,
+        "statusLabel": null,
+        "collapsedByDefault": false,
+        "avatar": {
+          "character": "subagent",
+          "variant": "sage",
+          "accessories": []
+        },
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas",
+          "name": "Atlas",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null
+        },
+        "meta": {
+          "model": "model-a",
+          "tokens": 42,
+          "durationMs": 100
+        }
+      },
+      {
+        "id": "ev:2:0",
+        "kind": "subagent-result",
+        "role": "assistant",
+        "at": 1791223009000,
+        "text": "| Check | Result |\n| --- | --- |\n| tests | **pass** |",
+        "body": {
+          "text": "| Check | Result |\n| --- | --- |\n| tests | **pass** |"
+        },
+        "title": "Review the changes",
+        "status": "completed",
+        "statusLabel": {
+          "key": "chat.result.status.completed"
+        },
+        "collapsedByDefault": true,
+        "avatar": {
+          "character": "fox",
+          "variant": null,
+          "accessories": [
+            "glasses"
+          ]
+        },
+        "senderInfo": {
+          "kind": "agent",
+          "id": "agent:atlas:subagent:review",
+          "name": "Review the changes",
+          "runtime": "demo",
+          "channel": null,
+          "avatarHint": null,
+          "delegation": {
+            "sessionKey": "agent:atlas:subagent:review",
+            "label": "Review the changes"
+          }
+        },
+        "meta": null
+      }
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "chat",
+      "rev": 4
+    }
+  }
+}

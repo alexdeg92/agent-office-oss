@@ -64,7 +64,10 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   enforceAuthorization = false, reauthenticationElapsed = undefined, log = (entry) => console.error(typeof entry === 'string' ? entry : JSON.stringify(entry)), now = () => Date.now() }) {
   // Internal integration switch only. Server boot keeps this off until the whole auth surface is reviewed.
   if(enforceAuthorization&&!store?.policy)throw new Error('authorization store required');
-  const projector=enforceAuthorization?require('../../security/view-projection').createViewProjection({store,cfg}):null;
+  let teamProjectById = () => null;
+  let projectExistsById = () => false;
+  const projector=enforceAuthorization?require('../../security/view-projection').createViewProjection({store,cfg,
+    isTeamProject: id => !!teamProjectById(id)?.teamProject}):null;
   const reauthentication=enforceAuthorization?require('../../security/reauthentication').createReauthentication({store,auth,now,elapsed:reauthenticationElapsed}):null;
   if(reauthentication)settings?.useAuthorization?.({reauthentication});
   const httpProjection=projector?require('../../security/http-projection').createHttpProjection({store,projector,reauthentication}):null;
@@ -136,6 +139,19 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     return kind + ':' + token;
   };
   const authorizeSourceTopic = (topic, context) => {
+    if (topic?.name === 'comments') {
+      const id=topic.params?.key;
+      if(!projectExistsById(id))return false;
+      if (teamProjectById(id)?.teamProject) {
+        const principal = sourcePrincipal({ session: context?.session });
+        if (principal) return sourcePermissions.allowsPrincipal(principal, 'teams', 'read');
+        // Legacy single-owner mode verifies its signed cookie without a user row.
+        // Keep that owner path for team comments, but never treat machine auth as it.
+        const identityActive = cfg?.rbacEnabled === true || !!store?.rbac?.state?.().owner_user_id;
+        return !identityActive && !context?.principal && !!context?.session;
+      }
+      return true;
+    }
     if (!['orchestrators', 'teams', 'office-scope'].includes(topic?.name)) return true;
     const principal = sourcePrincipal({ session: context?.session });
     const key = topic.params?.key;
@@ -217,6 +233,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     authorizationEvents:store.authorizationEvents,
     security:streamPolicies[version]=require('../../security/stream-policy').createStreamPolicy({store,auth,topics:topics.of(version),now,
       project:(user,id,vm)=>projector.project(user,id,vm,{version}),
+      revision:(user,id,vm)=>projector.revision(user,id,vm,version),
+      fingerprint:(user,id,vm)=>projector.fingerprint(user,id,vm,version),
       filterFrame:(user,type,data)=>projector.frame(user,type,data,{version}),
       mayExposeSources:projector.mayExposeSources}),
   }:{};
@@ -253,7 +271,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   const ok = (res, data, topic, name) => { const v = (res.req && res.req.apiVersion) || 2;
     if (v === 2) data = require('./runtime-projection').projectLegacy(data, name);
     const req=res.req,human=httpProjection&&req.principal?.kind!=='agent';
-    if(human)data=httpProjection.data(req,data,{name,topic:topic?.id});
+    if(human){data=httpProjection.data(req,data,{name,topic:topic?.id});if(topic&&(/^(?:projects(?:\?|$)|project:)/.test(topic.id)))topic={...topic,rev:httpProjection.revision(req,topic.id,data,v)};}
     const cohort=human?':'+store.rbac.fingerprint(req.user.id):'';
     res.json(okBody(name ? vms[v].check(name, data, 'route:' + name+cohort) : data, { engine:human&&!httpProjection.mayExposeSources(req)?null:engine, now: now(), topic })); };
   const noExtra = (body, allowed) => { for (const k of Object.keys(body || {})) if (!allowed.includes(k)) throw invalid(k, 'unexpected-field'); };
@@ -333,12 +351,15 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   });
 
   const views = mountViews({ configuredAgents: cfg.agentNames || {}, r, engine, topics, store, runtime, enrichment, orchestratorTeams,
+    officeTimings: settings?.officeTimings,
     officePrincipalFor: key => sourceScopes.get(key)?.principal || null, officeScopeFor: key => sourceScopes.get(key) || null,
-  officeTopicFor: req => (orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected) ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : 'office',
+  officeTopicFor: req => orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected
+    ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : null,
     authed, ok, now, sessionsReadable, isSubscribed: (id,version) => version ? hubs[version].isSubscribed(id) : hubs[2].isSubscribed(id) || hubs[3].isSubscribed(id) });
   const commands = mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, views, now, log });
   // S14b: the office layout and the UI prefs (store)
   const office = store ? mountOfficeLayout({ r, store, topics, authed, guard, ok, now, actorOf: views.actorOf, timeZone: () => cfg.timeZone,
+    officeTimings: settings?.officeTimings,
     actorRefOf: req => require('../../security/request-actor').requestActor(req,store) }) : null;
   // S7d: the screenshot capturer for project images (null without a browser or a public https origin)
   const capturer = cfg.capture === false ? null : createCapturer({ chromeBin: findChrome(), dataDir: cfg.dataDir,
@@ -352,7 +373,9 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   // architect-57: the project threads (comments, agent replies, the summary request), on the projects module
   const dispatchAuthority=enforceAuthorization?require('../../security/dispatch-authority').createDispatchAuthority({store,now}):null;
   const thread = store && store.comments ? createProjectThread({ store, engine, runtime, topics, cfg, log, now, dispatchAuthority }) : null;
-  const projects = store ? mountProjects(r, { capturer, store, engine, topics, cfg, runtime, authed, guard, ok, enrichment, log, thread, enforceAuthorization }) : null;
+  const projects = store ? mountProjects(r, { capturer, store, engine, topics, cfg, runtime, authed, guard, ok, enrichment, log, thread, enforceAuthorization, orchestratorTeams }) : null;
+  teamProjectById = projects?.teamProjectById || (() => null);
+  projectExistsById = projects?.projectExistsById || (() => false);
   if (thread) { thread.attach(projects); thread.mount(r, { authed, guard, ok }); }
 
   r.post('/stream/ticket',authed,(req,res)=>{

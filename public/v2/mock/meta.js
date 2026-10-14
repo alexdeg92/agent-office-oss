@@ -16,7 +16,7 @@ export const META = {
   capabilities: { openclawWrites: true, storeWrites: true },
   // G2 (api.md §3.1): the runtime adapter's names. 2.4 (G3a): the primary agent (or null) and the instance's zone and
   // locale; the ?agent= and ?fuseau= hooks change them to preview another instance.
-  runtime: { id: 'openclaw', name: 'OpenClaw', gatewayLabel: 'Passerelle' },
+  runtime: { id: 'openclaw', name: 'OpenClaw', gatewayLabel: 'Passerelle', brand: { mark: 'OC', color: '#b54d31', logo: 'assets/connectors/openclaw.svg', providerName: 'OpenClaw' } },
   locale: 'fr',
   primaryAgent: PROPOSED_AGENT,
   instance: { timeZone: 'Europe/Paris', locale: 'fr-CA', configured: true },
@@ -70,6 +70,14 @@ export const META = {
     'healthSub.cronAllOk': 'Aucune en échec',
     'healthSub.pluginsErrored': 'Dont {n} en erreur',
     'healthSub.pluginsAllOk': 'Toutes chargées',
+
+    'office.characters.count.one': '{n} agent',
+    'office.characters.count.other': '{n} agents',
+    'office.characters.independent': 'Agents sans équipe',
+    'office.characters.detectedGroup': 'Détectés récemment',
+    'office.characters.detected': 'Détecté · hors du bureau',
+    'office.characters.emptyAll': 'Aucun agent détecté pour cette recherche.',
+    'office.characters.emptyOffice': 'Aucun agent présent dans le bureau pour cette recherche.',
 
     'channelHealth.connected': 'Connecté',
     'channelHealth.running': 'En marche',

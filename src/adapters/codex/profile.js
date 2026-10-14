@@ -20,13 +20,13 @@ function projectName(cwd) {
   const p=require('node:path'); const api=p.posix.isAbsolute(cwd)?p.posix:p.win32.isAbsolute(cwd)?p.win32:null;
   const name=api?.basename(cwd); return name&&!['.','..'].includes(name)&&name.length<=128?name:null;
 }
-function parse(lines, { sessionKey, agentId, counters = {}, now = Date.now, gapBeforeIndex = null } = {}) {
-  const events=[], result={events,sessionId:null,cwd:null,projectName:null,model:null,usage:null,at:null,activityAt:null,activity:null,displayName:null,summary:null,recognizedLines:0};
-  let sessionAt=null, latestMessageAt=null, stable=0, execution=null, anonymousExec=0, pendingReply=false, pendingReplyAt=null;
-  let turnOpen=false, turnStartedAt=null, pendingExecOverflow=false;
+function parse(lines, { sessionKey, agentId, counters = {}, now = Date.now, gapBeforeIndex = null, state = null } = {}) {
+  const events=[], result={events,sessionId:null,cwd:null,projectName:null,model:null,usage:null,at:null,activityAt:state?.activity?.since??null,activity:state?.activity||null,displayName:null,summary:null,recognizedLines:0};
+  let sessionAt=state?.sessionAt??null, latestMessageAt=state?.latestMessageAt??null, stable=state?.stableCount||0, execution=state?.execution||null, anonymousExec=state?.anonymousExec||0, pendingReply=state?.pendingReply===true, pendingReplyAt=state?.pendingReplyAt??null;
+  let turnOpen=state?.turnOpen===true, turnStartedAt=state?.turnStartedAt??null, pendingExecOverflow=state?.pendingExecOverflow===true;
   let preGapUncertain=false, preGapExec=new Set(), preGapTools=new Set(), tailTaskComplete=false;
-  const pendingExec=new Set();
-  const openTools=new Set();
+  const pendingExec=new Set(state?.pendingExec||[]);
+  const openTools=new Set(state?.openTools||[]);
   const markExecution=(status,line)=>{execution={status:status,at:ts(line?.timestamp)??ts(line?.payload?.timestamp)??sessionAt};};
   const markActivity=(kind,line)=>{const at=ts(line?.timestamp)??ts(line?.payload?.timestamp)??sessionAt;result.activityAt=at;result.activity={kind,since:at};};
   // Keep the compact lifecycle state for every line in the adapter's bounded
@@ -68,7 +68,7 @@ function parse(lines, { sessionKey, agentId, counters = {}, now = Date.now, gapB
       extras(payload,ITEM_KEYS,counters); result.recognizedLines++;
       if(['function_call','custom_tool_call'].includes(payload.type)) {
         const callId=payload.call_id||payload.id;
-        if(typeof callId==='string'&&callId.length<=256)openTools.add(callId);
+        if(typeof callId==='string'&&callId.length<=256) { if(openTools.has(callId)||openTools.size<256)openTools.add(callId);else pendingExecOverflow=true; }
         markExecution('running',line); markActivity(toolActivity(payload.name),line); continue;
       }
       if(['function_call_output','custom_tool_call_output'].includes(payload.type)) {
@@ -171,6 +171,8 @@ function parse(lines, { sessionKey, agentId, counters = {}, now = Date.now, gapB
   result.activityAt=result.activityAt??execution?.at??latestMessageAt??null;
   if(result.activity) result.activity=transcriptActivity(result.activity.kind,result.activity.since,typeof now==='function'?now():now);
   result.execution=execution;
+  result.state={sessionAt,latestMessageAt,stableCount:stable,execution,anonymousExec,pendingReply,pendingReplyAt,turnOpen,turnStartedAt,pendingExecOverflow,
+    pendingExec:[...pendingExec].slice(-64),openTools:[...openTools].slice(-256),activity:result.activity};
   return result;
 }
 module.exports={PROFILE,parse,projectName,MAX_TEXT,MAX_ITEMS};

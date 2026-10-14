@@ -1,11 +1,13 @@
 import { loadModule, chunkError } from '../build-update.js';
+import './store-labels.js';
 import { buildQuery } from '../config.js';
 import { html, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../lib.js';
-import { useTopic, useStore } from '../hooks.js';
+import { useTopic, useStore, useFetch } from '../hooks.js';
 import { services, reloadGuards } from '../services.js';
 import { config } from '../config.js';
 import * as fmtTz from '../fmt.js';
-import { agentName } from '../i18n.js';
+import { agentName, label } from '../i18n.js';
+import { get } from '../api.js';
 import { Frame, Icon, Skeleton } from '../components/ui.js';
 import { Modal } from '../components/modal.js';
 import { Button, Select } from '../components/bureau/forms.js';
@@ -19,7 +21,7 @@ import { useLayout, officeApi } from './layout-source.js';
 import { createDraft } from './draft.js';
 import { floorId } from './floors.js';
 import { agentRows, looksOf, patchAgent, lookPatch } from './agent-looks.js';
-import { TABS, furnitureItems, characterItems, colourItems, accessoryItems, isLookTab, placedOf } from './catalog.js';
+import { furnitureItems, characterItems, colourItems, accessoryItems, isLookTab, placedOf } from './catalog.js';
 import { Figure } from './setup-characters.js';
 
 const STYLES = ['./office.css', './setup-characters.css', './boutique.css'].map((p) => new URL(p + buildQuery, import.meta.url).href);
@@ -29,7 +31,6 @@ const COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\([\d.,\s%]+\)|hsla?\([\d.,\s%deg]+\))$/
 const safeColor = (c) => (typeof c === 'string' && COLOR_RE.test(c.trim()) ? c.trim() : 'transparent');
 const ruleLabel = (id) => tr(`ed.rule.${canonicalRuleId(id) ?? id}`);
 const NO_STATUS = { get: () => null, subscribe: () => () => {} };
-const TAB_ICON = { mobilier: 'layers', decoration: 'sun', personnages: 'agent', couleurs: 'eye', accessoires: 'check', themes: 'moon' };
 
 function useStyles() {
   useEffect(() => {
@@ -47,7 +48,7 @@ const indexOf = (m) => indexCache.get(m) ?? (indexCache.set(m, indexManifest(m))
 
 export function BoutiquePage({ match }) {
   useStyles();
-  const id=floorId(match.query?.etage) ?? '1';
+  const id=match.query?.etage ?? '1';
   return html`<${FloorBoutique} key=${id} match=${match} currentFloorId=${id} />`;
 }
 
@@ -56,9 +57,13 @@ function FloorBoutique({match,currentFloorId}) {
   const layout = useLayout(currentFloorId);
   const office = useTopic('office', '/api/v2/views/office');
   const status = useStore(services.stream?.status ?? NO_STATUS);
-  const tab = TABS.includes(q.onglet) ? q.onglet : 'mobilier';
+  const navQuery = new URLSearchParams({floorId:currentFloorId});
+  if(q.onglet!=null)navQuery.set('section',q.onglet);
+  if(q.categorie!=null)navQuery.set('category',q.categorie);
+  navQuery.set('officeRevision',office.rev ?? 0);
+  const navigation=useFetch('/api/v2/views/office/store?'+navQuery,url=>get(url,{quiet:true}).then(response=>response.data));
+  const nav=navigation.data,tab=nav?.sectionId;
   const setQuery = (patch) => services.router.setQuery(patch);
-  const [categories, setCategories] = useState({});
 
   // One draft per floor context; its history and save transport share that scope.
   const draftRef = useRef(null);
@@ -67,7 +72,7 @@ function FloorBoutique({match,currentFloorId}) {
   const decideLeave=ok=>{const pending=leaveRef.current;leaveRef.current=null;setLeaving(false);pending?.resolve(ok);};
   const [, setSeq] = useState(0);
   const rootLay = layout.data;
-  const floorCaption = currentFloorId === 'rdc' ? tr('office.floor.rdc') : currentFloorId === 'gym' ? tr('office.floor.gym') : tr(currentFloorId === '1' ? 'office.floor.first' : 'office.floor.number', { n: currentFloorId });
+
   const floorStore = officeApi(currentFloorId);
   const lay = rootLay;
   if (lay && !draftRef.current) draftRef.current = createDraft(lay, indexOf(lay.manifest), floorStore);
@@ -93,20 +98,17 @@ function FloorBoutique({match,currentFloorId}) {
     return () => {reloadGuards.delete(reloadGuard);removeEventListener('beforeunload',onUnload);services.navigationGuards.delete(guard);leaveRef.current?.resolve(false);};
   }, []);
 
-  if (!lay || !draft) {
-    return html`<${Frame} class="bu-page ao-shop" aria-busy=${layout.error ? undefined : 'true'}>
-      ${layout.error ? html`<div class="bu-banner bu-banner--warning" role="alert"><${Icon} name="warning" /><span class="bu-banner__text">${tr('shop.loadFailed')}</span>
-        <button type="button" class="bu-btn bu-btn--sm" onClick=${layout.retry}>${tr('office.retry')}</button></div>`
+  if (!lay || !draft || !nav) {
+    return html`<${Frame} class="bu-page ao-shop" aria-busy=${layout.error || navigation.error ? undefined : 'true'}>
+      ${layout.error || navigation.error ? html`<div class="bu-banner bu-banner--warning" role="alert"><${Icon} name="warning" /><span class="bu-banner__text">${tr('shop.loadFailed')}</span>
+        <button type="button" class="bu-btn bu-btn--sm" onClick=${()=>{layout.retry();navigation.reload();}}>${tr('office.retry')}</button></div>`
         : html`<div class="ao-shop__grid">${Array.from({ length: 6 }, (_, k) => html`<div key=${k} class="bu-card ao-shop__card"><${Skeleton} kind="block" /></div>`)}</div>`}
     </${Frame}>`;
   }
 
   const index = indexOf(lay.manifest);
   const data = draft.data;
-  const category = categories[tab] ?? '';
-  const filterCategories = tab === 'mobilier' || tab === 'decoration'
-    ? [...new Set(furnitureItems(index, data, tab).map(x => x.category))].filter(Boolean)
-    : tab === 'accessoires' ? [...new Set([...index.accessories.values()].map(a => a.slot))] : null;
+  const category = nav.categoryId ?? '';
   const caps = (status && status.capabilities) || (services.meta && services.meta.capabilities) || null;
   const canWrite = !lay.readOnly && !(caps && caps.storeWrites === false);
   const occupants = office.data?.occupants ?? [];
@@ -116,20 +118,23 @@ function FloorBoutique({match,currentFloorId}) {
   const place = (target) => setQuery({ placer: target });
   const closePlacement = () => setQuery({ placer: null });
 
-  return html`<${Frame} class=${'bu-page ao-shop' + (draft.dirty ? ' ao-shop--dirty' : '')} bodyClass="ao-shop__panel ao-frame__body--framed"
-    bodyProps=${{ role: 'tabpanel', id: 'ao-shop-panel-' + tab, 'aria-labelledby': 'ao-shop-tab-' + tab }}
-    foot=${html`<${SaveBar} draft=${draft} canWrite=${canWrite} />`} bar=${html`<div class="ao-shop__navigation">
-      <${Tabs} tab=${tab} onTab=${(t) => setQuery({ onglet: t === 'mobilier' ? null : t })} />
-      <span class="ao-shop__floor-context" data-floor-context=${currentFloorId}>${floorCaption}</span>
-      <a class="bu-btn bu-btn--ghost ao-shop__back" href=${services.router.href('bureau',{}, {etage:currentFloorId})} title=${tr('shop.back')}><${Icon} name="arrow-left" /><span class="ao-shop__backtext">${tr('shop.back')}</span></a>
-      ${filterCategories ? html`<${Select} id="ao-shop-category" class="ao-shop__category" label=${tr('shop.category')}
-        value=${category} onValueChange=${value => setCategories(previous => ({ ...previous, [tab]: value }))}
-        options=${['', ...filterCategories].map(value => ({ value, label: tr('shop.categoryValue', { category: value ? tr((tab === 'accessoires' ? 'ed.slot.' : 'ed.cat.') + value) : tr('shop.allCategories') }) }))} />` : null}
-    </div>
+  return html`<${Frame} class=${'bu-page ao-shop' + (draft.dirty ? ' ao-shop--dirty' : '')} data-floor-context=${nav.floorId} data-store-section=${nav.sectionId} data-store-category=${nav.categoryId ?? ''} bodyClass="ao-shop__panel ao-frame__body--framed"
+    bodyProps=${{ role:'region',id:'ao-shop-panel-'+tab,'aria-labelledby':'ao-shop-section','aria-busy':navigation.loading ? 'true' : undefined }}
+    head=${html`<div class="ao-shop__controls">${nav.floors ? html`<div class="ao-shop__header"><${StoreSelect} id="ao-shop-floor" class="ao-shop__floor" control=${nav.floors} value=${nav.floorId}
+      onValueChange=${value=>setQuery({etage:value,placer:null})} />
+      <a class="bu-btn bu-btn--ghost ao-shop__back" href=${services.router.href('bureau',{}, {etage:nav.floorId})}><${Icon} name="arrow-left" /><span class="ao-shop__backtext">${tr('shop.back')}</span></a></div>` : null}
+    <div class="ao-shop__navigation">
+      <${StoreSelect} id="ao-shop-section" class="ao-shop__section" control=${nav.sections} value=${tab}
+        onValueChange=${value=>setQuery({onglet:value,categorie:null,placer:null})} />
+      ${nav.categories ? html`<${StoreSelect} id="ao-shop-category" class="ao-shop__category" control=${nav.categories} value=${category}
+        onValueChange=${value=>setQuery({categorie:value || null})} />` : null}
+    </div></div>`}
+    foot=${html`<${SaveBar} draft=${draft} canWrite=${canWrite} />`} bar=${navigation.error || !canWrite ? html`
+    ${navigation.error ? html`<div class="bu-banner bu-banner--warning" role="alert"><span>${tr('shop.loadFailed')}</span><${Button} label=${tr('office.retry')} onClick=${navigation.reload} /></div>` : null}
     ${canWrite ? null : html`<p class="bu-caption bu-text-tertiary ao-ro" id="ao-shop-ro"><${Icon} name="info" />${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}
-`}>
-      ${tab === 'mobilier' || tab === 'decoration' ? html`<${Frame} class="ao-shop__catalog" bodyClass="ao-shop__catalogue" bodyLabel=${tr('shop.tab.' + tab)}><${FurnitureGrid} key=${tab} tab=${tab} category=${category} index=${index} data=${data} canWrite=${canWrite} onPlace=${place} /></${Frame}>`
-        : isLookTab(tab) ? html`<${LooksPanel} key=${tab} tab=${tab} category=${category} index=${index} draft=${draft} occupants=${occupants} seen=${lay.agentsSeen} canWrite=${canWrite}
+` : null}>
+      ${tab === 'mobilier' || tab === 'decoration' ? html`<${Frame} class="ao-shop__catalog" bodyClass="ao-shop__catalogue" bodyLabel=${tr('shop.tab.' + tab)}><${FurnitureGrid} key=${tab} tab=${tab} itemIds=${nav.itemIds} index=${index} data=${data} canWrite=${canWrite} onPlace=${place} /></${Frame}>`
+        : isLookTab(tab) ? html`<${LooksPanel} key=${tab} tab=${tab} category=${category} itemIds=${nav.itemIds} index=${index} draft=${draft} occupants=${occupants} seen=${lay.agentsSeen} canWrite=${canWrite}
             agentId=${q.agent ?? null} onAgent=${(id) => setQuery({ agent: id })} primaryName=${primary()} />`
         : html`<${ThemesPanel} index=${index} draft=${draft} canWrite=${canWrite} />`}
   </${Frame}>
@@ -162,30 +167,11 @@ function ThemesPanel(props) {
     : html`<div aria-busy="true"><${Skeleton} kind="block" /></div>`;
 }
 
-/** Category tabs (tablist; arrows move, Home/End; horizontally scrollable on phones). */
-function Tabs({ tab, onTab }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const tabs = ref.current;
-    const reveal = () => tabs?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'start' });
-    reveal();
-    const resize = new ResizeObserver(reveal);
-    if (tabs) resize.observe(tabs);
-    return () => resize.disconnect();
-  }, [tab]);
-  const onKey = (e) => {
-    const i = TABS.indexOf(tab);
-    const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
-    if (j == null) return;
-    e.preventDefault();
-    const next = TABS[(j + TABS.length) % TABS.length];
-    onTab(next);
-    requestAnimationFrame(() => ref.current?.querySelector(`#ao-shop-tab-${next}`)?.focus());
-  };
-  return html`<div class="ao-shop__tabs" role="tablist" aria-label=${tr('shop.tabs')} ref=${ref} onKeyDown=${onKey}>
-    ${TABS.map((t) => html`<button type="button" role="tab" key=${t} id=${'ao-shop-tab-' + t} class="ao-shop__tab" aria-selected=${String(t === tab)}
-      aria-controls=${'ao-shop-panel-' + t} tabindex=${t === tab ? '0' : '-1'} onClick=${() => onTab(t)}><${Icon} name=${TAB_ICON[t]} />${tr('shop.tab.' + t)}</button>`)}
-  </div>`;
+// Choices, order, counts, labels and visibility come from OfficeStoreVM.
+function StoreSelect({id,class:cls,control,value,onValueChange}) {
+  return html`<div class=${'ao-shop__control '+cls}><label for=${id}>${label(control.label)}</label>
+    <${Select} id=${id} width="full" label=${label(control.label)} value=${value} onValueChange=${onValueChange}
+      options=${control.options.map(option=>({value:option.id,label:label(option.label)}))} /></div>`;
 }
 
 // ---------- Mobilier / Décoration ----------
@@ -225,16 +211,17 @@ function DecorPlacement(props) {
     <button type="button" class="bu-btn" onClick=${props.onClose}>${tr('shop.sheet.close')}</button>
   </div>`;
 }
-function FurnitureGrid({ tab, category, index, data, canWrite, onPlace }) {
+function FurnitureGrid({ tab, itemIds, index, data, canWrite, onPlace }) {
   const [open, setOpen] = useState(null);
   const items = furnitureItems(index, data, tab);
-  const filtered = items.filter(x => !category || x.category === category);
+  const byId=new Map(items.map(item=>[item.id,item]));
+  const filtered=itemIds.map(id=>byId.get(id)).filter(Boolean);
   const it = open && filtered.find((x) => x.id === open);
   if (!items.length) return html`<p class="bu-text-secondary">${tr('shop.emptyTab')}</p>`;
   return html`<ul class="ao-shop__grid" role="list">
     ${filtered.map((x) => html`<li key=${x.id}>
       <button type="button" class=${'bu-card bu-card--interactive ao-shop__card' + (open === x.id ? ' bu-card--selected' : '')} aria-expanded=${String(open === x.id)}
-        aria-controls="ao-shop-sheet" onClick=${() => setOpen(open === x.id ? null : x.id)}>
+        data-store-item=${x.id} aria-controls="ao-shop-sheet" onClick=${() => setOpen(open === x.id ? null : x.id)}>
         <span class="ao-shop__thumb"><img src=${resolveUrl(x.f.thumbnail ?? furnitureImage(x.f), assetBase())} alt="" loading="lazy" decoding="async" /></span>
         <span class="ao-shop__name">${labelOf(x.f, 'furniture')}</span>
         <span class=${'ao-shop__badge' + (x.count ? ' is-on' : '')}>${x.count ? tr('shop.inOffice', { n: x.count }) : tr('shop.notInOffice')}</span>
@@ -272,7 +259,7 @@ function ItemSheet({ it, index, data, canWrite, onPlace, onClose }) {
 }
 
 // ---------- Personnages / Couleurs / Accessoires ----------
-function LooksPanel({ tab, category, index, draft, occupants, seen, canWrite, agentId, onAgent, primaryName }) {
+function LooksPanel({ tab, category, itemIds, index, draft, occupants, seen, canWrite, agentId, onAgent, primaryName }) {
   const data = draft.data;
   const rows = useMemo(() => agentRows(data, occupants, seen ?? [], ruleLabel), [data, occupants, seen]);
   const looks = looksOf(data, index, rows);
@@ -282,7 +269,8 @@ function LooksPanel({ tab, category, index, draft, occupants, seen, canWrite, ag
   if (!row) return html`<${Frame}><p class="bu-text-secondary">${tr('shop.noAgents')}</p></${Frame}>`;
   const nameOf = (r) => (r.isDefault ? ruleLabel(r.id) : displayName({ id: r.id, role: r.role, name: data.agents.find((a) => a.agentId === r.id)?.name, sourceName: r.sourceName }, { primaryName }));
   const look = looks[row.id];
-  const list = tab === 'personnages' ? characterItems(index, look, rows, looks) : tab === 'couleurs' ? colourItems(index, look, rows, looks) : accessoryItems(index, look, rows, looks).filter(x => !category || x.a.slot === category);
+  const accessoryById=tab==='accessoires' ? new Map(accessoryItems(index,look,rows,looks).map(item=>[item.id,item])) : null;
+  const list = tab === 'personnages' ? characterItems(index, look, rows, looks) : tab === 'couleurs' ? colourItems(index, look, rows, looks) : itemIds.map(id=>accessoryById.get(id)).filter(Boolean);
   const focused = list.find((x) => x.id === focus) ?? null;
   const preview = focused ? (tab === 'accessoires' ? focused.toggled : focused.look) : look;
   const changed = JSON.stringify(preview) !== JSON.stringify(look);
@@ -314,7 +302,7 @@ function LooksPanel({ tab, category, index, draft, occupants, seen, canWrite, ag
       <${Frame} class="ao-shop__catalog" bodyClass="ao-shop__catalogue" bodyLabel=${tr('shop.tab.' + tab)}>
       ${list.length ? html`<ul class="ao-shop__grid ao-shop__grid--looks" role="list">
         ${list.map((x) => html`<li key=${x.id}>
-          <button type="button" class=${'bu-card bu-card--interactive ao-shop__card' + (focus === x.id ? ' bu-card--selected' : '')} aria-pressed=${String(focus === x.id)} onClick=${() => setFocus(focus === x.id ? null : x.id)}>
+          <button type="button" class=${'bu-card bu-card--interactive ao-shop__card' + (focus === x.id ? ' bu-card--selected' : '')} data-store-item=${x.id} aria-pressed=${String(focus === x.id)} onClick=${() => setFocus(focus === x.id ? null : x.id)}>
             <span class="ao-shop__thumb ao-shop__thumb--fig">
               ${tab === 'couleurs' && x.swatch ? html`<span class="ao-shop__swatch" style=${{ background: safeColor(x.swatch) }}></span>` : null}
               <${Figure} index=${index} look=${tab === 'accessoires' ? (x.on ? look : x.toggled) : x.look} pose="idle" assetBase=${assetBase()} thumbnail=${tab !== 'accessoires'} /></span>

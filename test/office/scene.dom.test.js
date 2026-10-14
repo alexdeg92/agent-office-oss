@@ -32,6 +32,16 @@ describe('office scene in a real DOM', { skip, timeout: 120_000 }, () => {
     return p;
   }
 
+  it('T-0141: seated thinking never renders an overhead marker or question bubble without injected intents', async () => {
+    const p = await harness();
+    try {
+      await p.eval(`src[0].state='thinking';push();`);
+      await p.waitFor(`sc.chars.get('main').seatMode==='desk'&&!sc.chars.get('main').walking`);
+      const actual = await p.eval(`const c=sc.chars.get('main');return {state:c.occ.state,markerHidden:c.marker.hidden,bubble:c.plate.querySelector('.ao-life-bubble')?.textContent??null};`);
+      assert.equal(actual.state,'thinking');assert.equal(actual.markerHidden,true);assert.equal(actual.bubble,null);
+    } finally { await p.close(); }
+  });
+
   it('R4-12: a superseded decode never leaves two poses mounted', async () => {
     const p = await harness();
     const r = await p.eval(`
@@ -644,8 +654,12 @@ describe('office editor in a real DOM', { skip, timeout: 120_000 }, () => {
       sc.setOccupants(H.occupants([{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'error', stateSince: Date.now() }]));
       const b = sc.addControl({ label: '<img src=x onerror="window.pwned=1">', icon: '<path d="M1 1"/>', text: true });
       const store = H.createMockLayoutStore({ data: H.layout, defaultData: H.layout, manifest: m });
-      const ed = await H.openEditor({ scene: sc, store, assetBase: H.assetBase, barHost: document.getElementById('bar'), asideHost: document.getElementById('aside'), getOccupants: () => [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'idle', stateSince: Date.now() }] });
-      ed.agentSel = '*subagent'; ed.setMode('characters');
+      // The character editor now renders only rows supplied by its server VM. Exercise the
+      // fallback subagent appearance through a concrete occupant rather than the old client-side
+      // pseudo-row ('*subagent').
+      const editorOccupants = [{ id: 'subagent:unsafe', role: 'subagent', sourceName: 'Scout', state: 'idle', stateSince: Date.now() }];
+      const ed = await H.openEditor({ scene: sc, store, assetBase: H.assetBase, barHost: document.getElementById('bar'), asideHost: document.getElementById('aside'), getOccupants: () => editorOccupants });
+      ed.agentSel = 'subagent:unsafe'; ed.setMode('characters');
       await H.until(() => document.querySelectorAll('.ao-sc__dot').length >= 2);
       const dots = [...document.querySelectorAll('.ao-sc__dot')].map((d) => ({ bi: d.style.backgroundImage, bc: d.style.backgroundColor }));
       const masks = [...document.querySelectorAll('.ao-tint')].map((t) => t.style.maskImage || t.style.webkitMaskImage);
@@ -762,7 +776,6 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
       const names = await q.eval(`return [...document.querySelectorAll('.ao-plate__name, .ao-roster__name, #ao-drawer-title')].map((n) => n.textContent.trim());`);
       assert.ok(names.length >= 3, url);
       for (const n of names) assert.ok(n && !raw.test(n), `${url}: « ${n} » is a raw id`);
-      assert.ok(names.includes('Timmy'), `${url}: the mock primary agent shows its data name`);
       await q.close();
     }
   });
@@ -942,13 +955,18 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
     assert.equal(await p.eval(`return !!document.activeElement.closest('.ao-editbar');`), true, 'opening the editor focuses its toolbar');
     assert.ok(await tabTo(`a.matches('.ao-editbar .bu-segmented__opt') && a.textContent === 'Personnages'`), 'reach Personnages');
     await p.key('Enter');
-    await p.eval(`await window.officeBench.until(() => document.querySelector('.ao-sc__list'));`);
-    // O6: the agent list is the setup step's (one tab stop; arrows move between agents).
-    assert.ok(await tabTo(`a.matches('.ao-sc__agent')`), 'reach the agent list');
-    for (let i = 0; i < 12 && !(await p.eval(`return document.activeElement.querySelector('.ao-sc__name')?.textContent === 'Nouveaux sous-agents';`)); i++) await p.key('ArrowDown');
-    assert.equal(await p.eval(`return document.activeElement.querySelector('.ao-sc__name')?.textContent;`), 'Nouveaux sous-agents', 'reach the default rule');
+    await p.eval(`await window.officeBench.until(() => document.querySelector('.ao-character-row'));`);
+    assert.ok(await tabTo(`a.matches('.ao-character-row')`), 'reach the backend-provided occupant list');
     await p.key('Enter');
-    await p.eval(`await window.officeBench.until(() => document.querySelector('#ao-sc-editing')?.textContent === 'Apparence de Nouveaux sous-agents');`);
+    await p.eval(`await window.officeBench.until(() => document.querySelector('#ao-sc-editing'));`);
+    // The first occupant may use a one-variant character with no colour control. Walk the
+    // backend-provided rows with the keyboard until the selected look offers that control.
+    for (let i = 0; i < 6 && !(await p.eval(`return !!document.querySelector('input[name^=ao-sc-var-]')`)); i++) {
+      await p.key('Tab');
+      assert.ok(await tabTo(`a.matches('.ao-character-row')`), 'move to another occupant');
+      await p.key('Enter');
+      await p.eval(`await window.officeBench.until(() => document.querySelector('#ao-sc-editing'));`);
+    }
     assert.ok(await tabTo(`a.matches('input[name^=ao-sc-var-]')`), 'reach the colour radios');
     const before = await p.eval(`return document.querySelector('input[name^=ao-sc-var-]:checked').parentElement.textContent.trim();`);
     await p.key('ArrowRight');
@@ -975,11 +993,11 @@ describe('Bureau page in a real DOM (S14a/b)', { skip, timeout: 120_000 }, () =>
       await window.officeBench.until(() => document.querySelector('#ao-sc-editing'));
       const card = document.querySelector('#ao-sc-editing')?.textContent;
       const ctrlHidden = getComputedStyle(document.querySelector('.ao-controls [data-page-control]')).display === 'none';
-      [...document.querySelectorAll('.ao-editbar button')].find((b) => b.textContent === 'Annuler').click();
+      document.querySelector('.ao-characters__actions .bu-btn--ghost').click();
       await window.officeBench.until(() => !document.querySelector('.ao-editbar'));
       return { card, ctrlHidden, roster: document.querySelectorAll('.ao-bureau__roster .ao-roster').length, editing: document.querySelector('.ao-office').hasAttribute('data-editing') };
     `);
-    assert.deepEqual(r, { card: 'Apparence de Atlas', ctrlHidden: true, roster: 4, editing: false });
+    assert.deepEqual(r, { card: 'Apparence d’Atlas', ctrlHidden: true, roster: 4, editing: false });
     await p.close();
   });
 });

@@ -20,7 +20,7 @@ const v3 = (n) => JSON.parse(fs.readFileSync(path.join(EX, 'v3', n + '.json'), '
 const V3 = fs.readdirSync(path.join(EX, 'v3')).filter((f) => f.endsWith('.json') && !f.endsWith('.types.json')).map((f) => f.slice(0, -5));
 // Contract-only request/error/job examples are validated by their own suite. They are
 // not v2→v3 VM migrations and must not silently enter the migration/schema inventory.
-const MIGRATION_V3 = ['meta-vm', 'office-vm', 'health-vm', 'layout-vm', 'logs-page', 'session-vm', 'access-vm', 'interlocutor-vm', 'flow-detail-vm', 'board-vm', 'orchestrators-vm', 'teams-vm'];
+const MIGRATION_V3 = ['meta-vm', 'office-vm', 'office-store-vm', 'office-palette-vm', 'health-vm', 'layout-vm', 'logs-page', 'session-vm', 'chat-vm', 'access-vm', 'interlocutor-vm', 'flow-detail-vm', 'board-vm', 'orchestrators-vm', 'teams-vm'];
 const ACCESS_CONTRACT = [
   'external-access-vm', 'external-access-setup-vm', 'external-access-plan-request', 'external-access-plan',
   'external-access-checks-request', 'external-access-check-status-request', 'external-access-cancel-request',
@@ -29,7 +29,7 @@ const ACCESS_CONTRACT = [
 
 // api-v3.md D1–D8: the structural differences from 2.x, per VM (value-only changes are checked in 2.)
 const SHAPE_DELTAS = {
-  'office-vm': [], 'health-vm': [],
+  'office-vm': [], 'office-store-vm': [], 'office-palette-vm': [], 'health-vm': [], 'chat-vm': [],
   'layout-vm': ['$.layout.data.presence: unexpected'],   // office-dev O8 (operations.md §4)
   'logs-page': ['$.items[].runtimeKind: unexpected'],
   'session-vm': ['$.runtimeKind: unexpected'],
@@ -77,8 +77,8 @@ describe('G5 · contract 3.0 examples', () => {
   it('4. every v3 example validates against the 3.0 VM schemas of the server (the runtime check of /api/v3)', () => {
     const sch = require('../../src/schema');
     const { VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
-    const NAME = { 'meta-vm': 'meta', 'office-vm': 'office', 'logs-page': 'logs', 'session-vm': 'session', 'access-vm': 'access', 'interlocutor-vm': 'interlocutor',
-      'health-vm': 'health', 'flow-detail-vm': 'flow', 'board-vm': 'projects', 'layout-vm': 'layout', 'orchestrators-vm': 'orchestrators', 'teams-vm': 'teams' };
+    const NAME = { 'meta-vm': 'meta', 'office-vm': 'office', 'logs-page': 'logs', 'session-vm': 'session', 'chat-vm': 'chat', 'access-vm': 'access', 'interlocutor-vm': 'interlocutor',
+      'health-vm': 'health', 'flow-detail-vm': 'flow', 'board-vm': 'projects', 'layout-vm': 'layout', 'orchestrators-vm': 'orchestrators', 'teams-vm': 'teams', 'office-store-vm': 'officeStore', 'office-palette-vm': 'officePalette' };
     for (const n of MIGRATION_V3) {
       const r = sch.validate(VM_SCHEMAS_V3[NAME[n]], v3(n).data);
       assert.deepEqual(r.ok ? [] : r.issues.filter((i) => i.severity === 'error').map((i) => i.path + ' ' + i.detail), [], n);

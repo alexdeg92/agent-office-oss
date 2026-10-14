@@ -15,17 +15,38 @@ export function SettingsTabs({ tab, onSelect, busy = false, me }) {
   const tablist = useRef(null);
   useLayoutEffect(() => {
     const list = tablist.current;
+    let disposed = false;
+    const edges = () => {
+      list.dataset.overflowStart = String(list.scrollLeft > 1);
+      list.dataset.overflowEnd = String(list.scrollLeft + list.clientWidth < list.scrollWidth - 1);
+    };
     const reveal = () => {
       const active = list?.querySelector('[aria-selected=true]');
       if (!active) return;
+      list.style.removeProperty('--ao-tabs-end-space');
       const row = list.getBoundingClientRect(), item = active.getBoundingClientRect();
-      if (item.left < row.left) list.scrollLeft -= row.left - item.left;
+      const inset = parseFloat(getComputedStyle(list).scrollPaddingLeft) || 0;
+      if (inset) {
+        // Pick a whole-tab boundary that keeps the selected label in the viewport.
+        const buttons = [...list.querySelectorAll('[role=tab]')];
+        const minimum = Math.max(0, item.right - row.left + list.scrollLeft - list.clientWidth + inset);
+        const starts = buttons.map(button => Math.max(0, button.getBoundingClientRect().left - row.left + list.scrollLeft - inset));
+        const start = starts.find(value => value >= minimum - 1) ?? starts.at(-1);
+        const end = buttons.at(-1).getBoundingClientRect().right - row.left + list.scrollLeft;
+        // Let the last selection align too, rather than clamping between tab labels.
+        list.style.setProperty('--ao-tabs-end-space', Math.max(inset, start + list.clientWidth - end) + 'px');
+        list.scrollLeft = start;
+      }
+      else if (item.left < row.left) list.scrollLeft -= row.left - item.left;
       else if (item.right > row.right) list.scrollLeft += item.right - row.right;
+      edges();
     };
     reveal();
     const resize = new ResizeObserver(reveal);
     resize.observe(list);
-    return () => resize.disconnect();
+    list.addEventListener('scroll', edges, { passive: true });
+    document.fonts?.ready.then(() => { if (!disposed) reveal(); });
+    return () => { disposed = true; resize.disconnect(); list.removeEventListener('scroll', edges); };
   }, [tab, getLang()]);
   function select(id, focus = false) {
     if (busy) return;

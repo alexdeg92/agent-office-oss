@@ -2,7 +2,7 @@
   "data": {
     "modelVersion": 1,
     "apiVersion": 3,
-    "contractVersion": "3.5",
+    "contractVersion": "3.6",
     "serverVersion": "1.0.0+dev",
     "env": "dev",
     "capabilities": {

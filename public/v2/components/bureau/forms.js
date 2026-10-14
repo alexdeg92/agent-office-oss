@@ -146,7 +146,7 @@ export const Radio = props => html`<${Choice} ...${props} kind="radio" mixed=${f
 export function Button({
   id, label, icon, iconOnly = false, title, variant = 'secondary', size = 'md', type = 'button', form, name, value,
   formAction, formMethod, formEncType, formTarget, formNoValidate, onPress, onClick, onBlur, onFocus,
-  busy = false, busyLabel, disabled = false, describedBy, pressed, class: cls, testId,
+  busy = false, busyLabel, disabled = false, describedBy, pressed, class: cls, testId, children,
 }) {
   const style = ['primary','secondary','ghost','danger'].includes(variant) ? variant : 'secondary';
   const scale = ['sm','md','lg'].includes(size) ? size : 'md';
@@ -160,6 +160,6 @@ export function Button({
       onPress?.(); onClick?.(event);
     }}>
     ${icon ? html`<span class="bu-button__icon" aria-hidden="true">${icon}</span>` : null}
-    ${iconOnly ? null : html`<span>${label}</span>`}${busy ? progress(busyLabel) : null}
+    ${children !== undefined ? children : iconOnly ? null : html`<span>${label}</span>`}${busy ? progress(busyLabel) : null}
   </button>`;
 }

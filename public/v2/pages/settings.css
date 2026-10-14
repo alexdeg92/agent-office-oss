@@ -40,7 +40,20 @@
 .ao-settings__plan .bu-code { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; max-height: none; }
 .ao-settings__empty { margin-block: var(--bu-space-6); }
 @media (max-width: 820px) {
-  .ao-settings__tabs { padding: 0 var(--bu-space-2); }
+  .ao-settings__tabs {
+    padding: 0 var(--bu-space-2) 0 var(--bu-space-2);
+    padding-right: var(--ao-tabs-end-space, var(--bu-space-8));
+    scroll-padding-inline: var(--bu-space-8);
+    scroll-snap-type: x proximity;
+    --ao-tab-edge-start: black;
+    --ao-tab-edge-end: black;
+    mask-image: linear-gradient(to right,
+      var(--ao-tab-edge-start) 0, var(--ao-tab-edge-start) var(--bu-space-6), black var(--bu-space-8),
+      black calc(100% - var(--bu-space-8)), var(--ao-tab-edge-end) calc(100% - var(--bu-space-6)), var(--ao-tab-edge-end) 100%);
+  }
+  .ao-settings__tabs[data-overflow-start=true] { --ao-tab-edge-start: transparent; }
+  .ao-settings__tabs[data-overflow-end=true] { --ao-tab-edge-end: transparent; }
+  .ao-settings__tabs .bu-tab-button { scroll-snap-align: start; }
   .ao-settings__tabs .bu-tab-button { padding: var(--bu-space-2) var(--bu-space-3); font: var(--bu-type-label); }
   .ao-settings__content { padding: var(--bu-space-4); }
   .ao-settings__grid, .ao-settings__fields { grid-template-columns: minmax(0, 1fr); }

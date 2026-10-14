@@ -1,4 +1,4 @@
-# Contract examples (api.md 2.8)
+# Contract examples (api.md 2.9)
 
 **Authoritative example payloads** for every VM and command shared across agents (PM decision on review-07).
 They are the wire contract in executable form. PM delegated these contract edits to onboarding-1 for this fix round.
@@ -19,9 +19,12 @@ They are the wire contract in executable form. PM delegated these contract edits
 | `import-result.json` | its response → `Ok<CommandResult<ImportResult>>` | §5.4 |
 | `error-409-project.json` | any project write with a stale `expectedRevision` → `ApiError` with `current.vm: ProjectVM` | §2.2, §5.4 |
 | `office-vm.json` | `GET /api/v2/views/office` → `Ok<OfficeVM>` | §3.2 |
-| `layout-vm.json` | `GET /api/v2/office/layout` → `Ok<LayoutVM>`; `layout.data` / `default.data` are `design/office/layout.example.json` and `manifest` is a snapshot of `design/office/manifest.example.json` (opaque; the test enforces the same `version`) | §3.10 |
+| `office-store-vm.json` | `GET /api/v2/views/office/store` → `Ok<OfficeStoreVM>` | §3.16 |
+| `office-characters-vm.json` | `GET /api/v2/views/office/characters` → `Ok<OfficeCharactersVM>` | §3.15 |
+| `layout-vm.json` | `GET /api/v2/office/layout` → `Ok<LayoutVM>`; `layout.data` / `default.data` follow `design/office/layout.example.json` with the read-only `idleRelocationMinutes` Settings projection; `manifest` is a snapshot of `design/office/manifest.example.json` (opaque; the test enforces the same `version`) | §3.10 |
 | `health-vm.json` | `GET /api/v2/views/health` → `Ok<HealthVM>` (S6: the server's builder asserts this shape) | §3.8 |
 | `session-vm.json` | `GET /api/v2/views/sessions/:key` → `Ok<SessionVM>` | §3.6 |
+| `chat-vm.json` | `GET /api/v2/views/chat` → `Ok<ChatVM>` | §3.3 |
 | `logs-page.json` | `GET /api/v2/views/logs` → `Ok<Page<LogRowVM>>` (S7b) | §3.6 |
 | `flow-list-vm.json` | `GET /api/v2/views/flows` → `Ok<FlowListVM>` (S7b) | §3.4 |
 | `flow-detail-vm.json` | `GET /api/v2/views/flows/:jobId` → `Ok<FlowDetailVM>` (S7b) | §3.4 |

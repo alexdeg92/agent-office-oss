@@ -29,7 +29,8 @@
     "$.participants[].delegation",
     "$.participants[].delegation.label",
     "$.run.evidence.observedAt",
-    "$.run.evidence.expiresAt"
+    "$.run.evidence.expiresAt",
+    "$.events[].title"
   ],
   "types": {
     "$.events[].error": "string",
@@ -42,7 +43,10 @@
     "$.subagents[].channel": "string",
     "$.subagents[].name": "string",
     "$.subagents[].avatarHint": "string",
-    "$.subagents[].delegation.label": "string"
+    "$.subagents[].delegation.label": "string",
+    "$.events[].title": "string",
+    "$.events[].status": "string",
+    "$.events[].body": "string"
   },
   "variants": {
     "$.subagents": [

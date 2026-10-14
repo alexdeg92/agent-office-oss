@@ -1,23 +1,29 @@
 /* La Boutique (office-dev-21): the original Bureau card design (bu-card, bu-btn, bu-segmented colours), mobile-first
    (360–436 px), then a wider grid on desktop. Placement mode is a fixed overlay over the shell. */
-.ao-shop__navigation { display: flex; align-items: center; gap: var(--bu-space-3); min-width: 0;
-  padding: var(--bu-space-0-5); border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-control); background: var(--bu-bg-sunken); }
-.ao-shop__navigation .ao-shop__tabs { flex: 1; min-width: 0; margin-inline: 0; }
-.ao-shop__back { min-height: 44px; }
-.ao-shop__floor-context { flex: 0 1 auto; max-width: 14rem; overflow: hidden; color: var(--bu-text-secondary); font: var(--bu-type-caption); text-overflow: ellipsis; white-space: nowrap; }
-.ao-shop__category { flex: 0 0 auto; margin-inline-start: auto; }
-.ao-shop__category .bu-text-input { min-height: 44px; font: var(--bu-type-label); }
-.bu-shell__main:has(.ao-shop) { grid-template-columns: minmax(0, 1fr); }
-
-/* Category tabs: one row, scrolls sideways on phones; 44 px targets. */
-.ao-shop__tabs { display: flex; gap: var(--bu-space-1); overflow-x: auto; scrollbar-width: none; padding: var(--bu-space-0-5); margin-inline: calc(-1 * var(--bu-space-0-5));
-  scroll-snap-type: x proximity; }
-.ao-shop__tabs::-webkit-scrollbar { display: none; }
-.ao-shop__tab { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--bu-space-1-5, 6px); min-height: 44px; padding: 0 var(--bu-space-3);
-  border: 1px solid transparent; border-radius: calc(var(--bu-radius-control) - 2px); background: none; color: var(--bu-text-secondary); font: var(--bu-type-label); white-space: nowrap; cursor: pointer; scroll-snap-align: start; }
-.ao-shop__tab[aria-selected="true"] { background: var(--bu-surface); color: var(--bu-text-primary); border-color: var(--bu-border-default); box-shadow: var(--bu-shadow-1); }
-.ao-shop__tab:focus-visible { outline: 2px solid var(--bu-focus-ring); outline-offset: 2px; }
-.ao-shop__tab .bu-icon { width: 16px; height: 16px; }
+/* Fixed Store header: independent floor choice and two equal dropdowns. */
+.ao-shop__header { display:flex; align-items:end; justify-content:space-between; gap:var(--bu-space-3); padding-bottom:var(--bu-space-3); }
+.ao-shop__navigation { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; gap:var(--bu-space-3); min-width:0; }
+.ao-shop__control { display:grid; gap:var(--bu-space-1); min-width:0; }
+.ao-shop__control > label { font:var(--bu-type-caption); color:var(--bu-text-secondary); }
+.ao-shop__control .bu-input-control { width:100%; min-width:0; }
+.ao-shop__control .bu-text-input { width:100%; min-width:0; min-height:44px; font:var(--bu-type-label); }
+.ao-shop__floor { width:min(22rem,100%); }
+.ao-shop__back { min-height:44px; flex:none; }
+.bu-shell__main:has(.ao-shop) { grid-template-columns:minmax(0,1fr); }
+@media(min-width:821px) {
+  .ao-shop__controls { display:grid; grid-template-columns:repeat(2,minmax(0,20rem)); align-items:end; gap:var(--bu-space-3); }
+  .ao-shop__controls:has(.ao-shop__floor) { display:flex; }
+  .ao-shop__controls .ao-shop__header, .ao-shop__controls .ao-shop__navigation { display:contents; }
+  .ao-shop__controls .ao-shop__floor { width:auto; order:1; }
+  .ao-shop__controls:has(.ao-shop__floor) .ao-shop__section { order:2; }
+  .ao-shop__controls:has(.ao-shop__floor) .ao-shop__category { order:3; }
+  .ao-shop__controls:has(.ao-shop__floor) .ao-shop__control { flex:0 1 16rem; }
+  .ao-shop__controls .ao-shop__back { order:4; margin-left:auto; }
+}
+@media(min-width:821px) and (max-width:1100px) {
+  .ao-shop__backtext { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
+  .ao-shop__back { width:44px; padding-inline:var(--bu-space-2); }
+}
 .ao-shop__panel { display: flex; flex-direction: column; gap: var(--bu-space-4); min-width: 0; }
 .ao-shop__panel:focus-visible { outline: 2px solid var(--bu-focus-ring); outline-offset: 4px; border-radius: var(--bu-radius-card); }
 
@@ -105,21 +111,16 @@
 .ao-place__actions .bu-btn { flex: 1 1 0; min-height: 48px; justify-content: center; }
 @media (min-width: 700px) { .ao-place__actions { justify-content: flex-end; } .ao-place__actions .bu-btn { flex: 0 0 auto; min-width: 9rem; } }
 
-@media (max-width: 600px) {
-  .ao-shop__navigation { gap: var(--bu-space-1); flex-wrap: wrap; }
-  .ao-shop__floor-context { order: -1; flex: 1 0 100%; max-width: none; }
-  .ao-shop__back .ao-shop__backtext { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .ao-shop__back { min-width: 44px; padding-inline: var(--bu-space-2); }
+@media(max-width:600px) {
+  .ao-shop__navigation { gap:var(--bu-space-2); }
+  .ao-shop__header { gap:var(--bu-space-2); }
+  .ao-shop__floor { flex:1; width:auto; }
+  .ao-shop__back .ao-shop__backtext { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
+  .ao-shop__back { min-width:44px; padding-inline:var(--bu-space-2); }
 }
-@media (max-width: 480px) {
-  /* The bottom navigation already links to Bureau; give the full tab label room. */
-  .ao-shop__back { display: none; }
-  .ao-shop__tab { padding-inline: var(--bu-space-2); }
-}
-
 /* The horizontally scrolling rows (tabs, agent chips) never widen the page (on a phone that would zoom the layout out). */
 .ao-shop { min-width: 0; max-width: 100%; overflow-x: clip; }
-.ao-shop__tabs, .ao-shop__agents { width: 100%; max-width: 100%; min-width: 0; }
+.ao-shop__agents { width: 100%; max-width: 100%; min-width: 0; }
 .ao-shop__panel, .ao-shop__try, .ao-shop__grid { min-width: 0; max-width: 100%; }
 
 .ao-shop.ao-frame > .ao-frame__bar { padding-bottom: var(--bu-space-3); }

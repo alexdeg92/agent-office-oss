@@ -12,7 +12,7 @@ const { buildSkillListVM, buildSkillDetailVM } = require('./vm/skills');
 const { buildLogsPage, buildSessionVM, parseLogsQuery, logsTopicOf, LIMIT_DEFAULT } = require('./vm/logs');
 const { buildAccessVM, buildInterlocutorVM } = require('./vm/access');
 const { buildOfficeVM, createStateTracker, officeDefaults } = require('./vm/office');
-const { DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS } = require('../../engine/derive/occupants');
+const { DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS, occupantIdOf } = require('../../engine/derive/occupants');
 const { projectionFor } = require('./project3x');
 const { isInterlocutorId, cpLength, OCCUPANT_ID_MAX } = require('../../engine/model/kinds');
 const { every } = require('../../ops/timescale');
@@ -55,7 +55,8 @@ const decodeKey = (k) => { try { return decodeURIComponent(k); } catch (_) { ret
  */
 function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, enrichment = null, orchestratorTeams = null,
   officePrincipalFor = () => null, officeScopeFor = () => null, officeTopicFor: scopedOfficeTopicFor = null, authed, ok, isSubscribed = () => false, sessionsReadable = () => false, now = () => Date.now(),
-  presenceWindowMs = sessionPresenceWindow(), agentPresenceWindowMs = agentPresenceWindow() }) {
+  presenceWindowMs = sessionPresenceWindow(), agentPresenceWindowMs = agentPresenceWindow(), officeTimings = null }) {
+  const currentOfficeTimings = () => officeTimings?.() || { finishedSessionWindowMs: presenceWindowMs, agentPresenceWindowMs, idleRelocationMinutes: 15 };
   // G7 (ADR-001 §14.2): interlocutor profiles come from the selected enrichers (InterlocutorProfile, cached only)
   const peek = enrichment ? (id) => enrichment.peek(id) : () => ({ resolution: 'unresolvable', profile: null });
   const names = {
@@ -88,7 +89,8 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     const idleWindow = (Number.isInteger(idleMinutes) && idleMinutes >= 1 && idleMinutes <= 1440 ? idleMinutes : 15) * 60_000;
     const relocationAt = (vm?.occupants || []).filter(row => row.state === 'idle' && !row.activity && !row.visitPhase && Number.isFinite(row.stateSince))
       .map(row => row.stateSince + idleWindow).filter(at => at > t).sort((a, b) => a - b)[0];
-    const at = [visitAt, relocationAt].filter(value => Number.isFinite(value) && value > t).sort((a, b) => a - b)[0];
+    const communicationAt = (vm?.occupants || []).map(row => row.communication?.expiresAt).filter(at => Number.isFinite(at) && at > t).sort((a,b) => a-b)[0];
+    const at = [visitAt, relocationAt, communicationAt].filter(value => Number.isFinite(value) && value > t).sort((a, b) => a - b)[0];
     if (!at) return;
     if (visitExpiryTimer && visitExpiryAt <= at) return;
     clearTimeout(visitExpiryTimer);
@@ -110,6 +112,46 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   const primaryAgentId = () => { const a = engine.primaryAgent(); return a ? a.id : null; };   // G3a: the one resolver
   const pendingRestart = new Set();   // S7c: skills toggled since the gateway last (re)connected
   engine.on('change', (c) => { if (c && c.channel === 'gateway.connection' && engine.gateway().connected) pendingRestart.clear(); });
+  // Chat author portraits use the same backend-resolved appearance as the
+  // OfficeVM. Match by canonical agent/session identity, never by a label.
+  const chatAvatarFor = (sender) => {
+    if (!sender || sender.kind !== 'agent') return null;
+    let office;
+    try { office = topics.current('office', 3)?.vm; } catch (_) { return null; }
+    if (!office) return null;
+    const sessionKey = sender.delegation?.sessionKey || null;
+    let row = sessionKey ? office.occupants.find(o => o.sessionKey === sessionKey) : null;
+    // Result cards remain in chat after a completed child leaves the short
+    // office-presence window. Resolve the canonical session to the same
+    // occupant identity the OfficeVM uses, then reuse its stored appearance.
+    // The session key and occupant id are private server-side join inputs; the
+    // ChatVM receives only the appearance descriptor.
+    const session = sessionKey ? engine.session(sessionKey) : null;
+    const canonicalOccupantId = session ? occupantIdOf(session) : null;
+    if (!row && canonicalOccupantId) {
+      const occupantId = Pof({ apiVersion: 3 }).occupantId(canonicalOccupantId);
+      row = office.occupants.find(o => o.id === occupantId);
+    }
+    if (row?.look) return row.look;
+    if (session?.class?.kind === 'subagent' && canonicalOccupantId) {
+      const active = activeLayout(), defaults = officeDefaults();
+      const P2 = require('./project2x').project2x;
+      const [appearance] = defaults.rules.resolveOccupants(active.layout, defaults.index, [{
+        id: P2.occupantId(canonicalOccupantId), role: P2.occupantRole('subagent'),
+        sourceName: 'Agent', appearanceId: canonicalOccupantId,
+      }], { assignLook });
+      if (appearance?.look) return appearance.look;
+    }
+    if (!row && typeof sender.id === 'string' && sender.id.startsWith('agent:')) {
+      const agent = engine.agents().find(a => a.id === sender.id.slice(6));
+      if (agent?.isPrimary) row = office.occupants.find(o => o.role === 'primary' || o.role === 'main');
+      else if (agent) {
+        const projected = Pof({ apiVersion: 3 }).occupantId('agent:' + agent.id);
+        row = office.occupants.find(o => o.id === projected);
+      }
+    }
+    return row?.look || null;
+  };
 
   const notFound = () => { throw new ApiError('not_found'); };
   const legacyKey = (key,kind,version=3) => resolveWireId(engine,key,kind,version);
@@ -123,7 +165,7 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     const off = officeDefaults();
     if (!store || !store.office) return off;
     const l = store.office.active(() => off.layout);
-    return Object.assign({}, off, { layout: l.data, revision: l.revision });
+    return Object.assign({}, off, { layout: { ...l.data, idleRelocationMinutes: currentOfficeTimings().idleRelocationMinutes }, revision: l.revision });
   };
   // agent-identity-1: `office` is the full projection; `office?view=limited` the one for callers without the sessions
   // read grant (names and states only, no transcript-derived field). HTTP and SSE pick it per session (OFFICE_LIMITED).
@@ -134,26 +176,28 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     return require('../orchestrator-team-projection').projectOfficeTeamPlacementPopulation(office, snapshot, {
       runtimeAgents: engine.agents(), primaryAgentId: engine.primaryAgent()?.id || null,
       runtimeIdentitySessions: engine.identitySessions?.(snapshot.agents?.[0]?.hostId) || [], runtimeSessions: engine.sessions(),
-      version: P.version, tracker, agentPresenceWindowMs,
+      version: P.version, tracker, agentPresenceWindowMs: currentOfficeTimings().agentPresenceWindowMs,
     });
   };
   topics.define('office', { params: ['view'], build: (q, P) => {
     if (q.view === 'limited') {
-      const vm = buildOfficeVM({ engine, now: now(), tracker: limitedTracker, names, actorOf, layout: activeLayout(), configuredAgents, canReadSessions: false, P, assignLook, presenceWindowMs, agentPresenceWindowMs });
+      const timing = currentOfficeTimings();
+      const vm = buildOfficeVM({ engine, now: now(), tracker: limitedTracker, names, actorOf, layout: activeLayout(), configuredAgents, canReadSessions: false, P, assignLook, presenceWindowMs: timing.finishedSessionWindowMs, agentPresenceWindowMs: timing.agentPresenceWindowMs });
       // A limited reader may be the first subscriber. Build the server-only
       // full population when no shared OfficeVM cache exists so placement does
       // not depend on who has visited the view first.
       const sharedOffice = topics.current('office', P.version)?.vm || buildOfficeVM({ engine, now: now(), tracker, names, actorOf,
-        layout: activeLayout(), configuredAgents, canReadSessions: true, P, isNewAgent, presenceWindowMs, agentPresenceWindowMs });
+        layout: activeLayout(), configuredAgents, canReadSessions: true, P, isNewAgent, presenceWindowMs: timing.finishedSessionWindowMs, agentPresenceWindowMs: timing.agentPresenceWindowMs });
       const { projectOfficePlacement } = require('./vm/office-roster');
       const placed = projectOfficePlacement(vm, { layout: activeLayout().layout, index: officeDefaults().index,
         projectOccupantId: P.occupantId, now: now(), tracker,
-        planningOccupants: placementPopulationFor(sharedOffice, orchestratorTeams?.getSnapshot?.(), P) });
+        planningOccupants: placementPopulationFor(sharedOffice, orchestratorTeams?.getSnapshot?.(), P), engine, canReadSessions: false });
       scheduleOfficeExpiry(placed);
       return placed;
     }
     if (q.view !== undefined) notFound();
-    const vm = buildOfficeVM({ engine, now: now(), tracker, names, actorOf, layout: activeLayout(), configuredAgents, canReadSessions: true, P, isNewAgent, assignLook, presenceWindowMs, agentPresenceWindowMs });
+    const timing = currentOfficeTimings();
+    const vm = buildOfficeVM({ engine, now: now(), tracker, names, actorOf, layout: activeLayout(), configuredAgents, canReadSessions: true, P, isNewAgent, assignLook, presenceWindowMs: timing.finishedSessionWindowMs, agentPresenceWindowMs: timing.agentPresenceWindowMs });
     scheduleOfficeExpiry(vm);
     // R22-04: the inventory of occupants seen is kept whatever contract built the office, in CANONICAL (3.0) form;
     // LayoutVM serves it per version. A change refreshes the layout topic (its agentsSeen).
@@ -202,7 +246,7 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     // on the server-side planning path; project and return the limited `office`.
     const planningOffice = scope?.officeLimited
       ? topics.current('office', P.version)?.vm || buildOfficeVM({ engine, now: now(), tracker, names, actorOf, layout: activeLayout(),
-        configuredAgents, canReadSessions: true, P, isNewAgent, assignLook, presenceWindowMs, agentPresenceWindowMs })
+        configuredAgents, canReadSessions: true, P, isNewAgent, assignLook, presenceWindowMs: currentOfficeTimings().finishedSessionWindowMs, agentPresenceWindowMs: currentOfficeTimings().agentPresenceWindowMs })
       : office;
     const principal = officePrincipalFor(key), snapshot = orchestratorTeams?.getSnapshot?.();
     if (!principal) return office;
@@ -244,20 +288,22 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     const projected = projectOfficeTeamOccupants(annotated, snapshot, principal, { sourceEnabled: true, runtimeAgents: agents,
       primaryAgentId: engine.primaryAgent()?.id || null, runtimeIdentitySessions: engine.identitySessions?.(snapshot.agents?.[0]?.hostId) || [],
       runtimeSessions: engine.sessions(),
-      canReadSessions: sessionsReadable({ session: null, principal }), version: P.version, tracker, agentPresenceWindowMs });
+      canReadSessions: sessionsReadable({ session: null, principal }), version: P.version, tracker, agentPresenceWindowMs: currentOfficeTimings().agentPresenceWindowMs });
     const { projectOfficeRoster, projectOfficePlacement } = require('./vm/office-roster');
     const roster = projectOfficeRoster(projected, { projectOccupantId: P.occupantId });
     const placementLayout = activeLayout();
     const placed = projectOfficePlacement(roster, { layout: placementLayout.layout, index: officeDefaults().index, projectOccupantId: P.occupantId, now: now(), tracker,
-      planningOccupants: placementPopulationFor(planningOffice, snapshot, P),
+      planningOccupants: placementPopulationFor(planningOffice, snapshot, P), engine, canReadSessions: sessionsReadable({ session: null, principal }),
       homeAssignments: store?.office?.teamHomeAssignments?.(placementLayout.revision) || null,
       rememberHomeAssignments: store?.office?.rememberTeamHomeAssignments
         ? assignments => store.office.rememberTeamHomeAssignments(placementLayout.revision, assignments) : null });
+    scheduleOfficeExpiry(placed);
     return activationHint ? { ...placed, ...activationHint } : placed;
   } });
   const officeTopic = req => {
     const ordinary = officeTopicFor(req, sessionsReadable);
-    return ['office', OFFICE_LIMITED].includes(ordinary) && scopedOfficeTopicFor ? scopedOfficeTopicFor(req) : ordinary;
+    if (!['office', OFFICE_LIMITED].includes(ordinary) || !scopedOfficeTopicFor) return ordinary;
+    return scopedOfficeTopicFor(req) || ordinary;
   };
   topics.define('session', { params: 'path', build: ({ key:wire }, P = projectionFor(2)) => {const key=legacyKey(wire,'session',P.version);return buildSessionVM(engine.session(key), shown(engine.transcript(key)), names,
     traceStates.get(key) || (engine.transcript(key) ? 'fresh' : 'stale'), P, now()) || notFound();} });
@@ -295,6 +341,53 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   const send = (res, id, wire, projectionName = wire) => { const t = topics.current(id, res.req.apiVersion); if (!t) throw new ApiError('not_found'); ok(res, t.vm, { id: wire || t.id, rev: t.rev }, projectionName); };
 
   r.get('/views/office', authed, (req, res) => { const id = officeTopic(req); send(res, id, 'office', 'office'); });
+  r.get('/views/office/store', authed, (req, res) => {
+    const current = topics.current(officeTopic(req),req.apiVersion);
+    if (!current?.vm) notFound();
+    const { buildOfficeStoreVM } = require('./vm/office-store');
+    let vm;
+    try { vm = buildOfficeStoreVM({office:current.vm,index:officeDefaults().index,
+      floorId:req.query.floorId ?? '1',section:req.query.section ?? 'mobilier',category:req.query.category ?? ''}); }
+    catch (error) { if (error.field) throw invalid(error.field,'invalid'); throw error; }
+    ok(res,vm,null,'officeStore');
+  });
+  r.get('/views/office/palette', authed, (req, res) => {
+    const { buildOfficePaletteVM } = require('./vm/office-palette');
+    let vm;
+    try { vm = buildOfficePaletteVM({index:officeDefaults().index,floorId:req.query.floorId ?? '1',
+      category:req.query.category ?? '',search:req.query.search ?? ''}); }
+    catch (error) { if(error.field) throw invalid(error.field,'invalid'); throw error; }
+    ok(res,vm,null,'officePalette');
+  });
+  r.get('/views/office/characters', authed, (req, res) => {
+    const scope = req.query.scope === undefined ? 'office' : req.query.scope;
+    const search = req.query.search === undefined ? '' : req.query.search;
+    if (!['office', 'all'].includes(scope)) throw invalid('scope', 'invalid');
+    if (typeof search !== 'string' || search.length > 120) throw invalid('search', 'invalid');
+    const current = topics.current(officeTopic(req), req.apiVersion);
+    if (!current?.vm) notFound();
+    const defaults = officeDefaults();
+    const layout = activeLayout().layout;
+    const runtimeRows = engine.runtimes?.() || [];
+    const { parseId } = require('../../runtime-ids');
+    const projection = Pof(req);
+    const runtimeInfo = row => {
+      let id = row.id;
+      if (row.role === 'primary' || row.role === 'main') id = engine.primaryAgent()?.id || id;
+      const runtimeId = parseId(id, 'agent')?.runtime;
+      const found = runtimeRows.find(runtime => runtime.id === runtimeId);
+      const runtime = found || (runtimeRows.length === 1 ? runtimeRows[0] : null);
+      const declared = runtime ? require('../../adapters').settingsBrand(runtime.adapter) : null;
+      const brand = declared ? { monogram: declared.mark, color: declared.color, ...(declared.logo && { logo: declared.logo }),
+        ...(declared.logoDark && { logoDark: declared.logoDark }), ...(declared.providerName && { providerName: declared.providerName }) } : null;
+      return { name: runtime?.name || declared?.providerName || row.runtime || null, brand };
+    };
+    const { buildOfficeCharactersVM } = require('./vm/office-characters');
+    const { canonicalSeen } = require('./office-layout');
+    const vm = buildOfficeCharactersVM({ office: current.vm, layout, rules: defaults.rules, index: defaults.index,
+      seen: (store?.office?.seenRecent(now()) || []).map(canonicalSeen), runtimeInfo, projection, scope, search });
+    ok(res, vm, null, 'officeCharacters');
+  });
   r.get('/views/flows', authed, (req, res) => send(res, 'flows'));
   r.get('/views/flows/:jobId', authed, async (req, res) => {
     const wire=req.params.jobId;
@@ -385,7 +478,7 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     enrichment.onChange(() => { for (const n of ['interlocutor', 'access', 'logs', 'session', 'office']) topics.invalidate(n); });
   }
 
-  return { pendingRestart, close: () => { clearInterval(ticker); clearTimeout(visitExpiryTimer); }, pull, actorOf };
+  return { pendingRestart, close: () => { clearInterval(ticker); clearTimeout(visitExpiryTimer); }, pull, actorOf, chatAvatarFor };
 }
 
 module.exports = { OFFICE_LIMITED, officeTopicFor, mountViews };

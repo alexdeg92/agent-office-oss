@@ -29,52 +29,10 @@
   },
   {
     "file": "public/v2/mock/examples/board-vm.json",
-    "tokenB64": "YWxleA==",
-    "line": "\"id\": \"per_alex00000000000\",",
-    "count": 1,
-    "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
-  },
-  {
-    "file": "public/v2/mock/examples/board-vm.json",
-    "token": "alexdeg92",
-    "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/board-vm.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/board-vm.json",
     "token": "Timmy",
     "line": "\"name\": \"Timmy\",",
     "count": 1,
     "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
-  },
-  {
-    "file": "public/v2/mock/examples/candidates-vm.json",
-    "token": "alexdeg92",
-    "line": "{ \"id\": \"gh:alexdeg92/agent-office-oss\", \"key\": \"gh:alexdeg92/agent-office-oss\", \"name\": \"Agent Office\", \"summary\": \"Tableau de bord de Timmy.\",",
-    "count": 2,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/candidates-vm.json",
-    "token": "alexdeg92",
-    "line": "{ \"kind\": \"github\", \"label\": \"alexdeg92/agent-office-oss\", \"ref\": { \"owner\": \"alexdeg92\", \"repo\": \"agent-office-oss\" } },",
-    "count": 2,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/candidates-vm.json",
-    "token": "Timmy",
-    "line": "{ \"id\": \"gh:alexdeg92/agent-office-oss\", \"key\": \"gh:alexdeg92/agent-office-oss\", \"name\": \"Agent Office\", \"summary\": \"Tableau de bord de Timmy.\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
   },
   {
     "file": "public/v2/mock/examples/comment-thread-vm.json",
@@ -89,62 +47,6 @@
     "line": "\"id\": \"per_alex00000000000\",",
     "count": 3,
     "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"label\": \"alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"owner\": \"alexdeg92\",",
-    "count": 1,
-    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"owner\": \"alexdeg92\",",
-    "count": 1,
-    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss/actions/runs/1\"",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/error-409-project.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
   },
   {
     "file": "public/v2/mock/examples/error-409-project.json",
@@ -189,13 +91,6 @@
     "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
   },
   {
-    "file": "public/v2/mock/examples/import-result.json",
-    "token": "alexdeg92",
-    "line": "\"created\": [ { \"key\": \"gh:alexdeg92/agent-office-oss\", \"id\": \"prj_k3v9q2m8x1c4d7fz\" }, { \"key\": \"sg:group:Automations\", \"id\": \"prj_m2n4p6q8r1s3t5v7\" } ],",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
     "file": "public/v2/mock/examples/project-vm.json",
     "tokenB64": "YWxleA==",
     "line": "\"id\": \"per_alex00000000000\",",
@@ -204,62 +99,6 @@
   },
   {
     "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"label\": \"alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"owner\": \"alexdeg92\",",
-    "count": 1,
-    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"owner\": \"alexdeg92\",",
-    "count": 1,
-    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"repoLabel\": \"alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://github.com/alexdeg92/agent-office-oss/actions/runs/1\"",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "alexdeg92",
-    "line": "\"url\": \"https://shots.example/alexdeg92/agent-office-oss.png\",",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
     "token": "Timmy",
     "line": "\"name\": \"Timmy\",",
     "count": 1,
@@ -276,13 +115,6 @@
     "file": "public/v2/mock/examples/project-vm.json",
     "token": "Timmy",
     "line": "\"name\": \"Timmy\",",
-    "count": 1,
-    "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
-  },
-  {
-    "file": "public/v2/mock/examples/project-vm.json",
-    "token": "Timmy",
-    "line": "\"summary\": \"Refonte du tableau de bord de Timmy : moteur typé, API v2 et nouveau bureau illustré.\",",
     "count": 1,
     "reason": "frontend (owner: frontend): home-instance mocks and their tests; burn down"
   },
@@ -955,20 +787,6 @@
     "file": "test/office/scene.dom.test.js",
     "token": "Timmy",
     "line": "assert.match(r.batch, /^3 changements\\. Timmy : réfléchit\\. Scout : erreur|^3 changements\\./);",
-    "count": 1,
-    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
-  },
-  {
-    "file": "test/office/scene.dom.test.js",
-    "token": "Timmy",
-    "line": "assert.ok(names.includes('Timmy'), `${url}: the mock primary agent shows its data name`);",
-    "count": 1,
-    "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
-  },
-  {
-    "file": "test/office/scene.dom.test.js",
-    "token": "Timmy",
-    "line": "const ed = await H.openEditor({ scene: sc, store, assetBase: H.assetBase, barHost: document.getElementById('bar'), asideHost: document.getElementById('aside'), getOccupants: () => [{ id: 'main', role: 'main', sourceName: 'Timmy', state: 'idle', stateSince: Date.now() }] });",
     "count": 1,
     "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
   },

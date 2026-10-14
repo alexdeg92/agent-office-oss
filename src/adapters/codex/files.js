@@ -2,7 +2,7 @@
 const fs=require('node:fs'), fsp=fs.promises, path=require('node:path');
 const {createHash}=require('node:crypto');
 const {parse,PROFILE,projectName:projectBasename}=require('./profile');
-const MAX_SESSIONS=2000, MAX_DIRS=10000, MAX_ENTRIES=4096, MAX_READ=256*1024, MAX_HEAD=64*1024;
+const MAX_SESSIONS=2000, MAX_DIRS=10000, MAX_ENTRIES=4096, MAX_READ=256*1024, MAX_LINE=1024*1024, MAX_EVENTS=256;
 const MAX_PROJECT_SAMPLE=64*1024, MAX_PROJECT_HEAD=8*1024, MAX_PROJECT_TAIL=MAX_PROJECT_SAMPLE-MAX_PROJECT_HEAD;
 const MAX_FILTER_BYTES=256*1024;
 const invalid=()=>Object.assign(new Error('rollout path refused'),{code:'EUNSAFEPATH'});
@@ -44,16 +44,46 @@ function createFiles({home,include=[],exclude=[],now=Date.now,agentGrouping='pro
    for(const row of rows)if(known(row)&&matches(row))allowed.add(row.key);
    let start=filterCursorKey?rows.findIndex(row=>row.key===filterCursorKey)+1:0;if(start<0)start=0;if(start>=rows.length)start=0;const ordered=rows.slice(start).concat(rows.slice(0,start));
    const reserve=bytes=>{if(budget+bytes>MAX_FILTER_BYTES)return false;budget+=bytes;stats.filterBytes=budget;return true;};
-   for(const row of ordered){if(closed)break;if(known(row))continue;try{const hint=await projectHint(row,stats,reserve);if(hint.limited){limited=true;break;}filterCursorKey=row.key;row.hintedProject=hint.name;row.hintMtime=row.mtime;row.hintCtime=row.ctime;row.hintSize=row.size;delete row.projectName;delete row.projectId;delete row.agentId;cache.delete(row.key);if(matches(row))allowed.add(row.key);}catch(error){if(error.code==='EUNSAFEPATH')throw error;limited=true;filterCursorKey=row.key;}}
+   for(const row of ordered){if(closed)break;if(known(row))continue;try{const hint=await projectHint(row,stats,reserve);if(hint.limited){limited=true;break;}filterCursorKey=row.key;const changedProject=row.hintedProject!==hint.name;row.hintedProject=hint.name;row.hintMtime=row.mtime;row.hintCtime=row.ctime;row.hintSize=row.size;row.hintDev=row.dev;row.hintIno=row.ino;if(changedProject){delete row.projectName;delete row.projectId;delete row.agentId;cache.delete(row.key);}if(matches(row))allowed.add(row.key);}catch(error){if(error.code==='EUNSAFEPATH')throw error;limited=true;filterCursorKey=row.key;}}
    stats.filterBudgetExhausted=limited;const out=rows.filter(row=>allowed.has(row.key));Object.defineProperty(out,'capacityLimited',{value:limited});return out;}
  async function read(key){const row=index.get(key);if(!row||closed)return null;if(cache.has(key)&&row.loadedMtime===row.mtime&&row.loadedCtime===row.ctime&&row.loadedSize===row.size)return cache.get(key);
    const before=await fsp.lstat(row.filename);if(!before.isFile()||before.isSymbolicLink())throw invalid();await verify(row.chain);const parent=await pin(row.chain);let fd;
-   try{fd=await fsp.open(`/proc/self/fd/${parent.fd}/${path.basename(row.filename)}`,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);const st=await fd.stat();if(!st.isFile()||!same(before,st))throw invalid();const tailSize=st.size<=MAX_READ?st.size:MAX_READ-MAX_HEAD,tail=await readAt(fd,tailSize,st.size-tailSize,stats),headSize=st.size<=MAX_READ?st.size:MAX_HEAD,head=st.size<=MAX_READ?tail:await readAt(fd,headSize,0,stats);await verify(row.chain);const after=await fsp.lstat(row.filename);if(after.isSymbolicLink()||!same(st,after)||after.size!==st.size||after.mtimeMs!==st.mtimeMs||after.ctimeMs!==st.ctimeMs)throw invalid();
-     const hasGap=st.size>MAX_READ,lines=sampledLines(head,tail,stats,hasGap),projectSample=projectMetadataSample(head,tail,st.size),cwd=latestProjectCwd(sampledLines(projectSample.head,projectSample.tail,stats,st.size>MAX_PROJECT_SAMPLE));const project=path.resolve(cwd||'/');const projectId='project:'+createHash('sha256').update(project).digest('hex');const agentId=agentGrouping==='runtime'?'runtime':projectId;const data=parse(lines,{sessionKey:key,agentId,now,counters:stats,gapBeforeIndex:lines.gapBeforeIndex??null});const safeProjectName=projectBasename(cwd)||'Project '+createHash('sha256').update(project).digest('hex').slice(0,12);const activityAt=row.loadedSize!==undefined&&st.size>row.loadedSize?data.activityAt:null;
-     if(exclude.includes(safeProjectName)||include.length&&!include.includes(safeProjectName))return null;const projectName=agentGrouping==='runtime'?'Codex':safeProjectName;Object.assign(row,{identitySessionRef:data.sessionId||row.identitySessionRef,loadedSize:st.size,loadedMtime:st.mtimeMs,loadedCtime:st.ctimeMs,projectId,agentId,projectName,model:data.model,activityAt,activity:data.activity,execution:data.execution,usage:data.usage,displayName:data.displayName,summary:data.summary});
-     const trace={sessionKey:key,fetchedAt:now(),messageCount:data.events.length,window:{from:0,to:data.events.length},events:data.events};cache.set(key,trace);return trace;
+   try{fd=await fsp.open(`/proc/self/fd/${parent.fd}/${path.basename(row.filename)}`,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);const st=await fd.stat();if(!st.isFile()||!same(before,st))throw invalid();
+     const changed=row.readDev!==st.dev||row.readIno!==st.ino||st.size<(row.loadedSize||0)
+       ||((st.size===(row.loadedSize||0))&&(row.loadedMtime!==st.mtimeMs||row.loadedCtime!==st.ctimeMs));
+     const reset=changed||row.loadedSize===undefined||!cache.has(key);
+     const prior=reset?null:row;
+     let offset=reset?0:row.loadedSize, pending=reset?Buffer.alloc(0):Buffer.from(row.pendingLine||''), skipping=reset?false:row.skipLine===true;
+     const amount=Math.min(MAX_READ,Math.max(0,st.size-offset));
+     const chunk=amount?await readAt(fd,amount,offset,stats):Buffer.alloc(0);offset+=chunk.length;
+     let input=Buffer.concat([pending,chunk]), lines=[], start=0, oversize=skipping;
+     for(let end;(end=input.indexOf(10,start))>=0;start=end+1){
+       const line=input.subarray(start,end);if(oversize){oversize=false;continue;}
+       if(line.length>MAX_LINE){stats.oversizeLines=(stats.oversizeLines||0)+1;continue;}
+       if(line.length)lines.push(line.toString('utf8'));
+     }
+     let remainder=input.subarray(start);
+     if(remainder.length>MAX_LINE){remainder=Buffer.alloc(0);oversize=true;stats.oversizeLines=(stats.oversizeLines||0)+1;}
+     const parsed=[];for(const line of lines){try{parsed.push(JSON.parse(line));}catch{stats.malformedLines++;}}
+     const observedCwd=latestProjectCwd(parsed);const cwd=observedCwd||prior?.projectPath||null;const project=path.resolve(cwd||'/');const projectId='project:'+createHash('sha256').update(project).digest('hex');const agentId=agentGrouping==='runtime'?'runtime':projectId;
+     const data=parse(parsed,{sessionKey:key,agentId,now,counters:stats,state:prior?.parserState||null});
+     const events=[];for(const event of [...(prior?.events||[]),...data.events]){const existing=event.id?events.findIndex(old=>old.id===event.id):-1;if(existing>=0){events[existing]=event;continue;}events.push(event);if(events.length>MAX_EVENTS)events.shift();}
+     const complete=offset>=st.size&&!remainder.length;
+     const currentProjectHint=row.hintDev===st.dev&&row.hintIno===st.ino&&row.hintMtime===st.mtimeMs&&row.hintCtime===st.ctimeMs&&row.hintSize===st.size;
+     if((include.length||exclude.length)&&!currentProjectHint){delete row.projectName;delete row.projectId;delete row.agentId;cache.delete(key);return null;}
+     const safeProjectName=!complete&&currentProjectHint?row.hintedProject
+       :observedCwd?projectBasename(observedCwd):(projectBasename(cwd)||prior?.safeProjectName||null);
+     if((safeProjectName&&exclude.includes(safeProjectName))||include.length&&(!safeProjectName||!include.includes(safeProjectName)))return null;
+     const projectName=agentGrouping==='runtime'?'Codex':safeProjectName;
+     Object.assign(row,{identitySessionRef:data.sessionId||prior?.identitySessionRef||row.identitySessionRef,projectPath:cwd, safeProjectName,
+       loadedSize:offset,loadedMtime:st.mtimeMs,loadedCtime:st.ctimeMs,readDev:st.dev,readIno:st.ino,pendingLine:Buffer.from(remainder),skipLine:oversize,
+       projectId,agentId,projectName,model:data.model||prior?.model||null,activityAt:data.activityAt??prior?.activityAt??null,
+       activity:data.activity,execution:data.execution??prior?.execution??null,parserState:data.state,usage:data.usage??prior?.usage??null,
+       displayName:data.displayName||prior?.displayName||null,summary:data.summary||prior?.summary||null,events});
+     await verify(row.chain);const after=await fsp.lstat(row.filename);if(after.isSymbolicLink()||!same(st,after)||after.size!==st.size||after.mtimeMs!==st.mtimeMs||after.ctimeMs!==st.ctimeMs)throw invalid();
+     const trace={sessionKey:key,fetchedAt:now(),messageCount:events.length,window:{from:0,to:events.length},events};cache.set(key,trace);return trace;
    }finally{await fd?.close();await parent.close();}
  }
- return {scan,filterRows,read,rows:()=>[...index.values()].filter(row=>row.projectName),cached:()=>[...cache.keys()],stats,bounds:{sessions:MAX_SESSIONS,readBytes:MAX_READ},close(){closed=true;cache.clear();},agentId:project=> 'project:'+createHash('sha256').update(project).digest('hex'),profile:PROFILE};
+ return {scan,filterRows,read,rows:()=>[...index.values()].filter(row=>row.agentId),cached:()=>[...cache.keys()],stats,bounds:{sessions:MAX_SESSIONS,readBytes:MAX_READ},close(){closed=true;cache.clear();},agentId:project=> 'project:'+createHash('sha256').update(project).digest('hex'),profile:PROFILE};
 }
 module.exports={createFiles,MAX_SESSIONS,MAX_ENTRIES,MAX_READ,MAX_FILTER_BYTES,MAX_FILTER_HEAD:MAX_PROJECT_SAMPLE,filenameSessionRef};

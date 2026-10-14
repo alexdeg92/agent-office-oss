@@ -92,6 +92,36 @@ test('Claude agent summaries use ai-title or only the first line of the first pr
   assert.ok(!fallback.summary.includes('NEVER SHOW'));
 });
 
+test('Claude ancestry passes through unrecognized UUID-bearing records without truncating earlier exchanges', async t => {
+  const h = fixture(t); h.file('synthetic-ancestry', 'ancestry-session', [
+    { type: 'user', sessionId: 'ancestry-session', uuid: 'user-before-metadata', timestamp: new Date(NOW - 4000).toISOString(), message: { role: 'user', content: 'Synthetic first exchange' } },
+    { type: 'attachment', uuid: 'unrecognized-metadata', parentUuid: 'user-before-metadata', timestamp: new Date(NOW - 3000).toISOString(), attachment: { id: 'synthetic-attachment' } },
+    { type: 'user', sessionId: 'ancestry-session', uuid: 'user-after-metadata', parentUuid: 'unrecognized-metadata', timestamp: new Date(NOW - 2000).toISOString(), message: { role: 'user', content: 'Synthetic second question' } },
+    { type: 'assistant', sessionId: 'ancestry-session', uuid: 'answer-after-metadata', parentUuid: 'user-after-metadata', timestamp: new Date(NOW - 1000).toISOString(), message: { role: 'assistant', content: [{ type: 'text', text: 'Synthetic second answer' }] } },
+  ]);
+  const files = createFiles({ home: h.home, now: () => NOW }); t.after(() => files.close());
+  await files.scan();
+  const trace = await files.read(files.rows()[0].key);
+  assert.deepEqual(trace.events.map(event => event.text), ['Synthetic first exchange', 'Synthetic second question', 'Synthetic second answer']);
+});
+
+test('Claude bootstrap reads history from byte zero across the previous tail-window boundary', async t => {
+  const h = fixture(t), id = 'long-history-session';
+  h.file('synthetic-long-history', id, [
+    { type: 'user', sessionId: id, uuid: 'old-large-prompt', timestamp: new Date(NOW - 4000).toISOString(), message: { role: 'user', content: 'Synthetic old exchange ' + 'x'.repeat(320 * 1024) } },
+    { type: 'assistant', sessionId: id, uuid: 'old-large-answer', parentUuid: 'old-large-prompt', timestamp: new Date(NOW - 3000).toISOString(), message: { role: 'assistant', content: [{ type: 'text', text: 'Synthetic old answer' }] } },
+    { type: 'user', sessionId: id, uuid: 'new-question', parentUuid: 'old-large-answer', timestamp: new Date(NOW - 2000).toISOString(), message: { role: 'user', content: 'Synthetic recent question' } },
+    { type: 'assistant', sessionId: id, uuid: 'new-answer', parentUuid: 'new-question', timestamp: new Date(NOW - 1000).toISOString(), message: { role: 'assistant', content: [{ type: 'text', text: 'Synthetic recent answer' }] } },
+  ]);
+  const files = createFiles({ home: h.home, now: () => NOW }); t.after(() => files.close());
+  await files.scan();
+  const trace = await files.read(files.rows()[0].key);
+  assert.equal(trace.events.length, 4);
+  assert.match(trace.events[0].text, /^Synthetic old exchange /);
+  assert.equal(trace.events[0].text.length, 32 * 1024);
+  assert.deepEqual(trace.events.slice(1).map(event => event.text), ['Synthetic old answer', 'Synthetic recent question', 'Synthetic recent answer']);
+});
+
 test('Claude connection probe counts projects independently of runtime agent grouping', async t => {
   const h = fixture(t), home = h.home;
   h.file('synthetic-project-one', 'session-one');
@@ -184,10 +214,15 @@ test('project labels use only a validated cwd basename, keep opaque identity, an
   const portals = engine.agents().filter(a => a.name === 'agent-office-portal');
   assert.equal(portals.length, 2); assert.notEqual(portals[0].id, portals[1].id, 'same basename never merges project identities');
   assert.ok(engine.agents().some(a => a.name === 'windows-project'));
-  assert.equal(engine.agents().filter(a => /^Project [a-f0-9]{12}$/.test(a.name)).length, 7, 'unknown cwd uses a safe fallback');
+  assert.equal(engine.agents().filter(a => a.name === 'Claude Code project').length, 7, 'unknown cwd uses a neutral fallback instead of exposing a generated project id');
+  assert.equal(engine.agents().some(a => /^Project [a-f0-9]{12}$/.test(a.name)), false, 'generated identity fragments are never used as display names');
   assert.ok(!JSON.stringify([engine.agents(), engine.sessions()]).includes(privateRoot));
   assert.ok(engine.agents().every(a => a.workspace === null)); assert.ok(engine.sessions().every(s => s.cwd === null));
   const id = portals.find(a => a.mainSessionKey === runtime.files.rows().find(r => r.sessionId === 'label-main').key).id;
+  const projected = engine.sessions().find(row => row.sessionId === 'label-main');
+  assert.match(projected.projectRef, /^project:[a-f0-9]{64}$/);
+  assert.equal(projected.projectLabel, 'agent-office-portal');
+  assert.equal(projected.cwd, null);
   fs.appendFileSync(file, JSON.stringify(record('label-main', 'Changed working directory', { uuid: 'cwd-change', cwd: cwd + '/src' })) + '\n');
   await runtime.cycle(); assert.equal(engine.agents().find(a => a.id === id).name, 'agent-office-portal', 'later cwd changes do not rename the project');
   fs.renameSync(file, file + '.old'); fs.writeFileSync(file, JSON.stringify(record('label-main', 'New generation', { cwd: privateRoot + '/renamed-project' })) + '\n');
@@ -515,7 +550,9 @@ test('filters and containment refuse symlink roots, project links and transcript
 });
 test('1000 synthetic sessions yield during indexing, keep bounded tails/cache, and produce 20 project agents or one runtime agent', async t => {
   const h = fixture(t);
-  for (let p = 0; p < 20; p++) for (let n = 0; n < 50; n++) h.file('project-' + p, 'session-' + p + '-' + n);
+  // These index fixtures model empty transcript files; use an empty record set
+  // rather than the helper's default synthetic user turn.
+  for (let p = 0; p < 20; p++) for (let n = 0; n < 50; n++) h.file('project-' + p, 'session-' + p + '-' + n, []);
   let yielded = false; setImmediate(() => { yielded = true; });
   for (const agentGrouping of ['project', 'runtime']) {
     const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home, agentGrouping } } }, { now: () => NOW });

@@ -18,11 +18,19 @@ const { linkProjectActivity } = require('../../projects/activity');
 const { indexOf, childKeys, completionResults, isFinal, finalText } = require('../../projects/session-results');
 const { PROJECT_CONTEXT_READS, mayRead: mayReadComment } = require('../../security/comment-provenance');
 const { runAuthorized } = require('../../security/dispatch-context');
+const { senderKey } = require('../../engine/model/sender');
+const { randomUUID } = require('node:crypto');
 
 const MAX_BODY = 4000;
 const PAGE = 50;
 const RECENT_IN_PROMPT = 8;
 const TURN_MS = 150000;
+const COMMENT_DELIVERY_MS = 2 * 60 * 60 * 1000;
+// Summary requests create a visible, project-wide pending state. Keep that state
+// short enough to recover from an idle agent or a reply the transcript reader
+// cannot match; normal comment delivery keeps its longer follow window.
+const SUMMARY_DELIVERY_MS = 15 * 60 * 1000;
+const EXPIRED_ATTEMPT = Symbol('expired-attempt');
 const MENTION = /(^|[^\p{L}\p{N}_.@-])@([\p{L}\p{N}_][\p{L}\p{N}_.-]{0,63})/gu;
 
 const foldMention = (v) => String(v || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, '');
@@ -38,7 +46,11 @@ function projectSlug(project) {
   const tag = (project.sources || []).find((x) => x.kind === 'sessionGroup' && x.ref && String(x.ref.groupId || '').startsWith('projet:'));
   return (tag && tag.ref.name) || slugOf(project.name).slice(0, 60) || project.id;
 }
-const sessionKeyOf = (agentId, project) => `agent:${agentId}:ao-projet-${projectSlug(project)}`;
+const sessionKeyOf = (agentId, project, definition = null) => {
+  const ref = 'ao-projet-' + projectSlug(project);
+  const mapped = definition?.sessionKeyFor?.(agentId, ref, { purpose: 'project' });
+  return typeof mapped === 'string' && mapped ? mapped : `agent:${agentId}:${ref}`;
+};
 
 /**
  * @param {object} deps { store, engine, runtime, topics, cfg, log, now }
@@ -46,11 +58,14 @@ const sessionKeyOf = (agentId, project) => `agent:${agentId}:ao-projet-${project
  */
 function createProjectThread({ store, engine, runtime, topics, cfg, log = () => {}, now = () => Date.now(), pollMs = 5000, relayGraceMs = 30000, dispatchAuthority = null }) {
   const comments = store.comments;
-  let service = null, repository = null;
+  let service = null, repository = null, teamProjectById = null;
   let closed = false;
   const sleepers = new Set();
+  let expiryTimer = null;
   const jobs = new Set();
+  const runningJobs = new Set();
   const chains = new Map();   // projectId → the delivery chain (one turn at a time per project)
+  const turnLocks = new Map(); // protects context/baseline/agentTurn when a retry bypasses stale tracking
   const locale = () => resolveLocale({ instance: cfg && cfg.instanceLocale });
   const L = () => labelsFor(locale(), 'server');
   const fill = (tpl, p) => String(tpl).replace(/\{(\w+)\}/g, (_, k) => (p[k] == null ? '' : String(p[k])));
@@ -70,8 +85,28 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
 
   function projectOf(id) {
     const p = repository && repository.getProject(id);
-    if (!p) throw new ApiError('not_found');
-    return p;
+    if (p) return p;
+    const teamProject = teamProjectById?.(id);
+    if (teamProject?.teamProject) return teamProject;
+    throw new ApiError('not_found');
+  }
+  function assertCommentWritable(project) {
+    if (project?.teamProject) throw new ApiError('readonly');
+  }
+  function projectForRequest(req, id) {
+    const project = projectOf(id);
+    if (project.teamProject) {
+      // Team task bodies and threads are protected by the live permission store,
+      // independently of the generic projects route grant. Agent tokens do not
+      // have a human teams.read principal and remain masked as not-found.
+      const user = req.user || store.users?.byId?.(req.session?.userId);
+      const identityActive = cfg?.rbacEnabled === true || !!store.rbac?.state?.().owner_user_id;
+      const legacyOwner = !identityActive && !req.principal && !!req.session;
+      if (!legacyOwner && (!user || !store.policy?.can?.(user, 'teams', 'read'))) {
+        throw new ApiError('not_found');
+      }
+    }
+    return project;
   }
   function mentionsOf(body) {
     const list = agents(), out = [];
@@ -114,6 +149,8 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
   }
   function threadVM(projectId, { cursor = null, actor = { kind: 'human', personId:store.owner.id } } = {}) {
     const project = projectOf(projectId);
+    if (project.teamProject) return { projectId, items: [], nextCursor: null, mentionable: [],
+      canComment: false, canMention: false, session: null };
     const mark = cursor ? decodeCursor(cursor) : null;
     const rows = comments.page(projectId, { before: mark ? mark.seq : null, limit: PAGE + 1 });
     const more = rows.length > PAGE;
@@ -131,7 +168,7 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
       projectId, items, nextCursor: more ? encodeCursor(page[0]) : null,
       mentionable: agents().map((a) => ({ id: a.id, name: a.name || a.id, avatarUrl: null, primary: a.id === pid })),
       canComment: caps.storeWrites, canMention: caps.storeWrites && caps.openclawWrites,
-      session: pid ? { key: sessionKeyOf(pid, project), route: '/journaux/' + encodeURIComponent(sessionKeyOf(pid, project)) } : null,
+      session: pid ? { key: sessionKeyOf(pid, project, runtime?.definition), route: '/journaux/' + encodeURIComponent(sessionKeyOf(pid, project, runtime?.definition)) } : null,
     };
   }
 
@@ -198,11 +235,20 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
     }
     return blocks.join('\n\n') || (service.views.project({ id: project.id }).sources || []).map((s) => s.label).join(', ') || L()['prompt.noSources'];
   }
-  function update(commentId, agentId, patch) {
+  function attemptIdOf(c, d) { return d.attemptId || `legacy:${d.follow?.createdAt ?? c.createdAt}`; }
+  function update(commentId, agentId, patch, attemptId = null) {
     const c = comments.get(commentId);
     if (!c || closed) return;
-    comments.setDelivery(commentId, c.delivery.map((d) => d.agentId === agentId ? { ...d, ...patch } : d));
+    let changed = false;
+    const delivery = c.delivery.map((d) => {
+      if (d.agentId !== agentId || (attemptId && attemptIdOf(c, d) !== attemptId)) return d;
+      if (!['pending', 'working'].includes(d.status) && d.follow?.phase !== 'tracking') return d;
+      changed = true; return { ...d, ...patch };
+    });
+    if (!changed) return false;
+    comments.setDelivery(commentId, delivery);
     invalidate(c.projectId);
+    return true;
   }
   function enqueue(projectId, fn) {
     const prev = chains.get(projectId) || Promise.resolve();
@@ -210,6 +256,16 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
     chains.set(projectId, next);
     next.finally(() => { if (chains.get(projectId) === next) chains.delete(projectId); });
     return next;
+  }
+  async function withTurnLock(projectId, fn) {
+    const previous = turnLocks.get(projectId) || Promise.resolve();
+    let release;
+    const slot = new Promise((resolve) => { release = resolve; });
+    const tail = previous.then(() => slot);
+    turnLocks.set(projectId, tail);
+    await previous;
+    try { return await fn(); }
+    finally { release(); if (turnLocks.get(projectId) === tail) turnLocks.delete(projectId); }
   }
   function pause() {
     return new Promise((resolve) => {
@@ -229,9 +285,32 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
   }
   function settleDelivery(c, d, status, reason) {
     withTx(store.db, () => {
-      d.follow.phase = 'settled'; releaseSummary(c, d);
-      update(c.id, d.agentId, { status, reason, follow: d.follow });
+      const fresh = comments.get(c.id), current = fresh?.delivery.find((x) => x.agentId === d.agentId);
+      if (!fresh || !current || attemptIdOf(fresh, current) !== attemptIdOf(c, d) ||
+          (!['pending', 'working'].includes(current.status) && current.follow?.phase !== 'tracking')) return;
+      current.follow ||= {};
+      current.follow.phase = 'settled'; releaseSummary(fresh, current);
+      update(fresh.id, current.agentId, { status, reason, follow: current.follow }, attemptIdOf(fresh, current));
     });
+  }
+  // Expiry is independent of the per-project delivery queue. A long-running
+  // comment must not keep a later summary lock alive past that summary's own
+  // deadline merely because its delivery job has not reached the front yet.
+  function expirePendingDeliveries() {
+    if (closed) return;
+    for (const c of comments.active()) for (const d of c.delivery) {
+      if (!['pending', 'working'].includes(d.status) && d.follow?.phase !== 'tracking') continue;
+      const deadline = deliveryDeadline(c, d.follow);
+      if (now() < deadline) continue;
+      settleDelivery(c, d, d.status === 'replied' ? 'replied' : 'no-reply', d.status === 'replied' ? null : 'timeout');
+    }
+  }
+  function isUnavailableAttempt(commentId, agentId, attemptId) {
+    const c = comments.get(commentId), d = c?.delivery.find((x) => x.agentId === agentId);
+    if (!d || attemptIdOf(c, d) !== attemptId || (!['pending', 'working'].includes(d.status) && d.follow?.phase !== 'tracking')) return true;
+    if (now() < deliveryDeadline(c, d.follow)) return false;
+    settleDelivery(c, d, d.status === 'replied' ? 'replied' : 'no-reply', d.status === 'replied' ? null : 'timeout');
+    return true;
   }
   function applySummary(c, d, text) {
     const meta = d.follow.summary;
@@ -245,20 +324,27 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
     if (done.result?.applied !== false) meta.lastSummary = summary;
   }
   function newDelivery(agentId, project, summary = null, authority = null) {
-    return { agentId, status: 'pending', reason: null, follow: { phase: 'queued', sessionKey: sessionKeyOf(agentId, project),
-      deadline: now() + 2 * 60 * 60 * 1000, cursor: null, seen: [], children: {}, results: [], summary, ...(authority?{authority}:{}) } };
+    const createdAt = now(), lifetime = summary ? SUMMARY_DELIVERY_MS : COMMENT_DELIVERY_MS;
+    return { agentId, attemptId: randomUUID(), status: 'pending', reason: null, follow: { phase: 'queued', sessionKey: sessionKeyOf(agentId, project, runtime?.definition),
+      createdAt, deadline: createdAt + lifetime, cursor: null, seen: [], children: {}, results: [], summary, ...(authority?{authority}:{}) } };
   }
-  async function follow(c, d) {
+  function deliveryDeadline(c, follow = null) {
+    const summary = c.kind === 'event' && c.body === 'summary-requested';
+    return (Number.isFinite(follow?.createdAt) ? follow.createdAt : c.createdAt) + (summary ? SUMMARY_DELIVERY_MS : COMMENT_DELIVERY_MS);
+  }
+  async function follow(c, d, attemptId) {
     const f = d.follow, project = projectOf(c.projectId);
     const t = await read(f.sessionKey);
     if (closed) return true;
+    if (isUnavailableAttempt(c.id, d.agentId, attemptId)) return true;
     if (!t) { f.readOK = false; return false; }  // Gateway unavailable: retain the cursor; never consume last-good data as a new reply.
     f.readOK = true;
     const runEvents = (t.events || []).filter((e) => f.from == null ? e.at >= (f.startedAt || c.createdAt) : indexOf(e) >= f.from);
     const events = (t.events || []).filter((e) => f.cursor == null ? e.at >= (f.startedAt || c.createdAt) : indexOf(e) >= f.cursor);
     f.deferred ||= runEvents.some((e) => e.kind === 'tool' && /sessions_(yield|spawn)/.test(e.name + ' ' + e.input));
     for (const key of childKeys(runEvents)) if (!f.children[key]) f.children[key] = { done: false, text: null, at: null, posted: false };
-    for (const result of completionResults(events)) if (!f.results.some((r) => r.id === result.id)) f.results.push({ ...result, receivedAt: now(), posted: false });
+    for (const result of completionResults(events)) if (!f.results.some((r) => r.id === result.id && r.kind === result.kind &&
+      (senderKey(r.senderInfo) || '') === (senderKey(result.senderInfo) || ''))) f.results.push({ ...result, receivedAt: now(), posted: false });
     const assistants = events.filter((e) => e.kind === 'assistant' && e.text?.trim());
     let terminal = f.terminal || null;
     const lastToolAt = Math.max(0, ...runEvents.filter((e) => e.kind === 'tool').map((e) => e.at || 0));
@@ -274,17 +360,23 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
         if (isFinal(e, events) && e.at >= lastToolAt) terminal = { text: e.text, at: e.at };
       }
       f.cursor = t.messageCount; f.terminal = terminal;
-      update(c.id, d.agentId, { follow: f });
+      update(c.id, d.agentId, { follow: f }, attemptId);
     });
     for (const [key, child] of Object.entries(f.children)) {
       const ct = await read(key);
       if (closed) return true;
+      if (isUnavailableAttempt(c.id, d.agentId, attemptId)) return true;
       const text = finalText(ct);
-      if (text) { child.done = true; child.text = text; child.at ??= now(); }
+      if (text) {
+        child.done = true; child.text = text; child.at ??= now();
+        // A canonical delegated completion and its child transcript identify the same work by session, not body.
+        if (f.results.some((result) => result.posted && result.senderInfo?.delegation?.sessionKey === key)) child.posted = true;
+      }
     }
     // Reading children admits their project tags too. Refresh before invalidating the thread's system lines.
     await service.refresh({ changes: [{ type: 'Transcript' }], skipRepos: true });
     if (closed) return true;
+    if (isUnavailableAttempt(c.id, d.agentId, attemptId)) return true;
     withTx(store.db, () => {
       const childrenDone = Object.values(f.children).every((x) => x.done) || (f.results.length > 0 && f.results.length >= Object.keys(f.children).length);
       const latestResultAt = Math.max(0, ...f.results.map((x) => x.at || 0));
@@ -296,27 +388,38 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
         const results = Object.values(f.children).filter((x) => x.done);
         const fallback = results.length ? results : f.results;
         for (const result of fallback) if (!result.posted && now() - (result.receivedAt ?? result.at) >= relayGraceMs) {
-          const posted = [...Object.values(f.children), ...f.results].some((x) => x.posted && x.text === result.text);
           result.posted = true;
-          if (posted) continue;
+          // Each child/result record owns its own stable session/event identity. Equal text from distinct authors is distinct work.
           postAgent(project, d.agentId, result.text, c.id); d.status = 'replied';
           applySummary(c, d, result.text);
         }
       }
       if (f.phase !== 'settled' && d.status !== 'replied') d.status = 'working';
-      update(c.id, d.agentId, { status: d.status, reason: null, follow: f });
+      update(c.id, d.agentId, { status: d.status, reason: null, follow: f }, attemptId);
     });
     return f.phase === 'settled';
   }
-  function schedule(comment, agentId) {
-    const job = comment.id + ':' + agentId;
+  function schedule(comment, agentId, { independent = false } = {}) {
+    const scheduled = comment.delivery.find((x) => x.agentId === agentId);
+    if (!scheduled) return;
+    const attemptId = attemptIdOf(comment, scheduled);
+    const job = comment.id + ':' + agentId + ':' + attemptId;
     if (jobs.has(job) || closed) return;
     jobs.add(job);
-    return enqueue(comment.projectId, async () => {
+    const run = async () => {
       let c = comments.get(comment.id), d = c.delivery.find((x) => x.agentId === agentId);
       if (!d || !['pending', 'working'].includes(d.status) && d.follow?.phase !== 'tracking') return;
-      if (!d.follow) d.follow = { ...newDelivery(agentId, projectOf(c.projectId)).follow, phase: 'tracking', deadline: c.createdAt + 7200000 };
+      if (!d.follow) {
+        d.attemptId ||= attemptId;
+        d.follow = { ...newDelivery(agentId, projectOf(c.projectId)).follow, phase: 'tracking', createdAt: c.createdAt, deadline: deliveryDeadline(c) };
+        comments.setDelivery(c.id, c.delivery.map((x) => x.agentId === agentId ? d : x));
+        c = comments.get(c.id); d = c.delivery.find((x) => x.agentId === agentId);
+      }
+      if (attemptIdOf(c, d) !== attemptId) return;
       const f = d.follow;
+      // Cap persisted deliveries too: an old two-hour summary deadline must
+      // not keep the project spinner/summary lock alive after upgrading.
+      f.deadline = Math.min(Number.isFinite(f.deadline) ? f.deadline : deliveryDeadline(c, f), deliveryDeadline(c, f));
       const queued = f.phase === 'queued';
       try {
         if (now() >= f.deadline) { settleDelivery(c, d, d.status === 'replied' ? 'replied' : 'no-reply', d.status === 'replied' ? null : 'timeout'); return; }
@@ -326,52 +429,67 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
           const authorize = () => authorizeDelivery(c,d);
           const context = await contextOf(project, { exclude: c.id, authorize, user });
           authorize();
-          const baseline = await read(f.sessionKey,authorize);
+          if (isUnavailableAttempt(c.id, agentId, attemptId)) return;
+          const dispatched = await withTurnLock(c.projectId, async () => {
+            if (isUnavailableAttempt(c.id, agentId, attemptId)) return EXPIRED_ATTEMPT;
+            const baseline = await read(f.sessionKey,authorize);
+            if (closed || isUnavailableAttempt(c.id, agentId, attemptId)) return EXPIRED_ATTEMPT;
+            // Recheck after every context await and directly before the new external effect.
+            authorize();
+            f.cursor = baseline ? baseline.messageCount : null; f.from = f.cursor;
+            f.phase = 'tracking'; f.startedAt = now();
+            update(c.id, agentId, { status: 'working', follow: f }, attemptId);
+            const prompt = context + '\n\n' + (c.kind === 'event' ? fill(L()['prompt.projectSummary'], { name: project.name, status: project.status, sources: L()['prompt.projectSourcesAbove'] })
+              : fill(L()['prompt.projectComment'], { author: c.author.name, body: c.body }));
+            const out = await runAuthorized(authorize,()=>runtime.commands.agentTurn({ agentId, text: prompt, sessionRef: f.sessionKey, timeoutMs: TURN_MS }));
+            return { out, project };
+          });
+          if (dispatched === EXPIRED_ATTEMPT) return;
+          const { out } = dispatched;
           if (closed) return;
-          // Recheck after every context await and directly before the new external effect.
-          authorize();
-          f.cursor = baseline ? baseline.messageCount : null; f.from = f.cursor;
-          f.phase = 'tracking'; f.startedAt = now();
-          update(c.id, agentId, { status: 'working', follow: f });
-          const prompt = context + '\n\n' + (c.kind === 'event' ? fill(L()['prompt.projectSummary'], { name: project.name, status: project.status, sources: L()['prompt.projectSourcesAbove'] })
-            : fill(L()['prompt.projectComment'], { author: c.author.name, body: c.body }));
-          const out = await runAuthorized(authorize,()=>runtime.commands.agentTurn({ agentId, text: prompt, sessionRef: f.sessionKey, timeoutMs: TURN_MS }));
-          if (closed) return;
+          if (isUnavailableAttempt(c.id, agentId, attemptId)) return;
           if (out?.failed) { settleDelivery(c, d, 'failed', out.failed); return; }
           const text = out?.text?.trim();
           if (text) withTx(store.db, () => { postAgent(project, agentId, text, c.id); f.immediate = text; d.status = 'working';
-            update(c.id, agentId, { status: 'working', follow: f }); });
-          const settled = await follow(c, d);
+            update(c.id, agentId, { status: 'working', follow: f }, attemptId); });
+          const settled = await follow(c, d, attemptId);
           if (settled) return;
+          if (isUnavailableAttempt(c.id, agentId, attemptId)) return;
           // A synchronous reply with a successful session read and no deferred work is complete.
           if (text && f.readOK && !f.deferred && !Object.keys(f.children).length && !f.results.length) {
-            withTx(store.db, () => { applySummary(c, d, text); f.phase = 'settled'; releaseSummary(c, d); update(c.id, agentId, { status: 'replied', follow: f }); });
+            withTx(store.db, () => { if (isUnavailableAttempt(c.id, agentId, attemptId)) return; applySummary(c, d, text); f.phase = 'settled'; releaseSummary(c, d); update(c.id, agentId, { status: 'replied', follow: f }, attemptId); });
             return;
           }
           if (!text && f.readOK && !f.deferred && !Object.keys(f.children).length && engine.transcript(f.sessionKey)?.messageCount) {
-            settleDelivery(c, d, 'failed', 'empty'); return;
+            if (!isUnavailableAttempt(c.id, agentId, attemptId)) settleDelivery(c, d, 'failed', 'empty'); return;
           }
         }
         while (!closed) {
           if (now() >= f.deadline) {
             settleDelivery(c, d, d.status === 'replied' ? 'replied' : 'no-reply', d.status === 'replied' ? null : 'timeout'); return;
           }
-          if (await follow(c, d)) return;
+          if (await follow(c, d, attemptId)) return;
           await pause();
         }
       } catch (e) {
+        if (isUnavailableAttempt(c.id, agentId, attemptId)) return;
         if (e instanceof ApiError && queued) { settleDelivery(c,d,'failed',e.code==='readonly'?'readonly':'permission-denied'); return; }
         // Persisted tracking is retried by the worker/restart; never silently drop a pending delivery.
         log('comments: tracking interrupted (' + (e?.code || 'error') + ')');
         if (!closed) await pause();
       }
-    }).finally(() => {
+    };
+    const queued = independent ? Promise.resolve().then(run) : enqueue(comment.projectId, run);
+    const task = queued.finally(() => {
       jobs.delete(job);
       if (!closed) { const fresh = comments.get(comment.id), delivery = fresh?.delivery.find((x) => x.agentId === agentId);
-        if (delivery && (['pending', 'working'].includes(delivery.status) || delivery.follow?.phase === 'tracking')) schedule(fresh, agentId); }
+        if (delivery && attemptIdOf(fresh, delivery) === attemptId && (['pending', 'working'].includes(delivery.status) || delivery.follow?.phase === 'tracking')) schedule(fresh, agentId); }
     });
+    runningJobs.add(task);
+    task.then(() => runningJobs.delete(task), () => runningJobs.delete(task));
+    return task;
   }
-  function deliver(comment) { for (const d of comment.delivery) if (d.status === 'pending') schedule(comment, d.agentId); }
+  function deliver(comment, options = {}) { for (const d of comment.delivery) if (d.status === 'pending') schedule(comment, d.agentId, options); }
   function persistSummary(projectId, agentId, actor, meta, authority = null) {
     const project = projectOf(projectId);
     if (!meta.turnId || repository.getSummaryTurn(projectId) !== meta.turnId) throw new ApiError('conflict');
@@ -426,7 +544,7 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
     };
 
     r.get('/views/projects/:id/comments', authed, wrap((req, res) => {
-      projectOf(req.params.id);
+      projectForRequest(req, req.params.id);
       if (req.query.cursor) return ok(res, threadVM(req.params.id, { cursor: req.query.cursor, actor: actorOf(req) }), null, 'comments');
       const t = topics.current('comments:' + req.params.id, req.apiVersion);
       // the topic is built for a person; an agent token sees its own comments as editable
@@ -434,7 +552,8 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
       ok(res, t.vm, { id: t.id, rev: t.rev });
     }));
     r.post('/projects/:id/comments', authed, guard('store'), wrap((req, res) => {
-      const project = projectOf(req.params.id);
+      const project = projectForRequest(req, req.params.id);
+      assertCommentWritable(project);
       const text = bodyOf(req, ['body', 'replyTo']);
       const replyTo = req.body.replyTo ?? null;
       if (replyTo !== null) {
@@ -457,7 +576,8 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
       if (canDeliver && mentions.length) deliver(c);
     }));
     r.post('/projects/:id/comments/:cid/retry', authed, guard('store'), guard('openclaw'), wrap((req, res) => {
-      const project = projectOf(req.params.id), c = comments.get(req.params.cid);
+      const project = projectForRequest(req, req.params.id); assertCommentWritable(project);
+      const c = comments.get(req.params.cid);
       if (!c || c.projectId !== project.id) throw new ApiError('not_found');
       if (c.deleted) throw invalid(null, 'deleted');
       if (!mine(c, actorOf(req))) throw new ApiError('forbidden');
@@ -466,7 +586,6 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
       for (const k of Object.keys(b)) if (k !== 'agentId') throw invalid(k, 'unexpected-field');
       const d = c.delivery.find((x) => x.agentId === b.agentId);
       if (!d || !['failed', 'no-reply'].includes(d.status)) throw invalid('agentId', 'not-retryable');
-      if (jobs.has(c.id + ':' + d.agentId)) throw invalid('agentId', 'not-retryable');
       if (c.kind === 'event' && hasPendingSummary(c.projectId)) throw new ApiError('conflict');
       req.authorize?.();
       const authority = dispatchAuthority ? dispatchAuthority.capture(req) : null;
@@ -476,9 +595,10 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
         const summary = turn ? { originalSummary: project.summary, lastSummary: null, turnId: turn.result.turnId } : null;
         comments.setDelivery(c.id, c.delivery.map((x) => x.agentId === d.agentId ? newDelivery(d.agentId, project, summary,authority) : x));
       });
-      invalidate(project.id); send(req, res, c, 202); deliver(comments.get(c.id));
+      invalidate(project.id); send(req, res, c, 202); schedule(comments.get(c.id), d.agentId, { independent: true });
     }));
     r.patch('/projects/:id/comments/:cid', authed, guard('store'), wrap((req, res) => {
+      assertCommentWritable(projectForRequest(req, req.params.id));
       const c = own(req);
       if (!mine(c, actorOf(req))) throw new ApiError('forbidden');
       const text = bodyOf(req, ['body']);
@@ -488,6 +608,7 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
       invalidate(c.projectId);
     }));
     r.delete('/projects/:id/comments/:cid', authed, guard('store'), wrap((req, res) => {
+      assertCommentWritable(projectForRequest(req, req.params.id));
       const c = own(req);
       const actor = actorOf(req);
       if ((actor.kind === 'agent'||req.authorize) && !mine(c, actor)) throw new ApiError('forbidden');
@@ -500,7 +621,15 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
   function hasPendingSummary(projectId) { return !!repository.getSummaryTurn(projectId); }
   return {
     attach(projects) {
-      service = projects.service; repository = projects.repository;
+      service = projects.service; repository = projects.repository; teamProjectById = projects.teamProjectById || null;
+      // Sweep outside enqueue(): project serialization protects turn ordering,
+      // while deadlines belong to each delivery and must elapse independently.
+      // Read-only instances must not persist timeout transitions.
+      if (capabilitiesOf(cfg).storeWrites) {
+        expirePendingDeliveries();
+        expiryTimer = setInterval(expirePendingDeliveries, Math.max(1, Math.min(pollMs, 1000)));
+        expiryTimer.unref?.();
+      }
       if (capabilitiesOf(cfg).storeWrites && capabilitiesOf(cfg).openclawWrites) for (const c of comments.active()) {
         // Pre-016 retry records had a null id. Adopt once without sending the prompt again.
         withTx(store.db, () => {
@@ -518,8 +647,9 @@ function createProjectThread({ store, engine, runtime, topics, cfg, log = () => 
         for (const d of c.delivery) if (['pending', 'working'].includes(d.status) || d.follow?.phase === 'tracking') schedule(c, d.agentId);
       }
     },
-    close() { closed = true; for (const wake of [...sleepers]) wake(); },
-    mount, requestSummary, startSummary, hasPendingSummary, runProjectTurn: enqueue, threadVM, mentionsOf, sessionKeyOf, idle: () => Promise.all([...chains.values()]),
+    close() { closed = true; if (expiryTimer) clearInterval(expiryTimer); expiryTimer = null; for (const wake of [...sleepers]) wake(); },
+    mount, requestSummary, startSummary, hasPendingSummary, runProjectTurn: enqueue, threadVM, mentionsOf, sessionKeyOf,
+    async idle() { while (chains.size || runningJobs.size) await Promise.all([...chains.values(), ...runningJobs]); },
   };
 }
 

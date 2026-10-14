@@ -201,7 +201,8 @@
             "station": "auto",
             "appearance": "auto"
           }
-        ]
+        ],
+        "idleRelocationMinutes": 15
       }
     },
     "manifest": {
@@ -4550,7 +4551,8 @@
             "station": "auto",
             "appearance": "auto"
           }
-        ]
+        ],
+        "idleRelocationMinutes": 15
       }
     },
     "revisions": [

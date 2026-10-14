@@ -1,0 +1,2176 @@
+{
+  "mobilier": {
+    "": {
+      "floorId": "1",
+      "sectionId": "mobilier",
+      "categoryId": "",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 31
+          },
+          {
+            "id": "poste",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.poste"
+            }
+          },
+          {
+            "id": "assise",
+            "count": 8,
+            "label": {
+              "key": "office.store.category.assise"
+            }
+          },
+          {
+            "id": "rangement",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.rangement"
+            }
+          },
+          {
+            "id": "equipement",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.equipement"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "desk",
+        "chair",
+        "sofa",
+        "shelf",
+        "coffee-machine",
+        "server-rack",
+        "meeting-table",
+        "standing-desk",
+        "armchair",
+        "tall-bookcase",
+        "l-desk",
+        "dual-monitor-desk",
+        "laptop-table",
+        "beanbag",
+        "bench",
+        "bar-stool",
+        "cafe-table",
+        "coffee-table",
+        "filing-cabinet",
+        "cube-shelf",
+        "fridge",
+        "water-cooler",
+        "printer",
+        "charging-dock",
+        "arcade-cabinet",
+        "elevator-door",
+        "reception-counter",
+        "pause-shelter",
+        "treadmill",
+        "weight-rack",
+        "exercise-bench"
+      ]
+    },
+    "poste": {
+      "floorId": "1",
+      "sectionId": "mobilier",
+      "categoryId": "poste",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 31
+          },
+          {
+            "id": "poste",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.poste"
+            }
+          },
+          {
+            "id": "assise",
+            "count": 8,
+            "label": {
+              "key": "office.store.category.assise"
+            }
+          },
+          {
+            "id": "rangement",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.rangement"
+            }
+          },
+          {
+            "id": "equipement",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.equipement"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "desk",
+        "meeting-table",
+        "standing-desk",
+        "l-desk",
+        "dual-monitor-desk",
+        "laptop-table",
+        "cafe-table",
+        "coffee-table",
+        "reception-counter"
+      ]
+    },
+    "assise": {
+      "floorId": "1",
+      "sectionId": "mobilier",
+      "categoryId": "assise",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 31
+          },
+          {
+            "id": "poste",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.poste"
+            }
+          },
+          {
+            "id": "assise",
+            "count": 8,
+            "label": {
+              "key": "office.store.category.assise"
+            }
+          },
+          {
+            "id": "rangement",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.rangement"
+            }
+          },
+          {
+            "id": "equipement",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.equipement"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "chair",
+        "sofa",
+        "armchair",
+        "beanbag",
+        "bench",
+        "bar-stool",
+        "pause-shelter",
+        "exercise-bench"
+      ]
+    },
+    "rangement": {
+      "floorId": "1",
+      "sectionId": "mobilier",
+      "categoryId": "rangement",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 31
+          },
+          {
+            "id": "poste",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.poste"
+            }
+          },
+          {
+            "id": "assise",
+            "count": 8,
+            "label": {
+              "key": "office.store.category.assise"
+            }
+          },
+          {
+            "id": "rangement",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.rangement"
+            }
+          },
+          {
+            "id": "equipement",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.equipement"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "shelf",
+        "tall-bookcase",
+        "filing-cabinet",
+        "cube-shelf",
+        "weight-rack"
+      ]
+    },
+    "equipement": {
+      "floorId": "1",
+      "sectionId": "mobilier",
+      "categoryId": "equipement",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 31
+          },
+          {
+            "id": "poste",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.poste"
+            }
+          },
+          {
+            "id": "assise",
+            "count": 8,
+            "label": {
+              "key": "office.store.category.assise"
+            }
+          },
+          {
+            "id": "rangement",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.rangement"
+            }
+          },
+          {
+            "id": "equipement",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.equipement"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "coffee-machine",
+        "server-rack",
+        "fridge",
+        "water-cooler",
+        "printer",
+        "charging-dock",
+        "arcade-cabinet",
+        "elevator-door",
+        "treadmill"
+      ]
+    }
+  },
+  "decoration": {
+    "": {
+      "floorId": "1",
+      "sectionId": "decoration",
+      "categoryId": "",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 22
+          },
+          {
+            "id": "sol",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.sol"
+            }
+          },
+          {
+            "id": "plante",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.plante"
+            }
+          },
+          {
+            "id": "deco",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.deco"
+            }
+          },
+          {
+            "id": "mur",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.mur"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "rug",
+        "plant-large",
+        "plant-small",
+        "lamp",
+        "winter-garland",
+        "autumn-garland",
+        "whiteboard",
+        "window",
+        "monstera",
+        "arc-lamp",
+        "framed-art",
+        "wall-clock",
+        "corkboard",
+        "dashboard-screen",
+        "neon-sign",
+        "cactus-trio",
+        "indoor-tree",
+        "runner-rug",
+        "round-rug",
+        "desk-lamp",
+        "ash-receptacle",
+        "exercise-mat"
+      ]
+    },
+    "sol": {
+      "floorId": "1",
+      "sectionId": "decoration",
+      "categoryId": "sol",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 22
+          },
+          {
+            "id": "sol",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.sol"
+            }
+          },
+          {
+            "id": "plante",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.plante"
+            }
+          },
+          {
+            "id": "deco",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.deco"
+            }
+          },
+          {
+            "id": "mur",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.mur"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "rug",
+        "runner-rug",
+        "round-rug",
+        "exercise-mat"
+      ]
+    },
+    "plante": {
+      "floorId": "1",
+      "sectionId": "decoration",
+      "categoryId": "plante",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 22
+          },
+          {
+            "id": "sol",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.sol"
+            }
+          },
+          {
+            "id": "plante",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.plante"
+            }
+          },
+          {
+            "id": "deco",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.deco"
+            }
+          },
+          {
+            "id": "mur",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.mur"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "plant-large",
+        "plant-small",
+        "monstera",
+        "cactus-trio",
+        "indoor-tree"
+      ]
+    },
+    "deco": {
+      "floorId": "1",
+      "sectionId": "decoration",
+      "categoryId": "deco",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 22
+          },
+          {
+            "id": "sol",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.sol"
+            }
+          },
+          {
+            "id": "plante",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.plante"
+            }
+          },
+          {
+            "id": "deco",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.deco"
+            }
+          },
+          {
+            "id": "mur",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.mur"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "lamp",
+        "arc-lamp",
+        "desk-lamp",
+        "ash-receptacle"
+      ]
+    },
+    "mur": {
+      "floorId": "1",
+      "sectionId": "decoration",
+      "categoryId": "mur",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 22
+          },
+          {
+            "id": "sol",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.sol"
+            }
+          },
+          {
+            "id": "plante",
+            "count": 5,
+            "label": {
+              "key": "office.store.category.plante"
+            }
+          },
+          {
+            "id": "deco",
+            "count": 4,
+            "label": {
+              "key": "office.store.category.deco"
+            }
+          },
+          {
+            "id": "mur",
+            "count": 9,
+            "label": {
+              "key": "office.store.category.mur"
+            }
+          }
+        ]
+      },
+      "floors": {
+        "label": {
+          "key": "office.store.floor"
+        },
+        "options": [
+          {
+            "id": "rdc",
+            "label": {
+              "key": "office.floor.rdc"
+            },
+            "count": null
+          },
+          {
+            "id": "1",
+            "label": {
+              "key": "office.floor.first"
+            },
+            "count": null
+          },
+          {
+            "id": "2",
+            "label": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            },
+            "count": null
+          },
+          {
+            "id": "gym",
+            "label": {
+              "key": "office.floor.gym"
+            },
+            "count": null
+          }
+        ]
+      },
+      "itemIds": [
+        "winter-garland",
+        "autumn-garland",
+        "whiteboard",
+        "window",
+        "framed-art",
+        "wall-clock",
+        "corkboard",
+        "dashboard-screen",
+        "neon-sign"
+      ]
+    }
+  },
+  "personnages": {
+    "": {
+      "floorId": "1",
+      "sectionId": "personnages",
+      "categoryId": null,
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": null,
+      "floors": null,
+      "itemIds": []
+    }
+  },
+  "couleurs": {
+    "": {
+      "floorId": "1",
+      "sectionId": "couleurs",
+      "categoryId": null,
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": null,
+      "floors": null,
+      "itemIds": []
+    }
+  },
+  "accessoires": {
+    "": {
+      "floorId": "1",
+      "sectionId": "accessoires",
+      "categoryId": "",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 15
+          },
+          {
+            "id": "head",
+            "count": 7,
+            "label": {
+              "key": "office.store.slot.head"
+            }
+          },
+          {
+            "id": "face",
+            "count": 3,
+            "label": {
+              "key": "office.store.slot.face"
+            }
+          },
+          {
+            "id": "neck",
+            "count": 4,
+            "label": {
+              "key": "office.store.slot.neck"
+            }
+          },
+          {
+            "id": "badge",
+            "count": 1,
+            "label": {
+              "key": "office.store.slot.badge"
+            }
+          }
+        ]
+      },
+      "floors": null,
+      "itemIds": [
+        "headphones",
+        "cap",
+        "glasses",
+        "scarf",
+        "badge",
+        "beanie",
+        "bow-tie",
+        "necktie",
+        "crown",
+        "bandana",
+        "monocle",
+        "flower-crown",
+        "wizard-hat",
+        "party-hat",
+        "earrings"
+      ]
+    },
+    "head": {
+      "floorId": "1",
+      "sectionId": "accessoires",
+      "categoryId": "head",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 15
+          },
+          {
+            "id": "head",
+            "count": 7,
+            "label": {
+              "key": "office.store.slot.head"
+            }
+          },
+          {
+            "id": "face",
+            "count": 3,
+            "label": {
+              "key": "office.store.slot.face"
+            }
+          },
+          {
+            "id": "neck",
+            "count": 4,
+            "label": {
+              "key": "office.store.slot.neck"
+            }
+          },
+          {
+            "id": "badge",
+            "count": 1,
+            "label": {
+              "key": "office.store.slot.badge"
+            }
+          }
+        ]
+      },
+      "floors": null,
+      "itemIds": [
+        "headphones",
+        "cap",
+        "beanie",
+        "crown",
+        "flower-crown",
+        "wizard-hat",
+        "party-hat"
+      ]
+    },
+    "face": {
+      "floorId": "1",
+      "sectionId": "accessoires",
+      "categoryId": "face",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 15
+          },
+          {
+            "id": "head",
+            "count": 7,
+            "label": {
+              "key": "office.store.slot.head"
+            }
+          },
+          {
+            "id": "face",
+            "count": 3,
+            "label": {
+              "key": "office.store.slot.face"
+            }
+          },
+          {
+            "id": "neck",
+            "count": 4,
+            "label": {
+              "key": "office.store.slot.neck"
+            }
+          },
+          {
+            "id": "badge",
+            "count": 1,
+            "label": {
+              "key": "office.store.slot.badge"
+            }
+          }
+        ]
+      },
+      "floors": null,
+      "itemIds": [
+        "glasses",
+        "monocle",
+        "earrings"
+      ]
+    },
+    "neck": {
+      "floorId": "1",
+      "sectionId": "accessoires",
+      "categoryId": "neck",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 15
+          },
+          {
+            "id": "head",
+            "count": 7,
+            "label": {
+              "key": "office.store.slot.head"
+            }
+          },
+          {
+            "id": "face",
+            "count": 3,
+            "label": {
+              "key": "office.store.slot.face"
+            }
+          },
+          {
+            "id": "neck",
+            "count": 4,
+            "label": {
+              "key": "office.store.slot.neck"
+            }
+          },
+          {
+            "id": "badge",
+            "count": 1,
+            "label": {
+              "key": "office.store.slot.badge"
+            }
+          }
+        ]
+      },
+      "floors": null,
+      "itemIds": [
+        "scarf",
+        "bow-tie",
+        "necktie",
+        "bandana"
+      ]
+    },
+    "badge": {
+      "floorId": "1",
+      "sectionId": "accessoires",
+      "categoryId": "badge",
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": {
+        "label": {
+          "key": "office.store.category"
+        },
+        "options": [
+          {
+            "id": "",
+            "label": {
+              "key": "office.store.all"
+            },
+            "count": 15
+          },
+          {
+            "id": "head",
+            "count": 7,
+            "label": {
+              "key": "office.store.slot.head"
+            }
+          },
+          {
+            "id": "face",
+            "count": 3,
+            "label": {
+              "key": "office.store.slot.face"
+            }
+          },
+          {
+            "id": "neck",
+            "count": 4,
+            "label": {
+              "key": "office.store.slot.neck"
+            }
+          },
+          {
+            "id": "badge",
+            "count": 1,
+            "label": {
+              "key": "office.store.slot.badge"
+            }
+          }
+        ]
+      },
+      "floors": null,
+      "itemIds": [
+        "badge"
+      ]
+    }
+  },
+  "themes": {
+    "": {
+      "floorId": "1",
+      "sectionId": "themes",
+      "categoryId": null,
+      "sections": {
+        "label": {
+          "key": "office.store.section"
+        },
+        "options": [
+          {
+            "id": "mobilier",
+            "label": {
+              "key": "office.store.section.mobilier"
+            },
+            "count": 31
+          },
+          {
+            "id": "decoration",
+            "label": {
+              "key": "office.store.section.decoration"
+            },
+            "count": 22
+          },
+          {
+            "id": "personnages",
+            "label": {
+              "key": "office.store.section.personnages"
+            },
+            "count": 14
+          },
+          {
+            "id": "couleurs",
+            "label": {
+              "key": "office.store.section.couleurs"
+            },
+            "count": 40
+          },
+          {
+            "id": "accessoires",
+            "label": {
+              "key": "office.store.section.accessoires"
+            },
+            "count": 15
+          },
+          {
+            "id": "themes",
+            "label": {
+              "key": "office.store.section.themes"
+            },
+            "count": 5
+          }
+        ]
+      },
+      "categories": null,
+      "floors": null,
+      "itemIds": []
+    }
+  }
+}

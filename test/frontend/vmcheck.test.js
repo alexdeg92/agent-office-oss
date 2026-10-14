@@ -70,7 +70,7 @@ test('paths and topics map to their schema names', () => {
     '/api/v2/views/projects/prj_a': 'project', '/api/v2/views/projects/prj_a/history?cursor=x': 'history', '/api/v2/views/project-candidates': 'candidates',
     '/api/v2/views/logs?kind=cron&cursor=c': 'logs', '/api/v2/views/sessions/agent%3Amain': 'session', '/api/v2/views/skills/meteo': 'skill',
     '/api/v2/views/flows/f1': 'flow', '/api/v2/views/interlocutors/x': 'interlocutor', '/api/v2/views/chat': 'chat', '/api/v2/office/layout': 'layout',
-    '/api/v2/views/office': 'office', '/api/v2/projects': null, '/api/v2/stream': null };
+    '/api/v2/views/office': 'office', '/api/v2/views/office/store?floorId=2': 'officeStore', '/api/v3/views/office/store': 'officeStore', '/api/v2/projects': null, '/api/v2/stream': null };
   for (const [p, name] of Object.entries(paths)) assert.equal(vmcheck.schemaForPath(p), name, p);
   const topics = { health: 'health', 'projects?filter=at-risk': 'projects', 'project:prj_a': 'project', 'logs?heartbeat=include&kind=cron': 'logs', 'session:agent%3Amain': 'session',
     'skill:meteo': 'skill', 'flow:f1': 'flow', 'interlocutor:x': 'interlocutor', chat: 'chat', layout: 'layout', office: 'office', prefs: 'prefs' };

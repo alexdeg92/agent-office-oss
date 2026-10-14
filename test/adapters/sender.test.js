@@ -81,3 +81,35 @@ test('failed or unmatched spawns and primary inter-session messages do not inven
   assert.equal(t.participants[0].delegation, undefined);
   assert.equal(t.participants[1].id, 'agent:main');
 });
+
+test('trusted internal child batches become labelled result events; lookalike human prose stays human', () => {
+  const parent = 'agent:main:discord:direct:synthetic-peer';
+  const children = ['review-1', 'review-2', 'review-3'].map(id => 'agent:main:subagent:' + id);
+  const block = (i, title, status, body) => `Child task ${i}:\n<prompt-data>${title}</prompt-data>\nstatus: ${status}\nChild result ${i}:\n<prompt-data>${body}</prompt-data>`;
+  const injected = `[Subagent Context] results\nChild completion results:\n${[
+    block(1, 'Review the release', 'ok', '**Looks good**\n\n| Check | Result |\n| --- | --- |\n| tests | pass |'),
+    block(2, 'Inspect the logs', 'failed', 'Could not open the fixture.'),
+    block(3, 'Wait for the service', 'working', 'Still running.'),
+  ].join('\n')}`;
+  const session = { key: parent, class: { kind: 'conversation-direct', channel: 'discord' } };
+  const messages = [
+    ...children.flatMap((child, i) => [
+      { role: 'assistant', content: [{ type: 'toolCall', id: 'spawn-' + i, name: 'sessions_spawn', arguments: { taskName: ['Review the release', 'Inspect the logs', 'Wait for the service'][i] } }] },
+      { role: 'toolResult', toolCallId: 'spawn-' + i, content: JSON.stringify({ status: 'accepted', childSessionKey: child }) },
+    ]),
+    { role: 'user', content: injected, provenance: { kind: 'internal_system' } },
+    { role: 'user', content: injected },
+  ];
+  const t = normaliseTranscript(parent, { messages }, 20, Infinity, () => {}, { session, runtime: 'openclaw', agent: fixture.agent,
+    sessionOf: key => children.includes(key) ? { key, class: { kind: 'subagent' }, label: ['Review the release', 'Inspect the logs', 'Wait for the service'][children.indexOf(key)] } : null });
+  const results = t.events.filter(e => e.kind === 'subagent-result');
+  assert.equal(results.length, 3);
+  assert.deepEqual(results.map(e => [e.title, e.status]), [['Review the release', 'completed'], ['Inspect the logs', 'failed'], ['Wait for the service', 'running']]);
+  assert.equal(results[0].senderInfo.delegation.sessionKey, children[0]);
+  const result = results[0];
+  assert.match(result.body, /\| tests \| pass \|/);
+  assert.match(result.body, /\*\*Looks good\*\*/);
+  assert.equal(t.events.filter(e => e.kind === 'user').length, 1);
+  assert.equal(t.events.find(e => e.kind === 'user').text, injected);
+  assert.equal(require('../../src/schema').validate(require('../../src/engine/model/canonical').Transcript, t).ok, true);
+});

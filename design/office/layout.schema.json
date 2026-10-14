@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://office.example.com/schemas/office-layout.json",
-  "title": "Agent Office — saved office layout",
+  "title": "Agent Office \u2014 saved office layout",
   "description": "What the customization editor saves: furniture placement, room theme, and how each agent looks and is labelled. References asset ids from the manifest. Stored by the Agent Office backend (never in ~/.openclaw).",
   "type": "object",
   "required": [
@@ -67,7 +67,7 @@
           "description": "Optional season theme layered on top (e.g. 'hiver')."
         }
       },
-      "description": "The ONE owner of the office theme (api-proposal.md §4). UiPrefs has no office theme.",
+      "description": "The ONE owner of the office theme (api-proposal.md \u00a74). UiPrefs has no office theme.",
       "allOf": [
         {
           "if": {
@@ -137,7 +137,7 @@
           "label": {
             "type": "string",
             "maxLength": 48,
-            "description": "Optional custom name, e.g. « Poste de Scout »."
+            "description": "Optional custom name, e.g. \u00ab Poste de Scout \u00bb."
           }
         },
         "oneOf": [
@@ -180,7 +180,7 @@
           "agentId": {
             "type": "string",
             "pattern": "^(main|primary|\\*(agent|subagent|cron|dm|channel|scheduled|direct|group|conversation)|(agent|subagent|cron|dm|channel|scheduled|direct|group|conversation):[^\\s]{1,128})$",
-            "description": "The primary agent (\"main\" in 2.x, \"primary\" in 3.0), an exact OccupantId (\"subagent:<subjectId>\", \"dm:<id>\" ≡ \"direct:<id>\" …), or a default rule \"*<role>\". Both vocabularies are accepted (ADR-001 §12.6: main ≡ primary, cron ≡ scheduled, dm ≡ direct, channel ≡ group; conversation is 3.0). Matching: exact id → \"*<role>\" → \"*conversation\" (conversation roles) → \"*subagent\"."
+            "description": "The primary agent (\"main\" in 2.x, \"primary\" in 3.0), an exact OccupantId (\"subagent:<subjectId>\", \"dm:<id>\" \u2261 \"direct:<id>\" \u2026), or a default rule \"*<role>\". Both vocabularies are accepted (ADR-001 \u00a712.6: main \u2261 primary, cron \u2261 scheduled, dm \u2261 direct, channel \u2261 group; conversation is 3.0). Matching: exact id \u2192 \"*<role>\" \u2192 \"*conversation\" (conversation roles) \u2192 \"*subagent\"."
           },
           "match": {
             "type": "object",
@@ -245,7 +245,7 @@
           },
           "station": {
             "type": "string",
-            "description": "items[].uid of a desk station, or \"auto\" (also the meaning when omitted): first free desk in layout order. Default (\"*\") rules must use auto. No free desk → the occupant is listed but not seated (overflow)."
+            "description": "items[].uid of a desk station, or \"auto\" (also the meaning when omitted): first free desk in layout order. Default (\"*\") rules must use auto. No free desk \u2192 the occupant is listed but not seated (overflow)."
           },
           "appearance": {
             "enum": [
@@ -258,7 +258,7 @@
             "type": "string",
             "pattern": "^(?:[1-9]|[1-9][0-9]|1(?:0[0-9]|1[0-9]|2[0-8]))$",
             "maxLength": 3,
-            "description": "Optional numbered office floor (1–128) for this rule; only office floors can own home stations."
+            "description": "Optional numbered office floor (1\u2013128) for this rule; only office floors can own home stations."
           }
         }
       }
@@ -290,21 +290,55 @@
       "description": "Optional data-driven floor layouts. Floor 1 remains the legacy root layout; office floors carry home stations, while rdc/gym are visit destinations.",
       "items": {
         "type": "object",
-        "required": ["id", "kind", "layout"],
+        "required": [
+          "id",
+          "kind",
+          "layout"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "pattern": "^(?:[1-9]|[1-9][0-9]|1(?:0[0-9]|1[0-9]|2[0-8])|rdc|gym)$" },
-          "kind": { "enum": ["office", "lobby", "gym"] },
+          "id": {
+            "type": "string",
+            "pattern": "^(?:[1-9]|[1-9][0-9]|1(?:0[0-9]|1[0-9]|2[0-8])|rdc|gym)$"
+          },
+          "kind": {
+            "enum": [
+              "office",
+              "lobby",
+              "gym"
+            ]
+          },
           "layout": {
-            "type": "object", "required": ["room", "theme", "items"], "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "room",
+              "theme",
+              "items"
+            ],
+            "additionalProperties": false,
             "properties": {
-              "room": { "type": "string" },
-              "theme": { "type": "object" },
-              "items": { "type": "array", "items": { "type": "object" } }
+              "room": {
+                "type": "string"
+              },
+              "theme": {
+                "type": "object"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
             }
           }
         }
       }
+    },
+    "communicationMeetingPercent": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Backend-selected share of canonical conversations eligible for a registered meeting table. Default 10. Missing table, occupied seats, cross-floor peers or activity preserves existing targets."
     }
   }
 }

@@ -67,6 +67,78 @@ test('instance and agents apply live, revisions persist, fields-only audit; hidd
  r=await h.put(BASE+'/agents',{expectedRevision:3,runtime:'openclaw',primary:'atlas',agents:[{id:'atlas',name:'Orion',hidden:false},{id:'scribe',name:'Lyra',hidden:false}]});assert.equal(r.status,200,r.text);assert.equal(h.engine.agents().find(a=>a.id===scopedId('legacy','agent','scribe')).name,'Lyra');
  const log=JSON.stringify(h.store.audit.recent());assert.ok(log.includes('instance.name'));assert.ok(!log.includes('Nouveau'));assert.ok(!log.includes(h.fake.token));assert.equal(JSON.parse(fs.readFileSync(h.paths.file)).agents.names.legacy.scribe,'Lyra');
 });
+test('office presence timings validate, persist, stay live and are audited as fields only',async t=>{
+ const h=await fixture(t);let r=await h.get(BASE);assert.equal(r.status,200,r.text);
+ assert.deepEqual(Object.fromEntries(Object.entries(r.json.data.office).filter(([key])=>key!=='help').map(([key,value])=>[key,value.value])),
+  {finishedSessionWindowMinutes:15,agentPresenceWindowMinutes:60,idleRelocationMinutes:15});
+ assert.ok(Object.values(r.json.data.office).every(field=>field.minimum===1&&field.maximum===1440));
+ for(const [key,value] of [['finishedSessionWindowMinutes',0],['agentPresenceWindowMinutes',1441],['idleRelocationMinutes',0]]) {
+  const invalid=await h.put(BASE+'/instance',{expectedRevision:1,office:{[key]:value}});assert.equal(invalid.status,400,invalid.text);assert.equal(invalid.json.error.details[0].field,'office.'+key);
+ }
+ const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45}});
+ assert.equal(saved.status,200,saved.text);assert.equal(saved.json.data.result.restartRequired,false);
+ assert.deepEqual(Object.fromEntries(Object.entries(saved.json.data.vm.office).filter(([key])=>key!=='help').map(([key,value])=>[key,value.value])),
+  {finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45});
+ assert.deepEqual(h.settings.officeTimings(),{finishedSessionWindowMs:60000,agentPresenceWindowMs:1440*60000,idleRelocationMinutes:45});
+ assert.deepEqual(JSON.parse(fs.readFileSync(h.paths.file)).office.presence,{finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45});
+ assert.equal((await h.get(BASE)).json.data.office.finishedSessionWindowMinutes.value,1);
+ const audit=h.store.audit.recent().find(row=>row.command==='settings.instance'&&row.outcome==='ok');
+ assert.equal(audit.target,'office.finishedSessionWindowMinutes,office.agentPresenceWindowMinutes,office.idleRelocationMinutes');
+ assert.equal(audit.detail,null);assert.ok(!Object.hasOwn(audit,'value'));
+});
+test('office timing environment values are boot overrides and cannot be changed in Settings',async t=>{
+ const h=await fixture(t,{env:{AGENT_OFFICE_SESSION_PRESENCE_WINDOW_MS:'1800000',AGENT_OFFICE_AGENT_PRESENCE_WINDOW_MS:'7200000',AGENT_OFFICE_IDLE_RELOCATION_MINUTES:'45'}});
+ const vm=(await h.get(BASE)).json.data;
+ assert.deepEqual([vm.office.finishedSessionWindowMinutes.value,vm.office.agentPresenceWindowMinutes.value,vm.office.idleRelocationMinutes.value],[30,120,45]);
+ assert.ok([vm.office.finishedSessionWindowMinutes,vm.office.agentPresenceWindowMinutes,vm.office.idleRelocationMinutes].every(row=>row.source==='env'&&!row.editable&&row.reason.key==='settings.office.managed'&&!row.reason.params));
+ const refused=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:40}});assert.equal(refused.status,403);assert.equal(refused.json.error.details[0].issue,'env-override');
+});
+test('empty timing environment values are ignored consistently for display and writes',async t=>{
+ const h=await fixture(t,{env:{AGENT_OFFICE_IDLE_RELOCATION_MINUTES:''}}),vm=(await h.get(BASE)).json.data;
+ assert.equal(vm.office.idleRelocationMinutes.value,15);assert.equal(vm.office.idleRelocationMinutes.source,'default');assert.equal(vm.office.idleRelocationMinutes.editable,true);
+ const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{idleRelocationMinutes:45}});
+ assert.equal(saved.status,200,saved.text);assert.equal(saved.json.data.vm.office.idleRelocationMinutes.value,45);
+});
+test('a pre-Settings layout delay is migrated once into instance configuration',async t=>{
+ const h=await fixture(t,{legacyIdleRelocationMinutes:7}),response=await h.get(BASE);
+ assert.equal(response.status,200,response.text);assert.equal(response.json.data.office.idleRelocationMinutes.value,7);
+ assert.equal(response.json.data.office.idleRelocationMinutes.source,'file');
+ const savedConfig=JSON.parse(fs.readFileSync(h.paths.file));assert.equal(savedConfig.office.presence.idleRelocationMinutes,7);
+ const layout=(await h.get('/api/v3/office/layout')).json.data;assert.equal(layout.layout.data.idleRelocationMinutes,7);
+ const updated=await h.put(BASE+'/instance',{expectedRevision:response.json.data.revision,office:{idleRelocationMinutes:23}});
+ assert.equal(updated.status,200,updated.text);assert.equal(updated.json.data.vm.office.idleRelocationMinutes.value,23);
+ assert.equal((await h.get('/api/v3/office/layout')).json.data.layout.data.idleRelocationMinutes,23);
+});
+test('Settings compatibility lookup does not seed a missing office layout',async t=>{
+ const h=await fixture(t,{emptyOfficeLayout:true});
+ assert.equal(h.officeLayoutAfterSettings,null,'Settings construction must leave layout initialization to the layout owner');
+});
+test('Settings is the only relocation-delay source for layout GET and live office timing',async t=>{
+ const h=await fixture(t),layout=(await h.get('/api/v3/office/layout')).json.data;
+ const savedLayout=await h.put('/api/v3/office/layout',{expectedRevision:layout.layout.revision,data:{...layout.layout.data,idleRelocationMinutes:7}});
+ assert.equal(savedLayout.status,200,savedLayout.text);
+ assert.equal(savedLayout.json.data.vm.layout.data.idleRelocationMinutes,15,'legacy layout write cannot override Settings');
+ assert.equal(Object.hasOwn(h.store.office.active(()=>({})).data,'idleRelocationMinutes'),false,'layout writes do not create a second persisted setting');
+ const settings=(await h.get(BASE)).json.data;
+ assert.equal(settings.office.idleRelocationMinutes.value,15);assert.equal(settings.office.idleRelocationMinutes.source,'default');
+ const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{idleRelocationMinutes:25}});assert.equal(saved.status,200,saved.text);
+ assert.equal(h.settings.officeTimings().idleRelocationMinutes,25);
+ const currentLayout=(await h.get('/api/v3/office/layout')).json.data;
+ assert.equal(currentLayout.layout.data.idleRelocationMinutes,25,'layout projection follows Settings after save');
+ const office=(await h.get('/api/v3/views/office')).json.data;
+ assert.equal(h.settings.officeTimings().idleRelocationMinutes,currentLayout.layout.data.idleRelocationMinutes,'placement engine and layout projection share the same Settings value');
+ assert.ok(office && Array.isArray(office.occupants),'the live OfficeVM remains available after a Settings change');
+});
+test('saving a longer finished-session window changes the next OfficeVM without restart',async t=>{
+ const now=1791740000000,sessionFixture=JSON.parse(fs.readFileSync(require.resolve('../fixtures/gw/rpc/sessions.list/2026.9.8/foreign-instance.json'),'utf8')).body.value;
+ const source=sessionFixture.sessions.find(row=>row.key==='agent:atlas:telegram:direct:foreign-user');
+ const finished={...source,updatedAt:now-20*60000,status:'done',hasActiveRun:false};
+ const h=await fixture(t,{now:()=>now,handlers:{'sessions.list':()=>({...sessionFixture,totalCount:1,count:1,sessions:[finished]})}});
+ const key=finished.key;
+ let office=await h.get('/api/v3/views/office');assert.equal(office.status,200,office.text);assert.equal(office.json.data.occupants.some(row=>row.role==='direct'),false);
+ const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:30}});assert.equal(saved.status,200,saved.text);assert.equal(saved.json.data.result.restartRequired,false);
+ office=await h.get('/api/v3/views/office');assert.equal(office.status,200,office.text);assert.equal(office.json.data.occupants.some(row=>row.role==='direct'),true);
+});
 test('cleared chosen names persist as null while detected names survive save and GET',async t=>{
  const h=await fixture(t);
  const row=vm=>vm.agents.find(a=>a.agentId==='atlas'&&['openclaw','legacy'].includes(a.runtime));

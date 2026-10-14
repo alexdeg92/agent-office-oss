@@ -43,7 +43,11 @@ function createProjectService(deps = {}) {
   }
 
   function persons() {
-    return repository.listPersons();
+    const stored = repository.listPersons();
+    const projected = typeof deps.additionalPersons === 'function' ? deps.additionalPersons() : [];
+    const byId = new Map(stored.map(row => [row.id, row]));
+    for (const person of projected || []) if (person?.id) byId.set(person.id, person);
+    return [...byId.values()];
   }
 
   function currentPrimaryId() {
@@ -104,8 +108,15 @@ function createProjectService(deps = {}) {
     };
   }
 
-  function projectVm(id) {
-    const project = repository.getProject(id);
+  function projectVm(id, { includeRuntime = false } = {}) {
+    const project = repository.getProject(id) || (typeof deps.additionalProjects === 'function'
+      ? (deps.additionalProjects({ includeRuntime }) || []).find(row => row.id === id && row.runtimeProject) : null);
+    if (project && project.runtimeProject) {
+      const context = viewContext(id, null);
+      context.sessionCounts = { runtime: { sessionCount: project.sessionCount } };
+      return buildProjectVM(project, [], context);
+    }
+    if (!project) repository.getHistory(id, { limit: HISTORY_PAGE }); // preserve the repository's normal not-found error
     const page = repository.getHistory(id, { limit: HISTORY_PAGE });
     return buildProjectVM(project, page.events, viewContext(id, page.nextCursor));
   }
@@ -449,20 +460,23 @@ function createProjectService(deps = {}) {
   };
 
   const views = {
-    board({ filter = 'all' } = {}) {
-      return buildBoardVM(repository.listProjects({ archived: 'all' }), {
+    board({ filter = 'all', sourceFilterId = null, allowUnknownSourceFilter = false, includeRuntime = false } = {}) {
+      const extras = typeof deps.additionalProjects === 'function' ? deps.additionalProjects({ includeRuntime }) : [];
+      return buildBoardVM([...repository.listProjects({ archived: 'all' }), ...(Array.isArray(extras) ? extras : [])], {
         filter,
         coverOf: deps.coverOf || null,
         persons: persons(),
         timmyPersonId: primaryPersonId(),
         primaryAgentId: currentPrimaryId(),
+        sourceFilterId,
+        allowUnknownSourceFilter,
         portability: repository.portability === true,
         locale: repository.locale || undefined,
       });
     },
 
-    project({ id } = {}) {
-      return projectVm(id);
+    project({ id, includeRuntime = false } = {}) {
+      return projectVm(id, { includeRuntime });
     },
 
     async candidates({authorize=()=>{}}={}) {

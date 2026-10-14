@@ -61,7 +61,9 @@ const definition = {
   schemas: {}, routes: {}, eventPrefix: 'demo.event.',
   gatewayLabel: 'Runtime de démonstration',
   gatewayLabels: { fr: 'Runtime de démonstration', en: 'Demo runtime' },
-  sessionKeyFor: (agentId, ref) => 'demo:' + agentId + ':explicit:' + ref,
+  sessionKeyFor: (agentId, ref, options = {}) => options.purpose === 'project'
+    ? 'demo:' + agentId + ':' + ref
+    : 'demo:' + agentId + ':explicit:' + ref,
   normalise: {
     session: (row) => ({ session: row }),       // a canonical runtime: rows are already Sessions
     runtimeHealth: () => ({ version: 'demo', pluginsLoaded: null, eventLoop: null }),

@@ -22,7 +22,7 @@ export function markerHtml(kind) {
     case 'thought':
       return '<span class="ao-mk ao-mk--thought"><i></i><i></i><i></i></span>';
     case 'question':
-      return `<span class="ao-mk ao-mk--pill"><b>?</b>${ICONS.hourglass}</span>`;
+      return `<span class="ao-mk ao-mk--pill">${ICONS.hourglass}</span>`;
     case 'alert':
       return '<span class="ao-mk ao-mk--pill ao-mk--solid"><b>!</b></span>';
     case 'zz':

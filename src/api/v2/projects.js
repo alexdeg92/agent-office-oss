@@ -29,6 +29,11 @@ function toApiError(err) {
   if (err instanceof ApiError) return err;
   if (err instanceof ProjectError || (err && err.name === 'ProjectError')) {
     const code = ['validation_failed', 'not_found', 'conflict', 'upstream_failed', 'internal', 'rate_limited', 'readonly'].includes(err.code) ? err.code : 'internal';
+    // A repository miss and a runtime project hidden by the caller's grants must
+    // have the same public response. ProjectError's normal not-found message
+    // ("Projet introuvable.") would otherwise disclose that a formerly visible
+    // runtime project still exists after permissions are revoked.
+    if (code === 'not_found') return new ApiError('not_found');
     const current = err.body && err.body.error && err.body.error.current ? err.body.error.current : undefined;
     const details = Array.isArray(err.details) ? err.details.map((d) => Object.assign(d.field ? { field: String(d.field) } : {}, { issue: String(d.issue || code) })) : undefined;
     return new ApiError(code, { message: err.message, details, current, status: err.status });
@@ -114,13 +119,23 @@ function liveSources(cfg, engine, log = () => {}) {
     resolve: (host) => dns.promises.lookup(host, { all: true }).then((r) => r.map((x) => x.address)) };
 }
 
-function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false }) {
+function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false, orchestratorTeams = null }) {
   const owner = store.owner;
   const primaryAgentId = () => { const agent = engine.primaryAgent(); return agent ? agent.id : null; };
+  const teamProjectModule = require('../../projects/orchestrator-teams');
+  const runtimeProjectModule = require('../../projects/runtime-sources');
+  const teamSnapshot = () => orchestratorTeams?.getSnapshot?.() || null;
+  const runtimeProjects = () => runtimeProjectModule.collectRuntimeProjects({ sessions: engine.sessions(), agents: engine.agents(),
+    connectorOf: key => engine.connectorOf?.(key) || engine.connectorOf?.() || null, idKey: cfg.sessionSecret });
   const repository = createProjectsRepository(store.db, { persons: [], ownerPersonId: owner.id, timmyPersonId: null, primaryAgentId,
     githubOwners: cfg.projectsOwners, onInvalid: () => engine.quarantine.record({ channel: 'store.projects', code: 'store.invalid', severity: 'warn', path: null }) });
   let covers = null;
   const service = createProjectService({
+    additionalProjects: ({ includeRuntime = false } = {}) => [
+      ...teamProjectModule.teamProjects(teamSnapshot(), orchestratorTeams?.teamCapabilities),
+      ...(includeRuntime ? runtimeProjects().projects : []),
+    ],
+    additionalPersons: () => runtimeProjects().persons,
     coverOf: (id) => covers && covers.vm(id),
     onProjectChanged: (project) => { if (covers) covers.observe(project); },
     repository, clock: () => Date.now(), ids: { mint: (p) => p + '_' + crypto.randomBytes(10).toString('hex') },
@@ -149,7 +164,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   };
   engine.on('change', (c) => {
     if (!c || !PROJECT_TYPES.has(c.type)) return;
-    if (c.type === 'Transcript' || c.type === 'Session') topics.invalidate('project');
+    if (c.type === 'Transcript' || c.type === 'Session') { topics.invalidate('project'); topics.invalidate('projects'); }
     if (pending) return;
     pending = setTimeout(() => { pending = null; runRefresh({ changes: [{ type: c.type }] }); }, 1000);
     if (pending.unref) pending.unref();
@@ -157,23 +172,26 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   if (enrichment) enrichment.onChange(() => topics.invalidate('project'));
   const timer = setInterval(() => runRefresh({}), REFRESH_EVERY_MS);
   if (timer.unref) timer.unref();
+  const offTeamSource = orchestratorTeams?.onChange?.(() => { topics.invalidate('projects'); topics.invalidate('project'); }) || null;
 
   // G5 (api-v3.md D8): 3.0 says 'with-agent' (+ agent, default the primary) and has no 'with-timmy'; 2.x is unchanged
-  topics.define('projects', { params: ['filter', 'agent'], build: (p, P) => {
+  topics.define('projects', { params: ['filter', 'agent', 'source'], build: (p, P) => {
+    const sourceFilterId = p.source || null;
     const filter = p.filter || 'all';
     if (P.version !== 3) {
       if (p.agent !== undefined) throw invalid('agent', 'unexpected-field');
-      return service.views.board({ filter });
+      return service.views.board({ filter, sourceFilterId, allowUnknownSourceFilter: true, includeRuntime: false });
     }
     if (filter === 'with-timmy' || !['all', 'at-risk', 'with-agent', 'archived'].includes(filter)) throw invalid('filter', 'invalid');
     const primary = primaryAgentId();
     if (p.agent !== undefined && filter !== 'with-agent') throw invalid('agent', 'unexpected-field');
     // projects' board selects by the PRIMARY agent today; another agent needs their builder to take it (relayed)
     if (p.agent !== undefined && p.agent !== primary) throw invalid('agent', 'unsupported');
-    const vm = service.views.board({ filter: filter === 'with-agent' ? 'with-timmy' : filter });
-    return Object.assign({ filter, agent: filter === 'with-agent' ? primary : null }, { columns: vm.columns });
+    const vm = service.views.board({ filter: filter === 'with-agent' ? 'with-timmy' : filter, sourceFilterId, allowUnknownSourceFilter: true, includeRuntime: true });
+    return Object.assign({}, vm, { filter, agent: filter === 'with-agent' ? primary : null });
   } });
-  topics.define('project', { params: 'path', build: (p) => service.views.project({ id: p.key }) });
+  topics.define('project', { params: 'path', build: (p, P) => teamProjectModule.buildTeamProjectVM(teamSnapshot(), p.key, orchestratorTeams?.teamCapabilities)
+    || service.views.project({ id: p.key, includeRuntime: P.version === 3 }) });
 
   const body = (req, allowed) => {
     const b = req.body || {};
@@ -204,6 +222,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     const q = [];
     if (typeof req.query.agent === 'string') q.push('agent=' + encodeURIComponent(req.query.agent));
     if (filter !== 'all') q.push('filter=' + encodeURIComponent(filter));
+    if (typeof req.query.source === 'string') q.push('source=' + encodeURIComponent(req.query.source));
     const t = topics.current(q.length ? 'projects?' + q.join('&') : 'projects', req.apiVersion);
     if (!t) throw invalid('filter', 'invalid');
     ok(res, t.vm, { id: t.id, rev: t.rev });
@@ -305,7 +324,14 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
       .catch((e) => { log('projects: summary turn failed (' + (e && e.code || 'error') + ')'); release(); });
   }));
 
-  return { service, repository, covers, close: () => { covers.close(); clearInterval(timer); if (pending) clearTimeout(pending); } };
+  return { service, repository,
+    teamProjectById: id => teamProjectModule.buildTeamProjectVM(teamSnapshot(), id, orchestratorTeams?.teamCapabilities),
+    // Only entities supported by the comment thread can authorize that topic.
+    // Runtime-derived projects declare comments unsupported and are not resolved
+    // by projectForRequest, so treating them as existing here would create a
+    // separate existence oracle for hidden runtime projects.
+    projectExistsById: id => !!repository.getProject(id) || !!teamProjectModule.buildTeamProjectVM(teamSnapshot(), id, orchestratorTeams?.teamCapabilities),
+    covers, close: () => { offTeamSource?.(); covers.close(); clearInterval(timer); if (pending) clearTimeout(pending); } };
 }
 
 module.exports = { sessionGroupsOf, mountProjects, toApiError, engineRegistry };

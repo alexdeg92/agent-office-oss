@@ -244,6 +244,11 @@ const furniture = [
   }),
 ];
 
+// Existing English UI names are registration data too: the backend searches the
+// same names the renderer displays, without importing a browser dictionary.
+const furnitureEnglish = {'desk':'Desk','chair':'Chair','sofa':'Sofa','rug':'Rug','plant-large':'Large plant','plant-small':'Small plant','shelf':'Bookcase','coffee-machine':'Coffee machine','server-rack':'Server rack','meeting-table':'Meeting table','lamp':'Floor lamp','winter-garland':'Winter garland','autumn-garland':'Autumn garland','whiteboard':'Whiteboard','window':'Window'};
+for (const item of furniture) if(furnitureEnglish[item.id]) item.names={fr:item.label,en:furnitureEnglish[item.id]};
+
 const subDirs = ['sage', 'ochre', 'teal'];
 const swatch = { sage: '#A8C090', ochre: '#D8A860', teal: '#609090' };
 const label = { sage: 'Sauge', ochre: 'Ocre', teal: 'Sarcelle' };

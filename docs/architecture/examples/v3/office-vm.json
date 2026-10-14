@@ -89,7 +89,13 @@
           }
         },
         "standingPoint": null,
-        "stateActive": true
+        "stateActive": true,
+        "communication": null,
+        "screenIntent": {
+          "screen": null,
+          "surface": "none",
+          "label": null
+        }
       },
       {
         "id": "agent:codex:worker",
@@ -149,7 +155,13 @@
           }
         },
         "standingPoint": null,
-        "stateActive": false
+        "stateActive": false,
+        "communication": null,
+        "screenIntent": {
+          "screen": null,
+          "surface": "none",
+          "label": null
+        }
       },
       {
         "id": "subagent:ffffffff-0001-4000-8000-000000000001",
@@ -208,7 +220,13 @@
           }
         },
         "standingPoint": null,
-        "stateActive": true
+        "stateActive": true,
+        "communication": null,
+        "screenIntent": {
+          "screen": null,
+          "surface": "none",
+          "label": null
+        }
       },
       {
         "id": "scheduled:ffffffff-0c01-4000-8000-000000000001",
@@ -267,7 +285,13 @@
           }
         },
         "standingPoint": null,
-        "stateActive": false
+        "stateActive": false,
+        "communication": null,
+        "screenIntent": {
+          "screen": null,
+          "surface": "none",
+          "label": null
+        }
       }
     ],
     "occupantOverflowCount": 0,
@@ -297,7 +321,7 @@
         "count": 1,
         "actor": {
           "kind": "system",
-          "name": "Système"
+          "name": "Syst\u00e8me"
         },
         "text": {
           "key": "liveEvent.cron.fired",

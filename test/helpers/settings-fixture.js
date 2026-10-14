@@ -40,7 +40,12 @@ async function settingsFixture(options = {}) {
  if(!options.reuse) IC.writeInstanceConfig(paths,config,secrets);
  const files = IC.readInstanceConfig(env), cfg = {...tryLoadConfig(IC.effectiveEnv(env,files)),instanceName:files.config.instance.name,configured:true,...(options.bootId ? {bootId:options.bootId} : {})};
  store = openStore({dir:cfg.dataDir,instance:'test',ownerName:'Camille',log:()=>{},deferRegistrySync:!!options.enforceAuthorization});
- if(!options.reuse) { store.setup.amendOwner({displayName:'Camille',email:EMAIL,passwordHash:await hashPassword(PASSWORD),layout:require('../../src/ops/setup-layout').setupLayout({primary:'atlas',looks:{}})});store.setup.prepare(config);store.setup.configured(); }
+ if(!options.reuse) { const layout=require('../../src/ops/setup-layout').setupLayout({primary:'atlas',looks:{}});
+  if(Number.isInteger(options.legacyIdleRelocationMinutes))layout.idleRelocationMinutes=options.legacyIdleRelocationMinutes;
+  store.setup.amendOwner({displayName:'Camille',email:EMAIL,passwordHash:await hashPassword(PASSWORD),layout});store.setup.prepare(config);store.setup.configured(); }
+ if(options.emptyOfficeLayout) store.withTx(()=>{
+  store.db.prepare('DELETE FROM office_layout_revisions').run();store.db.prepare('DELETE FROM office_layouts').run();
+ });
  if (options.effectiveV3 || files.config.version === 3) {
   const effective = {...files,...IC.upgradeV2(files.config,files.secrets)};
   store.runtimeReferences.migrate(require('../../src/ops/config-publisher').digest(files.config));
@@ -67,8 +72,10 @@ async function settingsFixture(options = {}) {
  };
  const orchestratorTeams = typeof options.orchestratorTeams === 'function' ? options.orchestratorTeams({tmp,env,gw,engine,runtime}) : options.orchestratorTeams || null;
  const settings = createSettings({env,files,cfg:controller.cfg,engine,store,auth,controller,paths:openclawPaths(env),orchestratorTeams,detect: Object.hasOwn(options,'detect') ? options.detect : detection,probe:options.probe,derivePassword:options.derivePassword,supervisor:options.supervisor,bootId:options.bootId,elapsed:()=>clock.elapsed,now:()=>clock.now,readBuild:()=>({buildId:'fixture-build'}),changed:frame=>{events.push(frame);api?.topics.invalidate();for(const hub of Object.values(api?.hubs||{}))hub.broadcastSettings(frame);}});
+ const officeLayoutAfterSettings = options.emptyOfficeLayout ? store.office.active() : undefined;
  const tokenGate=require('../../src/api/agent-token').createAgentTokenGate({tokens:store.tokens,audit:row=>store.audit.append(row),allowedAgent:()=>engine.primaryAgent()?.id,personOf:id=>store.persons.ensureAgent(id,id).person.id});
- const app = createApp({readonly:cfg.readonly,readonlyStore:cfg.readonlyStore,apiOnly:true,tokenGate,publicDir:path.join(__dirname,'../../public'),csrf:createCsrfGuard({publicUrl:options.publicUrl}),writeClassOf,audit:auditMiddleware({store,sessionOf:req=>auth.sessionOf(req)}),mountRoutes:app=>{auth.mountRoutes(app,{isGwConnected:()=>engine.gateway().connected});api=mountV2(app,{auth,engine:options.viewEngine ?? engine,cfg:controller.cfg,store,runtime,settings,orchestratorTeams,sourcePrincipalFor:options.sourcePrincipalFor,sessionsReadable:options.sessionsReadable,enforceAuthorization:!!options.enforceAuthorization,reauthenticationElapsed:()=>clock.elapsed,...(options.now ? {now:options.now} : {})});}});
+ const apiEngine = typeof options.viewEngine === 'function' ? options.viewEngine(engine) : options.viewEngine ?? engine;
+ const app = createApp({readonly:cfg.readonly,readonlyStore:cfg.readonlyStore,apiOnly:true,tokenGate,publicDir:path.join(__dirname,'../../public'),csrf:createCsrfGuard({publicUrl:options.publicUrl}),writeClassOf,audit:auditMiddleware({store,sessionOf:req=>auth.sessionOf(req)}),mountRoutes:app=>{auth.mountRoutes(app,{isGwConnected:()=>engine.gateway().connected});api=mountV2(app,{auth,engine:apiEngine,cfg:controller.cfg,store,runtime,settings,orchestratorTeams,sourcePrincipalFor:options.sourcePrincipalFor,sessionsReadable:options.sessionsReadable,enforceAuthorization:!!options.enforceAuthorization,reauthenticationElapsed:()=>clock.elapsed,...(options.now ? {now:options.now} : {})});}});
  server = app.listen(options.listenDesired ? cfg.port : 0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
  const base = 'http://127.0.0.1:'+server.address().port;
  let cookie='';
@@ -84,7 +91,7 @@ async function settingsFixture(options = {}) {
  controller.start(({runtime,engine})=>{runtime.start(engine);return {close(){}};});
  await waitFor(()=>engine.gateway().connected&&engine.agents().length>0);
  if(options.automaticDetection) await settings.startDetection(options.detectionSchedule);
- return {tmp,base,app,api,auth,engine,runtime,controller,settings,store,env,paths,clock,events,gw,fake,password:PASSWORD,email:EMAIL,
+ return {tmp,base,app,api,auth,engine,runtime,controller,settings,store,env,paths,clock,events,gw,fake,password:PASSWORD,email:EMAIL,officeLayoutAfterSettings,
   get cookie(){return cookie;},set cookie(value){cookie=value;},get detectCalls(){return detectCalls;},orchestratorTeams,request,login,
   get:route=>request('GET',route),post:(route,value={})=>request('POST',route,value),put:(route,value)=>request('PUT',route,value),
   reauth:()=>request('POST','/api/v3/settings/reauth',{password:PASSWORD}),

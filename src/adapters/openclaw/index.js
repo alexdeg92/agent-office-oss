@@ -69,7 +69,9 @@ const definition = {
   gatewayLabel: 'Passerelle OpenClaw',
   gatewayLabels: { fr: 'Passerelle OpenClaw', en: 'OpenClaw gateway' },   // G3c
   // OpenClaw's session-key grammar for an explicit key (`--session-key <ref>` → agent:<id>:explicit:<ref>)
-  sessionKeyFor: (agentId, ref) => 'agent:' + agentId + ':explicit:' + ref,
+  sessionKeyFor: (agentId, ref, options = {}) => options.purpose === 'project'
+    ? 'agent:' + agentId + ':' + ref
+    : 'agent:' + agentId + ':explicit:' + ref,
   eventPrefix: 'gw.event.',          // unknown runtime events arrive as `${eventPrefix}<name>` (event.unknown)
   normalise: { agents: normaliseAgents, flows: normaliseCronJobs, flowRuns: normaliseCronRuns, skills: normaliseSkills, skillInfo: normaliseSkillInfo,
     channels: normaliseChannels, transcript: normaliseTranscript, config: normaliseConfig, session: normaliseSession, runtimeHealth,

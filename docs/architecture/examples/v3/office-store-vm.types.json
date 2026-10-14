@@ -1,0 +1,11 @@
+{
+  "$comment": "OfficeStoreVM (api.md §3.16), identical v2/v3 projection.",
+  "types": {
+    "$.floors.options[].count": "number"
+  },
+  "nullable": [
+    "$.categoryId",
+    "$.categories",
+    "$.floors"
+  ]
+}

@@ -102,6 +102,19 @@ describe('view models match the 2.4 examples', () => {
     assert.deepEqual(compareExample('board-vm', board), []);
     const card = board.columns.find((c) => c.id === 'in-progress').cards[0];
     assert.equal(card.status, 'in-progress');
+    assert.equal(card.statusLabel.key, 'projectStatus.in-progress');
+    assert.deepEqual(card.counts, { sessions: null, agents: 1, activity: null });
+    assert.equal(board.sourceFilters.length, 4);
+    assert.equal(board.sourceFilters.some(row => row.selected), false);
+    const other = { ...project, id: 'prj_other_opaque', name: 'Other', sources: [{ id: 'src_other', kind: 'manual', ref: null, addedAt: AT }] };
+    const filtered = buildBoardVM([project, other], { filter: 'all', persons, sourceFilterId: 'src_gh' });
+    assert.equal(filtered.columns.flatMap(row => row.cards).length, 1, 'source selection determines server membership');
+    assert.equal(filtered.sourceFilters.find(row => row.id === 'src_gh').selected, true);
+    assert.equal(filtered.sourceFilters.find(row => row.id === 'src_other').count, 1);
+    assert.throws(() => buildBoardVM([project], { filter: 'all', sourceFilterId: 'missing' }), /Filtre de source invalide/);
+    const unresolved = buildBoardVM([project], { filter: 'all', sourceFilterId: 'missing', allowUnknownSourceFilter: true });
+    assert.equal(unresolved.sourceFilterId, 'missing');
+    assert.equal(unresolved.columns.every(column => column.cards.length === 0 && column.count === 0), true);
   });
 
   it('buildCandidatesVM matches candidates-vm.json', () => {

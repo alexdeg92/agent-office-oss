@@ -1,5 +1,5 @@
 'use strict';
-// T-0099: the backend-persisted ambient relocation threshold belongs to the office layout.
+// T-0115: the Settings value is projected through layout for compatibility, but is not stored there.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScenario } = require('../helpers/scenario');
@@ -44,13 +44,14 @@ describe('office layout idle relocation threshold', () => {
       data: { ...l3.layout.data, idleRelocationMinutes: 7 } });
     assert.equal(saved.status, 200, saved.text);
     l3 = (await h.get('/api/v3/office/layout')).json.data;
-    assert.equal(l3.layout.data.idleRelocationMinutes, 7);
+    assert.equal(l3.layout.data.idleRelocationMinutes, 15, 'legacy layout writes are ignored; Settings remains authoritative');
+    assert.equal(Object.hasOwn(l3.layout.data, 'idleRelocationMinutes'), true, 'compatibility projection remains in the API shape');
     const l2 = (await h.get('/api/v2/office/layout')).json.data;
-    assert.equal(l2.layout.data.idleRelocationMinutes, 7);
+    assert.equal(l2.layout.data.idleRelocationMinutes, 15);
     const data2 = { ...l2.layout.data };
     delete data2.idleRelocationMinutes;
     const saved2 = await h.request('PUT', '/api/v2/office/layout', { expectedRevision: l2.layout.revision, data: data2 });
     assert.equal(saved2.status, 200, saved2.text);
-    assert.equal((await h.get('/api/v3/office/layout')).json.data.layout.data.idleRelocationMinutes, 7);
+    assert.equal((await h.get('/api/v3/office/layout')).json.data.layout.data.idleRelocationMinutes, 15);
   });
 });

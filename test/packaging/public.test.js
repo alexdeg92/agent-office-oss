@@ -84,6 +84,7 @@ test('export excludes history and captures, preserves runtime integration, and r
     for (const file of ['public/v2/assets/connectors/openclaw.svg', 'public/v2/assets/connectors/claude-code.svg', 'public/v2/assets/connectors/codex.svg', 'public/v2/assets/connectors/codex-dark.svg', 'public/v2/assets/connectors/provenance.json']) {
       assert.ok(fs.existsSync(path.join(dir, file)), `${file} is present in the public export`);
     }
+    assert.ok(fs.existsSync(path.join(dir, 'design/assets/Office/monitor-screens/manifest.json')), 'registered monitor frame enumeration remains available to a public rebuild');
     const before = fs.readFileSync(path.join(dir, 'public/v2/index.html'), 'utf8');
     const build = spawnSync(process.execPath, ['scripts/build-frontend.js'], { cwd: dir, encoding: 'utf8' });
     assert.equal(build.status, 0, build.stderr);

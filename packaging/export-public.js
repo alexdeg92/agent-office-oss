@@ -13,6 +13,9 @@ function exportTree(dest) {
   const allowedRoots = new Set(['src', 'public', 'scripts', 'test', 'docs', 'packaging', 'integrations', '.github']);
   const rootFiles = new Set(['package.json', 'package-lock.json', 'server.js', 'gateway.js', 'README.md', 'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', '.env.example', '.gitignore', '.dockerignore']);
   const sourceAssets = new Set(plan().map(([src]) => path.relative(ROOT, src).split(path.sep).join('/')));
+  // sync-design reads this build input to enumerate registered screen frames;
+  // it is not itself copied to the runtime bundle by plan().
+  sourceAssets.add('design/assets/Office/monitor-screens/manifest.json');
   // ls-files --cached also lists tracked files deleted in the worktree. Export the current tree,
   // including staged/unstaged removals, rather than attempting to copy those index-only paths.
   const deleted = new Set(execFileSync('git', ['ls-files', '-z', '--deleted'], { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter(Boolean));

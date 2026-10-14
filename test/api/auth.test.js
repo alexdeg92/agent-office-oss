@@ -19,7 +19,7 @@ const PROTECTED = [
   ['GET', '/me'], ['GET', '/views/health'], ['PUT', '/health/issues/x/muted'], ['POST', '/health/checks/x/fix'], ['POST', '/health/fix-all'], ['GET', '/shots/x.png'],
   ['GET', '/design-system/access'], ['POST', '/stream/ticket'],
   ['GET', '/stream'], ['POST', '/stream/x/topics'], ['POST', '/stream/x/resync'],
-  ['GET', '/views/office'], ['GET', '/views/flows'], ['GET', '/views/flows/x'], ['GET', '/views/logs'], ['GET', '/views/sessions/agent%3Amain%3Amain'],
+  ['GET', '/views/office'], ['GET', '/views/office/characters'], ['GET', '/views/office/store'], ['GET', '/views/office/palette'], ['GET', '/views/flows'], ['GET', '/views/flows/x'], ['GET', '/views/logs'], ['GET', '/views/sessions/agent%3Amain%3Amain'],
   ['GET', '/views/access'], ['GET', '/views/interlocutors/x'], ['GET', '/views/skills'], ['GET', '/views/skills/weather'], ['GET', '/views/chat'],
   ['GET', '/orchestrators'], ['GET', '/teams'],
   ['POST', '/flows'], ['PATCH', '/flows/x'], ['PUT', '/flows/x/enabled'], ['POST', '/flows/x/runs'], ['DELETE', '/flows/x'],

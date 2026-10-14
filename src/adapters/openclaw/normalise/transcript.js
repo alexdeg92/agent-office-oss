@@ -36,7 +36,7 @@ function delegatedLabelsOf(messages) {
     if (!p || !['toolCall', 'tool_use', 'toolUse'].includes(p.type) || (p.name || p.toolName) !== 'sessions_spawn') continue;
     const id = p.toolCallId || p.id || p.toolUseId || p.tool_use_id;
     const args = jsonObject(p.input || p.args || p.arguments || p.parameters || p.params);
-    if (id) calls.set(id, nameOf(args?.label, args?.task));
+    if (id) calls.set(id, nameOf(args?.label, args?.taskName, args?.task));
   }
   for (const m of messages) if (['toolResult', 'tool'].includes(m.role) && !m.isError) {
     const first = Array.isArray(m.content) ? m.content[0] : null;
@@ -47,6 +47,64 @@ function delegatedLabelsOf(messages) {
     if (typeof key === 'string' && key.trim() && !['error', 'forbidden', 'rejected'].includes(result.status)) labels.set(key, calls.get(id) || labels.get(key) || null);
   }
   return labels;
+}
+const RESULT_BLOCK = /Child task[^:\n]*:\s*<prompt-data>([\s\S]*?)<\/prompt-data>\s*status:\s*([^\s<]+)\s*Child result[^:\n]*:\s*<prompt-data>([\s\S]*?)<\/prompt-data>/gi;
+function resultStatus(value, failed = false) {
+  if (failed) return 'failed';
+  const status = String(value || '').trim().toLowerCase();
+  if (['ok', 'complete', 'completed', 'success', 'succeeded', 'done'].includes(status)) return 'completed';
+  if (['failed', 'failure', 'error', 'rejected'].includes(status)) return 'failed';
+  if (['running', 'working', 'in_progress'].includes(status)) return 'running';
+  return 'unknown';
+}
+function childForLabel(label, context, sourceKey = null) {
+  const isChild = key => {
+    const session = key && context.sessionOf?.(key);
+    return !!key && (session?.class?.kind === 'subagent' || context.delegatedLabels?.has(key));
+  };
+  if (isChild(sourceKey)) return sourceKey;
+  const matches = [...(context.delegatedLabels || [])].filter(([key, value]) => isChild(key)
+    && (key === label || value === label)).map(([key]) => key);
+  return matches.length === 1 ? matches[0] : null;
+}
+// Only adapter-confirmed internal provenance is eligible. A user who types the
+// same marker text remains a human message. Results are split before the event
+// enters the runtime-neutral model, so core and clients see no native envelope.
+function delegatedResults(message, { at, sessionKey, messageIndex, eventId, context }) {
+  const provenance = message?.provenance;
+  if (!provenance || !['inter_session', 'internal_system', 'system'].includes(provenance.kind)) return null;
+  const sourceKey = typeof provenance.sourceSessionKey === 'string' ? provenance.sourceSessionKey : null;
+  const isCurrentChild = context.session?.class?.kind === 'subagent';
+  const raw = textOf(message.content);
+  const batch = [];
+  if (/^\s*\[Subagent Context\]/i.test(raw) && /Child completion results:/i.test(raw)) {
+    RESULT_BLOCK.lastIndex = 0;
+    let match;
+    while ((match = RESULT_BLOCK.exec(raw))) batch.push({ label: nameOf(match[1]), nativeStatus: match[2], body: match[3].trim() });
+  }
+  if (batch.length) {
+    return batch.map((row, index) => {
+      const childKey = childForLabel(row.label, context, batch.length === 1 ? sourceKey : null);
+      const senderInfo = childKey ? delegatedSender(childKey, context) : {
+        kind: 'agent', id: `agent:unresolved-delegate:${eventId(messageIndex, index)}`, name: row.label, runtime: context.runtime || 'generic',
+        channel: context.session?.class?.channel || null, avatarHint: null,
+      };
+      const body = clip(row.body, 8000);
+      return { id: eventId(messageIndex, index), kind: 'subagent-result', at, senderInfo,
+        title: (row.label || senderInfo.delegation?.label || null)?.slice(0, 120), status: resultStatus(row.nativeStatus, message.isError === true),
+        body: body.text, text: body.text, truncated: body.truncated };
+    });
+  }
+  // A single ordinary inter-session completion is still an agent result. Do not
+  // reinterpret prompt/context sent into a child's own transcript as a result.
+  const childKey = provenance.kind === 'inter_session' && !isCurrentChild
+    ? childForLabel(sourceKey, context, sourceKey) : null;
+  if (!childKey) return null;
+  const body = clip(raw.replace(/^\s*\[Subagent Context\][^\n]*(?:\n|$)/i, '').trim(), 8000);
+  const senderInfo = delegatedSender(childKey, context);
+  return [{ id: eventId(messageIndex, 0), kind: 'subagent-result', at, senderInfo,
+    title: nameOf(context.delegatedLabels?.get(childKey), senderInfo.name)?.slice(0, 120) || null, status: resultStatus(null, message.isError === true),
+    body: body.text, text: body.text, truncated: body.truncated }];
 }
 // Seen in captures, content not rendered yet (data-model §2.1): known, deliberately skipped, not drift.
 const METADATA_ROLES = new Set(['custom', 'operator']);
@@ -67,8 +125,11 @@ function normaliseTranscript(sessionKey, v, fetchedAt, window = 120, issue = () 
   const evId = (mi, pi) => 'ev:' + (base + mi) + ':' + pi;
   msgs.forEach((m, mi) => {
     const at = m.timestamp || 0;
+    const childResults = delegatedResults(m, { at, sessionKey, messageIndex: mi, eventId: evId, context: ctx });
+    if (childResults) { events.push(...childResults); return; }
     if (m.role === 'system') { const c = clip(textOf(m.content), 8000); events.push({ id: evId(mi, 0), kind: 'system', at, text: c.text, truncated: c.truncated }); return; }
-    if (m.role === 'user') { const rawText = textOf(m.content), senderInfo = resolveSender(m, { ...ctx, text: rawText });
+    if (m.role === 'user') { const rawText = textOf(m.content);
+      const senderInfo = resolveSender(m, { ...ctx, text: rawText });
       const c = clip(stripEnvelope(rawText), 8000); events.push({ id: evId(mi, 0), kind: senderInfo.kind === 'system' ? 'system' : 'user', at, ...(senderInfo.kind === 'system' ? {} : { sender: senderInfo.name }), senderInfo, text: c.text, truncated: c.truncated }); return; }
     if (METADATA_ROLES.has(m.role)) return;
     if (!ROLES.has(m.role)) { issue('enum.unmapped', 'warn', '$.messages[].role', 'value not in the table'); return; }

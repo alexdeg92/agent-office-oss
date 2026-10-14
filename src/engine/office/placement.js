@@ -18,8 +18,8 @@ function target({ kind, floorId, stationUid = null, point, approachPoint = null,
     seatContact: seatContact && { x: seatContact.x, y: seatContact.y }, mode, seatIndex, facing: facingFor(facing) };
 }
 
-function homeTargetFor(placement, floor, index) {
-  const station = placement.stationUid && floor.layout.items.find(row => row.uid === placement.stationUid);
+function stationTargetFor(placement, floor, index, stationUid) {
+  const station = stationUid && floor?.layout.items.find(row => row.uid === stationUid);
   const asset = station && index.furniture.get(station.asset);
   const stationDef = asset?.station;
   if (station && stationDef) {
@@ -31,6 +31,14 @@ function homeTargetFor(placement, floor, index) {
   }
   const p = placement.standingPoint || { x: 0.5, y: 0.5 };
   return target({ kind: 'standing', floorId: placement.floorId, point: p, approachPoint: p, mode: 'stand' });
+}
+
+function homeTargetFor(placement, floor, index) {
+  return stationTargetFor(placement, floor, index, placement._homeWant || placement.stationUid);
+}
+
+function allocatedTargetFor(placement, floor, index) {
+  return stationTargetFor(placement, floor, index, placement.stationUid);
 }
 
 function activitySpotsFor(floor, index) {
@@ -143,7 +151,8 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
           travel: previous.floorId === home.floorId ? null : { id: `travel:${digest(`${spatialIdentity(home.id)}|${previous.activityId}|return`)}`, fromFloorId: previous.floorId, toFloorId: home.floorId, departure, arrival } });
       }
       const state = tracker?.relocations?.get(spatialIdentity(home.id));
-      return { ...home, homeTarget, sceneTarget: homeTarget, activity: null, sceneTravel: state?.activityId === null ? state.travel : null };
+      return { ...home, homeTarget, sceneTarget: allocatedTargetFor(home, floorById.get(home.floorId), index), activity: null,
+        sceneTravel: state?.activityId === null ? state.travel : null };
     }
     const slotId = spot.activityId;
     const activityId = `${row.stateSince}|${slotId}`;
@@ -180,6 +189,7 @@ function planOfficePlacement({ index, layout, occupants, now = Date.now(), track
   const plan = planFloors(index, layout, occupants, homeAssignments);
   const placements = new Map(plan.occupants.map(o => [o.id, {
     id: o.id, floorId: o.floorId, stationUid: o.stationUid ?? null,
+    ...(Object.hasOwn(o, '_homeWant') ? { _homeWant: o._homeWant } : {}),
     standingPoint: o.floorTravel?.phase === 'team-standing' ? { ...o.floorTravel.point } : null,
   }]));
   const byId = new Map(occupants.map(o => [o.id, o]));
@@ -228,9 +238,21 @@ function planOfficePlacement({ index, layout, occupants, now = Date.now(), track
   const activePlacements = occupants.map(row => withActivityById.get(row.id) || placements.get(row.id) || {
     id: row.id, floorId: hostFloor(row), stationUid: null, standingPoint: null,
   });
+  const seatedTargets = new Set();
+  const finalPlacements = activePlacements.map(row => {
+    if (!row.stationUid || row.activity) return row;
+    const floor = plan.byId.get(row.floorId);
+    const allocatedTarget = allocatedTargetFor(row, floor, index);
+    const normalized = row.sceneTarget?.floorId === row.floorId && row.sceneTarget?.stationUid === row.stationUid
+      ? row : { ...row, sceneTarget: allocatedTarget };
+    const key = `${row.floorId}:${row.stationUid}`;
+    if (seatedTargets.has(key)) throw new Error(`office placement assigned duplicate seated target ${key}`);
+    seatedTargets.add(key);
+    return normalized;
+  });
   return {
     // Input sequence stays intact; the VM owner retains rosterOrder and all parent/team/status fields.
-    placements: activePlacements,
+    placements: finalPlacements.map(({ _homeWant, ...placement }) => placement),
     // Room rendering does not expose global owner appearance/name rules from layout.agents.
     floors: plan.floors.map(({ id, kind, layout: local, capacity }) => ({ id, kind,
       layout: { room: local.room, theme: local.theme, items: local.items }, capacity })),

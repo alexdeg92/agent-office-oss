@@ -229,6 +229,8 @@ type TraceEvent = { id: string } & (
   | { kind: 'thinking';  at: Ms; text: string; truncated: boolean }                 // assistant 'thinking' parts
   | { kind: 'observation'; at: Ms; text: string; truncated: boolean }              // 'observation' parts (meaning to confirm)
   | { kind: 'user';      at: Ms; sender: string | null; text: string; truncated: boolean }
+  | { kind: 'subagent-result'; at: Ms; senderInfo: Sender; title: string | null;
+      status: 'completed' | 'failed' | 'running' | 'unknown'; body: string; text: string; truncated: boolean } // verified delegated output; Markdown is preserved
   | { kind: 'assistant'; at: Ms; model: string | null; provider: string | null; outputTokens: Tokens | null; text: string; truncated: boolean;
       stopReason: 'stop' | 'toolUse' | 'error' | 'unrecognized' | null; error: string | null }   // errorMessage
   | { kind: 'tool';      at: Ms; callId: string; name: string; toolKind: ToolKind;

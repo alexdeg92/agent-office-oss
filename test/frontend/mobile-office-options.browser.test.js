@@ -126,7 +126,7 @@ async function fixture(page, canonical = false, includeCodingSession = false) {
       });
       vm.rosterPreviewItems=vm.rosterItems;vm.rosterOverflowCount=0;
       vm.conversationIds=[];vm.rosterSummary={count:5,activeCount:5};
-      vm.rosterFloors=[{id:'1',order:1,label:{key:'office.floor.first'},kind:'office',occupantIds:vm.occupants.map(o=>o.id),items:vm.occupants.map(o=>({kind:'occupant',id:`occupant:${o.id}`,occupantId:o.id})),count:5,activeCount:5,idleCount:0,layout:fixtureFloorLayout,capacity:null}];
+      vm.rosterFloors=[{id:'1',order:1,label:{key:'office.floor.first'},kind:'office',occupantIds:vm.occupants.map(o=>o.id),mobileLabelIds:vm.occupants.slice(0,3).map(o=>o.id),items:vm.occupants.map(o=>({kind:'occupant',id:`occupant:${o.id}`,occupantId:o.id})),count:5,activeCount:5,idleCount:0,layout:fixtureFloorLayout,capacity:null}];
       vm.unseatedTeams=[];
       vm.kpis.find(k=>k.id==='active').value=5;
     }
@@ -157,7 +157,7 @@ test('compact options and separate parent stacks lead to full detail and return 
     p.on('pageerror',e=>errors.push(e.message));
     const capture=async name=>{if(process.env.BUREAU_SCREENSHOTS==='1'){
       await mkdir('design/reports/mobile-office-options/product',{recursive:true});
-      await p.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));});
+      await p.evaluate(()=>document.fonts.ready);
       await p.screenshot({path:`design/reports/mobile-office-options/product/${name}-${width}-${theme}.png`,animations:'disabled'});
     }};
     try {
@@ -176,6 +176,25 @@ test('compact options and separate parent stacks lead to full detail and return 
       await dialog.getByRole('button',{name:'Recentrer',exact:true}).click();
       await capture('options');await p.keyboard.press('Escape');
       await fixture(p);await capture('teams');
+      await p.evaluate(async()=>{
+        const {services}=await import('/services.js');
+        const office=services.stream._topics.get('office').state.data;
+        const layout=services.stream._topics.get('layout').state.data;
+        const primary=office.occupants.find(row=>row.role==='primary'||row.role==='main');
+        services.officeApi={get:async()=>layout,getRevision:async()=>null,put:async()=>({vm:layout}),putTheme:async()=>({vm:layout})};
+        // The endpoint fixture returns its complete server-owned groups and rows, not a client-built roster.
+        const byId=new Map(office.occupants.map(person=>[person.id,person]));
+        const shape=(person,order)=>({id:person.id,role:person.role,name:person.name,runtime:person.runtime,
+          runtimeBrand:person.runtimeBrand||null,state:person.state,stateLabel:person.stateLabel,roleLabel:person.roleLabel,
+          primary:person.id===primary.id,look:person.look,groupId:person.groupId,order:person.rosterOrder??order,
+          inOffice:true,lastSeenAt:null});
+        const groups=(office.rosterItems||[]).map(group=>({id:group.id,label:group.label,count:group.occupantIds.length,
+          countLabel:{key:group.occupantIds.length===1?'office.characters.count.one':'office.characters.count.other',params:{n:group.occupantIds.length}},
+          rows:group.occupantIds.map((id,index)=>byId.get(id)).filter(Boolean).map(shape)}));
+        const count=groups.reduce((sum,group)=>sum+group.rows.length,0);
+        services.officeCharacterVM=async({scope,search})=>({scope,search,count,countLabel:{key:count===1?'office.characters.count.one':'office.characters.count.other',params:{n:count}},
+          groups,emptyLabel:{key:'office.characters.emptyOffice'}});
+      });
       const group=p.locator('.ao-mobile-group');assert.equal(await group.count(),2);
       assert.ok(await group.evaluateAll(groups=>groups.every(g=>g.scrollWidth<=g.clientWidth)));
       await group.first().getByRole('button',{name:/Voir l’équipe de Atlas/}).click();
@@ -197,9 +216,62 @@ test('compact options and separate parent stacks lead to full detail and return 
       await p.locator('#ao-drawer-title').waitFor();assert.equal(await p.locator('#ao-drawer-title').innerText(),'Tests');await capture('tests-detail');
       await p.getByRole('button',{name:'Retour à l’équipe',exact:true}).click();await p.getByRole('dialog',{name:'Équipe de Claude',exact:true}).waitFor();
       await p.keyboard.press('Escape');
+      await p.locator('.ao-mobile-group').nth(1).locator('[data-mobile-agent]').click();
+      await p.locator('.bu-drawer #ao-drawer-title').waitFor();
+      await p.locator('.bu-drawer').getByRole('button',{name:'Personnaliser',exact:true}).click();
+      await p.locator('.ao-editpanel .ao-characters__detail').waitFor();
+      assert.equal(await p.locator('.ao-editpanel .ao-characters__list').isVisible(),false,'drawer customization opens the selected agent directly');
+      assert.equal(await p.locator('.ao-editpanel .ao-characters__detail').isVisible(),true);
+      await p.locator('.ao-characters__actions').getByRole('button',{name:'Annuler',exact:true}).click();
+      await p.locator('.bu-drawer').getByRole('button',{name:'Fermer',exact:true}).click();
+      await p.locator('.ao-mobile-options').waitFor();
       await p.getByRole('button',{name:'Options du bureau',exact:true}).click();
       await p.getByRole('dialog').getByRole('button',{name:'Personnaliser',exact:true}).click();
-      await p.waitForURL(/boutique/);
+      await p.locator('.ao-editpanel .ao-character-row').first().waitFor();
+      assert.equal(await p.locator('.ao-editpanel').getAttribute('data-mode'),'characters');
+      assert.ok(await p.locator('.ao-editpanel .ao-characters__list .ao-character-row').count()>=3,'server-projected roster provides multiple readable rows');
+      assert.equal(await p.locator('.ao-editpanel .ao-characters__detail').isVisible(),false,'customize opens the mobile roster list first');
+      assert.ok(await p.locator('.ao-editpanel .ao-characters__list').evaluate(node=>node.clientHeight>0));
+      const frameMetrics=await p.evaluate(()=>{
+        const box=selector=>{const r=document.querySelector(selector)?.getBoundingClientRect();return r&&{top:r.top,bottom:r.bottom,height:r.height,width:r.width};};
+        const list=document.querySelector('.ao-editpanel .ao-characters__list');
+        return {scrollHeight:document.scrollingElement.scrollHeight,viewport:innerHeight,stage:box('.ao-bureau__stagewrap'),bar:box('.ao-bureau__editbar'),panel:box('.ao-editpanel'),actions:box('.ao-characters__actions'),listScrolls:list.scrollHeight>list.clientHeight+1};
+      });
+      assert.ok(frameMetrics.scrollHeight<=frameMetrics.viewport+1,`mobile editor fits the viewport: ${JSON.stringify(frameMetrics)}`);
+      assert.ok(frameMetrics.bar.height<=56,`mode bar stays compact: ${JSON.stringify(frameMetrics)}`);
+      assert.ok(frameMetrics.stage.bottom<=frameMetrics.bar.top+2,`office preview stays above the mode bar: ${JSON.stringify(frameMetrics)}`);
+      assert.ok(frameMetrics.listScrolls,'only the character list owns the roster scrolling region');
+      assert.ok(frameMetrics.actions.bottom<=frameMetrics.panel.bottom+1,'save/cancel stay inside the editor frame');
+      const visibleLabels=await p.locator('.ao-office .ao-plate').evaluateAll(labels=>labels.filter(label=>getComputedStyle(label).display!=='none').map(label=>label.querySelector('.ao-plate__name')?.textContent.trim()));
+      assert.ok(visibleLabels.length<=4,`only the backend shortlist and current selection stay labelled on the mobile map: ${visibleLabels.join(', ')}`);
+      if(process.env.BUREAU_SCREENSHOTS==='1') {
+        await mkdir('design/reports/office-dev-105',{recursive:true});
+        await p.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.querySelectorAll('.ao-office img')].map(img=>img.decode().catch(()=>{})));});
+        await p.waitForTimeout(450);
+        await p.screenshot({path:`design/reports/office-dev-105/production-characters-${width}-${theme}.png`,animations:'disabled'});
+      }
+      await p.locator('.ao-editpanel .ao-character-row').first().click();
+      await p.locator('.ao-editpanel .ao-characters__detail').waitFor();
+      assert.equal(await p.locator('.ao-editpanel .ao-characters__list').isVisible(),false,'the selected character opens in its own mobile detail screen');
+      assert.equal(await p.locator('.ao-sc__subtitle').innerText(),'Apparence d’Atlas');
+      const characterTiles=await p.locator('.ao-sc__card').evaluateAll(cards=>cards.map(card=>{
+        const label=card.lastElementChild.getBoundingClientRect(),box=card.getBoundingClientRect();
+        return {text:card.lastElementChild.textContent.trim(),labelFits:label.left>=box.left&&label.right<=box.right&&label.bottom<=box.bottom};
+      }));
+      assert.ok(characterTiles.length>=2&&characterTiles.every(tile=>tile.labelFits),`character choice labels fit their tiles: ${JSON.stringify(characterTiles)}`);
+      assert.equal(await p.locator('.ao-characters__back .bu-icon').evaluate(icon=>getComputedStyle(icon).transform),'none','back control icon points left');
+      if(process.env.BUREAU_SCREENSHOTS==='1') {
+        await p.evaluate(()=>document.fonts.ready);
+        await p.screenshot({path:`design/reports/office-dev-105/production-characters-detail-${width}-${theme}.png`,animations:'disabled'});
+      }
+      const detailMetrics=await p.evaluate(()=>{
+        const detail=document.querySelector('.ao-editpanel .ao-characters__detail');
+        const rect=selector=>{const r=document.querySelector(selector)?.getBoundingClientRect();return r&&{x:r.x,width:r.width,height:r.height};};
+        return {page:document.scrollingElement.scrollHeight,viewport:innerHeight,detailScrolls:detail.scrollHeight>detail.clientHeight+1,actionsBottom:document.querySelector('.ao-characters__actions').getBoundingClientRect().bottom,frame:rect('.ao-bureau'),body:rect('.ao-bureau__main'),stage:rect('.ao-bureau__stagecol'),aside:rect('.ao-bureau__side'),host:rect('#ao-bureau-editaside'),panel:rect('.ao-editpanel'),characters:rect('.ao-characters'),detail:rect('.ao-characters__detail')};
+      });
+      assert.ok(detailMetrics.page<=detailMetrics.viewport+1,'detail remains inside the fixed mobile frame');
+      assert.ok(detailMetrics.detailScrolls,'long accessory/name controls scroll inside the detail region');
+      assert.ok(detailMetrics.panel.width>=width-48,`detail panel fills the phone content width: ${JSON.stringify(detailMetrics)}`);
       assert.deepEqual(errors,[]);
     } finally {await h.close();}
   }

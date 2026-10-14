@@ -1,30 +1,54 @@
 'use strict';
 const {ApiError}=require('../api/v2/errors');
+const {createHash}=require('node:crypto');
 const {TOPICS,COMMANDS}=require('./route-declarations');
 const {schemasFor}=require('../api/v2/vm/schemas');
 const {validate}=require('../schema');
 const {PROJECT_CONTEXT_READS,mayRead:mayReadComment}=require('./comment-provenance');
 const {labelsFor}=require('../i18n');
+const {redactChatIdentity}=require('./redact-text');
 const REQUIREMENTS=new Map([...TOPICS].map(([name,spec])=>[name,spec.resource]));
 REQUIREMENTS.set('history','projects');REQUIREMENTS.set('candidates','projects');
 REQUIREMENTS.set('layoutRevision','store');
 REQUIREMENTS.set('orchestrators','orchestrators');REQUIREMENTS.set('teams','teams');
+REQUIREMENTS.set('officeCharacters','office');
+REQUIREMENTS.set('officePalette','office');
+REQUIREMENTS.set('officeStore','store');
 const SELF=new Set(['meta','me','settings']);
 const SAFE_HISTORY=new Set(['project-created','renamed','status','priority','archived','restored','commit','agent-action']);
 const SUMMARY_ROLES=new Set(['main','primary','agent']);
+const countLabel=n=>({key:n===1?'office.characters.count.one':'office.characters.count.other',params:{n}});
 const denied=()=>new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
 
 // This module has no shared last-good cache. Both transports receive a fresh actor projection.
-function createViewProjection({store,cfg={}}) {
+function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
+  // A topic version is a deterministic fingerprint of the principal-visible VM.
+  // It cannot reveal shared raw-topic churn and has no evictable counter state.
+  function fingerprint(user,_topic,vm,_version=3) {
+    identity(user);
+    return createHash('sha256').update(JSON.stringify(vm)).digest('hex');
+  }
+  function revision(user,topic,vm,version=3) {
+    // api.md requires a safe integer on the wire. Keep 52 digest bits as that
+    // compatibility token; SSE compares the full digest to avoid treating a
+    // truncated-hash collision as an unchanged payload.
+    return Number.parseInt(fingerprint(user,topic,vm,version).slice(0,13),16);
+  }
   function identity(user) {
     const current=store.users.byId(typeof user==='string'?user:user?.id);
     if(current?.status!=='active')throw new ApiError('unauthorized');return current;
   }
   const can=(user,key,level='read')=>store.policy.can(user,key,level);
+  const sourceReadable=(user,kind)=>{
+    if(kind==='runtime'||kind==='workspace')return can(user,'logs')&&can(user,'settings.runtimes');
+    if(kind==='sessionGroup')return can(user,'logs');
+    if(kind==='orchestrator-team')return can(user,'teams');
+    return true;
+  };
   function authorize(user,name) {
     const current=identity(user),resource=REQUIREMENTS.get(name);
     if(!resource&&!SELF.has(name))throw new Error('undeclared view projection '+name);
-    if(resource&&!can(current,resource))throw denied();return current;
+    if(resource&&!can(current,resource)||name==='officeStore'&&!can(current,'office'))throw denied();return current;
   }
   function capabilities(user,base={openclawWrites:true,storeWrites:true}) {
     const specs=[...COMMANDS.values()],allows=cls=>specs.some(s=>s.writeClass===cls&&s.requirements.length&&s.requirements.every(r=>can(user,r.resource,r.level)));
@@ -46,10 +70,15 @@ function createViewProjection({store,cfg={}}) {
     return value;
   }
   function card(user,card) {
-    if(!can(user,'logs')) {
+    const descriptors=card.sourceDescriptors||[];
+    const withheldSourceData=descriptors.some(source=>!sourceReadable(user,source.kind));
+    card.sourceDescriptors=descriptors.filter(source=>sourceReadable(user,source.kind));
+    if(!can(user,'logs')||withheldSourceData) {
       card.people.visible=[];card.people.hiddenCount=null;card.lastActivityAt=null;
       card.flags.visible=card.flags.visible.filter(f=>f.kind!=='risk');card.flags.hiddenCount=null;
     }
+    if((!can(user,'logs')||withheldSourceData)&&card.counts)
+      card.counts={...card.counts,sessions:null,agents:null,activity:null};
     return cover(user,card);
   }
   function field(value,source='file',editable=false) {
@@ -65,6 +94,8 @@ function createViewProjection({store,cfg={}}) {
       if(!logs) {
         vm.occupants=vm.occupants.filter(o=>SUMMARY_ROLES.has(o.role));
         for(const o of vm.occupants){
+          o.communication=null;
+          o.screenIntent=require('../engine/office/communication').projectScreenIntent(o);
           o.sessionKey=null;o.tokens=null;o.lastSeenAt=null;o.execution={status:'unknown',evidence:{level:'unknown',observedAt:null,expiresAt:null}};
           delete o.exchanges;delete o.visitPhase;delete o.visitOnStage;delete o.visitStateLabel;
         }
@@ -109,6 +140,25 @@ function createViewProjection({store,cfg={}}) {
       }
       if(!can(user,'flows'))vm.queue=[];
     }
+    if(name==='officeCharacters') {
+      if(!logs) {
+        vm.groups=vm.groups.map(group=>{
+          const rows=group.rows.filter(row=>SUMMARY_ROLES.has(row.role));
+          return {...group,rows,count:rows.length,countLabel:countLabel(rows.length)};
+        }).filter(group=>group.rows.length);
+        vm.count=vm.groups.reduce((total,group)=>total+group.count,0);
+        vm.countLabel=countLabel(vm.count);
+      }
+      for(const group of vm.groups)for(const row of group.rows) {
+        row.name=redactChatIdentity(row.name,{id:row.id,role:row.role,maxLength:120})||'Agent';
+        if(!logs) {
+          row.lastSeenAt=null;
+          if(row.inOffice&&row.role!=='primary'&&row.role!=='main') {
+            row.state='unknown';row.stateLabel={key:'agentState.unknown'};
+          }
+        }
+      }
+    }
     if(name==='flow') {
       vm.editable=vm.editable&&can(user,'flows.edit','write');
       if(!logs)vm.runs=[];
@@ -132,11 +182,54 @@ function createViewProjection({store,cfg={}}) {
       vm.layout.data.agents=[];vm.default.data.agents=[];
     }
     if(name==='layoutRevision'&&!logs)vm.data.agents=[];
-    if(name==='projects')for(const column of vm.columns)column.cards=column.cards.map(c=>card(user,c));
+    if(name==='projects') {
+      // Workspace project names and runtime source IDs are derived from private
+      // session/transcript data. Projects access alone must not reveal either.
+      // Keep the gate aligned with the permissions that expose those inputs.
+      const runtimeProjectsReadable=logs&&runtimes;
+      const isRuntimeCard=c=>(c.sourceDescriptors||[]).some(source=>source.kind==='runtime');
+      const cardReadable=c=>(c.origin!=='orchestrator-team'||can(user,'teams'))&&(!isRuntimeCard(c)||runtimeProjectsReadable);
+      const selectedFilter=vm.sourceFilters.find(source=>source.id===vm.sourceFilterId);
+      const selectedFilterHidden=selectedFilter?!sourceReadable(user,selectedFilter.source?.kind):false;
+      const hiddenSourceCounts=new Map();
+      for(const column of vm.columns){
+        for(const hidden of column.cards.filter(c=>!cardReadable(c)))for(const source of hidden.sourceDescriptors||[])
+          hiddenSourceCounts.set(source.id,(hiddenSourceCounts.get(source.id)||0)+1);
+        column.cards=column.cards.filter(cardReadable).map(c=>card(user,c));
+        column.count=column.cards.length;
+      }
+      vm.sourceFilters=vm.sourceFilters.filter(source=>sourceReadable(user,source.source?.kind))
+        .map(source=>({...source,count:Math.max(0,source.count-(hiddenSourceCounts.get(source.id)||0))}))
+        .filter(source=>source.count>0);
+      // A caller may submit a previously visible restricted filter after grants
+      // change. It is an unfiltered read; no selected ID/count/empty hint tells
+      // whether the private source exists.
+      const unresolvedFilter=selectedFilterHidden||!!(vm.sourceFilterId&&!vm.sourceFilters.some(source=>source.id===vm.sourceFilterId));
+      if(unresolvedFilter) {
+        vm.sourceFilterId=null;
+        vm.sourceFilters=[];
+        for(const column of vm.columns){column.cards=[];column.count=0;}
+      }
+      const hasCards=vm.columns.some(column=>column.cards.length);
+      vm.emptyStateLabel=hasCards?null:{key:vm.sourceFilterId?'project.empty.source':'project.empty.board'};
+    }
     if(name==='project') {
+      const inaccessibleRuntime=(vm.sourceDescriptors||[]).some(source=>source.kind==='runtime'&&!sourceReadable(user,source.kind));
+      if(inaccessibleRuntime)throw new ApiError('not_found');
+      if(vm.teamProject&&!can(user,'teams'))throw new ApiError('not_found');
       cover(user,vm);
-      vm.sources=vm.sources.filter(s=>s.kind!=='sessionGroup'||logs).filter(s=>s.kind!=='workspace'||runtimes);
-      if(!logs){for(const s of vm.sources)s.sessionCount=null;vm.lastActivityAt=null;vm.flags=vm.flags.filter(f=>f.kind!=='risk');}
+      const withheldSourceData=[...(vm.sourceDescriptors||[]),...(vm.sources||[])].some(source=>!sourceReadable(user,source.kind));
+      vm.sources=vm.sources.filter(s=>sourceReadable(user,s.kind));
+      vm.sourceDescriptors=(vm.sourceDescriptors||[]).filter(source=>sourceReadable(user,source.kind));
+      if(!logs){for(const s of vm.sources)s.sessionCount=null;vm.lastActivityAt=null;vm.flags=vm.flags.filter(f=>f.kind!=='risk');
+      }
+      if(withheldSourceData||!logs){
+        for(const s of vm.sources)s.sessionCount=null;
+        vm.people=vm.people.filter(person=>person.origin==='manual'||person.kind==='git');
+        vm.lastActivityAt=null;
+        vm.flags=vm.flags.filter(flag=>flag.kind!=='risk');
+        if(vm.counts)vm.counts={...vm.counts,sessions:null,agents:null,activity:null};
+      }
       if(!logs||!can(user,'flows')||!runtimes){vm.summary=null;vm.summaryMeta=null;}
       vm.people=vm.people.filter(p=>logs||p.origin==='manual'||p.kind==='git');
       vm.recentHistory=history(user,vm.recentHistory);
@@ -148,6 +241,7 @@ function createViewProjection({store,cfg={}}) {
       if(!logs||!runtimes||!can(user,'flows'))vm.candidates=[];
     }
     if(name==='comments') {
+      if(isTeamProject(vm.projectId)&&!can(user,'teams'))throw denied();
       const write=can(user,'projects.comment','write')&&!cfg.readonlyStore;
       const related=PROJECT_CONTEXT_READS.every(r=>can(user,r.resource,r.level));
       vm.canComment=vm.canComment&&write;vm.canMention=vm.canMention&&write&&!cfg.readonly&&related;
@@ -180,12 +274,13 @@ function createViewProjection({store,cfg={}}) {
       for(const key of Object.keys(vm.resourceStatus))if(!Object.hasOwn(vm.permissions,key))vm.permissions[key]='none';
     }
     if(name==='settings') {
-      for(const [group,key] of [['instance','settings.instance'],['network','settings.network'],['restart','settings.restart']])if(!can(user,key))vm[group]=null;
+      for(const [group,key] of [['instance','settings.instance'],['office','settings.instance'],['network','settings.network'],['restart','settings.restart']])if(!can(user,key))vm[group]=null;
       if(!runtimes){vm.runtimes=[];vm.agents=[];} else {
         for(const runtime of vm.runtimes)for(const value of Object.values(runtime.values))value.editable=value.editable&&can(user,'settings.runtimes','write');
         for(const agent of vm.agents){if(!can(user,'settings.integrations'))agent.integrations=[];if(!can(user,'store'))agent.lookRoute=null;}
       }
       for(const [group,key] of [['instance','settings.instance'],['network','settings.network']])if(vm[group])for(const value of Object.values(vm[group]))if(value&&Object.hasOwn(value,'editable'))value.editable=value.editable&&can(user,key,'write');
+      if(vm.office)for(const value of Object.values(vm.office))if(value&&Object.hasOwn(value,'editable'))value.editable=value.editable&&can(user,'settings.instance','write');
       if(vm.restart)vm.restart.supported=vm.restart.supported&&can(user,'settings.restart','write');
       const sectionResource={diagnostic:'health',runtimes:'settings.runtimes',connection:'settings.runtimes',integrations:'settings.integrations',instance:'settings.instance'};
       vm.diagnostics=vm.diagnostics.filter(d=>d.section==='account'||sectionResource[d.section]&&can(user,sectionResource[d.section]));
@@ -203,14 +298,14 @@ function createViewProjection({store,cfg={}}) {
     if(type==='system')return {type:'system',gateway:raw.gateway,capabilities:capabilities(user,raw.capabilities),...(raw.closing?{closing:raw.closing}:{})};
     if(type==='cue')return can(user,'office')&&can(user,'logs')&&can(user,'flows')&&can(user,'projects')?structuredClone(raw):null;
     if(type==='settings') {
-      const groups={instance:'settings.instance',network:'settings.network',runtime:'settings.runtimes',runtimes:'settings.runtimes',agents:'settings.runtimes',detected:'settings.runtimes',integrations:'settings.integrations'};
+      const groups={instance:'settings.instance',office:'settings.instance',network:'settings.network',runtime:'settings.runtimes',runtimes:'settings.runtimes',agents:'settings.runtimes',detected:'settings.runtimes',integrations:'settings.integrations'};
       const changed=(raw.changed||[]).filter(group=>groups[group]&&can(user,groups[group]));
       return changed.length?{type:'settings',revision:raw.revision,changed,...(can(user,'settings.network')?{restartRequired:!!raw.restartRequired}:{})}:null;
     }
     // Toast messages have no declared resource/provenance. Do not forward global private parameters.
     return null;
   }
-  return {authorize,project,frame,capabilities,
+  return {authorize,project,frame,revision,fingerprint,capabilities,
     mayExposeSources:user=>can(identity(user),'health')&&can(user,'settings.runtimes')&&can(user,'logs'),
     build:(user,name,builder,options)=>{user=authorize(user,name);const before=store.rbac.fingerprint(user.id),raw=builder();if(before!==store.rbac.fingerprint(user.id))throw denied();return project(user,name,raw,options);},
   };

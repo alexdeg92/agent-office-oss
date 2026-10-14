@@ -89,3 +89,6 @@ export const SWIVEL_MS = 140;            // the intermediate seated pose during 
 export const SELECT_WAVE_MS = 1800;      // selection: swivel + short wave, then back to work
 export const IDLE_SWIVEL_EVERY_MS = [25_000, 50_000];
 export const IDLE_SWIVEL_HOLD_MS = 3_500;
+
+// Presentation follows the current animated position, including fallback seat art.
+export const atComputer = c => (c.target?.mode ?? c.seatMode) === 'desk' && !c.walking;

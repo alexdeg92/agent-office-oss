@@ -14,13 +14,16 @@ const { errorMiddleware, ApiError } = require('../../src/api/v2/errors');
 const { waitFor } = require('../helpers/harness');
 const { validate } = require('../../src/schema');
 const { VM_SCHEMAS } = require('../../src/api/v2/vm/schemas');
+const { createMultiRuntimeController } = require('../../src/multi-runtime-controller');
+const { scopedId } = require('../../src/runtime-ids');
+const { definition: demoDefinition, createDemoTeam } = require('../../src/adapters/demo');
 const fixture = require('./fixtures/comments/deferred.json');
 const KEY = 'agent:main:ao-projet-bulletin', CHILD = 'agent:main:subagent:child-1';
 const BASE = 1791400000000;
 const messages = (name) => structuredClone(fixture[name]).map((m) => ({ ...m, timestamp: BASE + m.timestamp }));
 
-async function setup(t, { grace = 10000, readonly = false } = {}) {
-  let clock = BASE, offline = false, turns = [], raw = new Map(), transcripts = new Map(), hints = new Map();
+async function setup(t, { grace = 10000, readonly = false, readonlyStore = false, sessionKeyFor = null, legacyExpiredOnAttach = false } = {}) {
+  let clock = BASE, offline = false, turns = [], activeTurns = 0, maxActiveTurns = 0, raw = new Map(), transcripts = new Map(), hints = new Map(), readGate = null;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-delivery-'));
   let store = openStore({ dir: tmp, instance: 'test', ownerName: 'Camille', now: () => clock, log: () => {} });
   store.persons.ensureAgent('main', 'Orion');
@@ -34,7 +37,11 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
     async request(op, key) {
       assert.equal(op, 'transcript');
       if (offline) return { ok: false, category: 'offline' };
-      const tr = normaliseTranscript(key, { messages: raw.get(key) || [] }, clock, Infinity);
+      if (readGate && turns.length) { const gate = readGate; readGate = null; gate.started(); await gate.promise; }
+      const tr = normaliseTranscript(key, { messages: raw.get(key) || [] }, clock, Infinity, undefined, {
+        runtime: 'openclaw', session: sessions.find((s) => s.key === key) || null,
+        sessionOf: (sessionKey) => sessions.find((s) => s.key === sessionKey) || null,
+      });
       transcripts.set(key, tr); hints.set(key, projectHintsOf(tr).map((h) => ({ ...h, sessionKey: key })));
       return { ok: true, value: tr };
     },
@@ -42,10 +49,18 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
   let service = createProjectService({ repository, engineRegistry: engineRegistry(engine), primaryAgentId: () => 'main', clock: () => clock });
   const p = service.commands.create({ name: 'Bulletin', summary: 'Résumé initial', status: 'in-progress', priority: 'P5', actor: { kind: 'human', personId: store.owner.id },
     sources: [{ kind: 'sessionGroup', ref: { by: 'group', groupId: 'projet:bulletin', name: 'bulletin' } }] }).vm;
-  const cfg = { instanceLocale: 'fr', readonly };
+  const cfg = { instanceLocale: 'fr', readonly, readonlyStore };
   const topics = { define() {}, invalidateIds() {} };
   let onTurn = () => { raw.set(KEY, messages('initial')); return { text: '' }; };
-  const runtime = { commands: { agentTurn: async (args) => { turns.push(args); return onTurn(args); } } };
+  let legacyId = null;
+  if (legacyExpiredOnAttach) {
+    legacyId = store.comments.create({ projectId: p.id, author: { kind: 'person', id: store.owner.id, name: 'Camille' }, body: 'Ancienne requête',
+      delivery: [{ agentId: 'main', status: 'working' }], at: BASE }).id;
+    clock = BASE + 3 * 60 * 60 * 1000;
+  }
+  const runtime = { definition: sessionKeyFor ? { sessionKeyFor } : undefined,
+    commands: { agentTurn: async (args) => { turns.push(args); activeTurns++; maxActiveTurns = Math.max(maxActiveTurns, activeTurns);
+      try { return await onTurn(args); } finally { activeTurns--; } } } };
   const makeThread = () => {
     const thread = createProjectThread({ store, engine, runtime, topics, cfg, now: () => clock, pollMs: 5, relayGraceMs: grace });
     thread.attach({ service, repository }); return thread;
@@ -64,9 +79,16 @@ async function setup(t, { grace = 10000, readonly = false } = {}) {
     return { status: r.status, body: await r.json() };
   };
   t.after(async () => { thread.close(); await thread.idle(); await new Promise((r) => server.close(r)); store.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
-  return { p, raw, turns, engine, get repository() { return repository; },
+  return { p, raw, turns, engine, legacyId, get maxActiveTurns() { return maxActiveTurns; }, get repository() { return repository; },
     get store() { return store; }, get thread() { return thread; }, get service() { return service; },
     setClock: (v) => { clock = v; }, setOffline: (v) => { offline = v; }, setTurn: (fn) => { onTurn = fn; }, request,
+    holdNextRead() {
+      let release, started;
+      const promise = new Promise((resolve) => { release = resolve; });
+      const startedPromise = new Promise((resolve) => { started = resolve; });
+      readGate = { promise, started };
+      return { started: startedPromise, release };
+    },
     async restart() {
       thread.close(); await thread.idle(); await new Promise((r) => server.close(r)); store.close();
       store = openStore({ dir: tmp, instance: 'test', ownerName: 'Camille', now: () => clock, log: () => {} });
@@ -144,13 +166,27 @@ it('summary request also survives yield and restart, updates from the final answ
   assert.equal(h.thread.hasPendingSummary(h.p.id), false);
 });
 
-it('two-hour deadline, gateway failures, retry no-reply and legacy empty, duplicate/foreign/deleted retry refusals', async (t) => {
+it('project summary dispatch and transcript reads use the adapter-mapped native session identity', async (t) => {
+  const h = await setup(t, { sessionKeyFor: (agentId, ref, options) => {
+    assert.equal(options.purpose, 'project');
+    return 'rt:openclaw:session:' + Buffer.from('agent:main:' + ref).toString('base64url');
+  } });
+  const accepted = h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.p.revision });
+  const c = h.thread.requestSummary(h.p.id, 'rt:openclaw:agent:bWFpbg', { kind: 'human' }, { turnId: accepted.result.turnId });
+  await waitFor(() => h.turns.length === 1);
+  const expected = 'rt:openclaw:session:' + Buffer.from('agent:main:ao-projet-bulletin').toString('base64url');
+  assert.equal(h.turns[0].sessionRef, expected);
+  assert.equal(state(h, c.id).follow.sessionKey, expected);
+  assert.equal(h.thread.threadVM(h.p.id).session.key, expected);
+});
+
+it('comment deadline, gateway failures, retry no-reply and legacy empty, duplicate/foreign/deleted retry refusals', async (t) => {
   const h = await setup(t), id = await create(h);
   await waitFor(() => replies(h, id).length === 1);
   h.setOffline(true); h.setClock(BASE + 7200001);
   await waitFor(() => state(h, id).status === 'no-reply');
   assert.equal(state(h, id).reason, 'timeout');
-  await waitFor(() => h.thread.idle());
+  await h.thread.idle();
   h.setOffline(false); h.setTurn(() => ({ text: 'Réponse après nouvelle tentative.' }));
   const retry = await h.request('POST', '/' + id + '/retry', { agentId: 'main' });
   assert.equal(retry.status, 202);
@@ -165,6 +201,27 @@ it('two-hour deadline, gateway failures, retry no-reply and legacy empty, duplic
   h.store.comments.remove(legacy.id);
   assert.equal((await h.request('POST', '/' + legacy.id + '/retry', { agentId: 'main' })).status, 400);
   assert.equal((await h.request('POST', '/cmt_unknown/retry', { agentId: 'main' })).status, 404);
+});
+
+it('summary requests time out within their bounded lifetime, release the lock, expose a retry reason, and can be retried', async (t) => {
+  const h = await setup(t);
+  const accepted = h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.p.revision });
+  const c = h.thread.requestSummary(h.p.id, 'main', { kind: 'human', personId: h.store.owner.id }, { turnId: accepted.result.turnId });
+  await waitFor(() => state(h, c.id).status === 'working');
+  h.setClock(BASE + 15 * 60 * 1000);
+  await waitFor(() => state(h, c.id).status === 'no-reply');
+  assert.equal(state(h, c.id).reason, 'timeout');
+  assert.equal(h.thread.hasPendingSummary(h.p.id), false, 'timed-out turn releases the durable summary lock');
+  assert.equal(h.thread.threadVM(h.p.id).items.find((item) => item.id === c.id).delivery[0].reason, 'timeout',
+    'the VM carries the server-computed timeout reason');
+  await h.thread.idle();
+
+  h.setTurn(() => ({ text: 'Résumé relancé.' }));
+  const retry = await h.request('POST', '/' + c.id + '/retry', { agentId: 'main' });
+  assert.equal(retry.status, 202);
+  await waitFor(() => state(h, c.id).follow.phase === 'settled');
+  assert.equal(h.repository.getProject(h.p.id).summary, 'Résumé relancé.');
+  assert.equal(h.thread.hasPendingSummary(h.p.id), false);
 });
 
 it('prompt contains actual linked requests, people, dates and child final texts, newest first, bounded context', async (t) => {
@@ -203,7 +260,10 @@ it('completion event provides the final result even when the child transcript is
   await h.restart();
   h.raw.set(CHILD, messages('child'));
   await waitFor(() => Object.values(state(h, id).follow.children).every((c) => c.done && c.posted));
-  assert.equal(replies(h, id).length, 2, 'late child availability does not duplicate the event fallback');
+  assert.equal(replies(h, id).length, 2, 'late child availability does not duplicate the event fallback: ' + JSON.stringify({
+    results: state(h, id).follow.results.map(({ id: resultId, kind, senderInfo, posted }) => ({ id: resultId, kind, senderInfo, posted })),
+    children: state(h, id).follow.children,
+  }));
 });
 
 it('manual summary edits win over the delayed summary, while its final message is still posted', async (t) => {
@@ -254,6 +314,71 @@ it('an ordinary empty answer without spawn/yield remains a retryable failed deli
   const id = await create(h);
   await waitFor(() => state(h, id).status === 'failed');
   assert.equal(state(h, id).reason, 'empty');
+});
+
+it('an expired queued summary clears its lock independently of an older working delivery', async (t) => {
+  const h = await setup(t), older = await create(h);
+  await waitFor(() => state(h, older).status === 'working');
+  const accepted = h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.p.revision });
+  const summary = h.thread.requestSummary(h.p.id, 'main', { kind: 'human', personId: h.store.owner.id }, { turnId: accepted.result.turnId });
+  assert.equal(state(h, summary.id).status, 'pending');
+  assert.equal(h.turns.length, 1);
+  h.setClock(BASE + 16 * 60 * 1000);
+  await waitFor(() => state(h, summary.id).status === 'no-reply');
+  assert.equal(state(h, summary.id).reason, 'timeout');
+  assert.equal(state(h, older).status, 'working', 'the earlier ordinary delivery remains active');
+  assert.equal(h.thread.hasPendingSummary(h.p.id), false, 'expiry releases the summary lock');
+  assert.equal(h.turns.length, 1, 'an expired queued summary is never dispatched');
+});
+
+it('an in-flight transcript read cannot overwrite summary expiry or post a late result', async (t) => {
+  const h = await setup(t), hold = h.holdNextRead();
+  const accepted = h.service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.p.revision });
+  const summary = h.thread.requestSummary(h.p.id, 'main', { kind: 'human', personId: h.store.owner.id }, { turnId: accepted.result.turnId });
+  let releaseRetry;
+  h.setTurn(() => {
+    if (h.turns.length === 1) {
+      h.raw.set(KEY, [...messages('initial'), { role: 'assistant', timestamp: 20, stopReason: 'stop', content: 'Réponse arrivée après expiration.' }]);
+      return { text: '' };
+    }
+    h.raw.set(KEY, [...messages('initial'),
+      { role: 'assistant', timestamp: 20, stopReason: 'stop', content: 'Réponse arrivée après expiration.' },
+      { role: 'assistant', timestamp: 30, stopReason: 'stop', content: 'Réponse de la nouvelle tentative.' }]);
+    return new Promise((resolve) => { releaseRetry = resolve; });
+  });
+  await hold.started;
+  h.setClock(BASE + 16 * 60 * 1000);
+  await waitFor(() => state(h, summary.id).status === 'no-reply');
+  assert.equal(h.thread.hasPendingSummary(h.p.id), false);
+  const retry = await h.request('POST', '/' + summary.id + '/retry', { agentId: 'main' });
+  assert.equal(retry.status, 202);
+  assert.equal(h.thread.hasPendingSummary(h.p.id), true, 'retry owns a new summary lock while the expired worker is still awaiting I/O');
+  await waitFor(() => h.turns.length === 2 && typeof releaseRetry === 'function');
+  assert.equal(h.maxActiveTurns, 1, 'retry bypasses stale transcript tracking without overlapping runtime turns');
+  assert.equal(state(h, summary.id).status, 'working', 'the old attempt cannot replace the new attempt state');
+  assert.equal(h.thread.hasPendingSummary(h.p.id), true, 'the old attempt cannot release the retry lock');
+  assert.deepEqual(replies(h, summary.id), [], 'the expired attempt cannot publish its late transcript');
+  releaseRetry({ text: '' });
+  await waitFor(() => state(h, summary.id).status === 'replied');
+  assert.deepEqual(replies(h, summary.id), ['Réponse de la nouvelle tentative.']);
+  assert.equal(h.repository.getProject(h.p.id).summary, 'Réponse de la nouvelle tentative.');
+  hold.release();
+  await h.thread.idle();
+  assert.equal(state(h, summary.id).status, 'replied', 'the old read remains a no-op when finally released');
+  assert.deepEqual(replies(h, summary.id), ['Réponse de la nouvelle tentative.']);
+});
+
+it('expired legacy working deliveries without follow metadata settle safely', async (t) => {
+  const h = await setup(t, { legacyExpiredOnAttach: true });
+  assert.equal(state(h, h.legacyId).status, 'no-reply');
+  assert.equal(state(h, h.legacyId).reason, 'timeout');
+  assert.equal(state(h, h.legacyId).follow.phase, 'settled');
+});
+
+it('read-only instances do not persist expiry sweep transitions', async (t) => {
+  const h = await setup(t, { readonlyStore: true, legacyExpiredOnAttach: true });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(state(h, h.legacyId).status, 'working');
 });
 
 it('two queued requests stay in order and exclude the previous delivery’s messages and spawns', async (t) => {
@@ -344,4 +469,64 @@ it('retrying a timed-out summary claims a new durable identity, not a null turn 
   await waitFor(() => state(h, c.id).follow.phase === 'settled');
   assert.equal(h.repository.getProject(h.p.id).summary, 'Retried summary');
   assert.equal(h.repository.getSummaryTurn(h.p.id), null);
+});
+
+for (const baselineCount of [0, 2]) it(`mapped runtime summary matches newly scoped events after ${baselineCount} baseline messages`, async (t) => {
+  const h = await setup(t);
+  h.thread.close(); await h.thread.idle();
+  const agentId = scopedId('two', 'agent', 'nova');
+  h.store.persons.ensureAgent(agentId, 'Nova');
+  const nativeKey = 'demo:nova:ao-projet-bulletin';
+  let nativeMessages = baselineCount ? [
+    { role: 'user', timestamp: BASE - 10000, content: 'Old request' },
+    { role: 'assistant', timestamp: BASE - 9000, content: 'Old reply', stopReason: 'stop' },
+  ] : [];
+  let dispatches = 0;
+  const chatDefinition = { ...demoDefinition, capabilities: () => ({ ...demoDefinition.capabilities(), chat: true }) };
+  const controller = createMultiRuntimeController({
+    cfg: { primaryAgent: agentId, runtimeInstances: [{ id: 'two', adapter: 'demo', enabled: true,
+      config: { adapter: 'demo' }, cfg: { agentNames: {}, hiddenAgents: [], configuredAgents: null } }] },
+    store: h.store,
+    resolveAdapter: () => ({ definition: chatDefinition, createRuntime: () => ({
+      definition: chatDefinition,
+      attach(engine) {
+        engine.ingestCanonical('agents', createDemoTeam({ now: () => BASE }).agents());
+        engine.setReads({ transcript: (key) => {
+          assert.equal(key, nativeKey);
+          const transcript = normaliseTranscript(key, { messages: nativeMessages }, BASE, Infinity);
+          assert.equal(validate(require('../../src/engine/model/canonical').Transcript, transcript).ok, true);
+          assert.equal(engine.ingestCanonical('transcript', transcript, { key }).ok, true);
+          return { ok: true };
+        } });
+      },
+      close() {},
+      commands: { agentTurn: (args) => {
+        assert.equal(args.agentId, 'nova');
+        assert.equal(args.sessionRef, nativeKey);
+        dispatches++;
+        nativeMessages.push(
+          { role: 'user', timestamp: BASE + 1, content: 'New summary request' },
+          { role: 'assistant', timestamp: BASE + 2, content: 'Fresh mapped summary', stopReason: 'stop' },
+        );
+        return { text: '' };
+      } },
+    }) }),
+  });
+  const service = createProjectService({ repository: h.repository, engineRegistry: engineRegistry(controller.engine),
+    primaryAgentId: () => agentId, clock: () => BASE });
+  const worker = createProjectThread({ store: h.store, engine: controller.engine, runtime: controller.runtime,
+    topics: { invalidateIds() {} }, cfg: { instanceLocale: 'fr', readonly: false }, now: () => BASE, pollMs: 5 });
+  try {
+    worker.attach({ service, repository: h.repository });
+    const accepted = service.commands.regenerateSummary({ id: h.p.id, expectedRevision: h.p.revision });
+    const comment = worker.requestSummary(h.p.id, agentId, { kind: 'human', personId: h.store.owner.id }, { turnId: accepted.result.turnId });
+    await waitFor(() => ['replied', 'failed'].includes(state(h, comment.id).status));
+    assert.equal(state(h, comment.id).follow.from, baselineCount);
+    assert.equal(dispatches, 1);
+    assert.equal(state(h, comment.id).status, 'replied', JSON.stringify(state(h, comment.id)));
+    assert.equal(h.repository.getProject(h.p.id).summary, 'Fresh mapped summary');
+    assert.deepEqual(replies(h, comment.id), ['Fresh mapped summary']);
+  } finally {
+    worker.close(); await worker.idle(); controller.close();
+  }
 });

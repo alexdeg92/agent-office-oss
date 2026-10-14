@@ -1,6 +1,6 @@
 {
   "name": "@alexdeg92/agent-office",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Live dashboard for OpenClaw agents: an animated office, chat, workflows, projects and system health.",
   "main": "server.js",
   "bin": {

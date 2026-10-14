@@ -42,7 +42,7 @@ describe('G5 · /api/v3 on a foreign instance', () => {
 
   it('3.0 vocabularies: ids, roles, kinds, channels, interlocutors, flows, board, labels', async () => {
     const meta = await get('/api/v3/meta');
-    assert.deepEqual([meta.apiVersion, meta.contractVersion, meta.instance.locale, meta.runtime.capabilities.flows.multiAgent], [3, '3.5', 'en', true]);
+    assert.deepEqual([meta.apiVersion, meta.contractVersion, meta.instance.locale, meta.runtime.capabilities.flows.multiAgent], [3, '3.7', 'en', true]);
     assert.ok(!('channel' in meta.enums) && meta.enums.sessionKind.includes('internal'));
     assert.equal(meta.labels['sessionKind.main'], undefined); assert.ok(meta.labels['sessionKind.primary']);
     assert.equal(meta.labels['channel.telegram'], 'Telegram', 'the adapter\'s channel label, as data');
@@ -86,7 +86,7 @@ describe('G5 · /api/v3 on a foreign instance', () => {
     const s2 = openSse(h.base, '/api/v2/stream?topics=office', { cookie: h.cookie });
     try {
       const hello3 = await s3.next((e) => e.event === 'hello'), hello2 = await s2.next((e) => e.event === 'hello');
-      assert.equal(hello3.data.contractVersion, '3.5'); assert.equal(hello2.data.contractVersion, '2.8');
+      assert.equal(hello3.data.contractVersion, '3.7'); assert.equal(hello2.data.contractVersion, '2.10');
       const o3 = await s3.next((e) => e.data && e.data.topic === 'office'), o2 = await s2.next((e) => e.data && e.data.topic === 'office');
       assert.equal(o3.data.data.occupants[0].id, 'primary'); assert.equal(o2.data.data.occupants[0].id, 'main');
     } finally { s3.close(); s2.close(); }
@@ -103,14 +103,19 @@ describe('G5 · /api/v3 on a foreign instance', () => {
 
   it('layout: read and written in 3.0 names on v3, still 2.x on v2', async () => {
     const l3 = await get('/api/v3/office/layout');
+    assert.equal(l3.layout.data.idleRelocationMinutes, 15, 'v3 returns the effective Settings value');
+    assert.equal(l3.default.data.idleRelocationMinutes, 15, 'the default layout uses the same effective Settings value');
     assert.ok(l3.layout.data.agents.some((a) => a.agentId === 'primary' && a.match.kind === 'primary'));
     assert.ok(!JSON.stringify(l3.layout.data.agents).includes('"main"'));
     const data = JSON.parse(JSON.stringify(l3.layout.data));
+    data.idleRelocationMinutes = 99; // compatibility input is ignored; Settings remains authoritative
     data.agents.find((a) => a.agentId === '*scheduled').variant = 'teal';
     const put = await h.request('PUT', '/api/v3/office/layout', { expectedRevision: l3.layout.revision, data });
     assert.equal(put.status, 200, put.text);
+    assert.equal(put.json.data.vm.layout.data.idleRelocationMinutes, 15);
     assert.equal(put.json.data.vm.layout.data.agents.find((a) => a.agentId === '*scheduled').variant, 'teal');
     const l2 = await get('/api/v2/office/layout');
+    assert.equal(l2.layout.data.idleRelocationMinutes, 15, 'v2 also gets the authoritative Settings value');
     assert.equal(l2.layout.data.agents.find((a) => a.agentId === '*cron').variant, 'teal', 'stored once, served per version');
     // office-dev's dual vocabulary landed: a 3.0-only rule is accepted (test/api/layout-vocab.test.js covers storage)
     data.agents.push({ agentId: '*conversation', match: { kind: 'conversation' }, character: 'subagent', variant: null, name: null, role: null, station: 'auto' });

@@ -6,11 +6,19 @@ const { startServer } = require('../helpers/harness');
 const { engineRegistry } = require('../../src/api/v2/projects');
 const { normaliseTranscript } = require('../../src/adapters/openclaw/normalise/transcript');
 const { buildChatVM } = require('../../src/api/v2/vm/chat');
+const { projectEvents } = require('../../src/engine/model/sender');
 const { CONTRACT_VERSION, CONTRACT_VERSION_V3 } = require('../../src/api/v2/envelope');
 const fixture = require('../fixtures/senders/group.json').body.value;
 const GROUP = 'agent:main:discord:channel:100000000000000099', DM = 'agent:main:telegram:direct:generic-peer', OP = 'agent:main:explicit:portal-chat';
 const DELEGATED_DM = 'agent:main:discord:direct:synthetic-peer';
 const CHILDREN = Array.from({ length: 9 }, (_, i) => 'agent:main:subagent:synthetic-' + i);
+const CHAT_CHILD = CHILDREN[0];
+const chatMessages = [messagesForHuman(),
+  { role: 'assistant', content: [{ type: 'toolCall', id: 'chat-spawn', name: 'sessions_spawn', arguments: { taskName: 'Review the chat result' } }] },
+  { role: 'toolResult', toolCallId: 'chat-spawn', content: JSON.stringify({ status: 'accepted', childSessionKey: CHAT_CHILD }) },
+  { role: 'user', content: '[Subagent Context]\nChild completion results:\nChild task 1:\n<prompt-data>Review the chat result</prompt-data>\nstatus: ok\nChild result 1:\n<prompt-data>**Ready**\n\n| Check | Result |\n| --- | --- |\n| tests | pass |</prompt-data>',
+    provenance: { kind: 'internal_system' } },
+];
 const delegatedMessages = [messagesForHuman(), ...CHILDREN.flatMap((key, i) => [
   { role: 'assistant', content: [{ type: 'toolCall', id: 'spawn-' + i, name: 'sessions_spawn', arguments: { label: 'Task ' + i } }] },
   { role: 'toolResult', toolCallId: 'spawn-' + i, content: JSON.stringify({ status: 'accepted', childSessionKey: key }) },
@@ -24,11 +32,14 @@ describe('sender identities through the real server, v2 and v3', () => {
   before(async () => {
     const sc = loadScenario('synthetic-basic'), list = readFixture(sc.rpc['sessions.list']).body.value, tpl = list.sessions.find((s) => s.key === 'agent:main:main');
     const rows = [GROUP, DM, OP, DELEGATED_DM, ...CHILDREN].map((key) => ({ ...tpl, key, isMain: false, sessionId: key, classification: undefined,
+      // A result remains in ChatVM after the child leaves the short-lived office
+      // stage. Its portrait still resolves from that child's canonical identity.
+      ...(key === CHAT_CHILD ? { updatedAt: sc.now - 60 * 60 * 1000, status: 'ok', hasActiveRun: false } : {}),
       ...(CHILDREN.includes(key) ? { parentSessionKey: DELEGATED_DM, label: key === CHILDREN[0] ? 'Canonical review' : undefined } : {}) }));
     const original = gatewayHandlers(sc)['sessions.get'];
     h = await startServer(sc, { env: { PORTAL_DISPLAY_NAME: 'Camille', AO_ENRICHERS: '', AO_PROJECTS_OWNERS: 'generic-org' }, handlers: {
       'sessions.list': () => ({ ...list, sessions: list.sessions.concat(rows), totalCount: list.sessions.length + rows.length }),
-      'sessions.get': (p) => p.key === DELEGATED_DM ? { messages: delegatedMessages } : [GROUP, DM, OP].includes(p.key) ? { messages: p.key === GROUP ? messages : [{ role: 'user', timestamp: sc.now - 1, content: 'Bonjour' }] } : original(p),
+      'sessions.get': (p) => p.key === DELEGATED_DM ? { messages: delegatedMessages } : [GROUP, DM, OP].includes(p.key) ? { messages: p.key === GROUP ? messages : p.key === OP ? chatMessages : [{ role: 'user', timestamp: sc.now - 1, content: 'Bonjour' }] } : original(p),
     } });
   });
   after(async () => { await h?.stop(); });
@@ -46,6 +57,19 @@ describe('sender identities through the real server, v2 and v3', () => {
     assert.equal(op.events[0].senderInfo.name, 'Camille'); assert.equal(op.participants[0].name, 'Camille');
     const response = await h.get('/api/v2/views/chat'); assert.equal(response.status, 200, response.text);
     assert.equal(response.json.data.messages[0].senderInfo.name, 'Camille');
+    for (const v of [2, 3]) {
+      const chat = await h.get(`/api/v${v}/views/chat`); assert.equal(chat.status, 200, chat.text);
+      const result = chat.json.data.messages.find(m => m.kind === 'subagent-result');
+      assert.ok(result); assert.equal(result.role, 'assistant'); assert.equal(result.status, 'completed');
+      assert.equal(result.senderInfo.delegation.sessionKey, CHAT_CHILD);
+      assert.equal(result.collapsedByDefault, true); assert.equal(result.body.text, result.text);
+      assert.match(result.body.text, /\| tests \| pass \|/);
+      assert.ok(Object.hasOwn(result, 'avatar'));
+      const office = await h.get(`/api/v${v}/views/office`); assert.equal(office.status, 200, office.text);
+      const author = office.json.data.occupants.find(o => o.sessionKey === CHAT_CHILD);
+      assert.equal(author, undefined, 'the completed child is outside the office presence window');
+      assert.ok(result.avatar, 'result portrait resolves from its canonical child occupant identity after it leaves the stage');
+    }
   });
   it('the contract versions advertise the identity extension', async () => {
     assert.equal((await h.get('/api/v2/meta')).json.data.contractVersion, CONTRACT_VERSION);
@@ -60,9 +84,35 @@ describe('sender identities through the real server, v2 and v3', () => {
       assert.equal(vm.participants.length, 2); assert.equal(vm.subagents.length, 9);
       assert.equal(vm.subagents[0].delegation.label, 'Canonical review');
       assert.equal(vm.subagents[1].delegation.label, 'Task 1');
+      const result = vm.events.find(e => e.kind === 'subagent-result');
+      assert.ok(result, 'trusted child output has its own event kind');
+      assert.equal(result.senderInfo.delegation.sessionKey, CHILDREN[0]);
       assert.deepEqual(compareExample('session-vm', vm, { version: v }), []);
     }
   });
+});
+
+it('repeated canonical event ids keep one first-position event and only fill missing sender metadata', () => {
+  const first = { id: 'event:shared', kind: 'user', at: 10, sender: null, text: 'First delivery', truncated: false,
+    senderInfo: { kind: 'human', id: 'human:opaque', name: null, runtime: 'foreign', channel: null, avatarHint: null } };
+  const redelivery = { ...first, at: 11, text: 'Redelivered child completion',
+    senderInfo: { ...first.senderInfo, name: 'Mira', avatarHint: 'portrait:mira' } };
+  const projected = projectEvents([first, redelivery]);
+  assert.equal(projected.length, 1);
+  assert.equal(projected[0].text, 'First delivery', 'a repeated stable id must not replace the first event body');
+  assert.equal(projected[0].at, 10);
+  assert.equal(projected[0].senderInfo.name, 'Mira', 'later duplicate may fill absent attribution metadata');
+  assert.equal(projected[0].senderInfo.avatarHint, 'portrait:mira');
+});
+
+it('completion results use canonical event ids so redelivery cannot duplicate a child result', () => {
+  const { completionResults } = require('../../src/projects/session-results');
+  const text='[Subagent Context]\nChild result: <prompt-data>Weather update</prompt-data>';
+  const results=completionResults([
+    {id:'ev:2:0',kind:'system',text,at:20},
+    {id:'ev:2:0',kind:'system',text,at:21},
+  ]);
+  assert.deepEqual(results,[{id:'ev:2:0:0',text:'Weather update',at:20}]);
 });
 
 it('an opaque-key canonical runtime can annotate delegates or use canonical session relationships', () => {
@@ -89,6 +139,28 @@ it('project history, Request summary and provisional chat messages reuse the sam
   assert.match(info.summary, /^Mira : Message 0/); assert.doesNotMatch(info.summary, /metadata/);
   const chat = buildChatVM({ sessionKey: OP, pending: { turnId: 'turn-a', since: 1, text: 'Bonjour' }, senderContext: { operator: fixture.operator, runtime: 'generic' } });
   assert.equal(chat.messages[0].senderInfo.name, 'Camille');
+});
+it('ChatVM preserves result markdown and supplies the agent portrait without deriving one for humans', () => {
+  const { buildChatVM } = require('../../src/api/v2/vm/chat');
+  const agent = { kind: 'agent', id: 'agent:child-1', name: 'Review', runtime: 'generic', channel: null,
+    avatarHint: null, delegation: { sessionKey: 'child/opaque', label: 'Review' } };
+  const human = { kind: 'human', id: 'person:owner', name: 'Mira', runtime: 'generic', channel: null, avatarHint: null };
+  const look = { character: 'fox', variant: 'night', accessories: ['glasses'] };
+  const chat = buildChatVM({ sessionKey: 'conversation/opaque', senderContext: {}, avatarFor: sender => sender.kind === 'agent' ? look : null,
+    transcript: { events: [
+      { id: 'ev:0:0', kind: 'user', at: 1, text: 'Bonjour', senderInfo: human },
+      { id: 'ev:1:0', kind: 'subagent-result', at: 2, title: 'Review', status: 'completed', body: '| Check | Result |\n| --- | --- |\n| tests | **pass** |', text: '| Check | Result |\n| --- | --- |\n| tests | **pass** |', senderInfo: agent },
+    ] } });
+  assert.equal(chat.messages[0].kind, 'message'); assert.equal(chat.messages[0].avatar, null);
+  assert.equal(chat.messages[1].kind, 'subagent-result'); assert.equal(chat.messages[1].role, 'assistant');
+  assert.deepEqual(chat.messages[1].avatar, look); assert.equal(chat.messages[1].collapsedByDefault, true);
+  assert.equal(chat.messages[1].statusLabel.key, 'chat.result.status.completed');
+  assert.equal(chat.messages[1].body.text, chat.messages[1].text);
+  assert.match(chat.messages[1].body.text, /\| tests \| \*\*pass\*\* \|/);
+  const { VM_SCHEMAS, VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
+  const { validate } = require('../../src/schema');
+  assert.equal(validate(VM_SCHEMAS.chat, chat).ok, true);
+  assert.equal(validate(VM_SCHEMAS_V3.chat, chat).ok, true);
 });
 it('stored people expose neutral identities on an open channel and keep the same avatar hint', () => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');

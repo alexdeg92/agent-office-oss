@@ -20,7 +20,8 @@ function createConfiguredOrchestrators({ env = process.env, enabled, binaryPath 
   const validTeamRoot = typeof teamRoot === 'string' && teamRoot.length <= 4096 && !teamRoot.includes('\0') && path.isAbsolute(teamRoot) ? teamRoot : null;
   const inboxEnabled = readInbox === true || (readInbox !== false && env.AO_TEAM_STORE_READ_INBOX === '1');
   const teamStore = validTeamRoot ? orchestratorSourceAdapter('agent-team-pm', { root: validTeamRoot, now, includeInbox: inboxEnabled, log }) : null;
-  const snapshots = createOrchestratorTeamSnapshots({ herdr: active, runtimeIdentityAgents: () => runtimeIdentityAgents(resolvedHostId),
+  const snapshots = createOrchestratorTeamSnapshots({ herdr: active,
+    runtimeIdentityAgents: () => runtimeIdentityAgents(resolvedHostId),
     runtimeIdentitySessions: () => runtimeIdentitySessions(resolvedHostId), teamStore, now });
   let herdrCheck = null;
   const checkState=()=>{
@@ -66,6 +67,7 @@ function createConfiguredOrchestrators({ env = process.env, enabled, binaryPath 
     get enabled() { checkState();return activation.enabled&&snapshots.hasHerdr || snapshots.hasTeamStore; },
     get hasHerdr() { checkState();return activation.enabled&&snapshots.hasHerdr; },
     get hasTeamStore() { return snapshots.hasTeamStore; },
+    get teamCapabilities() { return orchestratorSourceCapabilities('agent-team-pm'); },
   });
 }
 

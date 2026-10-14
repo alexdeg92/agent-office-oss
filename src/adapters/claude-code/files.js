@@ -42,13 +42,14 @@ async function pin(chain) {
     return fd;
   } catch (error) { await fd?.close(); throw error; }
 }
-function createFiles({ home, include = [], exclude = [], agentGrouping = 'project', now = Date.now, readFromStart = false }) {
+function createFiles({ home, include = [], exclude = [], agentGrouping = 'project', now = Date.now }) {
   const root = path.resolve(home, 'projects'), index = new Map(), cache = new Map(), prefix = ++cacheSequence;
   let closed = false, scanning = null, reads = 0, generation = 0, queued = 0;
   const inFlight = new Map();
   const stats = { entries: 0, reads: 0, bytes: 0, yields: 0, peakReads: 0, rejected: 0, recognizedLines: 0,
     ignoredLines: 0, unknownLineTypes: 0, metadataLines: 0, unknownKeys: 0, unknownContentBlocks: 0, malformedLines: 0 };
   const agentId = project => agentGrouping === 'runtime' ? 'runtime' : 'project:' + createHash('sha256').update(project).digest('hex');
+  const projectRef = project => 'project:' + createHash('sha256').update(project).digest('hex');
   const removeCache = (key, evicted = false) => { cache.delete(key); globalCache.delete(prefix + ':' + key); budget.release('file:' + prefix + ':' + key); if (evicted) { const row=index.get(key); if (row) { delete row.ancestry; delete row.tip; } } };
   function keep(key, value) {
     removeCache(key); const size = Buffer.byteLength(JSON.stringify(value));
@@ -161,7 +162,7 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
         const reset = row.readDev !== st.dev || row.readIno !== st.ino || st.size < (row.offset || 0)
           || st.size <= (row.offset || 0) && row.readMtime !== st.mtimeMs
           || row.coverageComplete && !row.recognizable && row.readMtime !== st.mtimeMs || !cache.has(key);
-        let offset = reset ? readFromStart ? 0 : Math.max(0, st.size - BOUNDS.readBytes) : row.offset || 0;
+        let offset = reset ? 0 : row.offset || 0;
         if (reset) { row.summary = null; row.summarySource = null; row.displayName = null; row.spawns = []; row.execution = null; row.activity = null; row.backgroundPending = false; row.backgroundPendingIds = []; row.pendingBackgroundOverflow = false; row.awaitingReply = false; row.awaitingReplyAt = null; }
         const startedAtZero = reset ? offset === 0 : !!row.startedAtZero;
         let skip = reset ? offset > 0 : row.skip || false, pending = Buffer.alloc(0), events = reset ? [] : structuredClone(cache.get(key).events);
@@ -171,7 +172,8 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
           pendingBackgroundOverflow = reset ? false : row.pendingBackgroundOverflow === true,
           awaitingReply = reset ? false : row.awaitingReply === true,
           awaitingReplyAt = reset ? null : row.awaitingReplyAt ?? null;
-        let recognizable = reset ? false : !!row.recognizable, coverageComplete = reset ? st.size === 0 && offset === 0 : !!row.coverageComplete;
+        let recognizable = reset ? false : !!row.recognizable,
+          coverageComplete = reset ? st.size === 0 && offset === 0 : !!row.coverageComplete && st.size <= (row.offset || 0);
         let projectName = reset ? null : row.projectName || null;
         const ancestry = reset ? new Map() : new Map(row.ancestry || []);
         let tip = reset ? null : row.tip, partial = reset ? offset > 0 : row.partial || false;
@@ -191,6 +193,8 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             if (line.length > BOUNDS.lineBytes) { partial=true; stats.oversizeLines=(stats.oversizeLines || 0)+1; continue; }
             let value; try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(line)); }
             catch { stats.malformedLines++; stats.ignoredLines++; continue; }
+            const rowUuid = typeof value.uuid === 'string' && value.uuid.length > 0 && value.uuid.length <= 256 ? value.uuid : null;
+            const parentUuid = typeof value.parentUuid === 'string' && value.parentUuid.length <= 256 ? value.parentUuid : null;
             const fallbackId = `${st.dev}:${st.ino}:${reset ? st.mtimeMs : row.fileGeneration}:${lineStart}`;
             const record = mapRecord(value, { sessionKey: row.sessionId, agentId: row.agentId, fallbackId, counters: stats,
               sidechainAgent: row.subagent || null, pendingBackground: backgroundPending, pendingBackgroundIds: backgroundPendingIds,
@@ -210,6 +214,19 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             // sub-agent tool calls (description) and their results (the spawned agent's id), joined by call id
             for (const spawn of record.spawns || []) { const old = (row.spawns || []).find(x => x.callId === spawn.callId);
               row.spawns = [...(row.spawns || []).filter(x => x !== old), { ...old, ...spawn }].slice(-BOUNDS.subagentsPerSession); }
+            // UUID ancestry includes every source row, not only rows understood
+            // by this adapter. Unrecognized tool/attachment rows often sit
+            // between a message and its next message in Claude's parent chain.
+            // Keep their nearest known event ancestor so they do not look like
+            // a branch/rewind and erase otherwise valid history.
+            const previousTip = tip;
+            if (rowUuid && (!record.recognized || record.at === null)) {
+              const parentId = parentUuid && ancestry.has(parentUuid)
+                ? ancestry.get(parentUuid) : (events.at(-1)?.id || null);
+              ancestry.set(rowUuid, parentId);
+              tip = rowUuid;
+              if (ancestry.size > 256) ancestry.delete(ancestry.keys().next().value);
+            }
             if (!record.recognized) continue;
             recognizable = true;
             if (record.execution) row.execution = record.execution;
@@ -217,16 +234,19 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             else if (record.backgroundCompleted) activity = null;
             else if (record.execution?.status === 'idle') activity = null;
             projectName ||= record.projectName;
-            if (value.uuid && ancestry.has(value.uuid) && record.events.every(e => !e.id || events.some(old => old.id === e.id))) continue;
-            if (record.at !== null && value.uuid !== tip && typeof value.parentUuid === 'string' && value.parentUuid !== tip) {
-              const parent = ancestry.get(value.parentUuid);
-              if (parent) { const stop = events.findIndex(e => e.id === parent); if (stop >= 0) events.splice(stop + 1); else { events = []; partial = true; } }
-              else { events = []; partial = true; }
+            if (rowUuid && ancestry.has(rowUuid) && record.events.every(e => !e.id || events.some(old => old.id === e.id))) continue;
+            if (record.at !== null && rowUuid !== previousTip && parentUuid && parentUuid !== previousTip) {
+              const parent = ancestry.get(parentUuid);
+              if (ancestry.has(parentUuid)) {
+                if (parent) { const stop = events.findIndex(e => e.id === parent); if (stop >= 0) events.splice(stop + 1); else { events = []; partial = true; } }
+              } else { events = []; partial = true; }
             }
             if (value.type === 'system' && value.subtype === 'compact_boundary') { events = []; ancestry.clear(); partial = true; }
             const fresh = record.events.some(e => e.id && !events.some(old => old.id === e.id));
             mergeRecord(events, record); accepted = accepted || record.at !== null;
-            if (record.at !== null) { tip = value.uuid || fallbackId; if (events.length) ancestry.set(tip, events[events.length - 1].id); if (ancestry.size > 256) ancestry.delete(ancestry.keys().next().value); }
+            if (rowUuid) tip = rowUuid;
+            else if (record.at !== null) tip = fallbackId;
+            if (record.at !== null) { if (tip) ancestry.set(tip, events.at(-1)?.id || null); if (ancestry.size > 256) ancestry.delete(ancestry.keys().next().value); }
             if (row.initialized && row.readDev===st.dev && row.readIno===st.ino && lineStart >= (row.offset || 0) && fresh && record.at != null) {
               activityAt = Math.max(activityAt || 0, record.at);
             }
@@ -248,7 +268,7 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
     }).finally(() => inFlight.delete(key));
     inFlight.set(key, operation); return operation;
   }
-  return { scan, read, rows: () => [...index.values()], cached: () => [...cache.keys()], agentId, stats, bounds: BOUNDS,
+  return { scan, read, rows: () => [...index.values()], cached: () => [...cache.keys()], agentId, projectRef, stats, bounds: BOUNDS,
     close() { closed = true; for (const key of cache.keys()) removeCache(key); pump(); },
     cacheBytes: () => [...cache.keys()].reduce((n, k) => n + (globalCache.get(prefix + ':' + k)?.size || 0), 0) };
 }

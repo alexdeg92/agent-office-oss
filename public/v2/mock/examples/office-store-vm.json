@@ -1,0 +1,174 @@
+{
+  "data": {
+    "floorId": "1",
+    "sectionId": "mobilier",
+    "categoryId": "",
+    "sections": {
+      "label": {
+        "key": "office.store.section"
+      },
+      "options": [
+        {
+          "id": "mobilier",
+          "label": {
+            "key": "office.store.section.mobilier"
+          },
+          "count": 31
+        },
+        {
+          "id": "decoration",
+          "label": {
+            "key": "office.store.section.decoration"
+          },
+          "count": 22
+        },
+        {
+          "id": "personnages",
+          "label": {
+            "key": "office.store.section.personnages"
+          },
+          "count": 14
+        },
+        {
+          "id": "couleurs",
+          "label": {
+            "key": "office.store.section.couleurs"
+          },
+          "count": 40
+        },
+        {
+          "id": "accessoires",
+          "label": {
+            "key": "office.store.section.accessoires"
+          },
+          "count": 15
+        },
+        {
+          "id": "themes",
+          "label": {
+            "key": "office.store.section.themes"
+          },
+          "count": 5
+        }
+      ]
+    },
+    "categories": {
+      "label": {
+        "key": "office.store.category"
+      },
+      "options": [
+        {
+          "id": "",
+          "label": {
+            "key": "office.store.all"
+          },
+          "count": 31
+        },
+        {
+          "id": "poste",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.poste"
+          }
+        },
+        {
+          "id": "assise",
+          "count": 8,
+          "label": {
+            "key": "office.store.category.assise"
+          }
+        },
+        {
+          "id": "rangement",
+          "count": 5,
+          "label": {
+            "key": "office.store.category.rangement"
+          }
+        },
+        {
+          "id": "equipement",
+          "count": 9,
+          "label": {
+            "key": "office.store.category.equipement"
+          }
+        }
+      ]
+    },
+    "floors": {
+      "label": {
+        "key": "office.store.floor"
+      },
+      "options": [
+        {
+          "id": "rdc",
+          "label": {
+            "key": "office.floor.rdc"
+          },
+          "count": null
+        },
+        {
+          "id": "1",
+          "label": {
+            "key": "office.floor.first"
+          },
+          "count": null
+        },
+        {
+          "id": "2",
+          "label": {
+            "key": "office.floor.number",
+            "params": {
+              "n": 2
+            }
+          },
+          "count": null
+        },
+        {
+          "id": "gym",
+          "label": {
+            "key": "office.floor.gym"
+          },
+          "count": null
+        }
+      ]
+    },
+    "itemIds": [
+      "desk",
+      "chair",
+      "sofa",
+      "shelf",
+      "coffee-machine",
+      "server-rack",
+      "meeting-table",
+      "standing-desk",
+      "armchair",
+      "tall-bookcase",
+      "l-desk",
+      "dual-monitor-desk",
+      "laptop-table",
+      "beanbag",
+      "bench",
+      "bar-stool",
+      "cafe-table",
+      "coffee-table",
+      "filing-cabinet",
+      "cube-shelf",
+      "fridge",
+      "water-cooler",
+      "printer",
+      "charging-dock",
+      "arcade-cabinet",
+      "elevator-door",
+      "reception-counter",
+      "pause-shelter",
+      "treadmill",
+      "weight-rack",
+      "exercise-bench"
+    ]
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791888000000,
+    "stale": []
+  }
+}

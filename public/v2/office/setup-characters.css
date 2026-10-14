@@ -23,13 +23,15 @@
 .ao-sc__pose .bu-select { min-height: 44px; }
 /* A look: stacked images on one canvas (192 × 288 authored px); back layers, body, front layers. */
 .ao-sc-figure { position: relative; display: inline-block; flex: none; aspect-ratio: 2 / 3; }
-.ao-sc-figure img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: auto; }
+.ao-sc-figure img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: auto; animation: ao-sc-image-enter var(--bu-duration-base) var(--bu-ease-enter) both; }
 .ao-sc-figure--sm { width: 40px; }
 .ao-sc-figure--lg { width: 144px; background: var(--bu-surface-sunken, color-mix(in srgb, var(--bu-text-primary) 4%, transparent)); border-radius: var(--bu-radius-sm); }
 .ao-sc__set { border: 0; margin: 0; padding: 0; min-width: 0; }
 .ao-sc__cards, .ao-sc__swatches { display: flex; flex-wrap: wrap; gap: var(--bu-space-2); }
 .ao-sc__card, .ao-sc__swatch { position: relative; display: inline-flex; align-items: center; gap: var(--bu-space-2); min-height: 44px; padding: var(--bu-space-1) var(--bu-space-3);
-  border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-sm); cursor: pointer; font: var(--bu-type-body-sm); }
+  border: 1px solid var(--bu-border-default); border-radius: var(--bu-radius-sm); cursor: pointer; font: var(--bu-type-body-sm);
+  transition: border-color var(--bu-duration-base) var(--bu-ease-standard), background-color var(--bu-duration-base) var(--bu-ease-standard), box-shadow var(--bu-duration-base) var(--bu-ease-standard), transform var(--bu-duration-fast) var(--bu-ease-standard); }
+.ao-sc__card:active, .ao-sc__swatch:active { transform: scale(.985); }
 .ao-sc__card.is-on, .ao-sc__swatch.is-on { border-color: var(--bu-accent); box-shadow: 0 0 0 1px var(--bu-accent); font-weight: 600; }
 .ao-sc__card input, .ao-sc__swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .ao-sc__dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--bu-border-default); }
@@ -44,7 +46,8 @@
   .ao-sc__grid { grid-template-columns: minmax(0, 1fr); gap: var(--bu-space-6); }
   .ao-sc-figure--lg { width: 112px; }
 }
-@media (prefers-reduced-motion: reduce) { .ao-sc * { transition: none !important; } }
+@keyframes ao-sc-image-enter { from { opacity: .3; transform: translateY(2px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .ao-sc * { transition: none !important; animation: none !important; } }
 /* Embedded in the Bureau editor's side panel (O6): one column, the panel gives the width. */
 .ao-sc--embedded .ao-sc__grid { grid-template-columns: minmax(0, 1fr); gap: var(--bu-space-5); }
 /* O7, embedded (Bureau editor): the agents are compact one-line chips above the look editor, so picking an agent

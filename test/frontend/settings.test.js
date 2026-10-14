@@ -258,8 +258,8 @@ test('guarded account revisions stay independent; legacy password wire format is
 });
 
 test('withheld Settings groups stay null and permission context never creates editable config defaults',()=>{
-  const vm=fixture();vm.owner.revision=7;vm.instance=null;vm.network=null;vm.restart=null;vm.runtimes=[];vm.agents=[];
-  const drafts=R.initialDrafts(vm);assert.deepEqual(drafts.instance,{instance:null,network:null});
+  const vm=fixture();vm.owner.revision=7;vm.instance=null;vm.network=null;vm.office=null;vm.restart=null;vm.runtimes=[];vm.agents=[];
+  const drafts=R.initialDrafts(vm);assert.deepEqual(drafts.instance,{instance:null,office:null,network:null});
   assert.equal(R.hasDrafts(drafts,vm),false);assert.equal(R.instanceError(drafts.instance),null);assert.deepEqual(R.changedFields(null,null),{});
   for(const tab of ['agents','connexion','integrations','instance'])assert.equal(R.settingsAccess(tab,vm,{permissions:{}},'write'),false);
   assert.equal(R.settingsAccess('instance',vm,null),false);

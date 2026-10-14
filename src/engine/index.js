@@ -475,7 +475,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   }
   // The one runtime projection VMs read (no VM reads a raw channel, §12.4).
   // T-0058: the connector that owns a session (one engine = one connector instance); adapter-declared mark
-  function connectorOf() { return { id: runtimeId || 'legacy', adapter: adapter.id, name: adapter.name, mark: markOf(adapter) }; }
+  function connectorOf() { return { id: runtimeId || 'legacy', adapter: adapter.id, name: adapter.name, mark: markOf(adapter), ...(adapter.projectSource ? { projectSource: adapter.projectSource } : {}) }; }
   function runtime() {
     return { adapterId: adapter.id, name: adapter.name, mark: markOf(adapter), gatewayLabel: adapter.gatewayLabel || adapter.name, gatewayLabels: adapter.gatewayLabels || null, version: gateway.version, protocol: runtimeState.protocol,
       state: runtimeState.notConfigured ? 'not-configured' : gateway.connected ? 'connected' : 'disconnected',

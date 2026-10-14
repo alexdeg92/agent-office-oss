@@ -17,7 +17,9 @@
     "$.error.current.vm.historyNextCursor",
     "$.error.current.vm.recentHistory[].actor.state",
     "$.error.current.vm.repo.image.url",
-    "$.error.current.vm.cover"
+    "$.error.current.vm.cover",
+    "$.error.current.vm.counts.sessions",
+    "$.error.current.vm.counts.activity"
   ],
   "types": {
     "$.error.current.vm.summaryMeta.author.avatarUrl": "string",

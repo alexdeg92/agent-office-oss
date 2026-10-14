@@ -5,12 +5,13 @@
 <title>Office DOM test harness</title>
 <link rel="stylesheet" href="/design/css/bureau.css">
 <link rel="stylesheet" href="/design/components/bundle.css">
+<link rel="stylesheet" href="/public/v2/app.css">
 <link rel="stylesheet" href="/public/v2/office/office.css">
 <link rel="stylesheet" href="/public/v2/office/editor.css">
 <script type="importmap">
 { "imports": { "preact": "/public/v2/vendor/preact.mjs", "preact/hooks": "/public/v2/vendor/preact-hooks.mjs", "htm": "/public/v2/vendor/htm.mjs" } }
 </script>
-<style>body { margin: 0; } #stage { width: 1000px; height: 700px; } #bar, #aside { width: 360px; }</style>
+<style>body { margin: 0; } #stage { width: 1000px; height: 700px; } #bar { width: 360px; } #aside { width: 360px; height: 640px; overflow: hidden; }</style>
 </head>
 <body>
 <div id="bar"></div>
@@ -23,14 +24,31 @@ import { OfficeScene } from '/public/v2/office/scene.js';
 import { indexManifest } from '/public/v2/office/assets.js';
 import { resolveOccupants, validateLayout } from '/public/v2/office/layout-rules.js';
 import { createMockLayoutStore } from '/public/v2/office/mock-store.js';
+import {mockPalette} from '/public/v2/mock/palette.js';
 import { openEditor } from '/public/v2/office/editor.js';
 
 const [manifest, layout] = await Promise.all(['manifest', 'layout'].map((n) => fetch(`/design/office/${n}.example.json`).then((r) => r.json())));
 const index = indexManifest(manifest);
 const realDecode = HTMLImageElement.prototype.decode;
 const held = [];
+const testCharacterVM = async ({ scope = 'office', search = '' } = {}, occupants = [], data = layout) => {
+  const resolved = resolveOccupants(data, index, occupants.map(o => ({ ...o, sourceName: o.sourceName ?? o.name })));
+  let rows = occupants.map((o, i) => ({ id: o.id, role: o.role, name: o.sourceName ?? o.name ?? o.id,
+    primary: o.role === 'main' || o.role === 'primary', runtime: 'OpenClaw', runtimeBrand: null, state: o.state,
+    stateLabel: { key: `agentState.${o.state || 'unknown'}` }, roleLabel: { key: `occupantRole.${o.role}` }, look: resolved[i].look,
+    groupId: null, order: i, inOffice: true, lastSeenAt: null }));
+  if (scope === 'all') rows = [...rows];
+  const query = String(search).trim().toLocaleLowerCase();
+  rows = rows.filter(row => !query || `${row.name} ${row.runtime}`.toLocaleLowerCase().includes(query));
+  const count = rows.length;
+  return { scope, search, count, countLabel: { key: count === 1 ? 'office.characters.count.one' : 'office.characters.count.other', params: { n: count } },
+    groups: count ? [{ id: null, label: { key: 'office.characters.independent' }, count,
+      countLabel: { key: count === 1 ? 'office.characters.count.one' : 'office.characters.count.other', params: { n: count } }, rows }] : [],
+    emptyLabel: { key: scope === 'all' ? 'office.characters.emptyAll' : 'office.characters.emptyOffice' } };
+};
+const openEditorWithCharacters = (opts) => openEditor({ ...opts, getPaletteVM:opts.getPaletteVM || mockPalette, getCharacterVM: opts.getCharacterVM || (async query => testCharacterVM(query, opts.getOccupants?.() || [], (await opts.store.get()).layout.data)) });
 window.H = {
-  manifest, layout, index, OfficeScene, resolveOccupants, validateLayout, createMockLayoutStore, openEditor,
+  manifest, layout, index, OfficeScene, resolveOccupants, validateLayout, createMockLayoutStore, openEditor: openEditorWithCharacters,
   assetBase: '/design/',
   /** From now on decode() waits until release(i); returns the pending list. */
   holdDecodes() {

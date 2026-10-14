@@ -53,7 +53,7 @@ test(`authoritative ${floor} editor open/save/reload preserves furniture at ${wi
     }else{
       await p.locator('.ao-shop__savebar').waitFor();
       assert.equal(new URL(p.url()).searchParams.get('etage'),floor);
-      await p.locator('#ao-shop-tab-themes').click();
+      await p.locator('#ao-shop-section').selectOption('themes');
       await p.locator('[data-theme-mode="night"]').click();
       await p.screenshot({path:`design/reports/rooms-102/editor-open-${floor}-${width}.png`,animations:'disabled'});
       const save=p.locator('.ao-shop__savebar').getByRole('button',{name:/Enregistrer/});assert.equal(await save.isEnabled(),true);

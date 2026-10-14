@@ -1,6 +1,10 @@
-# Agent Office API, contract 3.5 (`/api/v3`)
+# Agent Office API, contract 3.7 (`/api/v3`)
 
 **Status:** served on `/api/v3` (G5, architect-35; ADR-001 §9 and §12). Examples: `examples/v3/`. The runtime check validates every 3.0 VM against the 3.0 schemas (`VM_SCHEMAS_V3`; the frontend's `validateVM(name, vm, 3)`).
+
+**3.7 changelog (2026-10-13):** ProjectVM adds source descriptors, backend-selected source chips, counts/capabilities/status labels and render-only team rosters (same shape as api.md 2.10).
+
+**3.6 changelog (2026-10-13):** same ChatVM addition as api.md 2.9: trusted delegated output is a typed, collapsed `subagent-result`, with backend-resolved author appearance and preserved Markdown source.
 
 **3.5 changelog (2026-10-12):** TeamsVM members use canonical roleKind (`lead|member|unknown`) and a bounded source-native roleLabel; leadership derives from source roles or parent/child structure, never provider labels in core.
 
@@ -10,12 +14,12 @@
 
 **3.2 changelog (2026-10-09):** AccessVM agents add neutral nullable `modelSource` (`explicit|inherited`) and external `runtime` harness metadata (T-0008), shared with 2.7; locked missing-secrets setup and named partial-login boot errors; the setup/owner recovery, config v2 and safe installation contracts of api.md 2.7 apply on v3 too. Peer occupants add role `agent` and id `agent:<agentId>`; delegates retain their own identity/KPI. Setup fixtures are shared across v2/v3.
 
-**What 3.0 is:** the same API as 2.8 (api.md), on **`/api/v3`**, with the **open vocabularies as the canonical names** and **no personal value or field name**. Every route, method, body, envelope, error code, SSE frame and rule of api.md 2.8 applies unchanged, **except the deltas D1–D10 below**. A VM not listed here has the same shape and values as in 2.8 (its example is `examples/<name>.json`). The v3 examples are written for a foreign instance (primary agent `atlas` « Atlas », Telegram, Europe/Paris), so none of them carries a home-instance value.
+**What 3.0 is:** the same API as 2.10 (api.md), on **`/api/v3`**, with the **open vocabularies as the canonical names** and **no personal value or field name**. Every route, method, body, envelope, error code, SSE frame and rule of api.md 2.10 applies unchanged, **except the deltas D1–D10 below**. A VM not listed here has the same shape and values as in 2.10 (its example is `examples/<name>.json`). The v3 examples are written for a foreign instance (primary agent `atlas` « Atlas », Telegram, Europe/Paris), so none of them carries a home-instance value.
 
-**2.x stays.** `/api/v2` serves revision 2.8, from the same canonical core through the 2.x projection (`project2x`), until the frontend and office have moved (then S16 removes it). Both versions share one engine, one store, one set of runtime reads and one chat state; only the VM projection differs. A client uses ONE version for everything (views, commands, stream): a v3 topic is never sent on a v2 stream, nor the reverse.
+**2.x stays.** `/api/v2` serves revision 2.10, from the same canonical core through the 2.x projection (`project2x`), until the frontend and office have moved (then S16 removes it). Both versions share one engine, one store, one set of runtime reads and one chat state; only the VM projection differs. A client uses ONE version for everything (views, commands, stream): a v3 topic is never sent on a v2 stream, nor the reverse.
 
 ## D1 · MetaVM
-- `apiVersion: 3`, `contractVersion: '3.5'` (also in the stream's `hello`).
+- `apiVersion: 3`, `contractVersion: '3.7'` (also in the stream's `hello`).
 - **`runtimes`**: configured instance descriptors `{id,adapter,name,enabled,connection,capabilities}`, including disabled instances. Singular `runtime` describes the primary's source (or first enabled source), and is null when none are enabled. Entity IDs carry provenance; runtime command capability comes from that entity's source.
 - **`runtime`**: `{ id, name, gatewayLabel, version: string | null, capabilities }`. `capabilities` is the adapter's declaration (ADR §3): `sessions`, `transcripts`, `activity`, `flows {read, write, schedules}`, `skills {read, toggle, detail}`, `channels`, `interlocutors`, `chat`, `restart`, `costs`, `subagents`, `sessionGroups`. **The UI hides or disables by capability**; a command whose capability is false is 404 `not_found`.
 - **`instance`**: `{ name: string | null, timeZone, locale, configured }` (`name` from setup or `AO_INSTANCE_NAME`).
@@ -39,6 +43,7 @@
 - `ruleId`: the layout rule's id (3.0 layout names, D4).
 - `isNew?: boolean`: true for an auto-added agent during its first 24 hours; otherwise omitted.
 - `rosterFloors[].mobileLabelIds`: ordered, backend-selected IDs for up to three non-conversation occupants per floor whose names remain visible on the mobile map. Active-work occupants come first, followed by canonical team roots and roster order; each ID is also in that floor's `occupantIds`.
+- `GET /api/v3/views/office/characters?scope&search` uses the same `OfficeCharactersVM` shape as v2 with the v3 occupant vocabulary. The shared example uses roles valid in both contracts: `../office-characters-vm.json`.
 - Optional `homeTarget` and `sceneTarget` carry the backend-reserved home and current destination. `activity` carries the stable selected activity/spot and start time; `sceneTravel` carries stable doorway endpoints for a floor transition. The backend owns threshold, spot and capacity selection and the return-to-home decision; the browser animates only.
 
 ## D4 · LayoutVM and the layout commands
@@ -48,7 +53,7 @@ The additive `allowNoDesk?: boolean` is backend-provided editor validation polic
 - `layout.data.agents[].appearance` and `default.data.agents[].appearance` optionally declare `'auto' | 'manual'` (T-0052): auto uses the persisted first-sight assignment; manual uses the owner's chosen character/variant/accessories. Legacy rules without the field remain accepted. Both authoritative LayoutVM examples include auto on the shipped seed rules.
 - Stored layouts are **not rewritten in place**: they are read in either vocabulary, **normalised to 3.0 names on save**, and served in the caller's version (`/api/v2` gets 2.x names). `PUT /api/v3/office/layout` accepts 3.0 names only.
 - **`layout.data.presence`** `{ seenMinutes: 0–1440 }` (optional, office-dev O8): how long an occupant stays in the editor's seen inventory. 2.x reads don't show it, and a 2.x save keeps the stored value (operations.md §4).
-- **`layout.data.idleRelocationMinutes`** `{ 1–1440 }` (optional): idle duration before an occupant may be assigned to a declared activity spot. Defaults to 15 minutes when absent; this value is persisted in the office layout, not instance configuration.
+- **`layout.data.idleRelocationMinutes`** `{ 1–1440 }` (optional compatibility projection): idle duration before an occupant may be assigned to a declared activity spot. It is sourced from `SettingsVM.office.idleRelocationMinutes` (default 15), never persisted in the office layout. On upgrade, an existing layout value is migrated once into instance configuration when that Settings value is absent. Older layout writes may include it; the server ignores that value and returns the current Settings value.
 - `manifest` is unchanged (office-dev's opaque art data; its character `role`s are asset metadata, not occupant roles).
 - **Office-dev dependency:** `layout-rules.js` accepts both vocabularies (ADR §12.6) before the office moves to v3.
 
@@ -70,7 +75,10 @@ The additive `allowNoDesk?: boolean` is backend-provided editor validation polic
 
 ## D8 · Projects
 - `BoardVM.filter`: `'all' | 'at-risk' | 'with-agent' | 'archived'`, plus **`BoardVM.agent: AgentId | null`** (after `filter`): the agent of `with-agent` (default the primary), else null.
-- `GET /api/v3/views/projects?filter=with-agent[&agent=<id>]`; topics `projects?agent=<id>&filter=with-agent`. **`with-timmy` is 400 on v3** (on v2 it stays, meaning `with-agent` for the primary).
+- `GET /api/v3/views/projects?filter=with-agent[&agent=<id>][&source=<source-id>]`; topics `projects?agent=<id>&filter=with-agent&source=<source-id>`. **`with-timmy` is 400 on v3** (on v2 it stays, meaning `with-agent` for the primary). Source chips, counts, selection, and filtered membership are returned by the backend VM.
+- A project contributed by an enabled orchestrator source uses the same additive `ProjectCardVM.origin` / `teamProject` and `ProjectVM.teamProject` fields as v2. Task grouping and state-to-column mapping are backend values. `teams.read` is required for these rows and details; source task bodies and private references are never included.
+- Adapter-declared runtime workspace projects use the same source-neutral descriptors, counts, capabilities and backend source filters. Their opaque session project refs are internal only; local paths are never projected.
+- Runtime workspace projects are exposed only through v3 project list/detail and their `projects` / `project:<id>` live topics. The shared builder receives the contract projection and includes runtime rows only for v3. Legacy v2 excludes them consistently from cards, counts, source filters, detail (runtime IDs return the same `404 not_found` as absent IDs), and topic revisions; do not infer runtime data from v2.
 - History actors are unchanged (`ActorVM`, names are data).
 
 ## D9 · Labels that name an agent
@@ -93,11 +101,13 @@ The additive `allowNoDesk?: boolean` is backend-provided editor validation polic
 
 ## Commands, stream, errors
 - Every 2.5 command exists on `/api/v3` with the same path, body and result, except D4's layout names and D7's `agentId`. CSRF, the agent token (§5.6, with its v3 paths), setup (§5.7) and the read-only rules are identical.
-- `GET /api/v3/stream` and its transport POSTs work as §4, with v3 topic VMs and `contractVersion: '3.5'` in `hello`.
+- `GET /api/v3/stream` and its transport POSTs work as §4, with v3 topic VMs and `contractVersion: '3.6'` in `hello`.
 
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
+| 3.7 | 2026-10-13 | ProjectVM adds source descriptors/filters/counts/capabilities/status labels and server-shaped team roster fields (same change as api.md 2.10). |
+| 3.6 | 2026-10-13 | ChatVM adds typed delegated results, backend-resolved author appearances and preserved Markdown source (same change as api.md 2.9). |
 | 3.5 | 2026-10-12 | TeamsVM members add canonical roleKind and source-native roleLabel; core team projections are provider-neutral. |
 | 3.4 | 2026-10-10 | Canonical HealthCheckVM rows and adapter-driven remedies; health action routes and audit records. |
 | 3.0 | 2026-10-06 | First 3.0 contract (G5): D1–D10. Examples `examples/v3/` (`meta-vm`, `office-vm`, `logs-page`, `session-vm`, `access-vm`, `interlocutor-vm`, `health-vm`, `flow-detail-vm`, `board-vm`, `layout-vm`), held to these deltas by `test/api/contract-v3-examples.test.js`. |
@@ -105,7 +115,7 @@ The additive `allowNoDesk?: boolean` is backend-provided editor validation polic
 
 ## Sender extension · revision 3.1
 
-The shared [Sender/Participant contract](sender-identities.md) also applies on `/api/v3`: `senderInfo` on trace and chat messages, a `participants` collection for humans and primary agents plus `subagents` for delegated sessions on SessionVM, and metadata-free prose. Its runtime/channel fields are open identifiers. SSE hello advertises 3.5. Version 2 advertises 2.8 and retains its compatibility sender string.
+The shared [Sender/Participant contract](sender-identities.md) also applies on `/api/v3`: `senderInfo` on trace and chat messages, a `participants` collection for humans and primary agents plus `subagents` for delegated sessions on SessionVM, and metadata-free prose. Its runtime/channel fields are open identifiers. SSE hello advertises 3.7. Version 2 advertises 2.10 and retains its compatibility sender string.
 
 ## Settings extension · `/api/v3/settings` (T-0016)
 
@@ -123,6 +133,7 @@ type FieldDefinition = { id: string; label: LabelRef;
   type: 'text' | 'textarea' | 'url' | 'secret' | 'number' | 'boolean' | 'select';
   required: boolean; writeOnly: boolean; options: {value: string; label: LabelRef}[] };
 type ConnectionField = Field & { tokenSet?: boolean };
+type OfficeTimingField = Field & { value: number; label: LabelRef; help: LabelRef; minimum: 1; maximum: 1440 };
 type HerdrCheckStatus = 'not-checked' | 'available' | 'unavailable' | 'unsupported' | 'stale' | 'not-detected';
 interface DiagnosticFix {
   id: string; // opaque, server-declared selection ID; never parse it for routing
@@ -138,6 +149,9 @@ interface SettingsVM {
   reauth: { expiresAt: number | null; windowMs: 300000 };
   restart: { supported: boolean; command: string | null; reason: LabelRef | null };
   instance: { name: Field; locale: Field; timeZone: Field };
+  // Null without settings.instance read permission. Values are minutes and editable without restarting the process.
+  office: { finishedSessionWindowMinutes: OfficeTimingField; agentPresenceWindowMinutes: OfficeTimingField;
+    idleRelocationMinutes: OfficeTimingField } | null;
   owner: { displayName: Field; email: Field; passwordChangeEnabled: boolean; reason: LabelRef | null };
   network: { mode: Field; host: Field; port: Field; publicUrl: Field; cookieSecure: Field;
     active: {mode: string; host: string; port: number; publicUrl: string | null; cookieSecure: boolean};
@@ -190,7 +204,7 @@ The Diagnostics v2 extension (T-0028) uses one severity source: `error` prevents
 | `PUT /settings/agents` | `{expectedRevision,runtime,primary:string|null,agents:[{id,name:string|null,hidden:boolean}]}` | `{changed,restartRequired:false}`. Replace the chosen instance's configured agent set; adding, renaming, hiding, removing, and primary selection use this one operation. Ids unique; primary must be a listed visible agent. Runtime-found removed agents remain visible as `configured:false` after detection. Live office names/primary/presence refresh immediately. |
 | `PUT /settings/runtime` | `{expectedRevision,runtime:{adapter,...adapter fields}}` | `{changed,restartRequired:false}`. Re-auth required for connection/credential changes. Check the candidate first; failed connection is 502 `upstream_failed` with a closed status reason and leaves config/live runtime unchanged. Compatibility operation for a lone legacy instance; it cannot erase a collection (409) or change an existing ID's adapter (400 `instance-id-required`). Use the full-set operation for a new adapter ID. |
 | `PUT /settings/runtimes` | `{expectedRevision,runtimes:[{id,adapter,enabled,name?,...adapter fields}],herdrEnabled?:boolean}` | `{changed,restartRequired:false}`. Replace the full configured set (maximum 32), with recent re-auth. Optional `name` is trimmed, 1–80 characters without control characters; omission preserves a saved name. Omitting `herdrEnabled` preserves the automatic/explicit source preference. `herdrEnabled` explicitly opts the read-only Herdr source in or out; enabling requires successful Herdr detection. Changed enabled runtime sources pass their adapter check before publication; disabled sources require no connection. Herdr reads presence/status metadata only and starts or stops without a process restart. Files, source state and revision publish together. |
-| `PUT /settings/instance` | `{expectedRevision,name?,locale?,timeZone?}` | `{changed,restartRequired:false}`. Name 1–80, locale fr/en, IANA time zone. |
+| `PUT /settings/instance` | `{expectedRevision,name?,locale?,timeZone?,office?:{finishedSessionWindowMinutes?,agentPresenceWindowMinutes?,idleRelocationMinutes?}}` | `{changed,restartRequired:false}`. Name 1–80, locale fr/en, IANA time zone. Timing values are whole minutes from 1–1440; defaults are 15, 60, and 15 respectively. `office` is persisted in instance config and takes effect on the next OfficeVM without restart. `AGENT_OFFICE_SESSION_PRESENCE_WINDOW_MS`, `AGENT_OFFICE_AGENT_PRESENCE_WINDOW_MS`, and `AGENT_OFFICE_IDLE_RELOCATION_MINUTES` remain boot-time overrides; overridden fields report `source:'env'` and are read-only. |
 | `PUT /settings/network` | `{expectedRevision,mode,port,publicUrl}` | `{changed,restartRequired:boolean}`. Re-auth required. Same validation/derived host/cookie policy as setup. Save desired values; current listener/cookie/CSRF origin remains unchanged until restart. |
 | `PUT /settings/owner` | `{expectedRevision,displayName?,email?}` | `{changed,restartRequired:false}`. Database owner only; displayName 1–80, valid email. Email change requires re-auth; owner Person and DB account remain consistent. |
 | `POST /settings/password` | `{password:string}` | `{changed:['owner.password'],restartRequired:false}` plus VM/revision. Database owner only; re-auth required, 12–1024 characters. Invalidates other owner sessions and consumes the confirmation window. The current session remains usable. |
@@ -255,3 +269,16 @@ Cards, detected agents and diagnostics share the adapter-owned instance associat
 T-0052 additive appearance fields: `OccupantVM.automaticLook` and `LayoutVM.agentsSeen[].automaticLook` optionally carry `{ character, variant, accessories }`. Agent rules accept `appearance: 'auto' | 'manual'`; owner appearance edits mark manual. Canonical IDs key durable assignments; 2.x reads share the same assignment. See api.md's T-0052 contract and the updated example sidecars.
 
 The same occupant can carry both its durable `automaticLook` and the optional session-derived `summary`, `model`, `project`, `runtime`, `startedAt`, `lastActivityAt` and `tokensKnown` fields from agent-identity-1. The limited office projection retains automatic appearance and owner names while omitting session-derived fields, as described in api.md §3.2. These additive fields are recorded together in `examples/v3/office-vm.types.json`.
+
+
+### Desk communication (T-0122)
+
+Office occupants may carry nullable `communication: {id, mode: "desk"|"meeting", peerIds: string[], expiresAt: timestamp, screen: "message-sent"|"message-received", surface: "monitor"|"bubble", label: LabelRef}`. Only callers with sessions.read receive communication metadata; peers must be visible canonical occupants. The engine reads canonical sender identities from each occupant’s exact session transcript. It never inspects message text, guesses peers from names/providers/team membership, or carries transcript text in the scene. Evidence expires after two minutes; the server refreshes the VM at expiry.
+
+`screenIntent: {screen: "message-sent"|"message-received"|"coding"|"terminal"|"browsing"|"writing"|"thinking"|"waiting"|"blocked"|null, surface: "monitor"|"bubble"|"none", label: LabelRef|null}` provides the display directly. A computer target uses the monitor; an occupant away from a computer uses an overhead marker. The browser only selects registered animation frames, respecting reduced motion and visibility.
+
+Ordinary exchanges retain the supplied desk/home or current activity target. Optional persisted `layout.data.communicationMeetingPercent` (integer 0–100, default 10) deterministically samples a conversation by exact session and canonical peer identities. A physical meeting requires same-floor participants, no current activity, and two reachable registered table seats; no additional standing tiles or desks are invented. `sceneTarget` carries each authoritative meeting point; the home desk stays reserved. Each table hosts one pair, and expired communication restores normal backend targets.
+
+Office Store navigation is shared with v2 (`GET /api/v3/views/office/store`, OfficeStoreVM, api.md §3.16). Ordered section/category/floor choices, LabelRefs, counts, visibility, selections and filtered item IDs are backend-provided. Store + Office read authority is required.
+
+OfficePaletteVM and `/views/office/palette` use the identical v2 selection/projection contract; see api.md Customize catalogue and examples/v3/office-palette-vm.json.
