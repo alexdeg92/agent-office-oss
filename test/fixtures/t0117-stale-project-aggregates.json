@@ -1,0 +1,17 @@
+{
+  "$fixture": { "channel": "office", "source": "synthetic" },
+  "body": { "kind": "json" },
+  "view": "OfficeVM reader projection without sessions.read",
+  "expected": {
+    "primaryCount": 1,
+    "teamMemberCount": 5,
+    "staleProjectAggregateCount": 0
+  },
+  "staleProjectAggregates": [
+    { "id": "h_synthetic_01", "state": "idle", "floorId": "2", "sessionKeyPresent": true },
+    { "id": "h_synthetic_02", "state": "idle", "floorId": "2", "sessionKeyPresent": true },
+    { "id": "h_synthetic_03", "state": "unknown", "floorId": "2", "sessionKeyPresent": false },
+    { "id": "h_synthetic_04", "state": "unknown", "floorId": "2", "sessionKeyPresent": false },
+    { "id": "h_synthetic_05", "state": "unknown", "floorId": "2", "sessionKeyPresent": false }
+  ]
+}

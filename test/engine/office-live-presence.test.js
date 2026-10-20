@@ -6,7 +6,7 @@ const { buildLogsPage } = require('../../src/api/v2/vm/logs');
 const { deriveOccupants, DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS, isProjectAgentOnStage } = require('../../src/engine/derive/occupants');
 const { project2x } = require('../../src/api/v2/project2x');
 const { project3x } = require('../../src/api/v2/project3x');
-const t0117Capture = require('../fixtures/t0117-redacted-office-capture.json');
+const t0117Fixture = require('../fixtures/t0117-stale-project-aggregates.json');
 
 const NOW = Date.UTC(2026, 9, 12, 0, 0);
 const twoHoursAgo = NOW - 2 * 60 * 60 * 1000;
@@ -133,7 +133,7 @@ test('unconfigured transcript agents leave the roster while configured and prima
 
 test('persisted names and auto-added catalog identities do not keep stale project agents on stage', () => {
   const primary = session('runtime:main', { agentId: 'primary-agent', status: 'idle', level: 'verified', updatedAt: NOW, classKind: 'primary' });
-  const staleRows = t0117Capture.staleProjectAggregates;
+  const staleRows = t0117Fixture.staleProjectAggregates;
   const staleIds = staleRows.map(row => row.id);
   const staleSessions = staleRows.filter(row => row.sessionKeyPresent).map((row, index) => session(`runtime:old-project-session-${index}`,
     { agentId: row.id, updatedAt: twoHoursAgo }));
@@ -149,9 +149,9 @@ test('persisted names and auto-added catalog identities do not keep stale projec
   const office = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), configuredAgents: Object.fromEntries(staleIds.map(id => [id, `Saved ${id}`])),
     canReadSessions: true, P: project3x });
   assert.deepEqual(office.occupants.map(row => row.id), ['primary'], 'identity names and catalog persistence do not imply current presence');
-  assert.equal(office.occupants.filter(row => row.role === 'agent').length, t0117Capture.expected.staleProjectAggregateCount);
-  assert.equal(t0117Capture.expected.primaryCount, 1);
-  assert.equal(t0117Capture.expected.teamMemberCount, 5, 'the fixture retains PM plus five member presence as the live acceptance context');
+  assert.equal(office.occupants.filter(row => row.role === 'agent').length, t0117Fixture.expected.staleProjectAggregateCount);
+  assert.equal(t0117Fixture.expected.primaryCount, 1);
+  assert.equal(t0117Fixture.expected.teamMemberCount, 5, 'the fixture models one primary and five team members');
   assert.equal(office.kpis.find(row => row.id === 'active').value, 0);
   staleSessions[0].updatedAt = NOW - 30 * 60 * 1000;
   assert.ok(buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), configuredAgents: Object.fromEntries(staleIds.map(id => [id, `Saved ${id}`])),
