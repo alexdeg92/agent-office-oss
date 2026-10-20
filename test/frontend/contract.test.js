@@ -27,10 +27,12 @@ test('GET /views/projects/:id (every mock project) matches project-vm.json', asy
   }
 });
 
-test('GET /views/projects (all filters) matches board-vm.json', async () => {
+test('GET /views/projects (all filters) matches the pinned v3 board-vm.json', async () => {
   for (const f of ['', '?filter=at-risk', '?filter=with-timmy']) {
     const r = await call('GET', '/api/v2/views/projects' + f);
-    assert.deepEqual(compareExample('board-vm', r.body, { envelope: true }), [], f || 'all');
+    // Projects has used the v3 VM on both transport prefixes since its server-side
+    // controls were added; compare against that contract rather than the legacy 2.x shape.
+    assert.deepEqual(compareExample('board-vm', r.body, { envelope: true, version: 3 }), [], f || 'all');
   }
 });
 

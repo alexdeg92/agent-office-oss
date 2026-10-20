@@ -1,0 +1,9 @@
+{
+  "defaultColumnId": "todo",
+  "mobilePeopleLabel": {
+    "key": "project.team.people.mobile",
+    "params": {
+      "n": 3
+    }
+  }
+}

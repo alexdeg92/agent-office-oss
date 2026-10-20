@@ -19,10 +19,10 @@ const TOAST_ICON = { info: 'info', success: 'success', warning: 'warning', dange
 export function Toasts() {
   const { items } = useStore(toasts);
   return html`<div class="bu-toasts" role="status" aria-live="polite">
-    ${items.map((t) => html`<div key=${t.id} class=${'bu-toast' + (t.level !== 'info' ? ' bu-toast--' + t.level : '')}>
+    ${items.map((t) => html`<div key=${t.id} class=${'bu-toast' + (t.level !== 'info' ? ' bu-toast--' + t.level : '') + (t.className ? ' ' + t.className : '')}>
       <${Icon} name=${TOAST_ICON[t.level] || 'info'} />
       <span class="bu-toast__text">${t.message}${t.code || t.requestId ? html`<small><span class="bu-mono-sm">${[t.code, t.requestId].filter(Boolean).join(' · ')}</span></small>` : null}</span>
-      ${t.action ? html`<button class="bu-btn bu-btn--sm" onClick=${() => { dismiss(t.id); t.action.run(); }}>${t.action.label}</button>` : null}
+      ${t.action ? html`<button class=${'bu-btn bu-btn--sm' + (t.actionVariant === 'text' ? ' ao-toast-action--text' : '')} onClick=${() => { dismiss(t.id); t.action.run(); }}>${t.action.label}</button>` : null}
       <button class="bu-btn bu-btn--ghost bu-btn--icon bu-btn--sm" aria-label=${msg('common.close')} title=${msg('common.close')} onClick=${() => dismiss(t.id)}><${Icon} name="close" /></button>
     </div>`)}
   </div>`;

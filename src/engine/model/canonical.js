@@ -14,6 +14,7 @@ const ms = () => s.ms().nullable();
 const nn = () => s.int().min(0);
 const str = () => s.string();
 const strN = () => s.string().nullable();
+const boundedStrN = (max) => s.string().max(max).nullable();
 const externalUrlN = () => s.string().refine((v) => safeExternalUrl(v) === v, 'canonical HTTP(S) URL').nullable();
 const R = { extra: 'reject' };
 const boundedId = (max = 256) => s.string().min(1).max(max);
@@ -35,22 +36,22 @@ const Agent = s.object({
     role: hostRole, status: hostStatus }, R)),
 }, R);
 
-const Host = s.object({ id: boundedId(), label: strN(), platform: s.enumOf(['linux', 'macos', 'windows', 'container', 'unknown']),
+const Host = s.object({ id: boundedId(), label: boundedStrN(160), platform: s.enumOf(['linux', 'macos', 'windows', 'container', 'unknown']),
   sourceStatus, observedAt: ms() }, R);
-const Orchestrator = s.object({ id: boundedId(), hostId: boundedId(), kind: boundedId(80), label: strN(), sourceStatus, observedAt: ms() }, R);
-const HostAgent = s.object({ id: boundedId(), hostId: boundedId(), orchestratorId: boundedId(), name: strN(), runtimeKind: strN(),
+const Orchestrator = s.object({ id: boundedId(), hostId: boundedId(), kind: boundedId(80), label: boundedStrN(160), sourceStatus, observedAt: ms() }, R);
+const HostAgent = s.object({ id: boundedId(), hostId: boundedId(), orchestratorId: boundedId(), name: boundedStrN(120), runtimeKind: boundedStrN(80),
   role: hostRole, status: hostStatus, observedAt: s.ms(), staleAfter: s.ms(), spawnedBy: Lineage.nullable().optional() }, R).refine(x => x.staleAfter >= x.observedAt, 'staleAfter before observedAt');
 const IdentityLink = s.object({ hostAgentId: boundedId(), agentId: boundedId(),
   evidence: s.enumOf(['shared-runtime-session-ref', 'explicit-runtime-identity']), confidence: s.literal('exact') }, R);
 const Team = s.object({ id: boundedId(), storeId: boundedId(), label: s.string().min(1).max(160), status: s.enumOf(['active', 'stale']), observedAt: s.ms() }, R);
 const TeamMember = s.object({ id: boundedId(), teamId: boundedId(), name: s.string().min(1).max(120), roleKind: memberRoleKind,
-  roleLabel: s.string().max(80).nullable(), roleEvidence: s.enumOf(['explicit', 'derived-from-structure', 'unknown']), sourceAgentName: strN(), runtimeKind: strN().optional(),
+  roleLabel: s.string().max(80).nullable(), roleEvidence: s.enumOf(['explicit', 'derived-from-structure', 'unknown']), sourceAgentName: boundedStrN(120), runtimeKind: boundedStrN(80).optional(),
   hostAgentId: boundedId().nullable(), parentMemberId: boundedId().nullable().optional(), sessionStatus: s.enumOf(['known', 'unknown']).nullable().optional(),
   status: s.enumOf(['active', 'inactive', 'unknown']), spawnedBy: Lineage.nullable().optional() }, R);
 const ReportPresent = s.boolean();
 const Task = s.object({ id: boundedId(), teamId: boundedId(), title: s.string().max(2048), state: teamState,
   priority: s.int().min(0).max(3).nullable(), ownerMemberId: boundedId().nullable(), reviewerMemberIds: s.array(boundedId()),
-  createdAt: ms(), updatedAt: ms(), commit: strN(), reportPresent: ReportPresent, briefPresent: s.boolean(), messageCount: s.int().min(0) }, R);
+  createdAt: ms(), updatedAt: ms(), commit: boundedStrN(128), reportPresent: ReportPresent, briefPresent: s.boolean(), messageCount: s.int().min(0) }, R);
 const Review = s.object({ id: boundedId(), taskId: boundedId(), reviewerMemberId: boundedId().nullable(),
   verdict: s.enumOf(['go', 'no-go', 'pending', 'unknown']), createdAt: ms(), reportPresent: ReportPresent }, R);
 const TeamMessage = s.object({ id: boundedId(), teamId: boundedId(), taskId: boundedId().nullable(),

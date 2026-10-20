@@ -53,6 +53,21 @@ test('transcript identity includes source/session and sender/delegation/tool own
   assert.equal(first.events[0].senderInfo.runtime, 'one');
   assert.equal(second.participants[0].runtime, 'two');
 });
+test('human identity projection reads the people directory once per transcript, not once per event', t => {
+  let lookups = 0;
+  const sourceEngine = createEngine({ adapter: definition, now: () => NOW,
+    senderContext: () => { lookups++; return { people: [{ id: 'person-known' }] }; } });
+  const multi = createMultiEngine({ instances: [{ id: 'one', adapter: 'demo', enabled: true, engine: sourceEngine }] }); t.after(() => multi.close());
+  const sender = id => ({ kind: 'human', id, name: null, runtime: 'demo', channel: null, avatarHint: null });
+  const events = Array.from({ length: 40 }, (_, index) => ({ id: `ev:0:${index}`, kind: 'user', at: NOW,
+    senderInfo: sender(index % 2 ? 'person-known' : 'unknown-human'), text: 'synthetic message', sender: null, truncated: false }));
+  sourceEngine.ingestCanonical('transcript', { sessionKey: 'session:fixture', fetchedAt: NOW, messageCount: events.length,
+    participants: [sender('person-known')], window: { from: 0, to: events.length }, events }, { key: 'session:fixture' });
+  const result = multi.transcript(scopedId('one', 'session', 'session:fixture'));
+  assert.equal(result.participants[0].id, 'person-known', 'a registered person retains its stable canonical id');
+  assert.ok(result.events.some(row => row.senderInfo.id === scopedId('one', 'sender', 'unknown-human')));
+  assert.equal(lookups, 1, 'all events share one bounded people-directory lookup');
+});
 test('quarantine namespaces persist, retry, mute and prune independently', t => {
   const one = partition('one'), two = partition('two'), engine = createMultiEngine({ instances: [one, two] }); t.after(() => engine.close());
   for (const source of [one, two]) source.engine.quarantine.record({ channel: 'canonical.agents', code: 'shape.invalid', severity: 'warn', path: '$.canonical.agent' });

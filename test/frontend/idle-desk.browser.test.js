@@ -13,7 +13,7 @@ test(`idle desk doze and monitor off, then immediate active presentation v${vers
   let b,h;
   try{
     b=await openLayoutBrowser({theme:theme==='day'?'light':'dark',touch:width===390,apiVersion:version,
-      apiProxy:async origin=>{h=await officeSceneFixture({publicUrl:origin,theme,occupantCount:4,namedAgents:true,...emptyTeamOptions});h.publish(Array(4).fill('working'));return h.base;}});
+      apiProxy:async origin=>{h=await officeSceneFixture({publicUrl:origin,theme,occupantCount:4,namedAgents:true,env:{AGENT_OFFICE_IDLE_TRANSITION_DEBOUNCE_MS:'0'},...emptyTeamOptions});h.publish(Array(4).fill('working'));return h.base;}});
     const p=b.page,errors=[];p.on('pageerror',e=>errors.push(e.message));
     await p.setViewportSize({width,height:width===390?844:900});await p.emulateMedia({reducedMotion:'reduce'});
     const split=h.cookie.indexOf('=');await p.context().addCookies([{name:h.cookie.slice(0,split),value:h.cookie.slice(split+1),url:b.origin,httpOnly:true,sameSite:'Lax'}]);

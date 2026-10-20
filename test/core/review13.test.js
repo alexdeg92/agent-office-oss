@@ -88,7 +88,9 @@ const recordingCli = (result) => {
     calls.push(argv);
     if (argv[0] === 'gateway' && !result?.refused) {
       const p = JSON.parse(argv.find(a => a.startsWith('--params=')).slice(9));
-      return { ok: true, out: JSON.stringify({ ok: true, key: p.key, entry: { sendPolicy: 'deny' } }) };
+      return { ok: true, out: JSON.stringify({ ok: true, path: '/scratch/agents/main/agent/openclaw-agent.sqlite', key: String(p.key).toLowerCase(),
+        entry: { sessionId: '8f0b3782-0fff-4a97-b161-824608a44ace', lifecycleRevision: '2a267349-1426-405f-823d-f29b8d01eddb', updatedAt: 1792031718511, createdVia: 'operator', createdAt: 1792031718511, sendPolicy: 'deny' },
+        resolved: { modelProvider: 'openai', model: 'gpt-6-astra', agentRuntime: { id: 'codex', source: 'implicit' }, runtimeSelectionLocked: false } }) };
     }
     return typeof result === 'function' ? result(argv) : result;
   },
@@ -172,5 +174,9 @@ describe('R13-14 · the normative version literals equal CONTRACT_VERSION', () =
     const literals = [...md.matchAll(/contractVersion["']?\s*:\s*["'](\d+\.\d+)["']/g)].map((m) => m[1]);
     assert.ok(literals.length >= 2, 'found the declarations');
     assert.deepEqual([...new Set(literals)], [CONTRACT_VERSION]);
+    const v3 = fs.readFileSync(path.join(ROOT, 'docs', 'architecture', 'api-v3.md'), 'utf8');
+    const v3Version = require('../../src/api/v2/envelope').CONTRACT_VERSION_V3;
+    assert.ok(v3.includes("contractVersion: '" + v3Version + "'` (also in the stream's `hello`)"));
+    assert.ok(v3.includes(`with v3 topic VMs and \`contractVersion: '${v3Version}'\` in \`hello\``));
   });
 });

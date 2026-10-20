@@ -5,7 +5,6 @@ import { Icon } from './ui.js';
 import { t, has, enumOf } from '../i18n.js';
 import { labelTone, accentTone, sortFlags, safeImageUrl, priorityRank } from '../board.js';
 
-const STATUS_ICON = { idea: 'state-thinking', todo: 'list', 'in-progress': 'state-working', 'in-review': 'eye', shipped: 'check' };
 
 /**
  * The project image by `thumb.kind` (BRIEF, Owner's iPad review): `screenshot` (the live site) or `opengraph` (GitHub card)
@@ -35,7 +34,6 @@ const priorityTone = (p) => 'p' + Math.min(priorityRank(p), 9);
 export const priorityText = (p) => (has('priority.' + p) ? t('priority.' + p) : p);
 export const Priority = ({ p }) => html`<span class=${'bu-priority bu-priority--' + priorityTone(p)} data-priority=${p} title=${priorityText(p)}>${p}</span>`;
 
-export const PStatus = ({ status }) => html`<span class="bu-pstatus" data-project-status=${status}><${Icon} name=${STATUS_ICON[status]} />${t('projectStatus.' + status)}</span>`;
 
 /** One flag, shaped by kind (LabelChip README): risk = outlined pill, feature = dashed mono, label = tinted square. */
 export function Flag({ flag }) {

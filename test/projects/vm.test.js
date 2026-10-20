@@ -2,7 +2,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildBoardVM, buildProjectVM, presentHistory, compareCards } = require('../../src/projects');
+const { buildBoardVM, buildProjectVM, presentHistory, compareCards, buildCandidatesVM } = require('../../src/projects');
 const { initials } = require('../../src/projects/vm');
 const { commands } = require('../../src/projects');
 const { hashEmail } = require('../../src/projects/email');
@@ -18,6 +18,22 @@ function board(repo, filter) {
 }
 
 describe('project view models', () => {
+  it('supplies canonical labelled initial import stages even with no discoveries', () => {
+    const vm = buildCandidatesVM([], { scannedAt: AT });
+    assert.deepEqual(vm.statusOptions, ['idea','todo','in-progress','in-review','shipped'].map(id => ({ id, label: { key: 'projectStatus.' + id } })));
+  });
+
+  it('supplies labelled status destinations and no choices for read-only sources', () => {
+    const repo = repository(), project = commands.createProject(repo, { name: 'Transitions', actor: 'owner', at: AT });
+    for (const status of ['idea', 'todo', 'in-progress', 'in-review', 'shipped']) {
+      const vm = buildProjectVM({ ...project, status }, []);
+      assert.deepEqual(vm.statusLabel, { key: 'projectStatus.' + status });
+      assert.deepEqual(vm.statusTransitions, ['idea', 'todo', 'in-progress', 'in-review', 'shipped']
+        .filter(id => id !== status).map(id => ({ id, label: { key: 'projectStatus.' + id } })));
+      assert.deepEqual(buildProjectVM({ ...project, status, readOnly: true }, []).statusTransitions, []);
+    }
+  });
+
   it('orders cards by priority, then last activity, then id', () => {
     const repo = repository();
     const low = commands.createProject(repo, { name: 'Zed', priority: 'P2', actor: 'owner', at: AT });

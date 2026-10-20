@@ -11,6 +11,8 @@ const { projectEvents, participantsOf } = require('../../../engine/model/sender'
 const { messageCountOf } = require('../../../projects/session-summary');
 const { redactText } = require('../../../security/redact-text');
 const { executionState } = require('../../../engine/execution-state');
+const { createHash } = require('node:crypto');
+const { normalizeTranscriptEvents } = require('../../../engine/model/transcript');
 const executionVM = (run, activity = null, now = Date.now()) => {
   let e = executionState(run, now);
   if (e.level === 'unknown' && activity?.kind === 'working') e = { ...e, level: 'observed', observedAt: activity.since ?? null, expiresAt: activity.expiresAt ?? null };
@@ -130,8 +132,70 @@ function logsTopicOf({ kind, heartbeat, connector = null, agent = null }) {
  */
 // traceState (R16-07): 'fresh' (the last transcript read succeeded), 'stale' (it failed, or none yet: the last good
 // trace is shown), 'unavailable' (the runtime has no transcript capability). Never an empty "success".
-function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P = P2, now = Date.now()) {
+function repairRowIdentity(path, row) {
+  if (path === 'participants') return [row?.kind || null, row?.runtime || null, row?.channel || null];
+  if (path === 'subagents') return [row?.kind || null, row?.runtime || null, row?.channel || null,
+    row?.delegation?.sessionKey || null];
+  if (path === 'events') {
+    const sender = row?.senderInfo || {};
+    return [row?.kind || null, Number.isSafeInteger(row?.at) ? row.at : null,
+      sender.kind || null, sender.id || null, sender.runtime || null, sender.channel || null];
+  }
+  return [row?.kind || null, row?.runtime || null, row?.channel || null];
+}
+function stableRepairId(path, scope, priorId, identity, occurrence, suffix = 0) {
+  const digest = createHash('sha256').update(JSON.stringify([path, scope, priorId, identity, occurrence, suffix])).digest('hex');
+  return path === 'events' ? 'msg:' + digest + ':0' : 'repair:' + digest;
+}
+function repairSessionCollections(vm, onRepair = () => {}) {
+  const repair = (path, rows, { distinctDelegations = false } = {}) => {
+    if (!Array.isArray(rows)) return rows;
+    const out = [], byId = new Map(), occurrences = new Map();
+    // Later original IDs are reserved too, otherwise a repaired row can steal
+    // one and make the distinct later row disappear in projectEvents/schema.
+    const used = new Set(rows.map(row => row && typeof row.id === 'string' ? row.id : null).filter(Boolean));
+    let count = 0;
+    for (const row of rows) {
+      const id = row && typeof row.id === 'string' ? row.id : null;
+      if (!id) { out.push(row); continue; }
+      const index = byId.get(id);
+      if (index === undefined) { byId.set(id, out.length); used.add(id); out.push(row); continue; }
+      const prior = out[index];
+      if (JSON.stringify(prior) === JSON.stringify(row)) { count++; continue; }
+      const identity = repairRowIdentity(path, row);
+      const occurrenceKey = JSON.stringify([id, identity]);
+      const occurrence = occurrences.get(occurrenceKey) || 1;
+      occurrences.set(occurrenceKey, occurrence + 1);
+      const nextUniqueId = () => {
+        let suffix = 0, repaired;
+        do { repaired = stableRepairId(path, vm.key, id, identity, occurrence, suffix++); } while (used.has(repaired));
+        used.add(repaired); return repaired;
+      };
+      if (distinctDelegations && row.delegation?.sessionKey && prior.delegation?.sessionKey !== row.delegation.sessionKey) {
+        out.push({ ...row, id: nextUniqueId() }); count++; continue;
+      }
+      if (path === 'events') {
+        out.push({ ...row, id: nextUniqueId() }); count++; continue;
+      }
+      // Distinct provider identities may legitimately share a display id.
+      // Keep both without exposing the conflicting source identity in a key.
+      out.push({ ...row, id: nextUniqueId() }); count++;
+    }
+    if (count) onRepair(path, count);
+    return out;
+  };
+  return { ...vm,
+    participants: repair('participants', vm.participants),
+    subagents: repair('subagents', vm.subagents, { distinctDelegations: true }),
+    events: repair('events', vm.events),
+  };
+}
+
+function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P = P2, now = Date.now(), onRepair = () => {}) {
   if (!s) return null;
+  const normalized = normalizeTranscriptEvents(t, s.key);
+  if (normalized.repaired) onRepair('events', normalized.repaired);
+  t = normalized.transcript;
   const context = names.senderContext?.(s) || {};
   const events = projectEvents(t?.events, context);
   const participants = participantsOf([
@@ -141,7 +205,7 @@ function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P 
       avatarHint: null, delegation: { sessionKey: child.key, label: child.label || child.displayName || child.goal?.objective || null },
     } })), context),
   ]);
-  return Object.assign({ key: s.key, label: sessionLabel(s, names), title: sessionTitle(s, names), kind: P.sessionKind(s.class.kind) }, runtimeKindOf(P, s), {
+  const vm = Object.assign({ key: s.key, label: sessionLabel(s, names), title: sessionTitle(s, names), kind: P.sessionKind(s.class.kind) }, runtimeKindOf(P, s), {
     model: s.model ? s.model.id : null, modelProvider: s.model ? s.model.provider : s.provider,
     tokens: s.usage.total, updatedAt: s.updatedAt, cwd: s.cwd,
     run: { ...executionVM(s.run, names.activity?.(s.key), now), endReason: s.run.endReason },
@@ -153,6 +217,7 @@ function buildSessionVM(s, t, names = {}, traceState = t ? 'fresh' : 'stale', P 
     subagents: participants.filter((p) => p.kind === 'agent' && p.delegation),
     events,
   });
+  return repairSessionCollections(vm, onRepair);
 }
 
-module.exports = { buildLogsPage, buildSessionVM, parseLogsQuery, logsTopicOf, sessionLabel, sessionTitle, executionVM, LIMIT_DEFAULT, LIMIT_MAX };
+module.exports = { buildLogsPage, buildSessionVM, repairSessionCollections, parseLogsQuery, logsTopicOf, sessionLabel, sessionTitle, executionVM, LIMIT_DEFAULT, LIMIT_MAX };

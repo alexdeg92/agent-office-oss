@@ -14,6 +14,25 @@ const defaultAdapter = () => adapterById('openclaw');
 function settingsCapabilities(id) {
   try { return adapterById(id).setup?.capabilities || {}; } catch { return {}; }
 }
+// Adapter-declared display metadata for runtime kinds emitted by orchestrators.
+// The canonical team projection can brand harness-specific kinds without knowing
+// provider names or maintaining a second provider registry.
+function runtimePresentationFor(kind) {
+  if (typeof kind !== 'string' || !kind) return null;
+  for (const id of Object.keys(ADAPTERS)) {
+    const adapter = adapterById(id), declaration = adapter.definition?.runtimePresentation;
+    const alias = (declaration?.aliases || []).find(row => row.id === kind);
+    if (kind !== id && !alias) continue;
+    const label = declaration?.label || { key: 'team.runtime.other' };
+    const mark = adapter.definition?.mark || adapter.setup?.capabilities?.brand || null;
+    return Object.freeze({ runtime: id, label, qualifier: alias?.qualifier || null, brand: mark ? Object.freeze({
+      mark: mark.mark || mark.monogram || 'R', color: mark.color || '#596579', foreground: mark.foreground || '#ffffff',
+      providerName: mark.providerName || adapter.definition?.name || 'Runtime',
+      ...(mark.logo ? { logo: mark.logo } : {}), ...(mark.logoDark ? { logoDark: mark.logoDark } : {}),
+    }) : null });
+  }
+  return null;
+}
 const defaultAutoAdd = id => settingsCapabilities(id).autoAddDefault === true;
 const settingsBrand = id => settingsCapabilities(id).brand || null;
 
@@ -39,4 +58,4 @@ function detectOrchestratorSource(id,options) {
 
 module.exports = { detectRuntimes, adapterById, defaultAdapter, settingsCapabilities, defaultAutoAdd, settingsBrand,
   orchestratorSourceAdapter, orchestratorSourceCapabilities, defaultSourceEnable, sourceBrand, detectOrchestratorSource,
-  ADAPTER_IDS: Object.keys(ADAPTERS) };
+  runtimePresentationFor, ADAPTER_IDS: Object.keys(ADAPTERS) };

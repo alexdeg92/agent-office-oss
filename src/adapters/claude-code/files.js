@@ -6,7 +6,7 @@ const budget = require('../../engine/transcript-budget');
 const unsupported = () => Object.assign(new Error('unsupported transcript format'), { code: 'EFORMAT', reasonCode: 'no-recognizable-session-lines' });
 const BOUNDS = Object.freeze({ sessions: 2000, tails: 32, cacheSessions: 16, cacheBytes: 8 * 1024 * 1024,
   globalCacheBytes: 32 * 1024 * 1024, readBytes: 256 * 1024, lineBytes: 1024 * 1024, probeBytes: 2 * 1024 * 1024,
-  scanYield: 100, reads: 2, globalReads: 8, subagentsPerSession: 64, subagentEntriesPerDir: 256, subagentEntriesPerScan: 4096 });
+  scanYield: 100, scanEntries: 1000, reads: 2, globalReads: 8, subagentsPerSession: 64, subagentEntriesPerDir: 256, subagentEntriesPerScan: 4096 });
 const globalCache = new Map(); let cacheSequence = 0, globalReads = 0, globalQueued = 0;
 const waiters = []; let lastGranted = null;
 function pump() {
@@ -44,8 +44,16 @@ async function pin(chain) {
 }
 function createFiles({ home, include = [], exclude = [], agentGrouping = 'project', now = Date.now }) {
   const root = path.resolve(home, 'projects'), index = new Map(), cache = new Map(), prefix = ++cacheSequence;
-  let closed = false, scanning = null, reads = 0, generation = 0, queued = 0;
+  let closed = false, scanning = null, scanIterator = null, reads = 0, generation = 0, queued = 0, changeHandler = null;
+  const watchers = new Map();
   const inFlight = new Map();
+  function ensureWatcher(dir) {
+    if (!changeHandler || closed || watchers.has(dir) || watchers.size >= BOUNDS.sessions * 2 + 1) return;
+    try {
+      const watcher = fs.watch(dir, { persistent: false }, (_event, name) => changeHandler?.({ path: name == null ? null : path.resolve(dir, String(name)) }));
+      watcher.on('error', () => { watcher.close(); watchers.delete(dir); }); watchers.set(dir, watcher);
+    } catch { /* missed/unavailable paths are covered by the bounded safety scan */ }
+  }
   const stats = { entries: 0, reads: 0, bytes: 0, yields: 0, peakReads: 0, rejected: 0, recognizedLines: 0,
     ignoredLines: 0, unknownLineTypes: 0, metadataLines: 0, unknownKeys: 0, unknownContentBlocks: 0, malformedLines: 0 };
   const agentId = project => agentGrouping === 'runtime' ? 'runtime' : 'project:' + createHash('sha256').update(project).digest('hex');
@@ -68,12 +76,11 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
       try { return await fn(); } finally { reads--; globalReads--; pump(); }
     } finally { queued--; globalQueued--; }
   }
-  async function scan() {
-    if (scanning) return scanning;
-    scanning = (async () => {
+  async function* scanWork() {
       const gen = ++generation, found = new Map(), chain = await parents(root);
       // security-187: every entry of a nested subagents directory counts (valid or not), per directory and per scan
       let nestedBudget = BOUNDS.subagentEntriesPerScan, nestedTruncated = false;
+      ensureWatcher(root);
       const projects = await fsp.opendir(root); let steps = 0, candidates = 0;
       // A bounded max heap selects a deterministic prefix without retaining the
       // rest of a large directory or sorting its entire enumeration in memory.
@@ -83,13 +90,15 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
       try {
         for await (const project of projects) {
           if (closed) return [];
+          stats.entries++; stats.scanEntriesThisTick = (stats.scanEntriesThisTick || 0) + 1; yield;
           if (++steps % BOUNDS.scanYield === 0) { stats.yields++; await turn(); }
           if (!project.isDirectory() || project.isSymbolicLink() || exclude.includes(project.name) || include.length && !include.includes(project.name)) continue;
-          const dir = path.join(root, project.name), localChain = await parents(dir), entries = await fsp.opendir(dir);
+          const dir = path.join(root, project.name), localChain = await parents(dir), entries = await fsp.opendir(dir); ensureWatcher(dir);
           try {
             for await (const file of entries) {
               if (closed) return [];
               stats.entries++;
+              stats.scanEntriesThisTick = (stats.scanEntriesThisTick || 0) + 1; yield;
               if (++steps % BOUNDS.scanYield === 0) { stats.yields++; await turn(); }
               // T-0062: the one recognized nested location, <session>/subagents/agent-<id>.jsonl (a sub-agent's transcript)
               if (file.isDirectory() && !file.isSymbolicLink() && /^[a-zA-Z0-9-]{1,128}$/.test(file.name)) {
@@ -97,11 +106,12 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
                 let sst; try { sst = await fsp.lstat(sub); } catch { continue; }
                 if (!sst.isDirectory() || sst.isSymbolicLink()) continue;
                 if (nestedBudget <= 0) { nestedTruncated = true; continue; }
-                const subChain = await parents(sub), subEntries = await fsp.opendir(sub), names = []; let inspected = 0;
+                const subChain = await parents(sub), subEntries = await fsp.opendir(sub), names = []; let inspected = 0; ensureWatcher(sub);
                 try {
                   for await (const child of subEntries) {
                     if (closed) return [];
                     stats.entries++;
+                    stats.scanEntriesThisTick = (stats.scanEntriesThisTick || 0) + 1; yield;
                     if (++steps % BOUNDS.scanYield === 0) { stats.yields++; await turn(); }
                     if (nestedBudget-- <= 0 || inspected++ >= BOUNDS.subagentEntriesPerDir) { nestedTruncated = true; break; }   // critic-250: every entry counts locally too
                     if (child.isFile() && !child.isSymbolicLink() && /^agent-[A-Za-z0-9_-]{1,128}\.jsonl$/.test(child.name)) names.push(child.name);
@@ -143,7 +153,22 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
         for (const [key, row] of found) if (index.has(key) || index.size < BOUNDS.sessions) index.set(key, row);
         stats.excluded = Math.max(0,candidates-found.size); stats.truncated = stats.excluded > 0 || nestedTruncated; stats.nestedTruncated = nestedTruncated;
       }
+      stats.scanPending = false;
       return [...index.values()];
+  }
+  async function scan() {
+    if (scanning) return scanning;
+    scanning = (async () => {
+      stats.scanEntriesThisTick = 0;
+      scanIterator ||= scanWork();
+      try {
+        for (let n = 0; n < BOUNDS.scanEntries; n++) {
+          const step = await scanIterator.next();
+          if (step.done) { scanIterator = null; return step.value; }
+        }
+        stats.scanPending = true; stats.truncated = true;
+        return [...index.values()];
+      } catch (error) { scanIterator = null; throw error; }
     })().finally(() => { scanning = null; });
     return scanning;
   }
@@ -268,8 +293,18 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
     }).finally(() => inFlight.delete(key));
     inFlight.set(key, operation); return operation;
   }
+  async function refresh(key) {
+    const row = index.get(key); if (!row || closed) return null;
+    await verify(row.chain);
+    let st; try { st = await fsp.lstat(row.file); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+    if (!st.isFile() || st.isSymbolicLink()) return null;
+    Object.assign(row, { dev: st.dev, ino: st.ino, size: st.size, mtime: st.mtimeMs });
+    return row;
+  }
   return { scan, read, rows: () => [...index.values()], cached: () => [...cache.keys()], agentId, projectRef, stats, bounds: BOUNDS,
-    close() { closed = true; for (const key of cache.keys()) removeCache(key); pump(); },
+    refresh, keyForPath: file => [...index.values()].find(row => row.file === path.resolve(file))?.key || null,
+    watch(onChange) { changeHandler = typeof onChange === 'function' ? onChange : null; ensureWatcher(root); for (const row of [...index.values()].sort((a,b)=>b.mtime-a.mtime)) { ensureWatcher(path.dirname(row.file)); if (watchers.size >= BOUNDS.sessions * 2 + 1) break; } },
+  close() { closed = true; changeHandler = null; for (const watcher of watchers.values()) watcher.close(); watchers.clear(); const closing = scanIterator?.return?.(); void closing?.catch?.(() => {}); for (const key of cache.keys()) removeCache(key); pump(); },
     cacheBytes: () => [...cache.keys()].reduce((n, k) => n + (globalCache.get(prefix + ':' + k)?.size || 0), 0) };
 }
 module.exports = { createFiles, BOUNDS };

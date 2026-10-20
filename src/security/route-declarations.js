@@ -14,6 +14,7 @@ function add(method,path,{kind='permissions',resource=null,level='read',command=
 }
 for(const [path,resource] of [
   ['/views/office','office'],['/views/office/characters','office'],['/views/chat','chat'],['/views/flows','flows'],['/views/flows/:jobId','flows'],
+  ['/chat/agents','chat'],['/chat/agents/:agentId/sessions','chat'],['/chat/sessions/:sessionId','chat'],['/chat/attachments/:attachmentId','chat'],['/chat/attachments/:attachmentId/preview','chat'],
   ['/orchestrators','orchestrators'],['/teams','teams'],
   ['/views/logs','logs'],['/views/sessions/:key','logs'],['/views/interlocutors/:id','logs'],['/views/access','access'],
   ['/views/skills','skills'],['/views/skills/:name','skills'],['/views/health','health'],
@@ -21,6 +22,21 @@ for(const [path,resource] of [
   ['/views/projects/:id/comments','projects'],['/views/project-candidates','projects'],['/project-covers/:file','projects'],['/shots/:file','projects'],
   ['/office/layout','store'],['/office/layout/revisions/:rev','store'],['/prefs','store'],
 ])add('GET',path,{resource});
+add('GET','/views/project-create',{requirements:[{resource:'projects',level:'write'},{resource:'chat',level:'read'}],reason:'viewer-scoped send-capable project kickoff targets'});
+add('GET','/projects/:id/kickoff',{requirements:[{resource:'projects',level:'read'},{resource:'chat',level:'read'}],reason:'creator-private chat kickoff status'});
+add('POST','/chat/agents/:agentId/sessions',{requirements:[{resource:'chat',level:'write'}],reason:'create a private chat session for an authorized target',writeClass:'openclaw'});
+add('POST','/projects/:id/kickoff/retry',{command:'projects.retryKickoff',requirements:[{resource:'projects',level:'write'},{resource:'chat',level:'write'}],reason:'retry a known pre-dispatch failed kickoff without creating another project or session',writeClass:'store'});
+add('POST','/chat/sessions/:sessionId/read',{resource:'chat',level:'read',command:'chat.read',reason:'acknowledge visible messages owned by the current principal'});
+for(const [method,path,command] of [
+  ['PATCH','/chat/sessions/:sessionId/title','chat.renameSession'],['POST','/chat/sessions/:sessionId/archive','chat.archiveSession'],
+  ['DELETE','/chat/sessions/:sessionId','chat.deleteSession'],['POST','/chat/sessions/:sessionId/undo-delete','chat.undoDeleteSession'],
+])add(method,path,{resource:'chat',level:'write',command,writeClass:'store',audit:'transaction',reason:'manage only a conversation owned by the current principal'});
+for(const [method,path] of [
+  ['POST','/chat/sessions/:sessionId/messages'],['POST','/chat/sessions/:sessionId/retry'],
+  ['POST','/chat/sessions/:sessionId/attachments'],['DELETE','/chat/sessions/:sessionId/attachments/:attachmentId'],
+])add(method,path,{resource:'chat',level:'write',command:'chat.'+(path.includes('/read')?'read':path.includes('/messages')?'send':path.includes('/retry')?'retry':path.includes('/attachments')?(method==='DELETE'?'attachmentCancel':'attachmentUpload'):'send'),writeClass:'openclaw',...(path.includes('/messages')?{audit:'transaction'}:{})});
+add('DELETE','/chat/sessions/:sessionId/queued/:turnId',{resource:'chat',level:'write',command:'chat.cancelQueuedMessage',writeClass:'store',audit:'transaction',reason:'cancel one queued pane message owned by the current principal'});
+add('POST','/chat/sessions/:sessionId/queued/:turnId/send-now',{requirements:[{resource:'chat',level:'write'},{resource:'teams',level:'read'},{resource:'chat.pane.send',level:'write'}],command:'chat.sendQueuedNow',writeClass:'store',audit:'transaction',reason:'promote one owned queued pane message for immediate delivery'});
 add('GET','/views/office/palette',{requirements:[{resource:'office',level:'read'}],reason:'office'});
 add('GET','/views/office/store',{requirements:[{resource:'store',level:'read'},{resource:'office',level:'read'}],reason:'store'});
 for(const [method,path,resource,command,writeClass,agent] of [
@@ -40,6 +56,7 @@ add('GET','/meta',{kind:'public',reason:'redacted bootstrap or permission-projec
 add('GET','/me',{kind:'self',reason:'current authenticated identity'});
 add('GET','/design-system/access',{kind:'self',reason:'owner-only access decision for the design-system gallery'});
 add('GET','/settings',{kind:'self',reason:'independently projected settings groups'});
+add('GET','/settings/recovery',{kind:'self',reason:'recovery-only owner account repair projection'});
 for(const [method,path,resource,command,sensitive] of [
   ['POST','restart','settings.restart','settings.restart',true],['POST','check','settings.runtimes','settings.check'],['POST','detect','settings.runtimes','settings.detect'],['POST','herdr/check','settings.runtimes','settings.herdrCheck'],
   ['POST','fix-all','health','settings.fixAll',true],
@@ -67,7 +84,7 @@ for(const path of ['/stream/:streamId/topics','/stream/:streamId/resync'])add('P
 for(const [method,path] of [['GET','/setup'],['GET','/setup/catalog'],['POST','/setup/resume'],['POST','/setup/owner'],['POST','/setup/detect'],['POST','/setup/integrations/plan'],['POST','/setup/integrations/apply'],['POST','/setup/network'],['POST','/setup/check'],['POST','/setup/discover'],['POST','/setup/access/state'],['POST','/setup/access/plan'],['POST','/setup/access/checks'],['POST','/setup/access/checks/status'],['POST','/setup/access/checks/cancel'],['POST','/setup/access/apply'],['PUT','/setup']])
   add(method,path,{kind:'setup',reason:'one-time setup code or explicitly redacted locked/bootstrap response'});
 const TOPICS=new Map([
-  ['office','office'],['office-scope','office'],['orchestrators','orchestrators'],['teams','teams'],['chat','chat'],['flows','flows'],['flow','flows'],['logs','logs'],['session','logs'],['interlocutor','logs'],['access','access'],['skills','skills'],['skill','skills'],['health','health'],['layout','store'],['prefs','store'],['projects','projects'],['project','projects'],['comments','projects'],
+  ['office','office'],['office-scope','office'],['orchestrators','orchestrators'],['teams','teams'],['chat','chat'],['chat-agents','chat'],['chat-agent-sessions','chat'],['chat-agent-sessions-archived','chat'],['chat-session','chat'],['chat-agents-scope','chat'],['chat-agent-sessions-scope','chat'],['chat-session-scope','chat'],['flows','flows'],['flow','flows'],['logs','logs'],['session','logs'],['interlocutor','logs'],['access','access'],['skills','skills'],['skill','skills'],['health','health'],['health-admin','health'],['layout','store'],['prefs','store'],['projects','projects'],['project','projects'],['comments','projects'],
 ].map(([name,resource])=>[name,Object.freeze({resource,level:'read'})]));
 const CREDENTIAL_LINK_ROUTES=new Map([
   ['/api/auth/invitations/accept','users.acceptInvitation'],['/api/auth/password-reset/accept','users.acceptReset'],

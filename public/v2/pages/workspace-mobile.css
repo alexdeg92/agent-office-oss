@@ -21,6 +21,7 @@
 .ao-chat__input.bu-input-control { min-height: 0; min-width: 0; }
 .ao-chat__input textarea { min-height: calc(var(--bu-size-control) * 1.6); resize: vertical; }
 .ao-chat__heading { min-width: 0; overflow-wrap: anywhere; margin: 0; font: var(--bu-type-label); }
+.ao-messenger__pane-head h2:focus-visible { outline: 2px solid color-mix(in srgb, var(--bu-focus-ring) 52%, transparent); outline-offset: 3px; border-radius: var(--bu-radius-sm); }
 .ao-chat__trace.bu-btn { width: auto; padding-inline: var(--bu-space-3); text-decoration: none; min-height: var(--bu-size-touch); }
 .ao-chat__trace .ao-chat__btnlabel { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: nowrap; }
 .ao-chat__composer .bu-button { flex: none; }

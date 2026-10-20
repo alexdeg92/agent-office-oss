@@ -833,13 +833,6 @@
     "reason": "office (owner: office-dev): asset ids (Characters/timmy, look timmy) and home-instance test data; burn down"
   },
   {
-    "file": "test/packaging/bin.test.js",
-    "token": "alexdeg92",
-    "line": "assert.match(src, /registry\\.npmjs\\.org\\/@alexdeg92\\/agent-office\\/-\\/agent-office-/);",
-    "count": 1,
-    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
-  },
-  {
     "file": "test/packaging/check-pack.test.js",
     "token": "alexdeg92",
     "line": "assert.match(release, /if: github\\.repository == 'alexdeg92\\/agent-office-oss'/);",
@@ -859,13 +852,6 @@
     "line": "const repo = 'ghcr.io/alexdeg92/agent-office-oss';",
     "count": 1,
     "reason": "packaging (owner: packaging): published release identity; promotion deliberately rejects any other repository"
-  },
-  {
-    "file": "test/packaging/release.test.js",
-    "token": "alexdeg92",
-    "line": "assert.match(next, /registry\\.npmjs\\.org\\/@alexdeg92\\/agent-office\\/-\\/agent-office-1\\.2\\.3\\.tgz/);",
-    "count": 1,
-    "reason": "Public scoped package and release identity (owner: packaging); required distribution metadata."
   },
   {
     "file": "test/packaging/release.test.js",
@@ -1846,76 +1832,6 @@
     "line": "const ownerId = 'per_alex00000000000';",
     "count": 1,
     "reason": "synthetic owner fixture with an explicitly allowlisted personal marker"
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "{ id: 'src_gh', kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' }, addedAt: AT - 4 },",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } },",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/agent-office-oss/actions/runs/1' },",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss' },",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "key: 'gh:alexdeg92/agent-office-oss',",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "key: 'gh:alexdeg92/agent-office-oss',",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "keys: ['gh:alexdeg92/agent-office-oss', 'sg:discord-user:100000000000000001'],",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "owner: 'alexdeg92',",
-    "count": 1,
-    "reason": "projects (owner: projects): home-instance test data or the legacy actor mapping; burn down"
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } }],",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
-  },
-  {
-    "file": "test/projects/vm-shape.test.js",
-    "token": "alexdeg92",
-    "line": "url: 'https://github.com/alexdeg92/agent-office-oss',",
-    "count": 1,
-    "reason": "Public repository example or release identity (owner: packaging); reflects the public OSS repository."
   },
   {
     "file": "test/projects/vm-shape.test.js",

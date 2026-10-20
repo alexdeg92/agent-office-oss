@@ -3,13 +3,14 @@ import { apiUrl, config } from '../config.js';
 import * as api from '../api.js';
 import { Modal } from '../components/modal.js';
 import { Icon } from '../components/ui.js';
-import { ConnectorBrandMark } from '../pages/connector-brand.js';
+import { ProjectMemberRow, loadProjectMemberRowStyles } from '../components/project-member-row.js';
+import { label as labelVM } from '../i18n.js';
 import { Button } from '../components/bureau/index.js';
 import { CollapsedGroup } from '../components/bureau/collapsed-group.js';
 import { ListRow } from '../components/bureau/rows.js';
 import { loadStyles as loadBureauStyles } from '../components/bureau/styles.js';
 import { s as tr, locale } from './team-strings.js';
-import { anonymousPresenceGroups, dedupeHostRows, groupedTeamMembers, isResolvedPresenceName, linkedPresence, unlinkedHostRows } from './team-office-model.js';
+import { anonymousPresenceGroups, dedupeHostRows, groupedTeamMembers, isResolvedPresenceName, unlinkedHostRows } from './team-office-model.js';
 
 export const hostAnnotation = occupant => occupant?.hostAgentId && occupant.hostStatus
   ? tr('team.host.observation', { role: tr('team.host.role.' + occupant.hostRole), status: tr('team.host.status.' + occupant.hostStatus) }) : null;
@@ -113,7 +114,7 @@ const verdictKey = (verdict) => ({ go: 'team.review.go', 'no-go': 'team.review.n
 const stateSeverity = (state) => ({ blocked: 'warn', review: 'info', done: 'ok', working: 'info', claimed: 'info' })[state] || undefined;
 // Runtime identity is adapter-owned open vocabulary. Render the canonical ID as
 // a readable label; no provider-name matching or team-specific identity logic.
-const runtimeName = (runtime) => String(runtime || tr('team.runtime.other')).replace(/[-_.]+/g, ' ').trim().replace(/\b[a-z]/g, letter => letter.toUpperCase());
+const runtimeName = (runtime) => runtime?.key ? tr(runtime.key, runtime.params || {}) : tr('team.runtime.other');
 const hostStatusKey = (status) => ({ working: 'team.host.working', blocked: 'team.host.blocked', done: 'team.host.done', idle: 'team.host.idle', unknown: 'team.host.unknown' })[status] || 'team.host.unknown';
 const hostSeverity = (status) => ({ working: 'info', blocked: 'warn', done: 'ok' })[status];
 const taskCounts = (tasks) => tasks.reduce((counts, task) => ({ ...counts, [task.state]: (counts[task.state] || 0) + 1 }), {});
@@ -136,24 +137,23 @@ function Freshness({ label, sourceState, observedAt, status, live }) {
     ${label} · ${text}${observedAt ? html` <time datetime=${new Date(observedAt).toISOString()}>${new Date(observedAt).toLocaleTimeString(locale() === 'en' ? 'en-CA' : 'fr-CA', { hour: '2-digit', minute: '2-digit' })}</time>` : null}</span>`;
 }
 
-function Members({ data, hostData }) {
+function Members({ data, office }) {
   const members = data?.members || [];
   if (!members.length) return html`<p class="bu-text-secondary ao-team-empty">${tr('team.members.empty')}</p>`;
   return html`<ul class="bu-list ao-team-list" aria-label=${tr('team.members.label')}>
     ${groupedTeamMembers(members).map(({ member, depth, parent }) => {
       const role = roleText(member);
-      const host = linkedPresence(member, hostData?.agents || []);
-      const liveStatus = host ? tr('team.member.liveStatus', { runtime: runtimeName(host.runtimeKind), status: tr(hostStatusKey(host.status)) }) : null;
-      const lineage = parent ? tr('team.member.spawnedBy', { name: parent.name }) : null;
-      const sessionStatus = member.sessionStatus === 'unknown' ? tr('team.member.sessionUnknown') : null;
-      const meta = [lineage, role, liveStatus, sessionStatus].filter(Boolean).join(' · ');
-      const runtime = html`<span class="ao-team-runtime" data-runtime-kind=${member.runtimeKind || 'unknown'}
-        aria-label=${member.runtimeKind ? member.brand?.providerName || runtimeName(member.runtimeKind) : tr('team.runtime.unknown')}>
-        <${ConnectorBrandMark} brand=${member.brand || null} className="ao-team-runtime__brand" label=${member.brand?.providerName || runtimeName(member.runtimeKind)} />
-        ${member.runtimeKind ? runtimeName(member.runtimeKind) : tr('team.runtime.unknown')}</span>`;
-      const badges = html`${runtime}${member.status === 'inactive' ? html`<span class="bu-chip bu-chip--sm">${tr('team.member.inactive')}</span>` : null}`;
-      return html`<${ListRow} key=${member.id} memberId=${member.id} parentMemberId=${parent?.id || undefined} class=${depth ? 'ao-team-member-child' : ''} testId="team-member" title=${member.name} meta=${meta}
-        badges=${badges} />`;
+      const occupant = (office?.occupants || []).find(row => row.memberId === member.id);
+      const provider = runtimeName(member.runtimeLabel);
+      const qualifier = member.runtimeQualifierLabel ? runtimeName(member.runtimeQualifierLabel) : null;
+      const statusLabel = occupant ? labelVM(occupant.stateLabel)
+        : member.statusLabel?.key ? tr(member.statusLabel.key, member.statusLabel.params || {}) : '';
+      const status = occupant?.state || 'unknown';
+      return html`<${ProjectMemberRow} key=${member.id} id=${member.id} name=${member.name}
+        roleLabel=${role} parentLabel=${parent?.name || null} parentId=${parent?.id || null} parentMemberId=${parent?.id || null} depth=${depth}
+        look=${occupant?.look || null} avatarState=${occupant?.state || null} sourceLabel=${[provider, qualifier].filter(Boolean).join(' · ')}
+        sourceBrand=${member.brand || null} status=${status} statusLabel=${statusLabel}
+        testId="team-member" className=${depth ? 'ao-team-member-child' : ''} />`;
     })}
   </ul>`;
 }
@@ -221,8 +221,8 @@ function SourceCard({ title, state, retry, children, class: cls = '' }) {
   </section>`;
 }
 
-export function TeamOffice({hint=false}={}) {
-  useEffect(() => { void loadBureauStyles().catch(api.toastError); }, []);
+export function TeamOffice({hint=false, office=null}={}) {
+  useEffect(() => { void Promise.all([loadBureauStyles(), loadProjectMemberRowStyles()]).catch(api.toastError); }, []);
   const sources = useTeamSources();
   const [sheet, setSheet] = useState(null);
   if (config.apiVersion !== 3) return hint ? html`<aside class="bu-card ao-team-herdr-hint" data-testid="team-herdr-opt-in-hint">${tr('team.herdr.enableGrouping')}</aside>` : null;
@@ -232,6 +232,7 @@ export function TeamOffice({hint=false}={}) {
   const tasks = team?.tasks || [];
   // Exact-linked host observations annotate existing occupants and do not count as additional people.
   const hostRows = unlinkedHostRows(hosts?.agents || []);
+  const hasHostPresences = (hosts?.agents || []).length > 0;
   const hidden = sources.teams.denied && sources.orchestrators.denied;
   if (hidden && !hint) return null;
   return html`<section class="ao-team-office" aria-label=${tr('team.office.label')} data-testid="team-office">
@@ -239,31 +240,31 @@ export function TeamOffice({hint=false}={}) {
       <div><p class="bu-eyebrow">${team ? tr('team.office.eyebrow') : tr('team.source.herdr')}</p><h2>${team?.team?.label || tr('team.host.label')}</h2></div>
       <div class="ao-team-office__freshness">
         ${!sources.teams.denied && team ? html`<${Freshness} label=${tr('team.source.team')} sourceState="teams" observedAt=${team.team?.observedAt || team.observedAt} status=${team.team?.status} live=${sources.live} />` : null}
-        ${!sources.orchestrators.denied && hosts ? html`<${Freshness} label=${tr('team.source.herdr')} sourceState="herdr" observedAt=${hosts.orchestrators?.[0]?.observedAt || hosts.observedAt} status=${hosts.orchestrators?.[0]?.sourceStatus} live=${sources.live} />` : null}
+        ${!sources.orchestrators.denied && hasHostPresences ? html`<${Freshness} label=${tr('team.source.herdr')} sourceState="herdr" observedAt=${hosts.orchestrators?.[0]?.observedAt || hosts.observedAt} status=${hosts.orchestrators?.[0]?.sourceStatus} live=${sources.live} />` : null}
       </div>
     </header>` : null}
     <div class="ao-team-office__desktop">
       <${SourceCard} title=${countLabel('team.members.heading', members.length, !!team)} state=${sources.teams} retry=${sources.retry} class="members">
         ${hint ? html`<p class="bu-caption ao-team-herdr-hint" data-testid="team-herdr-opt-in-hint">${tr('team.herdr.enableGrouping')}</p>` : null}
-        <${Members} data=${team} hostData=${hosts} />
+        <${Members} data=${team} office=${office} />
       </${SourceCard}>
       <${SourceCard} title=${countLabel('team.board.heading', tasks.length, !!team)} state=${sources.teams} retry=${sources.retry} class="board">
         <${Board} data=${team} />
       </${SourceCard}>
-      <${SourceCard} title=${countLabel('team.host.heading', hostRows.length, !!hosts)} state=${sources.orchestrators} retry=${sources.retry} class="herdr">
+      ${hasHostPresences || !hosts ? html`<${SourceCard} title=${countLabel('team.host.heading', hostRows.length, !!hosts)} state=${sources.orchestrators} retry=${sources.retry} class="herdr">
         ${hosts?.orchestrators?.length ? html`<p class="ao-team-host-label">${runtimeName(hosts.orchestrators[0].kind)} · ${tr('team.host.readOnly')}</p>` : null}
         <${HostPresence} data=${hosts} />
-      </${SourceCard}>
+      </${SourceCard}>` : null}
     </div>
     <div class="ao-team-office__mobile">
       ${sources.teams.denied ? null : html`<${Button} variant="secondary" testId="team-open-members" label=${countLabel('team.members.heading', members.length, !!team)} onPress=${() => setSheet('members')} />`}
-      ${sources.orchestrators.denied ? null : html`<span class="bu-chip bu-chip--sm ao-team-mobile-host" data-testid="team-mobile-host">${countLabel('team.host.heading', hostRows.length, !!hosts)}</span>`}
+      ${sources.orchestrators.denied || !hasHostPresences ? null : html`<span class="bu-chip bu-chip--sm ao-team-mobile-host" data-testid="team-mobile-host">${countLabel('team.host.heading', hostRows.length, !!hosts)}</span>`}
       ${sources.teams.denied ? null : html`<${Button} variant="primary" testId="team-open-board" label=${countLabel('team.board.open', tasks.length, !!team)} onPress=${() => setSheet('board')} />`}
       ${!sources.teams.denied && !team ? html`<${SourceNote} state=${sources.teams} label=${tr('team.source.team')} retry=${sources.retry} />` : null}
       ${!sources.orchestrators.denied && !hosts ? html`<${SourceNote} state=${sources.orchestrators} label=${tr('team.source.herdr')} retry=${sources.retry} />` : null}
     </div>
-    ${sheet ? html`<${Modal} size="md" title=${sheet === 'board' ? countLabel('team.board.heading', tasks.length, !!team) : countLabel('team.members.heading', members.length, !!team)} onClose=${() => setSheet(null)}>
-      ${sheet === 'board' ? html`<${Board} data=${team} />` : html`<${Members} data=${team} hostData=${hosts} />${sources.orchestrators.denied ? null : html`<section class="ao-team-sheet-host"><h3 class="bu-heading-sm">${tr('team.host.heading', { count: hostRows.length })}</h3><${HostPresence} data=${hosts} /></section>`}`}
+    ${sheet ? html`<${Modal} size="md" class="ao-team-members-sheet" title=${sheet === 'board' ? countLabel('team.board.heading', tasks.length, !!team) : countLabel('team.members.heading', members.length, !!team)} onClose=${() => setSheet(null)}>
+      ${sheet === 'board' ? html`<${Board} data=${team} />` : html`<${Members} data=${team} office=${office} />${sources.orchestrators.denied || !hasHostPresences ? null : html`<section class="ao-team-sheet-host"><h3 class="bu-heading-sm">${tr('team.host.heading', { count: hostRows.length })}</h3><${HostPresence} data=${hosts} /></section>`}`}
     </${Modal}>` : null}
   </section>`;
 }

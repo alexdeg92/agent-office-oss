@@ -1,5 +1,5 @@
 // App shell (Nav README): desktop sidebar + top bar; mobile top bar + 5-slot bottom bar (BRIEF decisions log).
-import { assetUrl } from '../config.js';
+import { assetUrl, buildQuery } from '../config.js';
 import { html, useEffect, useState } from '../lib.js';
 import { Frame, Icon, LivePill, Clock, ConnectionBanner } from './ui.js';
 import { NAV, BOTTOM_TABS, routeByName, activeNav, activeTab } from '../router.js';
@@ -9,9 +9,16 @@ import { theme, setTheme } from '../theme.js';
 import { isMock } from '../api.js';
 import { withAgent, msg, getLang, LANGS } from '../i18n.js';
 import { chooseLang } from '../lang.js';
-import { watchReleaseBadge } from '../release-badge.js';
 
 const LOGOS = assetUrl('bureau/assets/Logos/');
+
+export function watchReleaseBadgeFor(email, setBadge) {
+  let active = true, stop = () => {};
+  import('../release-badge.js' + buildQuery).then(({ watchReleaseBadge }) => {
+    if (active) stop = watchReleaseBadge(email, setBadge);
+  }).catch(() => { if (active) setBadge(true); });
+  return () => { active = false; stop(); };
+}
 
 /** Light/dark logo pair; app.css shows the one that fits the current theme. */
 export function Logo({ kind = 'wordmark', class: cls = '', alt = 'Agent Office' }) {   // the product name: not translated
@@ -59,7 +66,7 @@ export function Shell({ match, me, status, onLogout, children }) {
   const who = (me && me.displayName) || (me && me.email ? me.email.split('@')[0] : '');
   const email = me?.email || '';
   const [hasNewRelease, setHasNewRelease] = useState(false);
-  useEffect(() => watchReleaseBadge(email, setHasNewRelease), [email]);
+  useEffect(() => watchReleaseBadgeFor(email, setHasNewRelease), [email]);
 
   return html`<div class="bu-shell">
     <a class="ao-skip" href="#contenu">${msg('shell.skip')}</a>

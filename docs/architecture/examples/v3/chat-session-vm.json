@@ -1,0 +1,17 @@
+{
+  "data": {
+    "id": "cs_Mk9qvR6vX2Z0JspN7xgTgD5Lz9WcB1yK",
+    "agentId": "ca_gW0egUVdHn8cQKv0uHKIcfD71U9vYixX",
+    "title": "Préparer la note",
+    "messages": [
+      { "id": "msg_Y6kP0dR3fN8xV2wQ5cL1sH9tB4aM7zE2", "kind": "message", "role": "user", "at": 1791223000000, "text": "Compare ces options", "body": { "text": "Compare ces options", "blocks": [{ "type": "text", "text": "Compare ces options" }] }, "title": null, "status": "sent", "statusLabel": { "key": "chat.pane.messageSent", "params": { "name": "Atlas" } }, "queueActions": null, "collapsedByDefault": false, "avatar": null, "senderInfo": { "kind": "human", "id": "human:viewer", "name": "Camille", "runtime": "portal", "channel": null, "avatarHint": null }, "meta": null, "attachments": [] },
+      { "id": "msg_J3wC8pL1xR6mY9vN2tF5gH0sD4kQ7aB2", "kind": "message", "role": "assistant", "at": 1791223005000, "text": "Je compare les deux options.", "body": { "text": "Je compare les deux options.", "blocks": [{ "type": "text", "text": "Je compare les deux options." }, { "type": "table", "headers": ["Option", "Résultat"], "rows": [["A", "Rapide"], ["B", "Complet"]] }, { "type": "team-result", "teamId": "ct_B2nXq8W3fV0kL7mR5dZa1YpJ9sH4cT6u", "label": "Équipe Produit", "summary": "Deux options comparées", "members": [{ "id": "ca_gW0egUVdHn8cQKv0uHKIcfD71U9vYixX", "name": "Atlas", "stateLabel": { "key": "chat.agent.idle" }, "portrait": { "look": { "character": "fox", "variant": "sage", "accessories": [] }, "avatarUrl": null, "alt": "Atlas" } }] }] }, "title": null, "status": null, "statusLabel": null, "collapsedByDefault": false, "avatar": { "character": "fox", "variant": "sage", "accessories": [] }, "senderInfo": { "kind": "agent", "id": "agent:atlas", "name": "Atlas", "runtime": "runtime-a", "channel": null, "avatarHint": null }, "meta": { "model": "model-a", "tokens": 42, "durationMs": 100 }, "attachments": [{ "id": "att_P4gN8xv2LmQ6cR0yK1zD5sW9hT3aB7uE", "name": "options.pdf", "mimeType": "application/pdf", "size": 84512, "url": "/api/v3/chat/attachments/att_P4gN8xv2LmQ6cR0yK1zD5sW9hT3aB7uE" }] }
+    ],
+    "turnPending": null,
+    "retryEligible": false,
+    "retryEligibleTurnId": null,
+    "pagination": { "olderCursor": null, "hasOlder": false },
+    "capabilities": { "sendNowWarning": null, "read": true, "startSession": true, "sendMessage": true, "markRead": true, "storyboard": {"available": true, "reason": null}, "retry": true, "attachments": { "allowed": true, "maxBytes": 20971520, "maxCountPerMessage": 5, "maxCountPerSession": 20, "mimeTypes": ["application/pdf", "text/plain", "image/png", "image/jpeg"], "reason": null } }
+  },
+  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [], "topic": { "id": "chat-session/cs_Mk9qvR6vX2Z0JspN7xgTgD5Lz9WcB1yK", "rev": 18 } }
+}

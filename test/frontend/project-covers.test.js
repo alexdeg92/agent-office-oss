@@ -24,7 +24,13 @@ async function evaluate(expression) {
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
   return r.result.value;
 }
-async function ready(expression) { await waitFor(() => evaluate(expression), { timeoutMs: 15000 }); }
+async function ready(expression) {
+  try { await waitFor(() => evaluate(expression), { timeoutMs: 15000 }); }
+  catch (error) {
+    console.log('cover browser diagnostics',await evaluate("JSON.stringify({width:innerWidth,clientWidth:document.documentElement.clientWidth,url:location.pathname,viewport:document.querySelector('meta[name=viewport]')?.content,cards:[...document.querySelectorAll('[data-card]')].map(c=>({classes:c.className,images:[...c.querySelectorAll('img')].map(i=>({src:i.getAttribute('src'),complete:i.complete,naturalWidth:i.naturalWidth,rect:i.getBoundingClientRect().toJSON()}))})),errors:window.__AO_VM_ISSUES||[]})"));
+    throw error;
+  }
+}
 async function go(path) { await send('Page.navigate', { url: h.base + path }); await ready("document.readyState === 'complete' && !!document.querySelector('#app > *')"); }
 before(async () => {
   if (skip) return;

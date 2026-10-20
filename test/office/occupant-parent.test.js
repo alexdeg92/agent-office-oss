@@ -13,6 +13,7 @@ const { project2x } = require('../../src/api/v2/project2x');
 const { schemasFor } = require('../../src/api/v2/vm/schemas');
 const { validate } = require('../../src/schema');
 const { projectOfficeRoster, projectOfficePlacement } = require('../../src/api/v2/vm/office-roster');
+const { projectOfficeRoster: projectEngineOfficeRoster } = require('../../src/engine/office/roster');
 const { officeDefaults } = require('../../src/api/v2/vm/office');
 
 const NOW = 1791600000000;
@@ -65,6 +66,41 @@ test('2.x: the same links with 2.x occupant ids, schema-valid', () => {
   assert.equal(validate(schemasFor(2).office, vm).ok, true);
 });
 
+test('gateway-level subagent lineage falls back to its primary owner, with a localized generic label (v2 and v3)', async () => {
+  const { displayName } = await import('../../public/v2/office/names.js');
+  const e = createEngine({ adapter, now: () => NOW, primary: 'main' });
+  e.ingestCanonical('agents', [{ id: 'main', name: 'Main', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'agent:main:main' }]);
+  e.ingestCanonical('sessions.snapshot', [
+    session('agent:main:main', 'primary'),
+    // The gateway parent is transport lineage, not a session rendered in the office.
+    session('agent:main:subagent:gateway-child', 'subagent', { subagentId: 'gateway-child', agentId: 'main' }, { parentKey: 'gateway:subagent:gateway-child' }),
+    // An adapter-provided task label remains the occupant name when available.
+    session('agent:main:subagent:labelled-child', 'subagent', { subagentId: 'labelled-child', agentId: 'main' }, { parentKey: 'gateway:subagent:labelled-child', label: 'Index the repository' }),
+  ]);
+  e.setGatewayConnected(true);
+  for (const P of [project2x, project3x]) {
+    const vm = buildOfficeVM({ engine: e, now: NOW, tracker: createStateTracker(), canReadSessions: true,
+      actorOf: () => ({ kind: 'system', name: 'System' }), P });
+    const primary = vm.occupants.find(row => row.role === (P.version === 2 ? 'main' : 'primary'));
+    const generic = vm.occupants.find(row => row.sessionKey === 'agent:main:subagent:gateway-child');
+    const labelled = vm.occupants.find(row => row.sessionKey === 'agent:main:subagent:labelled-child');
+    assert.equal(generic.parentId, primary.id, `v${P.version}: unresolved gateway parent falls back to the owning primary`);
+    assert.equal(generic.title.key, 'occupantRole.subagent', `v${P.version}: generic label is localized by the client locale`);
+    assert.equal(generic.roleLabel, null, `v${P.version}: backend omits a role label that duplicates the generic name`);
+    assert.equal(generic.name, '', `v${P.version}: no server-language generic literal overrides the viewer locale`);
+    assert.equal(displayName(generic, { title: 'Sub-agent', titleSource: 'Sous-agent' }), 'Sub-agent',
+      `v${P.version}: English client uses its localized LabelRef rather than a French literal`);
+    const withoutLabelRef = displayName(generic, { title: null, titleSource: null });
+    assert.ok(withoutLabelRef.trim(), `v${P.version}: the client never renders a blank label`);
+    assert.notEqual(withoutLabelRef, 'Sub-agent', `v${P.version}: removing the LabelRef renderer fails the English label assertion`);
+    assert.notEqual(withoutLabelRef, 'Sous-agent', `v${P.version}: removing the LabelRef renderer fails the French label assertion`);
+    assert.equal(labelled.parentId, primary.id, `v${P.version}: task-labelled subagent remains under its primary`);
+    assert.equal(labelled.name, 'Index the repository', `v${P.version}: adapter task label is preferred`);
+    assert.equal(labelled.title.key, 'sessionTitle.named');
+    assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
+  }
+});
+
 test('without the sessions read grant the backend emits explicit empty parents', () => {
   const vm = office()(false);
   assert.ok(vm.occupants.every(o => o.parentId === null));
@@ -83,18 +119,34 @@ test('OfficeVM supplies the ordered roster tree and floor aggregates to every cl
       assert.ok(row.stateLabel?.key);
       if (row.parentId) assert.ok(vm.occupants.some(parent => parent.id === row.parentId));
     }
-    for (const id of vm.conversationIds) assert.equal(vm.occupants.find(row => row.id === id)?.rosterDepth, 0, 'conversation lineage is preserved without presenting it as a spawned member');
+    const visitingHosts = new Map((vm.visitIntent?.visitors || []).filter(visitor => visitor.hostId).map(visitor => [visitor.id, visitor.hostId]));
+    for (const id of vm.conversationIds) {
+      const row = vm.occupants.find(item => item.id === id);
+      const visitHost = visitingHosts.get(id);
+      if (visitHost) {
+        assert.equal(row?.parentId, visitHost, 'an active human visit nests under its exact host');
+        const host = vm.occupants.find(item => item.id === visitHost);
+        assert.equal(row?.rosterDepth, host?.floorId === row?.floorId ? host.rosterDepth + 1 : 1,
+          'same-floor visits follow the host tree; cross-floor visits use the explicit team header');
+      } else assert.equal(row?.rosterDepth, 0, 'non-visiting conversation lineage is not presented as a spawned member');
+    }
     for (const group of vm.rosterGroups) {
       assert.equal(group.occupantIds[0], group.rootId);
       assert.equal(group.count, group.occupantIds.length - 1);
       assert.ok(group.occupantIds.slice(1).every(id => vm.occupants.find(row => row.id === id)?.groupId === group.rootId));
     }
-    assert.equal(vm.rosterFloors.reduce((count, floor) => count + floor.count, 0), vm.occupants.length);
-    assert.equal(vm.rosterSummary.count, vm.occupants.length, 'mobile summary, floor totals and KPI population use the same on-stage rows');
+    const agentCount = vm.occupants.filter(row => !row.visitPhase).length;
+    assert.equal(vm.rosterFloors.reduce((count, floor) => count + floor.count, 0), agentCount,
+      'floor count labels count agents, excluding people who are visiting');
+    assert.equal(vm.rosterFloors.reduce((count, floor) => count + floor.occupantIds.length, 0), vm.occupants.length,
+      'all occupants including visiting people remain present in floor rosters');
+    assert.equal(vm.rosterSummary.count, agentCount, 'the mobile “in office” count describes agents, not visiting people');
     assert.equal(vm.rosterSummary.count, vm.rosterFloors.reduce((count, floor) => count + floor.count, 0));
     assert.equal(vm.rosterSummary.activeCount, vm.kpis.find(row => row.id === 'active').value,
       'mobile summary and the active KPI share unknown-state handling');
-    assert.equal(vm.rosterItems.reduce((count, item) => count + item.occupantIds.length, 0), vm.occupants.length - vm.conversationIds.length);
+    assert.equal(vm.rosterItems.reduce((count, item) => count + item.occupantIds.length, 0),
+      vm.occupants.length - vm.conversationIds.length + visitingHosts.size,
+      'active visiting conversations join their host group; other conversations stay in their separate view');
     assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
   }
 });
@@ -198,14 +250,67 @@ test('team placement keeps members on the lead floor and cross-floor roster entr
   assert.equal(forcedCrossFloor.occupants.find(row => row.id === 'child').rosterDepth, 1);
 });
 
+test('office roster nests a visiting contact under the exact addressed agent with the supplied visit label', () => {
+  const projected = projectOfficeRoster({ occupants: [
+    { id: 'primary', role: 'primary', state: 'working', name: 'Atlas', floorId: '2' },
+    { id: 'agent:worker', role: 'agent', state: 'working', name: 'Worker', parentId: 'primary', floorId: '2' },
+    { id: 'contact', role: 'direct', state: 'working', name: 'Contact', parentId: 'agent:worker', floorId: '2',
+      visitPhase: 'linger', visitLabel: { key: 'office.visitingWith', params: { name: 'Worker' } } },
+  ] });
+  const visitor = projected.occupants.find(row => row.id === 'contact');
+  assert.equal(visitor.parentId, 'agent:worker');
+  assert.equal(visitor.rosterDepth, 2, 'the visitor stays below its exact host in the full parent tree');
+  assert.equal(visitor.parentName, null, 'a visit parent is not described as a launcher');
+  assert.deepEqual(visitor.roleLabel, { key: 'occupantRole.visitor' });
+  assert.deepEqual(visitor.stateLabel, { key: 'occupantRole.visitor' });
+  assert.equal(visitor.stateKind, 'visitor');
+  assert.equal(visitor.stateActive, false, 'visiting people use their own badge rather than agent activity styling');
+  assert.deepEqual(projected.rosterSummary, { count: 2, activeCount: 2 }, 'visitors stay in the roster but do not inflate agent activity');
+  const floor = projected.rosterFloors.find(row => row.id === '2');
+  assert.equal(floor.count, 2, 'floor agent count excludes a visiting person');
+  assert.equal(floor.activeCount, 2, 'floor active count excludes a visiting person');
+  assert.equal(visitor.groupId, 'primary', 'mobile team grouping follows the existing primary-rooted roster tree');
+  assert.deepEqual(projected.rosterFloors.find(row => row.id === '2').items.map(row => row.occupantId), ['primary', 'agent:worker', 'contact']);
+  const mobileGroup = projected.rosterItems.find(row => row.rootId === 'primary');
+  assert.deepEqual(mobileGroup.occupantIds, ['primary', 'agent:worker', 'contact'], 'the mobile group includes the visit under its exact host lineage');
+  assert.deepEqual(mobileGroup.childIds, ['agent:worker', 'contact']);
+  assert.deepEqual(mobileGroup.openLabel, { key: 'office.mobile.openTeam', params: { name: 'Atlas', n: 1 } },
+    'the subagent count excludes visiting people');
+  assert.deepEqual(mobileGroup.delegatesLabel, { key: 'office.mobile.delegates', params: { n: 1 } },
+    'the delegated-agent label counts only agents, not a visiting person');
+  assert.deepEqual(mobileGroup.teamLabel, { key: 'office.mobile.team', params: { name: 'Atlas' } });
+  assert.deepEqual(visitor.visitLabel, { key: 'office.visitingWith', params: { name: 'Worker' } });
+});
+
+test('visitor role labels override only human direct contacts, preserving coding and channel labels', () => {
+  const occupants = [
+    { id: 'primary', role: 'primary', state: 'working', name: 'Atlas', floorId: '1' },
+    { id: 'human', role: 'direct', state: 'working', name: 'Riley', parentId: 'primary', floorId: '1',
+      roleLabel: { key: 'occupantRole.direct' }, visitPhase: 'person' },
+    { id: 'coding', role: 'conversation', state: 'working', name: 'Build task', parentId: 'primary', floorId: '1',
+      roleLabel: { key: 'occupantRole.session', params: { provider: 'Claude Code' } }, visitPhase: 'agent' },
+    { id: 'group', role: 'group', state: 'working', name: 'Team channel', parentId: 'primary', floorId: '1',
+      roleLabel: { key: 'occupantRole.group' }, visitPhase: 'agent' },
+    { id: 'channel', role: 'channel', state: 'working', name: 'Project channel', parentId: 'primary', floorId: '1',
+      roleLabel: { key: 'occupantRole.channel' }, visitPhase: 'agent' },
+  ];
+  for (const project of [projectOfficeRoster, projectEngineOfficeRoster]) {
+    const rows = new Map(project({ occupants }).occupants.map(row => [row.id, row]));
+    assert.deepEqual(rows.get('human').roleLabel, { key: 'occupantRole.visitor' });
+    assert.deepEqual(rows.get('coding').roleLabel, { key: 'occupantRole.session', params: { provider: 'Claude Code' } });
+    assert.deepEqual(rows.get('group').roleLabel, { key: 'occupantRole.group' });
+    assert.deepEqual(rows.get('channel').roleLabel, { key: 'occupantRole.channel' });
+  }
+});
+
 test('backend projects visitor phase, state, on-stage membership and expiry intent', () => {
   const tracker = createStateTracker();
   const rows = [
     { id: 'lead', role: 'primary', state: 'working', stateSince: NOW - 1000 },
-    { id: 'person', role: 'direct', state: 'working', stateSince: NOW - 5000, visitPendingAt: NOW - 1000, exchanges: { recent: 1, lastAt: NOW - 5000 } },
-    { id: 'agent', role: 'direct', state: 'working', stateSince: NOW - 5000, exchanges: { recent: 2, lastAt: NOW - 5000 } },
-    { id: 'linger', role: 'group', state: 'idle', stateSince: NOW - 5000, exchanges: { recent: 0, lastAt: NOW - 5000 } },
-    { id: 'gone', role: 'direct', state: 'idle', stateSince: NOW - 120_000, exchanges: { recent: 0, lastAt: NOW - 120_000 } },
+    { id: 'person', role: 'direct', parentId: 'lead', state: 'working', stateSince: NOW - 5000, visitPendingAt: NOW - 1000, exchanges: { recent: 1, lastAt: NOW - 5000 } },
+    { id: 'agent', role: 'direct', parentId: 'lead', state: 'working', stateSince: NOW - 5000, exchanges: { recent: 2, lastAt: NOW - 5000 } },
+    { id: 'linger', role: 'group', parentId: 'lead', state: 'idle', stateSince: NOW - 5000, exchanges: { recent: 0, lastAt: NOW - 5000 } },
+    { id: 'gone', role: 'direct', parentId: 'lead', state: 'idle', stateSince: NOW - 120_000, exchanges: { recent: 0, lastAt: NOW - 120_000 } },
   ];
   const vm = tracker.visitRows(rows, NOW, 3);
   const byId = Object.fromEntries(vm.occupants.map(row => [row.id, row]));
@@ -233,6 +338,29 @@ test('backend projects visitor phase, state, on-stage membership and expiry inte
   assert.equal(departed.occupants.find(row => row.id === 'person')?.visitPhase, 'linger');
   assert.equal(departed.visitIntent.until, NOW + 60_000);
   assert.equal(departedTracker.visitRows([rows[0]], NOW + 60_001, 3).occupants.some(row => row.id === 'person'), false);
+});
+
+test('visitors follow the exact owning agent, retain that parent through linger, and expose grouped visit intent', () => {
+  const tracker = createStateTracker();
+  const rows = [
+    { id: 'primary', role: 'primary', name: 'Primary', state: 'working' },
+    { id: 'agent:worker', role: 'agent', name: 'Worker', state: 'working' },
+    { id: 'contact', role: 'direct', name: 'Contact', parentId: 'agent:worker', state: 'working',
+      visitPendingAt: NOW - 1000, exchanges: { recent: 1, lastAt: NOW - 500 } },
+  ];
+  const current = tracker.visitRows(rows, NOW, 3);
+  const visitor = current.occupants.find(row => row.id === 'contact');
+  assert.equal(visitor.parentId, 'agent:worker');
+  assert.equal(visitor.visitLabel.key, 'office.visitingWith');
+  assert.deepEqual(current.visitIntent.hosts, [{ id: 'agent:worker', visitorIds: ['contact'] }]);
+  assert.equal(current.visitIntent.hostId, 'agent:worker');
+  assert.equal(current.visitIntent.visitors[0].hostId, 'agent:worker');
+
+  const lingering = tracker.visitRows(rows.slice(0, 2), NOW + 5_000, 3);
+  const retained = lingering.occupants.find(row => row.id === 'contact');
+  assert.equal(retained.visitPhase, 'linger');
+  assert.equal(retained.parentId, 'agent:worker');
+  assert.equal(lingering.visitIntent.hosts[0].id, 'agent:worker');
 });
 
 test('visitor projection preserves rows and omits visit intent when the source has no primary host', () => {
@@ -274,5 +402,99 @@ test('retained visits expire observed execution leases without ending the presen
     assert.equal(lingering.execution.evidence.level, 'unknown');
     assert.deepEqual(retained.visitIntent.visitors.find(row => row.id === lingering.id)?.stateLabel, { key: 'agentState.unknown' });
     assert.equal(validate(schemasFor(P.version).office, retained).ok, true);
+  }
+});
+
+test('a Discord contact is placed and nested under the configured agent that owns its session (v2 and v3)', () => {
+  for (const P of [project2x, project3x]) {
+    const engine = createEngine({ adapter, now: () => NOW, primary: 'main' });
+    engine.ingestCanonical('agents', [
+      { id: 'main', name: 'Main', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'main-session' },
+      { id: 'worker', name: 'Worker', workspace: null, model: null, fallbackModels: [], isPrimary: false, mainSessionKey: 'worker-session' },
+    ]);
+    const primary = session('main-session', 'primary', { agentId: 'main' });
+    const worker = session('worker-session', 'primary', { agentId: 'worker' }, { parentKey: 'main-session' });
+    const visitorKey = 'agent:worker:discord:direct:person-1';
+    // The contact was initiated from Main's session, but belongs to Worker.
+    // Ownership must win over that independent session lineage.
+    const visitorSession = session(visitorKey, 'conversation-direct', { agentId: 'worker', channel: 'discord', interlocutorId: 'discord-user:person-1' }, { parentKey: 'main-session' });
+    engine.ingestCanonical('sessions.snapshot', [primary, worker, visitorSession]);
+    engine.setGatewayConnected(true);
+    const defaults = officeDefaults();
+    const layout = { ...defaults, layout: { ...defaults.layout, agents: [...defaults.layout.agents,
+      { agentId: 'worker', match: { kind: 'agent' }, character: 'subagent', variant: 'teal', accessories: [],
+        name: null, role: null, station: 'auto', homeFloor: '2', appearance: 'auto' }] } };
+    const vm = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), canReadSessions: true,
+      configuredAgents: { worker: 'Worker' }, names: { interlocutorName: () => 'Camille' }, layout,
+      actorOf: () => ({ kind: 'system', name: 'System' }), P });
+    const lead = vm.occupants.find(row => row.sessionKey === 'worker-session');
+    const visitor = vm.occupants.find(row => row.sessionKey === visitorKey);
+    assert.ok(lead && visitor);
+    assert.equal(visitor.parentId, lead.id);
+    assert.equal(lead.parentId, P.occupantId('primary'));
+    assert.equal(vm.visitIntent.hostId, lead.id);
+    assert.deepEqual(vm.visitIntent.hosts, [{ id: lead.id, visitorIds: [visitor.id] }]);
+    assert.equal(visitor.floorId, lead.floorId);
+    assert.equal(visitor.stationUid, null);
+    assert.equal(visitor.sceneTarget.kind, 'visit');
+    assert.equal(visitor.visitLabel.key, 'office.visitingWith');
+    assert.equal(visitor.rosterDepth, 2, 'same-floor visit depth follows the backend parent tree');
+    assert.equal(visitor.parentName, null, 'a visit parent is not described as a launcher');
+    assert.equal(visitor.groupId, P.occupantId('primary'), 'nested visitor remains in the owning team group');
+    assert.ok(visitor.rosterOrder > lead.rosterOrder);
+    assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
+  }
+});
+
+test('conversation owner wins over a conversation-shaped parent bridge in both contracts', () => {
+  for (const P of [project2x, project3x]) {
+    const engine = createEngine({ adapter, now: () => NOW, primary: 'main' });
+    engine.ingestCanonical('agents', [
+      { id: 'main', name: 'Main', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'main-session' },
+      { id: 'worker', name: 'Worker', workspace: null, model: null, fallbackModels: [], isPrimary: false, mainSessionKey: 'worker-session' },
+    ]);
+    const bridgeKey = 'agent:main:discord:direct:bridge';
+    const contactKey = 'agent:worker:discord:direct:contact';
+    engine.ingestCanonical('sessions.snapshot', [
+      session('main-session', 'primary', { agentId: 'main' }),
+      session('worker-session', 'primary', { agentId: 'worker' }),
+      session(bridgeKey, 'conversation-direct', { agentId: 'main', channel: 'discord', interlocutorId: 'discord-user:100000000000000002' }),
+      session(contactKey, 'conversation-direct', { agentId: 'worker', channel: 'discord', interlocutorId: 'discord-user:100000000000000003' }, { parentKey: bridgeKey }),
+    ]);
+    engine.setGatewayConnected(true);
+    const vm = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), canReadSessions: true,
+      names: { interlocutorName: () => 'Contact' }, actorOf: () => ({ kind: 'system', name: 'System' }), P });
+    const worker = vm.occupants.find(row => row.sessionKey === 'worker-session');
+    const bridge = vm.occupants.find(row => row.sessionKey === bridgeKey);
+    const contact = vm.occupants.find(row => row.sessionKey === contactKey);
+    assert.ok(worker && bridge && contact);
+    assert.equal(contact.parentId, worker.id, 'the owning agent wins over the conversation-shaped parent bridge');
+    assert.equal(contact.parentId === bridge.id, false);
+    assert.equal(vm.visitIntent.hosts.find(group => group.visitorIds.includes(contact.id)).id, worker.id);
+    assert.equal(contact.visitLabel.params.name, worker.name);
+    assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
+  }
+});
+
+test('a conversation with no resolvable owner never falls back to an unrelated primary', () => {
+  for (const P of [project2x, project3x]) {
+    const engine = createEngine({ adapter, now: () => NOW, primary: 'main' });
+    engine.ingestCanonical('agents', [
+      { id: 'main', name: 'Main', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'main-session' },
+    ]);
+    const contactKey = 'agent:missing:discord:direct:contact';
+    engine.ingestCanonical('sessions.snapshot', [
+      session('main-session', 'primary', { agentId: 'main' }),
+      session(contactKey, 'conversation-direct', { agentId: 'missing', channel: 'discord', interlocutorId: 'discord-user:100000000000000004' }, { parentKey: 'main-session' }),
+    ]);
+    engine.setGatewayConnected(true);
+    const vm = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), canReadSessions: true,
+      names: { interlocutorName: () => 'Contact' }, actorOf: () => ({ kind: 'system', name: 'System' }), P });
+    const contact = vm.occupants.find(row => row.sessionKey === contactKey);
+    assert.ok(contact, 'unresolved conversations remain visible');
+    assert.equal(contact.parentId, null);
+    assert.equal(contact.visitPhase, undefined);
+    assert.equal(vm.visitIntent, undefined, 'no visit is assigned to the unrelated primary');
+    assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
   }
 });

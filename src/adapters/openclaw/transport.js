@@ -38,7 +38,11 @@ class Gateway extends EventEmitter {
     super();
     this.url = opts.url;
     this.gatewayToken = opts.gatewayToken;
-    this.scopes = ['operator.read'];
+    // The long-lived ingestion socket is read-only. A one-shot conversation
+    // writer may request only operator.write on its own short-lived socket.
+    const scopes=opts.scopes||['operator.read'];
+    if(!Array.isArray(scopes)||!scopes.length||scopes.some(scope=>!['operator.read','operator.write'].includes(scope))||new Set(scopes).size!==scopes.length)throw new TypeError('invalid Gateway scopes');
+    this.scopes = [...scopes];
     // §12.1: construction never throws. No token or no usable identity → `notConfigured` (a category), and
     // start() never connects; the server still boots and serves.
     this.notConfigured = null;

@@ -37,14 +37,15 @@ function createFacades(db, options = {}) {
   const personIdForLegacy = () => legacyPersonId(db, options);
   const runtimeReferences = require('../runtime-references').createRuntimeReferences(db);
   const valid = (schema, v, table) => { if (check(schema, v).ok) return true; onInvalid(table); return false; };
-  const parseRow = (text, schema, table) => {
+  const parseRow = (text, schema, table, connectors) => {
     let v;
-    try { v = P(text); } catch (_) { onInvalid(table); return null; }
+    try { v = P(text); if(connectors)v={...v,connectorIds:P(connectors)}; } catch (_) { onInvalid(table); return null; }
     v = mapLegacyActors(v, personIdForLegacy());
     return valid(schema, v, table) ? runtimeReferences.project(v) : null;
   };
 
   // ---- projects (row = the module's project row) --------------------------------------------
+  const hasProvenance=db.prepare('PRAGMA table_info(project_sources)').all().some(row=>row.name==='connector_ids_json');
   const q = {
     rowGet: db.prepare('SELECT * FROM projects WHERE id = ?'),
     turnGet: () => db.prepare('SELECT summary_turn FROM projects WHERE id = ?'),
@@ -54,9 +55,9 @@ function createFacades(db, options = {}) {
       VALUES (:id, :name, :status, :priority, :summary, :summary_meta_json, :last_activity_at, :revision, :created_at, :archived_at)
       ON CONFLICT (id) DO UPDATE SET name = excluded.name, status = excluded.status, priority = excluded.priority, summary = excluded.summary,
         summary_meta_json = excluded.summary_meta_json, last_activity_at = excluded.last_activity_at, revision = excluded.revision, archived_at = excluded.archived_at`),
-    srcGet: db.prepare('SELECT data_json FROM project_sources WHERE project_id = ? ORDER BY rowid'),
+    srcGet: db.prepare('SELECT data_json'+(hasProvenance?', connector_ids_json':'')+' FROM project_sources WHERE project_id = ? ORDER BY rowid'),
     srcDel: db.prepare('DELETE FROM project_sources WHERE project_id = ?'),
-    srcIns: db.prepare('INSERT INTO project_sources (id, project_id, kind, ref_key, data_json) VALUES (?, ?, ?, ?, ?)'),
+    srcIns: db.prepare(hasProvenance?'INSERT INTO project_sources (id, project_id, kind, ref_key, data_json, connector_ids_json) VALUES (?, ?, ?, ?, ?, ?)':'INSERT INTO project_sources (id, project_id, kind, ref_key, data_json) VALUES (?, ?, ?, ?, ?)'),
     flagGet: db.prepare('SELECT data_json FROM project_flags WHERE project_id = ? ORDER BY rowid'),
     flagDel: db.prepare('DELETE FROM project_flags WHERE project_id = ?'),
     flagIns: db.prepare('INSERT INTO project_flags (project_id, kind, key, data_json) VALUES (?, ?, ?, ?)'),
@@ -104,10 +105,10 @@ function createFacades(db, options = {}) {
 
   // per-project lists, replaced whole by the logic (set = delete + insert, in list order)
   const listFacade = (get, del, insert, schema, table) => ({
-    get: (id) => { if (!q.rowGet.get(id)) return undefined; return get.all(id).map((r) => parseRow(r.data_json, schema, table)).filter(Boolean); },
+    get: (id) => { if (!q.rowGet.get(id)) return undefined; return get.all(id).map((r) => parseRow(r.data_json, schema, table, r.connector_ids_json)).filter(Boolean); },
     set(id, list) { del.run(id); for (const x of list) { if (!check(schema, x).ok) throw new Error(table + ' value rejected by its schema'); insert(id, x); } return this; },
   });
-  const sources = listFacade(q.srcGet, q.srcDel, (id, s) => q.srcIns.run(s.id, id, s.kind, refKeyOf(s.kind, s.ref), J(s)), sourceSchema, 'project_sources');
+  const sources = listFacade(q.srcGet, q.srcDel, (id, s) => q.srcIns.run(s.id, id, s.kind, refKeyOf(s.kind, s.ref), J(s), ...(hasProvenance?[s.connectorIds?J(s.connectorIds):null]:[])), sourceSchema, 'project_sources');
   const flags = listFacade(q.flagGet, q.flagDel, (id, f) => q.flagIns.run(id, f.kind, f.key, J(f)), flagSchema, 'project_flags');
   const overrides = {
     get: (id) => (q.rowGet.get(id) ? q.ovGet.all(id).map((r) => ({ personId: r.person_id, role: r.role, hidden: !!r.hidden, added: !!r.added })) : undefined),
@@ -186,6 +187,14 @@ function createFacades(db, options = {}) {
 }
 
 class SqlProjectsRepository extends MemoryRepository {
+  _captureSourceProvenance(id,previous,next) {
+    // Automatic annotation must preserve every raw row, including rows the
+    // read facade quarantines. This runs inside capture's existing transaction.
+    const hasColumn=this.db.prepare('PRAGMA table_info(project_sources)').all().some(row=>row.name==='connector_ids_json');
+    if(!hasColumn)return false; // pre-030 repository readers remain compatible
+    const update=this.db.prepare("UPDATE project_sources SET connector_ids_json=? WHERE id=? AND project_id=? AND kind='sessionGroup'");
+    for(let n=0;n<next.length;n++)if(next[n]!==previous[n])update.run(J(next[n].connectorIds),next[n].id,id);
+  }
   constructor(db, options = {}) {
     super(Object.assign({}, options, { persons: [] }));
     this.db = db;

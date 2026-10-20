@@ -55,8 +55,8 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
     // Explicit legacy compatibility only. A native key is never looked up in N sources.
     return { instance: enabled().find(i => i.id === 'legacy'), local: key };
   };
-  const sender = (i, raw) => raw && { ...raw, runtime: i.id,
-    id: raw.kind === 'agent' ? 'agent:' + id(i, 'agent', raw.id.replace(/^agent:/, '')) : raw.kind === 'human' && i.engine.senderPeople().some(p => p.id === raw.id) ? raw.id : id(i, raw.kind === 'tool' ? 'tool' : 'sender', raw.id),
+  const sender = (i, raw, knownPeople) => raw && { ...raw, runtime: i.id,
+    id: raw.kind === 'agent' ? 'agent:' + id(i, 'agent', raw.id.replace(/^agent:/, '')) : raw.kind === 'human' && knownPeople?.has(raw.id) ? raw.id : id(i, raw.kind === 'tool' ? 'tool' : 'sender', raw.id),
     ...(raw.delegation ? { delegation: { ...raw.delegation, sessionKey: id(i, 'session', raw.delegation.sessionKey) } } : {}) };
   const lineage = (i, v) => (v === undefined ? {} : { spawnedBy: normaliseLineage(v, { scope: { instance: i.id } }) });
   const agent = (i, raw) => ({ ...plain(raw), id: id(i, 'agent', raw.id), mainSessionKey: id(i, 'session', raw.mainSessionKey), ...lineage(i, raw.spawnedBy) });
@@ -84,20 +84,29 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
       group: id(i, 'session', row.group) };
   };
   const flow = (i, raw) => ({ ...plain(raw), id: id(i, 'flow', raw.id), agentId: id(i, 'agent', raw.agentId), sessionKey: id(i, 'session', raw.sessionKey) });
-  const trace = (i, raw) => raw && { ...plain(raw), sessionKey: id(i, 'session', raw.sessionKey),
-    participants: raw.participants?.map(p => sender(i, p)), events: raw.events.map(e => ({ ...e,
-      id: id(i, 'event', JSON.stringify([raw.sessionKey, e.id])), senderInfo: sender(i, e.senderInfo),
-      ...(e.callId != null ? { callId: id(i, 'tool', JSON.stringify([raw.sessionKey, e.callId])) } : {}) })) };
+  const trace = (i, raw) => {
+    if (!raw) return null;
+    // senderPeople can query the persistent identity store. Resolve it once per
+    // transcript projection, rather than once for every human event in history.
+    const senders = [...(raw.participants || []), ...(raw.events || []).map(event => event.senderInfo)];
+    const knownPeople = senders.some(row => row?.kind === 'human')
+      ? new Set((i.engine.senderPeople() || []).map(person => person.id)) : new Set();
+    return { ...plain(raw), sessionKey: id(i, 'session', raw.sessionKey),
+      participants: raw.participants?.map(p => sender(i, p, knownPeople)), events: raw.events.map(e => ({ ...e,
+        id: id(i, 'event', JSON.stringify([raw.sessionKey, e.id])), senderInfo: sender(i, e.senderInfo, knownPeople),
+        ...(e.callId != null ? { callId: id(i, 'tool', JSON.stringify([raw.sessionKey, e.callId])) } : {}) })) };
+  };
   function fault(instance, category) {
     instance.failure = category;
     instance.engine?.setSourceDown('runtime', true, category);
     events.emit('change', { type: 'Runtime', runtime: instance.id });
   }
-  async function bounded(instance, fn) {
+  // Reads use the short engine budget; long commands (agent turns) pass their own.
+  async function bounded(instance, fn, ms = timeoutMs) {
     let timer;
     try {
       const result = await Promise.race([Promise.resolve().then(()=>{checkDispatchAuthority();return fn();}), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(Object.assign(new Error('runtime operation timed out'), { code: 'ETIMEOUT' })), timeoutMs);
+        timer = setTimeout(() => reject(Object.assign(new Error('runtime operation timed out'), { code: 'ETIMEOUT' })), ms);
       })]);
       if (result?.ok !== false) { instance.failure = null; instance.engine?.setSourceDown('runtime', false); }
       return result;
@@ -221,7 +230,13 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
     runtime: () => preferred()?.engine.runtime() || null,
     runtimes: runtimeRows, runtimeFor: key => owner(key, parseId(key)?.entity).instance?.engine.runtime() || null,
     // T-0058: the connector instance that owns a session (its id, adapter, name and adapter-declared mark)
-    connectorOf: key => { const i = owner(key, 'session').instance; if (!i?.engine) return null; const c = i.engine.connectorOf(); return { ...c, id: i.id, adapter: i.adapter || c.adapter, name: i.name || c.name }; },
+    connectorById: runtimeId => {
+      const i=instances.find(row=>row.id===runtimeId);if(!i)return null;
+      let c=i.engine?.connectorOf();
+      if(!c){try{const definition=require('../adapters').adapterById(i.adapter).definition;c={adapter:definition.id,name:definition.name,mark:definition.mark,capabilities:{projectHints:typeof definition.projectHints==='function'}};}catch{return null;}}
+      return {...c,id:i.id,adapter:i.adapter||c.adapter,name:i.name||c.name};
+    },
+    connectorOf: key => facade.connectorById(owner(key,'session').instance?.id),
     runtimeForInstance: key => enabled().find(i => i.id === key)?.engine.runtime() || null,
     config: () => preferred()?.engine.config() || null, host: () => core?.host() || preferred()?.engine.host() || null,
     gateway: () => ({ ...(preferred()?.engine.gateway() || {}), connected: enabled().some(i => i.engine.gateway().connected) }),

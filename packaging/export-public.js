@@ -4,8 +4,10 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..');
 const { plan } = require('../scripts/sync-design');
+const git = (args, options = {}) => execFileSync('git', ['-c', `safe.directory=${ROOT}`, ...args], { cwd: ROOT, ...options });
 function exportTree(dest) {
-  const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: ROOT }).toString().trim();
+  // A container may bind-mount the checkout with a different owner. Trust only this exact source root, for this read-only query.
+  const gitRoot = git(['rev-parse', '--show-toplevel']).toString().trim();
   if (fs.realpathSync(gitRoot) !== fs.realpathSync(ROOT)) throw new Error('source must be its own Git checkout; initialize the exported repository first');
   dest = path.resolve(dest);
   if (dest === ROOT || ROOT.startsWith(dest + path.sep)) throw new Error('destination must not contain the source tree');
@@ -18,8 +20,8 @@ function exportTree(dest) {
   sourceAssets.add('design/assets/Office/monitor-screens/manifest.json');
   // ls-files --cached also lists tracked files deleted in the worktree. Export the current tree,
   // including staged/unstaged removals, rather than attempting to copy those index-only paths.
-  const deleted = new Set(execFileSync('git', ['ls-files', '-z', '--deleted'], { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter(Boolean));
-  const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter((file) => file && !deleted.has(file));
+  const deleted = new Set(git(['ls-files', '-z', '--deleted'], { maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter(Boolean));
+  const files = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { maxBuffer: 256 * 1024 * 1024 }).toString().split('\0').filter((file) => file && !deleted.has(file));
   // The built frontend is intentionally ignored by git, but needed in the exported checkout.
   function built(dir) {
     for (const entry of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {

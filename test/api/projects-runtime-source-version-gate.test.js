@@ -139,3 +139,62 @@ test('projects-only reader gets identical public not-found bodies for known and 
     card.sourceDescriptors?.some(descriptor => descriptor.kind === 'runtime')), false);
   assert.equal(hiddenBoard.json.data.sourceFilters.some(filter => filter.source?.kind === 'runtime'), false);
 });
+
+test('team project portraits require office.read in v2/v3 HTTP and SSE projections', async t => {
+  const teamId = 'team:portrait-permission';
+  const leadId = 'member:portrait-permission-lead';
+  const observedAt = Date.now();
+  const snapshot = { revision: 1, observedAt,
+    team: { id: teamId, label: 'Portrait permission team', status: 'active', observedAt },
+    members: [
+      { id: leadId, teamId, name: 'Project Lead', roleKind: 'lead', parentMemberId: null,
+        runtimeKind: 'openclaw', hostAgentId: null, status: 'idle' },
+      { id: 'member:portrait-permission-child', teamId, name: 'Project Builder', roleKind: 'member', parentMemberId: leadId,
+        runtimeKind: 'codex', hostAgentId: null, status: 'working' },
+    ], tasks: [], reviews: [], diagnostics: { skippedTaskCount: 0, skippedMemberCount: 0 },
+    privateMemberSessionKeys: {}, privateMemberSessionRefs: {} };
+  const source = { detected: true, hasHerdr: false, hasTeamStore: true, enabled: true,
+    teamCapabilities: { projectSource: { id: 'agent-team-pm', label: 'Agent Team PM' }, teamTasks: { write: false } },
+    start() {}, close() {}, onChange: () => () => {}, getSnapshot: () => snapshot };
+  const h = await settingsFixture({ enforceAuthorization: true, orchestratorTeams: source });
+  t.after(() => h.close());
+
+  h.api.topics.invalidate('projects');
+  const ownerBoard = await h.get('/api/v3/views/projects');
+  assert.equal(ownerBoard.status, 200, ownerBoard.text);
+  const card = ownerBoard.json.data.columns.flatMap(column => column.cards).find(row => row.origin === 'orchestrator-team');
+  assert.ok(card, 'the authorized owner sees the team project');
+  const ownerDetail = await h.get(`/api/v3/views/projects/${encodeURIComponent(card.id)}`);
+  assert.equal(ownerDetail.status, 200, ownerDetail.text);
+  assert.ok(ownerDetail.json.data.teamProject.roster.members.some(row => row.portrait.look),
+    'the owner with office.read sees the canonical Office portrait');
+
+  const owner = h.store.users.owner();
+  const context = { userId: owner.id, authGeneration: owner.auth_generation, requestId: 'req_portrait_reader', authorize: () => {} };
+  const invite = h.store.userManagement.invite({ name: 'Project team reader', email: 'portrait-reader@example.invalid', roleId: 'rol_reader' }, context);
+  h.store.userManagement.accept({ token: invite.token, purpose: 'invite', passwordHash: await hashPassword('synthetic-portrait-reader-password') },
+    { requestId: 'req_portrait_reader_accept' });
+  const reader = h.store.users.byId(invite.user.id);
+  for (const [resource, level] of [['projects', 'read'], ['teams', 'read'], ['office', 'none']]) {
+    h.store.db.prepare('INSERT INTO user_overrides(user_id,resource,level) VALUES (?,?,?)').run(reader.id, resource, level);
+  }
+  h.cookie = 'taco_sess=' + h.auth.signSession({ userId: reader.id, authGeneration: reader.auth_generation,
+    sid: 'synthetic-portrait-reader-session', exp: Date.now() + 60_000 });
+
+  const assertNeutral = data => {
+    const rows = data.teamProject.roster.members;
+    assert.equal(rows.length, 2);
+    for (const row of rows) assert.deepEqual(row.portrait, { look: null, avatarUrl: null },
+      'a projects+teams reader without office.read receives no Office-derived portrait');
+  };
+  for (const version of [2, 3]) {
+    const detail = await h.get(`/api/v${version}/views/projects/${encodeURIComponent(card.id)}`);
+    assert.equal(detail.status, 200, detail.text);
+    assertNeutral(detail.json.data);
+    const stream = openSse(h.base, `/api/v${version}/stream?topics=${encodeURIComponent('project:' + card.id)}`, { cookie: h.cookie });
+    try {
+      const frame = await stream.next(event => event.event === 'snapshot' && event.data?.topic === 'project:' + card.id);
+      assertNeutral(frame.data.data);
+    } finally { stream.close(); }
+  }
+});

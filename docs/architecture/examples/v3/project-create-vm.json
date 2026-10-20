@@ -1,0 +1,53 @@
+{
+  "data": {
+    "targets": [
+      {
+        "id": "ca_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "name": "Atlas",
+        "portrait": {
+          "look": null,
+          "avatarUrl": null,
+          "alt": "Atlas"
+        },
+        "provider": {
+          "id": "runtime-codex",
+          "label": {
+            "key": "runtime.codex"
+          },
+          "mark": {
+            "monogram": "CX",
+            "color": "#3f5365",
+            "providerName": "Codex",
+            "logo": "/assets/connectors/codex.svg",
+            "logoDark": "/assets/connectors/codex-dark.svg"
+          }
+        },
+        "stateLabel": {
+          "key": "chat.agent.available"
+        },
+        "helpLabel": {
+          "key": "project.create.assignHelp",
+          "params": {
+            "name": "Atlas"
+          }
+        },
+        "capabilities": {
+          "sendMessage": true
+        }
+      }
+    ],
+    "defaultTargetId": "ca_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "emptyLabel": {
+      "key": "project.create.noTargets"
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "projectCreate",
+      "rev": 1
+    }
+  }
+}

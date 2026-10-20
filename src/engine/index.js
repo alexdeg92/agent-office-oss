@@ -33,6 +33,7 @@ const C = require('./model/canonical');
 const { Session: SessionContract } = require('./model/session');
 // PM audit (B): canonical values are stored as entity instances (frozen, validated, explicit nulls)
 const M = require('../model');
+const { createOrchestrationSources, compareProjection: compareOrchestrationProjection, MAX_PARITY_SURFACES } = require('./orchestration-sources');
 const { resolvePrimaryAgent } = require('./derive/primary-agent');
 const { createHealthChecks } = require('./health-checks');
 const { resolveRunIdentity } = require('./run-identity');
@@ -48,7 +49,7 @@ function declaredVocabulary(schemas) {
 
 // Store tables whose rows are validated on read; an invalid row is reported as store.invalid on these (S5).
 const STORE_CHANNELS = ['store.quarantine', 'store.interlocutor_cache', 'store.audit_log', 'store.office_agents_seen', 'store.runtime_aliases', 'config.primary',
-  'core:vm.health', // legacy channel used by pre-canonical HealthVM validation reports
+  'core:vm.health', 'canonical.orchestrationSources', // legacy health + canonical source admission diagnostics
   // PM audit (B): a VM that failed its runtime check (vm/check.js); one channel per VM
   ...['meta', 'me', 'office', 'chat', 'flows', 'flow', 'access', 'interlocutor', 'logs', 'session', 'skills', 'skill', 'health', 'projects', 'project',
     'history', 'candidates', 'layout', 'prefs', 'settings'].flatMap((n) => ['vm.' + n, 'vm.v3.' + n])];   // G5: 'vm.v3.<name>' for contract 3.0
@@ -104,6 +105,12 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   // They are deliberately kept outside canonical entities and VM projections.
   const identitySessionRefs = new Map();
   const ev = new EventEmitter();
+  const orchestrationSourceRegistry = createOrchestrationSources({ now,
+    onIssue: ({ sourceId, code }) => quarantine.record({ source: sourceId, channel: 'canonical.orchestrationSources',
+      code: 'shape.invalid', severity: 'warn', path: '$.canonical.orchestration', detail: code }),
+    onChange: () => ev.emit('change', { type: 'OrchestrationSource' }),
+  });
+  const shadowParity = new Map();
   let openclawVersion = null;
 
   // ---- source freshness, per channel (R1-03) ------------------------------------------------
@@ -161,8 +168,11 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   let runExpiryTimer = null, runExpiryAt = null, engineClosed = false;
   const notifiedRunExpiries = new Map();
   const transcriptBudget = require('./transcript-budget'), transcriptKeys = new Map();
+  const transcriptByteSizes = new Map();
+  let cachedTranscriptBytes = 0;
   const forgetTranscript = (key, { activity = false } = {}) => {
-    canon.transcripts.delete(key); fullTranscripts.delete(key); conversationCounts.delete(key);
+    if (canon.transcripts.delete(key)) cachedTranscriptBytes = Math.max(0, cachedTranscriptBytes - (transcriptByteSizes.get(key) || 0));
+    transcriptByteSizes.delete(key); fullTranscripts.delete(key); conversationCounts.delete(key);
     lastJson.delete('canonical.transcript#' + key); outcomes.delete('transcript#' + key);
     registry.delete('canonical.transcript#' + key); if (activity) { observed.delete(key); scheduleRunExpiry(); }
     transcriptBudget.release(transcriptKeys.get(key)); transcriptKeys.delete(key);
@@ -256,15 +266,16 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   const fullTranscripts = new Set(); // opened conversations retain all turns until their cached transcript is evicted
   const conversationCounts = new Map(); // raw user/assistant counts before tail-window clipping; no tool results
   function keepTranscript(key, t) {
+    cachedTranscriptBytes = Math.max(0, cachedTranscriptBytes - (transcriptByteSizes.get(key) || 0));
     canon.transcripts.delete(key); canon.transcripts.set(key, t);
-    const bytes = () => [...canon.transcripts.values()].reduce((n, v) => n + Buffer.byteLength(JSON.stringify(v)), 0);
-    while (canon.transcripts.size > TRANSCRIPTS_MAX || adapter.transcriptBounds?.bytes && bytes() > adapter.transcriptBounds.bytes) {
+    const size = Buffer.byteLength(JSON.stringify(t)); transcriptByteSizes.set(key, size); cachedTranscriptBytes += size;
+    while (canon.transcripts.size > TRANSCRIPTS_MAX || adapter.transcriptBounds?.bytes && cachedTranscriptBytes > adapter.transcriptBounds.bytes) {
       const oldest = canon.transcripts.keys().next().value;
       forgetTranscript(oldest);
     }
     if (adapter.transcriptBounds && canon.transcripts.has(key)) {
       if (!transcriptKeys.has(key)) transcriptKeys.set(key, {});
-      transcriptBudget.reserve(transcriptKeys.get(key), Buffer.byteLength(JSON.stringify(t)), () => forgetTranscript(key));
+      transcriptBudget.reserve(transcriptKeys.get(key), size, () => forgetTranscript(key));
     }
     if (typeof adapter.projectHints !== 'function') return;
     let hints = []; try { hints = adapter.projectHints(t) || []; } catch (_) { hints = []; }
@@ -405,7 +416,9 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
       const agentOf = (id) => { const a = canon.agents.find((a) => a.id === id); return a ? { ...a, id: 'agent:' + a.id } : null; };
       const context = { ...senderContext(), runtime: adapter.id || 'generic', sessionKey: key, session,
         agent: agentOf(session?.class.agentId), parentAgent: agentOf(reg.get(session?.parentKey)?.class.agentId), agentOf, sessionOf: (key) => reg.get(key) };
-      const t = N.transcript(key, v, now(), fullTranscripts.has(key) ? Infinity : undefined, issueFn(rec), context);
+      const raw = N.transcript(key, v, now(), fullTranscripts.has(key) ? Infinity : undefined, issueFn(rec), context);
+      const { transcript: t, repaired } = require('./model/transcript').normalizeTranscriptEvents(raw, key);
+      if (repaired) rec({ code: 'transcript.events.repaired', severity: 'warn', path: '$.events', detail: String(repaired) });
       const e = admit(C.Transcript, 'transcript', t, rec);
       if (e) { conversationCounts.set(key, v.messages.filter((m) => m.role === 'user' || m.role === 'assistant').length); keepTranscript(key, e); }
     },
@@ -475,7 +488,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   }
   // The one runtime projection VMs read (no VM reads a raw channel, §12.4).
   // T-0058: the connector that owns a session (one engine = one connector instance); adapter-declared mark
-  function connectorOf() { return { id: runtimeId || 'legacy', adapter: adapter.id, name: adapter.name, mark: markOf(adapter), ...(adapter.projectSource ? { projectSource: adapter.projectSource } : {}) }; }
+  function connectorOf() { return { id: runtimeId || 'legacy', adapter: adapter.id, name: adapter.name, mark: markOf(adapter), capabilities: { projectHints: typeof adapter.projectHints==='function' }, ...(adapter.projectSource ? { projectSource: adapter.projectSource } : {}) }; }
   function runtime() {
     return { adapterId: adapter.id, name: adapter.name, mark: markOf(adapter), gatewayLabel: adapter.gatewayLabel || adapter.name, gatewayLabels: adapter.gatewayLabels || null, version: gateway.version, protocol: runtimeState.protocol,
       state: runtimeState.notConfigured ? 'not-configured' : gateway.connected ? 'connected' : 'disconnected',
@@ -513,7 +526,14 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     skills: (v, rec) => { const l = allAdmitted(C.Skill, 'skill', v, rec); if (l) canon.skills = l; },
     skillInfo: (v, rec, key) => { const e = admit(C.SkillInfo, 'skillInfo', v, rec); if (e) canon.skillInfo.set(key, e); },
     channels: (v, rec) => { const l = allAdmitted(C.Channel, 'channel', v, rec); if (l) canon.channels = l; },
-    transcript: (v, rec, key) => { const e = admit(C.Transcript, 'transcript', v, rec); if (e) keepTranscript(key, e); },
+    transcript: (v, rec, key) => {
+      // Canonical transcripts can also arrive through adapter-neutral ingest
+      // (tests, imports, and future providers). Apply the same id repair used
+      // after provider normalization before validating the keyed event rows.
+      const { transcript, repaired } = require('./model/transcript').normalizeTranscriptEvents(v, key);
+      if (repaired) rec({ code: 'transcript.events.repaired', severity: 'warn', path: '$.events', detail: String(repaired) });
+      const e = admit(C.Transcript, 'transcript', transcript, rec); if (e) keepTranscript(key, e);
+    },
     config: (v, rec) => { const e = admit(C.Config, 'config', v, rec); if (e) canon.config = e; },
     sessionGroups: (v, rec) => { const l = allAdmitted(C.SessionGroup, 'sessionGroup', v, rec); if (l) canon.sessionGroups = l; },
     hello: (v, rec) => {
@@ -799,6 +819,35 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     registryKeys: () => [...registry.keys()].sort(),
     latest: (channel, key) => registry.get(channel + (key ? '#' + key : '')),
     sources: sourceList,
+    // Checkpoint 1: canonical orchestration ingestion is engine-owned but
+    // intentionally not connected to public projections yet.
+    registerOrchestrationSource: (id, source, options) => orchestrationSourceRegistry.register(id, source, options),
+    ingestOrchestrationSource: (id, snapshot, options) => orchestrationSourceRegistry.ingest(id, snapshot, options),
+    refreshOrchestrationSource: id => orchestrationSourceRegistry.refresh(id),
+    setOrchestrationSourceEnabled: (id, enabled) => orchestrationSourceRegistry.setEnabled(id, enabled),
+    orchestrationSnapshot: orchestrationSourceRegistry.canonicalSnapshot,
+    orchestrationProjectionSnapshot: orchestrationSourceRegistry.projectionSnapshot,
+    orchestrationSourcePrivateRefs: orchestrationSourceRegistry.privateSourceRefs,
+    orchestrationSourceCapabilities: orchestrationSourceRegistry.capabilities,
+    orchestrationSourceStatus: orchestrationSourceRegistry.status,
+    // The engine owns the orchestration-aware Office roster/state/placement
+    // projection. API callers authorize the input and serialize the result.
+    buildOfficeView(options) { return require('./office/builder').buildOfficeView(this, options); },
+    compareOrchestrationProjection(surface, oldProjection, newProjection, fields) {
+      if (typeof surface !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(surface)) return null;
+      let result; try { result = compareOrchestrationProjection(oldProjection, newProjection, fields); } catch { return null; }
+      let key = surface;
+      if (!shadowParity.has(key) && shadowParity.size >= MAX_PARITY_SURFACES) key = '$overflow';
+      const previous = shadowParity.get(key) || { comparisons: 0, mismatches: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 };
+      shadowParity.set(key, { comparisons: Math.min(1_000_000, previous.comparisons + 1),
+        mismatches: Math.min(1_000_000, previous.mismatches + (result.equal ? 0 : 1)),
+        changedRows: Math.min(1_000_000, previous.changedRows + result.changedRows),
+        overflowKeys: Math.min(1_000_000, previous.overflowKeys + result.overflowKeys),
+        overflowSurfaces: Math.min(1_000_000, previous.overflowSurfaces + (key === '$overflow' && surface !== key ? 1 : 0)) });
+      return result;
+    },
+    orchestrationParityCounters: () => Object.fromEntries([...shadowParity.entries()]
+      .sort(([a], [b]) => a.localeCompare(b)).map(([surface, counts]) => [surface, { ...counts }])),
     sessions: () => reg.list().filter(row => { const id=row.class.agentId,selected=selectedAgents();return !hiddenAgents.includes(id)&&!excluded.includes(id)&&((!configuredAgents&&!managedAutoAdd)||selected.has(id)); }),
     // Activity (data-model §3): run-state only on 2026.9.8 (R6-05).
     activity: currentActivity,
@@ -808,7 +857,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     agentPresence: () => adapter.presence === 'agents',
     forgetTranscript,
     close() { engineClosed = true; if (runExpiryTimer) clearTimeout(runExpiryTimer); runExpiryTimer = null; runExpiryAt = null;
-      healthChecks.close(); for (const key of [...transcriptKeys.keys()]) forgetTranscript(key); observed.clear(); },
+      orchestrationSourceRegistry.close(); healthChecks.close(); for (const key of [...transcriptKeys.keys()]) forgetTranscript(key); observed.clear(); },
     expireObservedActivity() { const changed = clearExpiredEvidence(); scheduleRunExpiry(); return changed; },
     session: (key) => reg.get(key),
     sessionsMeta: () => reg.meta(),

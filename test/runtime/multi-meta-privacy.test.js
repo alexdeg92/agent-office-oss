@@ -11,12 +11,13 @@ for(const version of [2,3]) test('S36-01 v'+version+' anonymous bootstrap exclud
  await waitFor(()=>h.engine.agents().some(a=>a.id.startsWith('rt:claude:')));
  const id=h.engine.agents().find(a=>a.id.startsWith('rt:claude:')).id,local=parseId(id).local;
  await waitFor(()=>h.engine.instances.find(i=>i.id==='claude').runtime.files.rows().every(r=>r.initialized));
- assert.match(h.engine.agents().find(a=>a.id===id).name,/^Project [a-f0-9]{12}$/);
+ assert.equal(h.engine.agents().find(a=>a.id===id).name,'Claude Code project',
+  'anonymous-safe name is the adapter’s fixed fallback, never a discovered project basename');
  const owner=h.cookie, expired='taco_sess='+h.auth.signSession({...h.auth.verifySession(owner.split('=')[1]),exp:Date.now()-1000});
  const meta=async cookie=>h.request('GET','/api/v'+version+'/meta',undefined,{cookie});
  const anonymous=async(strict=true)=>{
   for(const cookie of ['', 'taco_sess=invalid',expired]) {
-   const r=await meta(cookie);assert.equal(r.status,200,r.text);assert.ok(!r.text.includes(SENTINEL)&&!r.text.includes(RENAMED),'anonymous entire response must not contain private names');
+   const r=await meta(cookie);assert.equal(r.status,200,r.text);assert.ok(!r.text.includes(SENTINEL)&&!r.text.includes(RENAMED)&&!r.text.includes(dir),'anonymous entire response must not contain private names or project paths');
    if(strict){assert.equal(r.json.data.primaryAgent,null);assert.equal(r.json.data.runtime,null);if(version===3){assert.deepEqual(r.json.data.runtimes,[]);assert.equal(r.json.data.instance.name,null);assert.ok(!Object.keys(r.json.data.labels).some(k=>k.startsWith('agent.rt:')));}}
    assert.ok(r.json.data.bootId);assert.equal(r.headers.get('cache-control'),'no-store');if(strict){assert.ok(r.headers.get('vary').includes('Cookie'));assert.deepEqual(r.json.meta.stale,[]);}
   }

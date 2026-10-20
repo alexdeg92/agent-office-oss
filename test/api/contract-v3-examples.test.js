@@ -26,6 +26,8 @@ const ACCESS_CONTRACT = [
   'external-access-checks-request', 'external-access-check-status-request', 'external-access-cancel-request',
   'external-access-check-status', 'external-access-check-status-waiting', 'external-access-error',
 ];
+const CHAT_CONTRACT = ['chat-agents-vm', 'chat-agent-sessions-vm', 'chat-session-vm', 'chat-attachment-result', 'chat-message-request', 'chat-read-ack-result'];
+const PROJECTS_CONTRACT = ['project-create-vm', 'project-kickoff-vm'];
 
 // api-v3.md D1–D8: the structural differences from 2.x, per VM (value-only changes are checked in 2.)
 const SHAPE_DELTAS = {
@@ -36,7 +38,12 @@ const SHAPE_DELTAS = {
   'access-vm': ['$.interlocutors[].channel: unexpected', '$.interlocutors[].name: null, but the example never allows null here', '$.interlocutors[].access.policy: null, but the example never allows null here'],
   'interlocutor-vm': ['$.channel: unexpected'],
   'flow-detail-vm': ['$.job.sessionTarget: missing', '$.job.wakeMode: missing', '$.job.ext: unexpected'],
-  'board-vm': ['$.agent: unexpected'],
+  'board-vm': ['$.agent: unexpected', '$.controls: unexpected', '$.columns[].label: unexpected',
+    '$.columns[].taskCount: unexpected', '$.columns[].summaryLabel: unexpected',
+    '$.columns[].cards[].flags.visible[].removable: unexpected',
+    '$.columns[].cards[].people.visible[].state: null, but the example never allows null here',
+    '$.columns[].cards[].thumb.repoLabel: null, but the example never allows null here',
+    '$.columns[].cards[].thumb.url: null, but the example never allows null here'],
 };
 
 describe('G5 · contract 3.0 examples', () => {
@@ -45,8 +52,10 @@ describe('G5 · contract 3.0 examples', () => {
       assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.types.json')), `${n}: sidecar`);
       assert.ok(v3(n).data && v3(n).meta, n);
     }
-    assert.deepEqual([...V3].sort(), [...MIGRATION_V3, ...ACCESS_CONTRACT].sort(), 'every v3 JSON example belongs to an explicit category');
+    assert.deepEqual([...V3].sort(), [...MIGRATION_V3, ...ACCESS_CONTRACT, ...CHAT_CONTRACT, ...PROJECTS_CONTRACT].sort(), 'every v3 JSON example belongs to an explicit category');
     for (const n of ACCESS_CONTRACT) assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.json')), `${n}: registered access contract`);
+    for (const n of CHAT_CONTRACT) assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.json')), `${n}: registered chat contract`);
+    for (const n of PROJECTS_CONTRACT) assert.ok(fs.existsSync(path.join(EX, 'v3', n + '.json')), `${n}: registered project contract`);
     assert.equal(v3('meta-vm').data.contractVersion, require('../../src/api/v2/envelope').CONTRACT_VERSION_V3); assert.equal(v3('meta-vm').data.apiVersion, 3);
   });
 
@@ -83,6 +92,34 @@ describe('G5 · contract 3.0 examples', () => {
       const r = sch.validate(VM_SCHEMAS_V3[NAME[n]], v3(n).data);
       assert.deepEqual(r.ok ? [] : r.issues.filter((i) => i.severity === 'error').map((i) => i.path + ' ' + i.detail), [], n);
     }
+    const chatNames = { 'chat-agents-vm': 'chatAgents', 'chat-agent-sessions-vm': 'chatAgentSessions', 'chat-session-vm': 'chatSession' };
+    for (const [n, name] of Object.entries(chatNames)) {
+      const r = sch.validate(VM_SCHEMAS_V3[name], v3(n).data);
+      assert.deepEqual(r.ok ? [] : r.issues.filter((i) => i.severity === 'error').map((i) => i.path + ' ' + i.detail), [], n);
+    }
+    const projectNames = { 'project-create-vm': 'projectCreate', 'project-kickoff-vm': 'projectKickoff' };
+    for (const [n, name] of Object.entries(projectNames)) {
+      const r = sch.validate(VM_SCHEMAS_V3[name], v3(n).data);
+      assert.deepEqual(r.ok ? [] : r.issues.filter((i) => i.severity === 'error').map((i) => i.path + ' ' + i.detail), [], n);
+    }
+  });
+
+  it('chat public IDs carry at least 192 bits of generated entropy and bodies stay within the UTF-8 page contract', () => {
+    const ids = [];
+    const walk = (value) => {
+      if (Array.isArray(value)) return value.forEach(walk);
+      if (value && typeof value === 'object') {
+        for (const [key, child] of Object.entries(value)) {
+          if (['id', 'agentId', 'teamId', 'parentId', 'sessionId', 'defaultSessionId', 'attachmentId', 'throughMessageId', 'turnId'].includes(key) && typeof child === 'string' && /^(ca|cs|ct|att|turn|msg|idem)_/.test(child)) ids.push(child);
+          walk(child);
+        }
+      }
+    };
+    for (const n of [...CHAT_CONTRACT, ...PROJECTS_CONTRACT]) walk(v3(n));
+    for (const id of ids) assert.match(id, /^(?:ca|cs|ct|att|turn|msg|idem)_[A-Za-z0-9_-]{32,}$/ , id);
+    assert.match(fs.readFileSync(path.join(EX, 'v3', 'chat-attachment-result.json'), 'utf8'), /Content-Digest.*sha-256=:[A-Za-z0-9+/]{43}=:/);
+    assert.match(v3('chat-session-vm').meta.topic.id, /^chat-session\/cs_[A-Za-z0-9_-]{32,}$/);
+    assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'docs', 'architecture', 'api-v3.md'), 'utf8'), /50 messages\/page/);
   });
 
   it('office example enumerates the rich state labels as required map entries', () => {
@@ -106,6 +143,10 @@ describe('G5 · contract 3.0 examples', () => {
       const text = JSON.stringify(v3(n));
       for (const t of CONTRACT_PERSONAL_TOKENS) assert.ok(!text.includes(t), `${n}: ${t}`);
       assert.deepEqual(walk(v3(n).data, '$', []), [], n);
+    }
+    for (const n of [...CHAT_CONTRACT, ...PROJECTS_CONTRACT]) {
+      const text = JSON.stringify(v3(n));
+      for (const t of CONTRACT_PERSONAL_TOKENS) assert.ok(!text.includes(t), `${n}: ${t}`);
     }
   });
 });

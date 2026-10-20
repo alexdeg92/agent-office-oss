@@ -16,7 +16,7 @@ const {TOPICS,ROUTES}=require('../../src/security/route-declarations');
 const {declareRoute,trackMounts,assertRouteCoverage}=require('../../src/security/route-policy');
 const {errorMiddleware}=require('../../src/api/v2/errors');
 const EX=path.resolve(__dirname,'../../docs/architecture/examples');
-const FILES={meta:'meta-vm',office:'office-vm',officeCharacters:'office-characters-vm',officeStore:'office-store-vm',flows:'flow-list-vm',flow:'flow-detail-vm',access:'access-vm',interlocutor:'interlocutor-vm',logs:'logs-page',session:'session-vm',skills:'skill-list-vm',skill:'skill-detail-vm',health:'health-vm',projects:'board-vm',project:'project-vm',history:'history-page',candidates:'candidates-vm',layout:'layout-vm',comments:'comment-thread-vm',orchestrators:'orchestrators-vm',teams:'teams-vm'};
+const FILES={meta:'meta-vm',office:'office-vm','office-scope':'office-vm',officeCharacters:'office-characters-vm',officePalette:'office-palette-vm',officeStore:'office-store-vm',flows:'flow-list-vm',flow:'flow-detail-vm',access:'access-vm',interlocutor:'interlocutor-vm',logs:'logs-page',session:'session-vm',skills:'skill-list-vm',skill:'skill-detail-vm',health:'health-vm',projects:'board-vm',project:'project-vm',projectCreate:'project-create-vm',projectKickoff:'project-kickoff-vm',history:'history-page',candidates:'candidates-vm',layout:'layout-vm',comments:'comment-thread-vm',orchestrators:'orchestrators-vm',teams:'teams-vm',chatAgents:'chat-agents-vm',chatAgentSessions:'chat-agent-sessions-vm',chatSession:'chat-session-vm'};
 const me=()=>({email:'historical@example.invalid',displayName:'Historical owner',gateway:'up',capabilities:{openclawWrites:true,storeWrites:true},sessionExpiresAt:Date.now()+60000});
 const example=(name,version)=>{
   if(name==='layoutRevision'){const layout=example('layout',version).layout;return {revision:layout.revision,updatedAt:layout.updatedAt,updatedBy:layout.updatedBy,data:layout.data};}
@@ -91,6 +91,38 @@ test('both contract versions explicitly deny each protected root before a builde
   }
   assert.throws(()=>f.projector.build(f.admin,'future-secret',()=>{throw new Error('builder entered');}),/undeclared view projection/);
 });
+test('projects projection preserves cross-stage counts while subtracting restricted source cards',t=>{
+  const f=fixture(t),board=boardWithPrivateSourceProjects(3);
+  const allCards=board.columns.flatMap(column=>column.cards);
+  const access=allCards.map(card=>({status:card.status,runtime:(card.sourceDescriptors||[]).some(source=>source.kind==='runtime'),
+    team:card.origin==='orchestrator-team',sourceIds:(card.sourceDescriptors||[]).map(source=>source.id)}));
+  const counts=[{id:'all',count:access.length},...board.columns.map(column=>({id:column.id,count:access.filter(row=>row.status===column.id).length}))];
+  board.controls.stage.counts=structuredClone(counts);
+  board.controls.search.counts=[{id:'matches',count:access.length}];
+  Object.defineProperty(board,Symbol.for('agent-office.projects.boardAccess'),{value:{stageRows:access,sourceRows:access}});
+  // The selected-stage response contains only in-progress cards, while its
+  // control counts still describe every stage available for this query.
+  board.controls.stage.selected='in-progress';
+  board.columns=board.columns.map(column=>({...column,cards:column.id==='in-progress'?column.cards:[],count:column.id==='in-progress'?column.count:0,taskCount:column.id==='in-progress'?column.taskCount:0}));
+  for(const column of board.columns)if(column.id==='in-progress')column.cards=column.cards.filter(card=>card.status==='in-progress');
+  const unrestricted=f.projector.project(f.admin,'projects',board,{version:3});
+  assert.deepEqual(unrestricted.controls.stage.counts,counts,'authorized projection preserves all server counts');
+
+  // The reader has projects access only: runtime cards and registered team
+  // cards are withheld from both rows and counts.
+  f.set(f.reader,'projects','read');f.set(f.reader,'logs','none');f.set(f.reader,'settings.runtimes','none');f.set(f.reader,'teams','none');
+  const projected=f.projector.project(f.reader,'projects',board,{version:3});
+  const hidden=access.filter(row=>row.runtime||row.team);
+  const expected=[{id:'all',count:access.length-hidden.length},...board.controls.stage.options.filter(row=>row.id!=='all').map(option=>({
+    id:option.id,count:access.filter(row=>row.status===option.id&&!row.runtime&&!row.team).length,
+  }))];
+  assert.deepEqual(projected.controls.stage.counts,expected);
+  assert.deepEqual(projected.controls.search.counts,[{id:'matches',count:access.filter(row=>!row.runtime&&!row.team).length}],
+    'search count preserves the pre-stage matching population while withholding restricted matches');
+  assert.ok(projected.controls.stage.counts.find(row=>row.id==='todo').count>0,'other-stage counts survive selecting in-progress');
+  const framed=f.projector.frame(f.reader,'snapshot',{type:'snapshot',topic:'projects',data:projected},{version:3});
+  assert.deepEqual(framed.data,projected,'the stream frame writer accepts a VM already projected for the same principal without subtracting private rows twice');
+});
 test('admin projections preserve all domain data; every known VM projects to a valid schema with no shared mutation',t=>{
   const f=fixture(t);
   for(const version of [2,3])for(const name of [...REQUIREMENTS.keys(),'meta','me',...(version===3?['settings']:[])]) {
@@ -114,6 +146,31 @@ test('Office without logs has only agent summaries, no session navigation, cues,
     assert.equal(projected.conversationLabel.params.n,0);
     assert.ok(projected.rosterFloors.every(floor=>floor.count===floor.occupantIds.length), 'floor totals are rebuilt from visible occupants');
     assert.equal(f.projector.frame(f.reader,'cue',{type:'cue',signal:{kind:'activity'}}),null);
+  }
+});
+test('Office hides ambiguous legacy chat and every other account private-chat occupant and their counts',t=>{
+  const f=fixture(t),{scopeForAccount,sessionRefForScope}=require('../../src/api/chat-identity');
+  f.set(f.reader,'logs','read');
+  const adminScope=scopeForAccount(f.admin.id,f.store),readerScope=scopeForAccount(f.reader.id,f.store);
+  const identities=new Map([
+    ['private-admin',{class:{kind:'explicit',explicitKey:sessionRefForScope(adminScope)},usage:{total:19},run:{status:'running'}}],
+    ['private-reader',{class:{kind:'explicit',explicitKey:sessionRefForScope(readerScope)},usage:{total:23},run:{status:'running'}}],
+    ['legacy-private',{class:{kind:'explicit',explicitKey:'portal-chat'},usage:{total:29},run:{status:'running'}}],
+  ]);
+  const projector=createViewProjection({store:f.store,chatSessionForKey:key=>identities.get(key)||null});
+  for(const version of [2,3]) {
+    const raw=example('office',version);
+    raw.occupants[0].sessionKey='private-admin';raw.occupants[1].sessionKey='private-reader';raw.occupants[2].sessionKey='legacy-private';
+    raw.kpis.find(row=>row.id==='tokens').value=100;
+    if(!raw.kpis.some(row=>row.id==='runs'))raw.kpis.push({id:'runs',label:{key:'kpi.runs'},value:3,unit:'count',sub:null});
+    else raw.kpis.find(row=>row.id==='runs').value=3;
+    const admin=projector.project(f.admin,'office',raw,{version}),reader=projector.project(f.reader,'office',raw,{version});
+    const sessionKeys=vm=>vm.occupants.map(row=>row.sessionKey);
+    assert.ok(sessionKeys(admin).includes('private-admin'));assert.ok(!sessionKeys(admin).includes('private-reader')&&!sessionKeys(admin).includes('legacy-private'));
+    assert.ok(sessionKeys(reader).includes('private-reader'));assert.ok(!sessionKeys(reader).includes('private-admin')&&!sessionKeys(reader).includes('legacy-private'));
+    assert.equal(admin.kpis.find(row=>row.id==='tokens').value,48);assert.equal(reader.kpis.find(row=>row.id==='tokens').value,52);
+    assert.equal(admin.kpis.find(row=>row.id==='runs').value,1);assert.equal(reader.kpis.find(row=>row.id==='runs').value,1);
+    assert.ok(validate(schemasFor(version).office,admin).ok);assert.ok(validate(schemasFor(version).office,reader).ok);
   }
 });
 test('restricted signed-cookie Office keeps physical floors, recomputes visible counts, and withholds visit state in v2 and v3',async t=>{
@@ -293,6 +350,8 @@ test('projects-only HTTP and SSE projections withhold restricted source identiti
     const projectsHttp=await fetch('http://127.0.0.1:'+server.address().port+'/api/v'+version+'/views/projects',{headers:{cookie}});
     assert.equal(projectsHttp.status,200);const projectsBody=(await projectsHttp.json()).data;
     assert.deepEqual(projectsBody,projectSnapshot.data,`v${version} HTTP and stream share the principal projection`);
+    if(version===3)assert.equal(projectSnapshot.data.controls.search.counts[0].count,projectsBody.columns.flatMap(column=>column.cards).length,
+      'v3 SSE search facet is calculated once, without a hidden-row count oracle');
     const projectsJson=JSON.stringify(projectsBody);
     for(const privateValue of ['project-from-private-workspace','runtime:runtime-codex','private-team-name','team-source:team:private-canary'])assert.equal(projectsJson.includes(privateValue),false);
     assert.equal(projectsBody.sourceFilters.some(row=>['runtime','orchestrator-team'].includes(row.source?.kind)),false);
@@ -376,4 +435,59 @@ test('projected topic versions are payload-derived and stable after topic churn'
   assert.notEqual(f.projector.revision(f.reader,'projects',visible,3),rev,'a visible payload change receives a different wire revision');
   assert.notEqual(f.projector.fingerprint(f.reader,'projects',visible,3),hash,'SSE distinguishes visible changes with the full digest');
   assert.equal(f.projector.revision(f.reader,'projects',after,3),rev,'returning to the same visible payload restores its deterministic revision');
+});
+
+// Status actions must agree with the same caller/store/source policy as writes.
+test('project status choices are supplied only to writers in both versions', t => {
+  const f = fixture(t);
+  for (const version of [2, 3]) {
+    const vm = example('project', version), original = structuredClone(vm.statusTransitions);
+    f.set(f.reader, 'projects', 'read'); f.set(f.reader, 'logs', 'read'); f.set(f.reader, 'settings.runtimes', 'read');
+    assert.deepEqual(f.projector.project(f.reader, 'project', vm, { version }).statusTransitions, []);
+    f.set(f.reader, 'projects', 'write');
+    // These example sources require runtime and journal visibility too.
+    f.set(f.reader, 'logs', 'read'); f.set(f.reader, 'settings.runtimes', 'read');
+    assert.deepEqual(f.projector.project(f.reader, 'project', vm, { version }).statusTransitions, original);
+    assert.deepEqual(createViewProjection({ store: f.store, cfg: { readonlyStore: true } })
+      .project(f.admin, 'project', vm, { version }).statusTransitions, []);
+    assert.deepEqual(f.projector.project(f.admin, 'project', { ...vm, capabilities: { ...vm.capabilities, write: false } }, { version }).statusTransitions, []);
+    assert.deepEqual(vm.statusTransitions, original, 'projection does not mutate shared producer options');
+    assert.equal(validate(schemasFor(version).project, vm).ok, true);
+    assert.equal(validate(schemasFor(version).project, { ...vm, statusTransitions: [{ id: 'invented', label: { key: 'projectStatus.idea' } }] }).ok, false);
+  }
+});
+
+test('candidate status choices obey writer and read-only store authority', t => {
+  const f = fixture(t);
+  for (const version of [2,3]) {
+    const vm = example('candidates', version);
+    f.set(f.reader, 'projects', 'read');
+    assert.deepEqual(f.projector.project(f.reader,'candidates',vm,{version}).statusOptions,[]);
+    f.set(f.reader, 'projects', 'write');
+    assert.deepEqual(f.projector.project(f.reader,'candidates',vm,{version}).statusOptions,vm.statusOptions);
+    assert.deepEqual(createViewProjection({store:f.store,cfg:{readonlyStore:true}}).project(f.admin,'candidates',vm,{version}).statusOptions,[]);
+    assert.equal(validate(schemasFor(version).candidates,vm).ok,true);
+  }
+});
+
+test('source access rows describe effective permissions in backend order in both contracts',t=>{
+ const f=fixture(t);
+ for(const version of [2,3]){
+  const raw=example('project',version);
+  const keys=['read','write','comments','history','repository'];
+  const assertRows=vm=>{
+   assert.deepEqual(vm.capabilityRows.map(row=>row.id),keys);
+   assert.deepEqual(vm.capabilityRows,keys.map(id=>({id,label:{key:'project.team.capability.'+id},valueLabel:{key:'project.team.availability.'+String(vm.capabilities[id])}})));
+   for(const locale of ['fr','en'])for(const row of vm.capabilityRows){const labels=require('../../src/i18n').labelsFor(locale,version);assert.ok(labels[row.label.key]);assert.ok(labels[row.valueLabel.key]);}
+   assert.equal(validate(schemasFor(version).project,vm).ok,true);
+  };
+  const admin=f.projector.project(f.admin,'project',raw,{version});assertRows(admin);assert.equal(admin.capabilities.write,true);
+  f.set(f.reader,'projects','read');f.set(f.reader,'projects.comment','read');
+  const reader=f.projector.project(f.reader,'project',raw,{version});assertRows(reader);
+  assert.equal(reader.capabilities.write,false);assert.equal(reader.capabilities.comments,'read-only');assert.equal(reader.capabilities.history,'read-only');
+  f.set(f.reader,'projects.comment','none');assert.equal(f.projector.project(f.reader,'project',raw,{version}).capabilities.comments,'unsupported');
+  const readonly=createViewProjection({store:f.store,cfg:{readonlyStore:true}}).project(f.admin,'project',raw,{version});assertRows(readonly);assert.equal(readonly.capabilities.write,false);assert.equal(readonly.capabilities.comments,'read-only');
+  const unsupported=f.projector.project(f.admin,'project',{...raw,capabilities:{...raw.capabilities,write:false,comments:'unsupported',history:'unsupported',repository:'unsupported'}},{version});assertRows(unsupported);assert.equal(unsupported.capabilities.history,'unsupported');
+  assert.equal(raw.capabilities.write,true,'per-viewer policy never mutates producer');
+ }
 });

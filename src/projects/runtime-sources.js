@@ -12,7 +12,7 @@ const projectId = (sourceId, projectRef, idKey) => {
   const digest = crypto.createHmac('sha256', idKey).update(`runtime-project\0${sourceId}\0${projectRef}`).digest('hex').slice(0, 24);
   return `runtimeprj_${digest}`;
 };
-const personId = (sourceId, agentId) => `runtime-person:${hash(`${sourceId}\0${agentId}`)}`;
+const personId = (sourceId, agentId) => `per_runtime_${hash(`${sourceId}\0${agentId}`)}`;
 
 function connectorBrand(mark) {
   if (!mark || typeof mark !== 'object') return null;
@@ -84,4 +84,4 @@ function collectRuntimeProjects({ sessions = [], agents = [], connectorOf = () =
   return { projects, persons };
 }
 
-module.exports = { collectRuntimeProjects, projectId, personId };
+module.exports = { collectRuntimeProjects, projectId, personId, connectorBrand };

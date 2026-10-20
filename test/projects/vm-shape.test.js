@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const { buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, projectConflictBody, commands } = require('../../src/projects');
 const { compareExample, loadExample } = require('../helpers/contract-shape');
 const { AT, repository } = require('./helpers');
+const { validate } = require('../../src/schema');
+const { VM_SCHEMAS_V3 } = require('../../src/api/v2/vm/schemas');
 
 const ownerId = 'per_alex00000000000';
 const timmyId = 'per_0a1b2c3d4e5f6g7h';
@@ -35,19 +37,19 @@ function shapeProject() {
       { kind: 'label', key: 'interne', label: 'interne' },
     ],
     sources: [
-      { id: 'src_gh', kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' }, addedAt: AT - 4 },
+      { id: 'src_gh', kind: 'github', ref: { owner: 'example-org', repo: 'agent-office-oss' }, addedAt: AT - 4 },
       { id: 'src_ws', kind: 'workspace', ref: { path: 'dev/project/agent-office-redesign' }, addedAt: AT - 3 },
       { id: 'src_sg', kind: 'sessionGroup', ref: loadExample('project-vm').data.sources.find((s) => s.kind === 'sessionGroup').ref, addedAt: AT - 2 },
       { id: 'src_man', kind: 'manual', ref: null, addedAt: AT - 1 },
     ],
     repoStatus: { state: 'ok', lastError: null },
     repo: {
-      url: 'https://github.com/alexdeg92/agent-office-oss',
-      owner: 'alexdeg92',
+      url: 'https://github.com/example-org/agent-office-oss',
+      owner: 'example-org',
       name: 'agent-office-oss',
       defaultBranch: 'main',
-      image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/alexdeg92/agent-office-oss' },
-      ci: { state: 'failing', at: AT, url: 'https://github.com/alexdeg92/agent-office-oss/actions/runs/1' },
+      image: { kind: 'opengraph', url: 'https://opengraph.githubassets.com/1/example-org/agent-office-oss' },
+      ci: { state: 'failing', at: AT, url: 'https://github.com/example-org/agent-office-oss/actions/runs/1' },
       commits: [{ sha: '3782a7b', at: AT, author: { name: 'owner', personId: null }, message: 'Service unit' }],
       fetchedAt: AT,
     },
@@ -76,6 +78,28 @@ function historyEvents() {
 }
 
 describe('view models match the 2.4 examples', () => {
+  it('projects search/stage controls and labelled board columns in v3 only', () => {
+    const projects = [shapeProject(), { ...shapeProject(), id: 'prj_other', name: 'Other', status: 'todo' }];
+    const v3 = buildBoardVM(projects, { apiVersion: 3, search: 'Office', stage: 'in-progress' });
+    assert.equal(v3.controls.search.selected, 'Office');
+    assert.deepEqual(v3.controls.search.counts, [{ id: 'matches', count: 1 }]);
+    assert.equal(v3.controls.stage.selected, 'in-progress');
+    assert.deepEqual(v3.controls.stage.options.map(option => option.id), ['all', 'idea', 'todo', 'in-progress', 'in-review', 'shipped']);
+    assert.deepEqual(v3.columns.map(column => [column.id, column.label.key, column.taskCount, column.summaryLabel]), [
+      ['idea', 'projectStatus.idea', 0, { key: 'project.board.column.summary', params: { n: 0 } }],
+      ['todo', 'projectStatus.todo', 0, { key: 'project.board.column.summary', params: { n: 0 } }],
+      ['in-progress', 'projectStatus.in-progress', 1, { key: 'project.board.column.summary', params: { n: 1 } }],
+      ['in-review', 'projectStatus.in-review', 0, { key: 'project.board.column.summary', params: { n: 0 } }],
+      ['shipped', 'projectStatus.shipped', 0, { key: 'project.board.column.summary', params: { n: 0 } }],
+    ]);
+    assert.equal(validate(VM_SCHEMAS_V3.projects, { ...v3, filter: 'all', agent: null }).ok, true);
+    const v2 = buildBoardVM(projects);
+    assert.equal(Object.hasOwn(v2, 'controls'), false);
+    assert.equal(Object.hasOwn(v2.columns[0], 'label'), false);
+    assert.equal(v2.columns.find(column => column.id === 'in-progress').cards.length, 1,
+      'v2 keeps the established all-stage projection');
+  });
+
   it('buildProjectVM matches project-vm.json', () => {
     const vm = buildProjectVM(shapeProject(), historyEvents(), {
       persons,
@@ -107,10 +131,10 @@ describe('view models match the 2.4 examples', () => {
     assert.equal(board.sourceFilters.length, 4);
     assert.equal(board.sourceFilters.some(row => row.selected), false);
     const other = { ...project, id: 'prj_other_opaque', name: 'Other', sources: [{ id: 'src_other', kind: 'manual', ref: null, addedAt: AT }] };
-    const filtered = buildBoardVM([project, other], { filter: 'all', persons, sourceFilterId: 'src_gh' });
+    const filtered = buildBoardVM([project, other], { filter: 'all', persons, sourceFilterId: 'source:github:example-org' });
     assert.equal(filtered.columns.flatMap(row => row.cards).length, 1, 'source selection determines server membership');
-    assert.equal(filtered.sourceFilters.find(row => row.id === 'src_gh').selected, true);
-    assert.equal(filtered.sourceFilters.find(row => row.id === 'src_other').count, 1);
+    assert.equal(filtered.sourceFilters.find(row => row.id === 'source:github:example-org').selected, true);
+    assert.equal(filtered.sourceFilters.find(row => row.id === 'source:manual').count, 2);
     assert.throws(() => buildBoardVM([project], { filter: 'all', sourceFilterId: 'missing' }), /Filtre de source invalide/);
     const unresolved = buildBoardVM([project], { filter: 'all', sourceFilterId: 'missing', allowUnknownSourceFilter: true });
     assert.equal(unresolved.sourceFilterId, 'missing');
@@ -119,7 +143,7 @@ describe('view models match the 2.4 examples', () => {
 
   it('buildCandidatesVM matches candidates-vm.json', () => {
     const vm = buildCandidatesVM([{
-      key: 'gh:alexdeg92/agent-office-oss',
+      key: 'gh:example-org/agent-office-oss',
       name: 'Agent Office',
       summary: 'Tableau de bord de Timmy.',
       status: 'in-progress',
@@ -127,7 +151,7 @@ describe('view models match the 2.4 examples', () => {
       reason: 'Activité dans les 14 derniers jours.',
       labels: [{ key: 'perso', label: 'perso' }],
       sources: [
-        { kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } },
+        { kind: 'github', ref: { owner: 'example-org', repo: 'agent-office-oss' } },
         { kind: 'workspace', ref: { path: 'dev/project/agent-office-redesign' } },
         { kind: 'sessionGroup', ref: loadExample('candidates-vm').data.candidates[0].sources.find((s) => s.kind === 'sessionGroup').ref },
       ],
@@ -146,15 +170,15 @@ describe('view models match the 2.4 examples', () => {
     const result = commands.importCandidates(repo, {
       at: AT,
       candidates: [{
-        key: 'gh:alexdeg92/agent-office-oss',
+        key: 'gh:example-org/agent-office-oss',
         name: 'Agent Office',
         summary: '',
         status: 'todo',
         labels: [],
-        sources: [{ kind: 'github', ref: { owner: 'alexdeg92', repo: 'agent-office-oss' } }],
+        sources: [{ kind: 'github', ref: { owner: 'example-org', repo: 'agent-office-oss' } }],
         lastActivityAt: AT,
       }],
-      keys: ['gh:alexdeg92/agent-office-oss', 'sg:discord-user:100000000000000001'],
+      keys: ['gh:example-org/agent-office-oss', 'sg:discord-user:100000000000000001'],
     });
     assert.deepEqual(compareExample('import-result', result), []);
     assert.deepEqual(Object.keys(result.result.created[0]).sort(), ['id', 'key']);

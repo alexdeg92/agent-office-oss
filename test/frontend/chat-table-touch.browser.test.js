@@ -3,20 +3,21 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {openLayoutBrowser,browserSkipReason} from './helpers/layout-browser.js';
-const require=createRequire(import.meta.url),{chatResultsFixture}=require('../helpers/chat-results-fixture');
+const require=createRequire(import.meta.url),{chatV3UiFixture}=require('../helpers/chat-v3-ui-fixture.cjs');
 const result='**Vérifications terminées**\n\n| Contrôle | Résultat détaillé |\n| --- | --- |\n'+Array.from({length:24},(_,i)=>`| Étape ${i+1} | Contrôle complet du parcours sur téléphone et ordinateur, sans publication ni donnée privée |`).join('\n');
 for(const theme of ['light','dark'])test(`touch swipe from a Chat table scrolls the conversation 390 ${theme}`,{skip:browserSkipReason(),timeout:90000},async()=>{
  let b,h,cdp;
  try {
-  b=await openLayoutBrowser({theme,touch:true,apiVersion:3,apiProxy:async publicUrl=>{h=await chatResultsFixture(publicUrl,{result});return h.base;}});
+  b=await openLayoutBrowser({theme,touch:true,apiVersion:3,apiProxy:async publicUrl=>{h=await chatV3UiFixture({publicUrl,historyCount:0,resultText:result});return h.base;}});
   const {page}=b,errors=[];page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize({width:390,height:844});
   const split=h.cookie.indexOf('=');await page.context().addCookies([{name:h.cookie.slice(0,split),value:h.cookie.slice(split+1),url:b.origin,httpOnly:true,sameSite:'Lax'}]);
   await page.goto(b.origin+'/discuter',{waitUntil:'domcontentloaded'});
+  await page.locator(`[data-chat-agent="${h.targetId}"]`).click();await page.locator(`[data-chat-session="${h.sessionId}"]`).click();
   const card=page.locator('.ao-chat__result-card').first();await card.waitFor();await card.locator('summary').click();
   const table=card.locator('.ao-md__table-scroll'),thread=page.locator('.bu-chat__thread');await table.waitFor();await table.scrollIntoViewIfNeeded();await page.evaluate(()=>document.fonts.ready);
   assert.equal(await table.locator('tbody tr').count(),24);assert.ok(await table.evaluate(el=>el.scrollWidth>el.clientWidth));
-  await mkdir('design/reports/chat-touch-148',{recursive:true});
-  const capture=async state=>page.screenshot({path:`design/reports/chat-touch-148/390-${theme}-${state}.png`,animations:'disabled'});
+  await mkdir('design/reports/chat-workspace-173',{recursive:true});
+  const capture=async state=>page.screenshot({path:`design/reports/chat-workspace-173/390-${theme}-touch-${state}.png`,animations:'disabled'});
   await capture('before');
   const point=async()=>{
    const a=await table.boundingBox(),c=await thread.boundingBox();
@@ -45,7 +46,7 @@ for(const theme of ['light','dark'])test(`touch swipe from a Chat table scrolls 
   const style=await table.evaluate(el=>({touchAction:getComputedStyle(el).touchAction,overscrollY:getComputedStyle(el).overscrollBehaviorY,overscrollX:getComputedStyle(el).overscrollBehaviorX,scrollLeft:el.scrollLeft}));
   assert.equal(style.overscrollY,'auto');assert.equal(style.overscrollX,'contain');
   assert.ok(style.touchAction.includes('pan-y'));await capture('horizontal');
-  await writeFile(`design/reports/chat-touch-148/390-${theme}-gesture.json`,JSON.stringify({before,after,delta:after-before,style},null,2)+'\n');
+  await writeFile(`design/reports/chat-workspace-173/390-${theme}-touch-gesture.json`,JSON.stringify({before,after,delta:after-before,style},null,2)+'\n');
   assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>window.__AO_VM_ISSUES||[]),[]);
- }finally{await cdp?.detach();await b?.close();await h?.stop();}
+ }finally{await cdp?.detach();await b?.close();await h?.close();}
 });

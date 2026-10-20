@@ -43,9 +43,9 @@ export function seedCandidates(now = Date.now()) {
 }
 
 /** CandidatesVM, conformed to the example. */
-export const candidatesVM = (list, scannedAt) => conform(EXAMPLES.candidatesVm.data, { scannedAt, candidates: list });
+export const candidatesVM = (list, scannedAt) => conform(EXAMPLES.candidatesVm.data, { scannedAt, candidates: list, statusOptions: EXAMPLES.candidatesVm.data.statusOptions });
 
-const STATUSES = ['idea', 'todo', 'in-progress', 'in-review', 'shipped'];
+const statusIds = EXAMPLES.candidatesVm.data.statusOptions.map(option => option.id);
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 const fail = (status, code, message, details) => ({ status, body: { error: { code, message, ...(details ? { details } : {}), requestId: 'req_' + Math.random().toString(36).slice(2, 10) } } });
 
@@ -65,7 +65,7 @@ export function importCandidates(db, list, body, now = Date.now(), imported = ne
     const c = list.find((x) => x.key === key);
     if (!c) { skipped.push({ key, reason: imported.has(key) ? 'exists' : 'unknown' }); continue; }
     const o = overrides[key] || {};
-    if ((o.name !== undefined && (!String(o.name).trim() || String(o.name).length > 80)) || (o.status !== undefined && !STATUSES.includes(o.status))
+    if ((o.name !== undefined && (!String(o.name).trim() || String(o.name).length > 80)) || (o.status !== undefined && !statusIds.includes(o.status))
       || (o.labels !== undefined && (!Array.isArray(o.labels) || o.labels.some((l) => typeof l !== 'string' || !l.trim() || l.length > 32)))) {
       skipped.push({ key, reason: 'validation_failed' }); continue;
     }

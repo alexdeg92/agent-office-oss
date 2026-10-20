@@ -98,21 +98,25 @@ test('read-only store does not enqueue, call the runtime or create files; close 
 test('VM: cover fields on board/detail obey both runtime schemas and example sidecars', () => {
   const cover = { url: 'https://bureau.example/a.svg', thumbUrl: 'https://bureau.example/t.svg', source: 'code', generatedAt: 123 };
   const options = { coverOf: () => cover };
-  const p = project(), board = buildBoardVM([p], options), detail = buildProjectVM(p, [], options);
+  const p = project(), board = buildBoardVM([p], options), board3 = buildBoardVM([p], { ...options, apiVersion: 3 }), detail = buildProjectVM(p, [], options);
   assert.deepEqual(detail.cover, cover); assert.equal(detail.thumb.kind, 'cover'); assert.equal(detail.thumb.url, cover.url);
   assert.deepEqual(board.columns[1].cards[0].cover, cover);
   for (const version of [2, 3]) {
     const check = createVmCheck({ mode: 'throw', version });
-    assert.deepEqual(check.issuesOf('project', detail), []); assert.deepEqual(check.issuesOf('projects', version === 3 ? { ...board, agent: null } : board), []);
+    assert.deepEqual(check.issuesOf('project', detail), []); assert.deepEqual(check.issuesOf('projects', version === 3 ? { ...board3, agent: null } : board), []);
   }
-  assert.deepEqual(compareExample('project-vm', detail), []); assert.deepEqual(compareExample('board-vm', board), []);
+  assert.deepEqual(compareExample('project-vm', detail), []);
+  assert.deepEqual(compareExample('board-vm', board), []);
+  assert.deepEqual(compareExample('board-vm', { ...board3, agent: null }, { version: 3 }), []);
 });
 test('agentTurn returns media files and tap preserves abort options without polluting primary skills', async () => {
   const calls = []; const cli = { async run(args, ms, options) {
     calls.push({ args, options });
     if (args[0] === 'gateway') {
       const p = JSON.parse(args.find(a => a.startsWith('--params=')).slice(9));
-      return { ok: true, out: JSON.stringify({ ok: true, key: p.key, entry: { sendPolicy: 'deny' } }) };
+      return { ok: true, out: JSON.stringify({ ok: true, path: '/scratch/agents/main/agent/openclaw-agent.sqlite', key: String(p.key).toLowerCase(),
+        entry: { sessionId: '8f0b3782-0fff-4a97-b161-824608a44ace', lifecycleRevision: '2a267349-1426-405f-823d-f29b8d01eddb', updatedAt: 1792031718511, createdVia: 'operator', createdAt: 1792031718511, sendPolicy: 'deny' },
+        resolved: { modelProvider: 'openai', model: 'gpt-6-astra', agentRuntime: { id: 'codex', source: 'implicit' }, runtimeSelectionLocked: false } }) };
     }
     return { ok: true, out: '{"result":{"payloads":[{"text":"Done","mediaUrl":"/tmp/image.webp"}]}}' };
   }, parseJson: JSON.parse };

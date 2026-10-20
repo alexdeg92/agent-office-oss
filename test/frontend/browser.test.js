@@ -23,6 +23,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let server, rootServer, v3Server, base, rootBase, v3Base, chrome, profile, ws, seq = 0;
 const responses = [];   // { url, status } of every HTTP response the page received
+const requestFailures = []; // failed browser requests with the network error from CDP
+const badResponses = []; // { url, status } for HTTP errors
+const pageErrors = [];
+const consoleApiErrors = [];
 // The contract the suite runs on (frontend-21): AO_TEST_API_VERSION, else the UI's own default.
 const API = '/api/v' + (process.env.AO_TEST_API_VERSION ? Number(process.env.AO_TEST_API_VERSION) : DEFAULTS.apiVersion);
 const requests = [];    // { url, by } of every request: `by` is the script that initiated it (CDP initiator), for F11
@@ -58,6 +62,13 @@ async function go(path, origin = base) {
   // An event, not a delay; the deadline only bounds a real failure, so it is generous for a loaded CI machine.
   await waitFor(`window.__testNavigation !== ${JSON.stringify(marker)} && location.origin === ${JSON.stringify(origin)} && document.readyState === 'complete' && !!document.querySelector('#app > *')`, 20_000);
 }
+async function openChat(){
+ await waitFor(`document.querySelector('[data-chat-agent]')`,15000);
+ await evaluate(`document.querySelector('[data-chat-agent]').click()`);
+ await waitFor(`document.querySelector('[data-chat-session]')`,15000);
+ await evaluate(`document.querySelector('[data-chat-session]').click()`);
+ await waitFor(`document.getElementById('chat-texte')`,15000);
+}
 async function key(k, extra = {}) {
   const codes = { Tab: 9, Enter: 13, ' ': 32, ArrowLeft: 37, ArrowRight: 39, Escape: 27 };
   const common = { key: k, code: k === ' ' ? 'Space' : k, windowsVirtualKeyCode: codes[k] || 0, ...extra };
@@ -88,7 +99,15 @@ before(async () => {
   ws.on('message', (m) => {
     const msg = JSON.parse(m);
     if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-    if (msg.method === 'Network.responseReceived') responses.push({ url: msg.params.response.url, status: msg.params.response.status });
+    if (msg.method === 'Network.responseReceived') {
+      const row = { url: msg.params.response.url, status: msg.params.response.status };
+      responses.push(row);
+      if (row.status >= 400) badResponses.push(row);
+    }
+    if (msg.method === 'Network.loadingFailed') {
+      const request = requests.find(row => row.id === msg.params.requestId);
+      requestFailures.push({ url: request?.url || null, error: msg.params.errorText, canceled: msg.params.canceled || false, blockedReason: msg.params.blockedReason || null });
+    }
     if (msg.method === 'Network.requestWillBeSent') {
       const i = msg.params.initiator || {};
       const frames = (i.stack && i.stack.callFrames) || [];
@@ -101,9 +120,14 @@ before(async () => {
     if (msg.method === 'Network.responseReceived' && (msg.params.response.fromDiskCache || msg.params.response.fromPrefetchCache)) cached(msg.params.requestId);
     if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
       const text = msg.params.args.map((x) => x.value ?? x.description ?? '').join(' ');
+      consoleApiErrors.push(text);
       if (text.startsWith('[vm]')) vmIssues.push(text);
     }
-    if (msg.method === 'Runtime.exceptionThrown') consoleErrors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
+    if (msg.method === 'Runtime.exceptionThrown') {
+      const text = msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text;
+      pageErrors.push(text);
+      consoleErrors.push(text);
+    }
   });
   await send('Runtime.enable');
   await send('Page.enable');
@@ -168,29 +192,29 @@ test('keyboard: the skip link and a nav link are reachable and activate with Ent
   assert.equal(await evaluate('document.activeElement.className'), 'ao-skip', 'first Tab reaches « Aller au contenu »');
   await evaluate(`[...document.querySelectorAll('.bu-nav__item')].find(a => a.textContent.trim() === 'Projets').focus()`);
   await key('Enter');
-  await waitFor(`location.pathname === '/v2/projets' && document.querySelector('[data-card]')`);
+  await waitFor(`location.pathname === '/v2/projets' && document.querySelector('.ao-projects-server__card[data-card]')`);
   assert.equal(await evaluate(`document.querySelector('.bu-nav__item[aria-current="page"]').textContent.trim()`), 'Projets');
   assert.equal(await evaluate('new URLSearchParams(location.search).get("mock")'), '1', 'mock mode survives navigation');
 });
 
-test('Kanban keyboard path: Espace picks, → moves with focus kept, Échap cancels, Espace drops', { skip, timeout: 20_000 }, async () => {
+test('Projects keyboard path: Espace opens move destinations, Escape cancels and Enter moves via the server VM', { skip, timeout: 20_000 }, async () => {
   await go('/v2/projets?mock=1');
-  await waitFor(`document.querySelector('[data-card=prj_lucie]')`);
-  await evaluate(`document.querySelector('[data-card=prj_lucie]').focus()`);
+  await waitFor(`document.querySelector('.ao-projects-server__card[data-card]')`);
+  const card = await evaluate(`document.querySelector('.ao-projects-server__card[data-card]').dataset.card`);
+  await evaluate(`document.querySelector('.ao-projects-server__card[data-card="${card}"]').focus()`);
   await key(' ');
-  await waitFor(`document.querySelector('[data-card=prj_lucie]').classList.contains('is-picked')`);
-  await key('ArrowRight');
-  await waitFor(`document.querySelector('[data-card=prj_lucie]').closest('[data-column]').dataset.column === 'in-progress'`);
-  assert.equal(await evaluate('document.activeElement.dataset.card'), 'prj_lucie', 'focus follows the card');
-  assert.match(await evaluate(`document.querySelector('[aria-live=assertive]').textContent`), /En cours/);
+  await waitFor(`document.querySelector('[role=dialog]')`);
   await key('Escape');
-  await waitFor(`document.querySelector('[data-card=prj_lucie]').closest('[data-column]').dataset.column === 'todo'`);
-  await evaluate(`document.querySelector('[data-card=prj_lucie]').focus()`);
+  await waitFor(`!document.querySelector('[role=dialog]')`);
+  await evaluate(`document.querySelector('.ao-projects-server__card[data-card="${card}"]').focus()`);
   await key(' ');
-  await key('ArrowRight');
-  await key(' ');
+  await waitFor(`document.querySelector('[role=dialog]')`);
+  const inProgress = await evaluate(`([...document.querySelectorAll('[role=dialog] button')].find(button => button.textContent.includes('En cours')) || {}).textContent || ''`);
+  assert.match(inProgress, /En cours/, 'the move sheet exposes the server-provided destination label');
+  await evaluate(`([...document.querySelectorAll('[role=dialog] button')].find(button => button.textContent.includes('En cours')).focus())`);
+  await key('Enter');
   await waitFor(`document.querySelector('.bu-toast--success')?.textContent.includes('En cours')`);
-  assert.equal(await evaluate(`document.querySelector('[data-card=prj_lucie]').closest('[data-column]').dataset.column`), 'in-progress');
+  await waitFor(`document.querySelector('[data-card="${card}"]').closest('[data-column]').dataset.column === 'in-progress'`);
   assert.equal(await evaluate('location.pathname'), '/v2/projets', 'Espace never follows the card link');
 });
 
@@ -288,33 +312,121 @@ test('Journaux: Enter opens a session; the view switch is in the URL; a live tra
   await waitFor(`location.pathname === '/v2/journaux' && document.querySelector('.ao-logs .bu-table__row')`);
 });
 
-test('Feuillet: send → working block, drafting allowed but sending blocked; the reply arrives; a failure offers to resume', { skip, timeout: 40_000 }, async () => {
+test('Chat: send → pending, draft retained; reply arrives; unsafe failures have no retry', { skip, timeout: 40_000 }, async () => {
   await evaluate(`localStorage.removeItem('ao.chat.draft')`);
-  await go('/v2/discuter?mock=1');
+  await go('/v3/discuter?mock=1', v3Base); await openChat();
   await waitFor(`document.querySelector('.ao-chat__msg')`);
   const before = await evaluate(`document.querySelectorAll('.ao-chat__msg').length`);
   await evaluate(`(() => { const t = document.getElementById('chat-texte'); t.value = 'Résume la semaine.'; t.dispatchEvent(new Event('input', { bubbles: true })); t.focus(); })()`);
   await key('Enter', { modifiers: 2 });   // Ctrl + Enter sends
   await waitFor(`document.querySelector('.ao-chat__pending') && document.querySelectorAll('.ao-chat__msg').length === ${before + 1}`);
-  assert.match(await evaluate(`document.querySelector('.ao-chat__pending').textContent`), /Travail en cours/);
+  assert.match(await evaluate(`document.querySelector('.ao-chat__pending').textContent`), /Réponse en cours/);
   await evaluate(`(() => { const t = document.getElementById('chat-texte'); t.value = 'Brouillon pendant le tour'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   assert.equal(await evaluate(`document.querySelector('.ao-chat__composer button[type=submit]').disabled`), true, 'one pending turn at a time');
   await waitFor(`!document.querySelector('.ao-chat__pending') && document.querySelectorAll('.ao-chat__msg--assistant').length > 0 && document.querySelectorAll('.ao-chat__msg').length === ${before + 2}`, 10_000);
   assert.equal(await evaluate(`document.getElementById('chat-texte').value`), 'Brouillon pendant le tour', 'the draft survives the turn');
 
-  await go('/v2/discuter?mock=1&echec-chat=1');
+  await go('/v2/discuter?mock=1&echec-chat=1'); await openChat();
   await waitFor(`document.querySelector('.ao-chat__composer')`);
   await evaluate(`(() => { const t = document.getElementById('chat-texte'); t.value = 'Vérifie le portail.'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   await evaluate(`document.querySelector('.ao-chat__composer button[type=submit]').click()`);
   await waitFor(`document.querySelector('.ao-chat__msg--error')`, 10_000);
-  await evaluate(`[...document.querySelectorAll('.ao-chat__msg--error .ao-chat__retry')].find(b => b.textContent.includes('Reprendre')).click()`);
-  assert.equal(await evaluate(`document.getElementById('chat-texte').value`), 'Vérifie le portail.');
+  assert.equal(await evaluate(`document.querySelectorAll('.ao-chat__retry').length`),0,'no retry is invented for a noneligible failure');
 
-  await go('/v2/discuter?mock=1&lecture=1');
+  await go('/v2/discuter?mock=1&lecture=1'); await openChat();
   await waitFor(`document.querySelector('.ao-chat__composer')`);
-  assert.match(await evaluate(`document.getElementById('chat-aide').textContent`), /lecture seule/);
+  assert.match(await evaluate(`document.querySelector('.ao-messenger__hint').textContent`), /L’envoi est indisponible/);
   assert.equal(await evaluate(`document.querySelector('.ao-chat__composer button[type=submit]').disabled`), true);
   await evaluate(`localStorage.removeItem('ao.chat.draft')`);
+});
+
+test('T-0185: Discuter desktop/mobile shell shows Atlas, the PM team, read-only state and admin composer', { skip, timeout: 40_000 }, async () => {
+  const capture = async (name) => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), '../../design/reports/t0185-chat-shell');
+    mkdirSync(dir, { recursive: true });
+    const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    writeFileSync(join(dir, name), Buffer.from(shot.data, 'base64'));
+  };
+  await evaluate(`localStorage.setItem('ao.locale','fr');localStorage.setItem('ao.uiTheme','light');localStorage.removeItem('ao.chat.draft')`);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 960, deviceScaleFactor: 1, mobile: false });
+  await go('/v2/discuter?mock=capture-t0185');
+  await waitFor(`document.querySelectorAll('[data-chat-agent]').length === 7`, 15_000);
+  const names = await evaluate(`[...document.querySelectorAll('[data-chat-agent]')].map(row=>row.textContent)`);
+  assert.doesNotMatch(await evaluate(`document.body.innerText`), /Autre \(|Other \(/, 'all backend label refs resolve in the capture locale');
+  assert.ok(names.some(name=>name.includes('Atlas')));assert.ok(names.some(name=>name.includes('PM')));
+  assert.ok(names.some(name=>name.includes('backend-codex')));assert.ok(names.some(name=>name.includes('security-claude')));
+  const primary = await evaluate(`[...document.querySelectorAll('[data-chat-agent]')].find(row=>row.textContent.includes('Atlas')).getAttribute('data-chat-agent')`);
+  await evaluate(`document.querySelector('[data-chat-agent="${primary}"]').click()`);
+  await waitFor(`document.querySelector('[data-chat-session]')`, 10_000);
+  await evaluate(`document.querySelector('[data-chat-session]').click()`);
+  await waitFor(`document.querySelector('.ao-chat__composer')`, 10_000);
+  const sentStatus=await evaluate(`document.querySelector('[data-queue-state="sent"]')?.innerText||''`);
+  assert.match(sentStatus,/Envoyé à Atlas/,'sent pane status is rendered in French');
+  assert.doesNotMatch(sentStatus,/pane\.messageSent/,'pane sent status never renders its raw LabelRef key');
+  assert.doesNotMatch(await evaluate(`document.body.innerText`), /Autre \(|Other \(/, 'session labels resolve too');
+  assert.equal(await evaluate(`document.getElementById('chat-texte').disabled`), false, 'administrator can compose to the primary agent');
+  assert.ok(await evaluate(`(() => {const img=document.querySelector('[data-chat-agent="${primary}"] .ao-messenger__portrait');return img?.getAttribute('src')?.endsWith('/bureau/assets/Characters/timmy/portrait.png')&&img.naturalWidth>0})()`), 'primary keeps the loaded canonical portrait');
+  await capture('discuter-desktop-admin-composer.png');
+
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await go('/v2/discuter?mock=capture-t0185');
+  await waitFor(`document.querySelectorAll('[data-chat-agent]').length === 7`, 15_000);
+  assert.doesNotMatch(await evaluate(`document.querySelector('[data-chat-pane="agents"]').innerText`), /Autre \(|Other \(/, 'mobile agent list has no fallback labels');
+  await waitFor(`document.querySelectorAll('[data-chat-agent] .ao-character-avatar[data-avatar-ready="true"]').length === 5`, 15_000);
+  await capture('discuter-mobile-agents.png');
+  await evaluate(`[...document.querySelectorAll('[data-chat-agent]')].find(row=>row.textContent.includes('critic')).click()`);
+  await waitFor(`document.querySelector('[data-chat-session]')`, 10_000);
+  await evaluate(`document.querySelector('[data-chat-session]').click()`);
+  await waitFor(`document.querySelector('.ao-chat__composer')`, 10_000);
+  assert.equal(await evaluate(`document.getElementById('chat-texte').disabled`), true, 'a read-only pane has no enabled composer');
+  assert.match(await evaluate(`document.querySelector('.ao-messenger__hint').textContent`), /lecture seule|indisponible/i);
+  assert.doesNotMatch(await evaluate(`document.body.innerText`), /Autre \(|Other \(/, 'read-only state labels are localized');
+  await capture('discuter-mobile-read-only.png');
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  await evaluate(`localStorage.setItem('ao.uiTheme','light')`);
+});
+
+test('T-0223: Chat attachments preview in composer and message with a full image viewer', { skip, timeout: 60_000 }, async () => {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), '../../design/reports/t0223-attachment-previews');
+  mkdirSync(dir, { recursive: true });
+  const capture = async (name) => writeFileSync(join(dir, name), Buffer.from((await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })).data, 'base64'));
+  const uploadPair = async () => {
+    await evaluate(`(() => {
+      const input = document.querySelector('.ao-messenger__compose input[type=file]');
+      const files = new DataTransfer();
+      files.items.add(new File([new Uint8Array(128)], 'atelier-equipe.jpg', {type:'image/jpeg'}));
+      files.items.add(new File([new Uint8Array(256)], 'compte-rendu.pdf', {type:'application/pdf'}));
+      Object.defineProperty(input, 'files', {configurable:true, value:files.files});
+      input.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await waitFor(`document.querySelectorAll('.ao-chat-attachment-strip--composer li[data-upload-state="ready"]').length === 2`, 10_000);
+    assert.equal(await evaluate(`document.querySelectorAll('.ao-chat-attachment-strip--composer [data-preview-kind="image"],.ao-chat-attachment-strip--composer [data-preview-kind="pdf"]').length`), 2);
+  };
+  const sendPair = async () => {
+    await evaluate(`(() => { const t=document.getElementById('chat-texte');t.value='Voici les fichiers.';t.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+    await evaluate(`document.querySelector('.ao-chat__composer button[type=submit]').click()`);
+    await waitFor(`document.querySelectorAll('.ao-chat__msg [data-preview-kind="image"],.ao-chat__msg [data-preview-kind="pdf"]').length === 2`, 10_000);
+    await waitFor(`!document.querySelector('.ao-chat__pending')`, 10_000);
+    assert.equal(await evaluate(`document.querySelectorAll('.ao-chat__msg [data-preview-kind="image"],.ao-chat__msg [data-preview-kind="pdf"]').length`), 2, 'the sent attachments stay inside the sender bubble');
+  };
+  await evaluate(`localStorage.setItem('ao.locale','fr');localStorage.setItem('ao.uiTheme','light');localStorage.removeItem('ao.chat.draft')`);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await go('/v3/discuter?mock=capture-t0223', v3Base); await openChat();
+  const issuesBefore = vmIssues.length;
+  await uploadPair(); await capture('desktop-composer.png');
+  await sendPair(); await capture('desktop-sent.png');
+  await evaluate(`document.querySelector('.ao-chat__msg [data-preview-kind="image"] button').click()`);
+  await waitFor(`document.querySelector('.ao-chat-attachment-viewer__image')?.complete && document.querySelector('.ao-chat-attachment-viewer__image')?.naturalWidth > 0`); await sleep(350); await capture('desktop-image-viewer.png');
+  assert.equal(vmIssues.length, issuesBefore, 'strict VM validation accepts attachment.preview');
+
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await go('/v3/discuter?mock=capture-t0223', v3Base); await openChat();
+  await uploadPair(); await capture('phone-composer.png');
+  await sendPair(); await capture('phone-sent.png');
+  await evaluate(`document.querySelector('.ao-chat__msg [data-preview-kind="image"] button').click()`);
+  await waitFor(`document.querySelector('.ao-chat-attachment-viewer__image')?.complete && document.querySelector('.ao-chat-attachment-viewer__image')?.naturalWidth > 0`); await sleep(350); await capture('phone-image-viewer.png');
+  assert.equal(vmIssues.length, issuesBefore, 'desktop and phone capture VMs pass strict validation');
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
 });
 
 test('R7-04: a hostile image URL cannot inject CSS into the card', { skip, timeout: 20_000 }, async () => {
@@ -368,8 +480,8 @@ const STACK_CHECK = `(() => {
   return { stacks: document.querySelectorAll('.bu-avatar-stack').length, bad };
 })()`;
 
-test('avatar stacks: discs of one size, overlap ≤ 30 %, initials never covered (board and detail header)', { skip, timeout: 30_000 }, async () => {
-  for (const [w, path] of [[1180, '/v2/projets?mock=1'], [1440, '/v2/projets?mock=1'], [1180, '/v2/projets/prj_portail?mock=1']]) {
+test('avatar stacks: project detail header keeps equal discs, overlap ≤ 30 %, initials uncovered', { skip, timeout: 30_000 }, async () => {
+  for (const [w, path] of [[1180, '/v2/projets/prj_portail?mock=1'], [1440, '/v2/projets/prj_portail?mock=1']]) {
     await send('Emulation.setDeviceMetricsOverride', { width: w, height: 820, deviceScaleFactor: 2, mobile: false });
     await go(path);
     await waitFor(`document.querySelector('.bu-avatar-stack')`);
@@ -498,20 +610,21 @@ test('default language: an English browser with no saved choice gets French; the
 
 const typeDraft = (text) => evaluate(`(() => { const t = document.getElementById('chat-texte'); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
 
-test('frontend-23: on a phone the chat fills the screen: the page never scrolls, the thread does, the composer sits on the tab bar', { skip, timeout: 30_000 }, async () => {
+test('frontend-23: a phone conversation fills the screen: the page never scrolls, the thread does, the composer reaches the viewport edge', { skip, timeout: 30_000 }, async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   try {
-    await go('/v2/discuter?mock=1');
-    await waitFor(`document.querySelector('.ao-chat__msg') && document.querySelector('.bu-bottombar')`);
+    await go('/v2/discuter?mock=1&chat-plein=1'); await openChat();
+    await waitFor(`document.querySelector('.ao-chat__msg') && document.querySelector('.ao-messenger__workspace[data-chat-screen="conversation"]')`);
     await sleep(300);
     const m = await evaluate(`(() => { const t = document.querySelector('.ao-chat .bu-chat__thread'); const send = document.querySelector('.ao-chat__send').getBoundingClientRect();
       return { page: document.scrollingElement.scrollHeight, vh: innerHeight, threadScrolls: t.scrollHeight > t.clientHeight && getComputedStyle(t).overflowY === 'auto', atEnd: Math.abs(t.scrollHeight - t.clientHeight - t.scrollTop) < 4,
-        composer: Math.round(document.querySelector('.ao-chat__card').getBoundingClientRect().bottom), tabs: Math.round(document.querySelector('.bu-bottombar').getBoundingClientRect().top),
+        composer: Math.round(document.querySelector('.ao-chat__card').getBoundingClientRect().bottom), tabsVisible: getComputedStyle(document.querySelector('.bu-bottombar')).display !== 'none',
         round: Math.round(send.width) === Math.round(send.height), card: getComputedStyle(document.querySelector('.ao-chat__card')).borderTopWidth }; })()`);
     assert.equal(m.page, m.vh, 'the page itself does not scroll');
     assert.ok(m.threadScrolls, 'the thread scrolls');
     assert.ok(m.atEnd, 'it opens on the latest exchange');
-    assert.equal(m.composer, m.tabs, 'the chat (composer last) ends right on the tab bar');
+    assert.equal(m.tabsVisible, false, 'the approved full-screen phone conversation hides app tabs');
+    assert.ok(Math.abs(m.composer - m.vh) <= 1, 'composer ends at the viewport edge: ' + JSON.stringify(m));
     assert.ok(m.round, 'a round send button');
     assert.equal(m.card, '0px', 'no outer card border');
     await typeDraft('un\ndeux\ntrois');
@@ -522,35 +635,20 @@ test('frontend-23: on a phone the chat fills the screen: the page never scrolls,
   }
 });
 
-test('frontend-24 (architect-55): priorities P0–P9: desktop badge tones, picker, P0-to-Pn filter and activity sort', { skip, timeout: 30_000 }, async () => {
+test('frontend-24 (architect-55): the v3 Projects VM renders P0–P9 priority badges and server-owned stage controls', { skip, timeout: 30_000 }, async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 700, height: 900, deviceScaleFactor: 1, mobile: true });
   try {
     await go('/v2/projets?mock=1');
-    await waitFor(`document.querySelector('[data-card=prj_accueil]') && document.getElementById('projets-priorite')`);
+    await waitFor(`document.querySelector('[data-card=prj_accueil] .bu-priority') && document.getElementById('project-stage')`);
     const badge = (id) => evaluate(`(() => { const b = document.querySelector('[data-card=${id}] .bu-priority'); return [b.textContent, b.className, b.title]; })()`);
-    assert.deepEqual(await badge('prj_accueil'), ['P9', 'bu-priority bu-priority--p9', 'P9 · minimale'], 'a P9 card: its own tone and the French label');
+    assert.deepEqual(await badge('prj_accueil'), ['P9', 'bu-priority bu-priority--p9', 'P9 · minimale']);
     assert.deepEqual(await badge('prj_factures'), ['P0', 'bu-priority bu-priority--p0', 'P0 · critique']);
     assert.ok(await evaluate(`document.scrollingElement.scrollWidth <= innerWidth`), 'no sideways page scroll at 700 px');
-    assert.ok(await evaluate(`(() => { const [a, b] = document.querySelectorAll('.ao-projects__order .bu-select'); const r = a.getBoundingClientRect(), q = b.getBoundingClientRect();
-      return Math.round(r.top) === Math.round(q.top) && r.right <= q.left && q.right <= innerWidth; })()`), 'filter and sort side by side, inside the screen');
-    const opts = await evaluate(`[...document.querySelectorAll('#projets-priorite option')].map((o) => o.textContent)`);
-    assert.deepEqual([opts.length, opts[0], opts[1], opts.at(-1)], [10, 'Priorité : toutes', 'P0 seulement', 'P0 à P8']);
-    const pick = (id, v) => evaluate(`(() => { const s = document.getElementById('${id}'); s.value = '${v}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    await pick('projets-priorite', 'P2');
-    await waitFor(`new URLSearchParams(location.search).get('priorite') === 'P2' && !document.querySelector('[data-card=prj_accueil]')`);
-    const shown = await evaluate(`[...document.querySelectorAll('[data-card] .bu-priority')].map((b) => b.textContent)`);
-    assert.ok(shown.length > 0 && shown.every((p) => Number(p.slice(1)) <= 2), 'only P0 to P2 remain: ' + shown);
-    assert.match(await evaluate(`document.querySelector('.ao-projects__matches').textContent`), /projets? en priorité P0 à P2\./);
-    await pick('projets-priorite', '');
-    await waitFor(`!new URLSearchParams(location.search).has('priorite') && document.querySelector('[data-card=prj_accueil]')`);
-    await pick('projets-tri', 'activite');
-    await waitFor(`new URLSearchParams(location.search).get('tri') === 'activite' && document.querySelector('[data-card=prj_accueil]')`);
-    assert.ok(await evaluate(`[...document.querySelectorAll('.bu-column')].every((col) => { const t = [...col.querySelectorAll('[data-card] time')].map((x) => Date.parse(x.dateTime));
-      return t.every((v, i) => i === 0 || t[i - 1] >= v); })`), 'each column runs from the most recent activity');
-    await evaluate(`document.querySelector('.ao-projects__bar .bu-btn--primary').click()`);
-    await waitFor(`document.getElementById('np-priority')`);
-    assert.deepEqual(await evaluate(`(() => { const o = [...document.querySelectorAll('#np-priority option')]; return [o.length, o[4].textContent, o.find((x) => x.selected).value]; })()`), [10, 'P4 · moyenne', 'P2']);
-    await key('Escape');
+    const options = await evaluate(`[...document.querySelectorAll('#project-stage option')].map(option=>option.value)`);
+    assert.ok(options.includes('all') && options.includes('in-progress'), 'stage values come from the server VM');
+    await evaluate(`(() => {const select=document.getElementById('project-stage');select.value='in-progress';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await waitFor(`new URLSearchParams(location.search).get('etape')==='in-progress' && document.querySelector('[data-card=prj_portail]') && !document.querySelector('.ao-projects-server[aria-busy=true]')`);
+    assert.ok(await evaluate(`[...document.querySelectorAll('.ao-projects-server__card')].every(card=>card.closest('[data-column]').dataset.column==='in-progress')`), 'server-selected stage controls visible membership');
   } finally {
     await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   }
@@ -571,9 +669,9 @@ test('Boutique (office-dev-21): a route of its own, in the mobile Plus list befo
   }
 });
 
-test('R19-01: a late 202 for message A never erases draft B typed meanwhile (text and stored copy)', { skip, timeout: 30_000 }, async () => {
+test('R19-01: a late 202 for message A never erases draft B typed meanwhile (in-memory viewer-scoped draft)', { skip, timeout: 30_000 }, async () => {
   await evaluate(`localStorage.removeItem('ao.chat.draft')`);
-  await go('/v2/discuter?mock=1&chat-lent=1');
+  await go('/v2/discuter?mock=1&chat-lent=1'); await openChat();
   await waitFor(`document.getElementById('chat-texte')`);
   await typeDraft('Message A');
   await sleep(100);
@@ -583,13 +681,13 @@ test('R19-01: a late 202 for message A never erases draft B typed meanwhile (tex
   await waitFor(`document.querySelector('.ao-chat__pending')`, 6000);   // A was accepted
   await sleep(300);
   assert.equal(await evaluate(`document.getElementById('chat-texte').value`), 'Brouillon B');
-  assert.equal(await evaluate(`localStorage.getItem('ao.chat.draft')`), 'Brouillon B');
+  assert.equal(await evaluate(`localStorage.getItem('ao.chat.draft')`), null,'private drafts are not stored in browser storage');
   await evaluate(`localStorage.removeItem('ao.chat.draft')`);
 });
 
 test('R19-05: with a full 50-message window, every reply is announced, the same text twice included', { skip, timeout: 40_000 }, async () => {
   await evaluate(`localStorage.removeItem('ao.chat.draft')`);
-  await go('/v2/discuter?mock=1&chat-plein=1');
+  await go('/v2/discuter?mock=1&chat-plein=1'); await openChat();
   await waitFor(`document.querySelectorAll('.ao-chat__msg').length >= 50`);
   await evaluate(`(() => { window.__said = []; const r = document.querySelector('.ao-chat [aria-live=polite]'); new MutationObserver(() => { if (r.textContent) window.__said.push(r.textContent); }).observe(r, { childList: true, characterData: true, subtree: true }); return true; })()`);
   for (const [i, text] of [[1, 'Première question.'], [2, 'Deuxième question.']]) {
@@ -601,7 +699,7 @@ test('R19-05: with a full 50-message window, every reply is announced, the same 
   }
   const said = await evaluate(`window.__said`);
   assert.equal(said.length, 2, JSON.stringify(said));
-  assert.ok(said.every((x) => /Réponse de .+ reçue\./.test(x)));
+  assert.ok(said.every((x) => /Nouveau message reçu\./.test(x)));
   assert.equal(await evaluate(`document.querySelectorAll('.ao-chat__msg').length`), 50, 'the window stays at 50');
 });
 
@@ -765,6 +863,7 @@ test('F11: a deep link fetches its page chunk with the core (no waterfall); hove
 });
 
 test('artist-15 state spots: only the active theme\'s variant is fetched and shown', { skip, timeout: 60_000 }, async () => {
+  await evaluate(`localStorage.removeItem('ao.uiTheme')`); // do not inherit frontend-27's explicit dark-theme choice
   for (const scheme of ['dark', 'light']) {
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
     await go('/v2/connexion?mock=1');   // leave the page, and drop the previous pass's images from every cache
@@ -916,7 +1015,7 @@ test('F13: « À propos » from the user menu (versions, API, notices with their
     await setTheme('light');
   }
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
-  await go('/v2/discuter?mock=1');
+  await go('/v2/discuter?mock=1'); await openChat();
   await routeReady('discuter');
   await waitFor(`document.querySelector('main textarea')`, 8000);
   await evaluate(`document.querySelector('main textarea').focus()`);
@@ -941,8 +1040,9 @@ test('G5: the whole UI on contract 3.0 (mock /api/v3): no /api/v2 call, 3.0 valu
   await waitFor(`document.getElementById('il-titre')`, 8000);
   assert.match(await evaluate(`document.querySelector('.ao-interlocutor .bu-detail-header').textContent`), /Personne[^]*Discord/);
   await go('/v3/projets?mock=1&filtre=with-timmy', v3Base);   // an old link: read as with-agent
-  await waitFor(`document.querySelector('.bu-segmented__opt[aria-pressed=true]')`, 8000);
-  assert.match(await evaluate(`document.querySelector('.bu-segmented__opt[aria-pressed=true]').textContent`), /avec/i);
+  await waitFor(`document.querySelector('.ao-projects-server__card[data-card]')`, 8000);
+  assert.equal(await evaluate(`document.querySelector('.ao-projects-server__card[data-card=prj_portail]')?.closest('[data-column]')?.dataset.column`), 'in-progress',
+    'the legacy primary-agent filter still resolves and returns the server-selected projects');
   await go('/v3/sante?mock=1', v3Base);
   await waitFor(`document.querySelector('.ao-health:not([aria-busy=true])')`, 8000);
   await sleep(400);
@@ -1153,82 +1253,31 @@ test('frontend-26: comments autocomplete, live replies and system lines, summary
   }
 });
 
-test('frontend-27: Bureau mobile status list, sheets, moves, legacy URLs and compact detail at 360/412', {skip,timeout:120_000},async()=>{
+test('frontend-27: mobile Projects renders the v3 server board, controls and detail at 360/412', {skip,timeout:60_000},async()=>{
   const errorsFrom=consoleErrors.length;
   const checkAxe=async()=>{if(!AXE)return;await evaluate(AXE);const issues=await evaluate(`axe.run(document,{rules:{'target-size':{enabled:false}}}).then(r=>r.violations.filter(v=>v.impact==='serious'||v.impact==='critical').map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})))`);assert.deepEqual(issues,[]);};
-  const filterButton=`document.querySelector('.ao-projects-mobile__filter')`;
   try {
     await evaluate(`localStorage.setItem('ao.locale','fr');localStorage.setItem('ao.uiTheme','dark')`);
     for(const [width,height] of [[360,780],[412,915]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
-      await go('/v2/projets?mock=1&vue=tableau');
-      await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]') && document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-comment-count]')`);
+      await go('/v2/projets?mock=1');
+      await waitFor(`document.querySelector('.ao-projects-server__card[data-card=prj_portail]') && document.getElementById('project-stage')`);
       assert.ok(await evaluate(`document.scrollingElement.scrollWidth<=innerWidth`));
-      assert.equal(await evaluate(`document.querySelectorAll('.ao-projects--mobile select').length`),0,'filters stay in the sheet');
-      assert.equal(await evaluate(`document.querySelectorAll('[data-project-choice]').length`),6,'All plus every status stays visible');
-      assert.equal(await evaluate(`document.querySelector('[data-project-choice][aria-pressed=true]').dataset.projectChoice`),'all');
-      assert.equal(await evaluate(`document.querySelectorAll('.ao-mobile-card__key,.ao-mobile-board').length`),0,'no internal identifiers or nested board');
-      // 1697031e: the card list is the one scroll body (data-scroll-body); the frame body stays fixed around it
-      assert.ok(await evaluate(`(() => {const b=document.querySelector('.ao-projects--mobile > .ao-frame__body'), l=b.querySelector('.ao-projects-mobile__list');return getComputedStyle(l).overflowY==='auto' && l.hasAttribute('data-scroll-body') && b.scrollHeight<=b.clientHeight+1;})()`),'one vertical body');
-      await send('Emulation.setTouchEmulationEnabled',{enabled:true});
-      const swipe=await evaluate(`(() => {const r=document.querySelector('.ao-projects-mobile__list').getBoundingClientRect();return {x:r.x+r.width/2,y:r.bottom-30,d:Math.min(r.height-60,220)};})()`);
-      await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:swipe.x,y:swipe.y}]});
-      for(let n=1;n<=10;n++) {await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:swipe.x,y:swipe.y-swipe.d*n/10}]});await sleep(25);}
-      await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-      await waitFor(`document.querySelector('.ao-projects-mobile__list').scrollTop>40`);
-      assert.equal(await evaluate(`scrollY`),0,'only the body scrolls');
-      assert.equal(await evaluate(`document.querySelectorAll('[role=dialog]').length`),0,'swiping does not open the long-press menu');
-      await evaluate(`document.querySelector('.ao-projects-mobile__list').scrollTop=0`);
-      assert.equal(await evaluate(`Number(document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-comment-count]').dataset.commentCount)`),1);
-      await evaluate(`import(new URL('api.js?v='+document.querySelector('meta[name=ao-build]').content,document.baseURI).href).then(m=>m.post('/api/v2/projects/prj_portail/comments',{body:'Commentaire du tableau mobile'},{quiet:true}))`);
-      await waitFor(`document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-comment-count="2"]')`);
+      assert.ok(await evaluate(`(() => {const board=document.querySelector('.ao-projects-server__board'),body=document.querySelector('.ao-projects-server > .ao-frame__body');return board.hasAttribute('data-scroll-body')&&getComputedStyle(board).overflowY==='auto'&&body.scrollWidth<=body.clientWidth+1;})()`),'the board is the contained mobile scroll region');
+      assert.equal(await evaluate(`document.querySelector('[data-project-source=all]').getAttribute('aria-pressed')`),'true','the backend-selected all-source filter is rendered');
+      await evaluate(`(() => {const s=document.getElementById('project-stage');s.value='in-progress';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await waitFor(`new URLSearchParams(location.search).get('etape')==='in-progress'&&document.querySelector('[data-card=prj_portail]')&&!document.querySelector('.ao-projects-server[aria-busy=true]')`);
+      assert.ok(await evaluate(`[...document.querySelectorAll('.ao-projects-server__card')].every(card=>card.closest('[data-column]').dataset.column==='in-progress')`),'stage membership is returned by the server');
       await checkAxe();
-      await evaluate(`${filterButton}.focus();${filterButton}.click()`);
-      await waitFor(`document.getElementById('mobile-project-filters')`);
-      assert.equal(await evaluate(`document.querySelectorAll('#mobile-project-filters select').length`),3);
-      await waitFor(`(() => {const r=document.querySelector('[role=dialog]').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&Math.abs(r.bottom-innerHeight)<2;})()`);
-      await checkAxe();
-      await evaluate(`document.getElementById('mobile-priority').value='P2';document.getElementById('mobile-sort').value='activite';document.getElementById('mobile-project-filters').requestSubmit()`);
-      await waitFor(`document.querySelector('[data-active-filters="2"]') && !document.querySelector('[role=dialog]')`);
-      assert.ok(await evaluate(`[...document.querySelectorAll('.ao-mobile-card .bu-priority')].every(p=>Number(p.textContent.slice(1))<=2)`));
-      await evaluate(`${filterButton}.focus();${filterButton}.click()`);await waitFor(`document.getElementById('mobile-priority')`);
-      assert.equal(await evaluate(`document.getElementById('mobile-priority').value`),'P2','sheet remembers active filters');
-      await key('Escape');
-      await waitFor(`!document.querySelector('[role=dialog]') && document.activeElement===${filterButton}`);
-      await go('/v2/projets?mock=1&vue=liste');
-      await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]')`);
-      assert.equal(await evaluate(`document.querySelector('[data-project-choice][aria-pressed=true]').dataset.projectChoice`),'all','legacy list URL shows the same complete mobile list');
-      await evaluate(`document.querySelector('.ao-projects-mobile__list').scrollTop=200`);
-      await evaluate(`document.querySelector('[data-project-choice="in-progress"]').click()`);
-      await waitFor(`document.querySelector('[data-project-choice="in-progress"][aria-pressed=true]')`);
-      assert.ok(await evaluate(`[...document.querySelectorAll('.ao-mobile-card [data-project-status]')].every(e=>e.dataset.projectStatus==='in-progress')`),'selected status narrows the list');
-      assert.equal(await evaluate(`document.querySelector('.ao-projects-mobile__list').scrollTop`),0,'status changes reset the list');
-      await checkAxe();
-      await go('/v2/projets?mock=1');await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]')`);
-      await evaluate(`document.querySelector('[data-card=prj_portail]').closest('li').querySelector('.bu-control-menu__trigger').click()`);
-      await waitFor(`document.querySelector('[role=menuitem]')`);
-      await evaluate(`document.querySelector('[role=menuitem]').click()`);
-      await waitFor(`document.querySelector('.ao-projects-mobile__destinations')`);
-      await evaluate(`document.querySelector('[role=dialog] [data-project-status="in-review"]').closest('button').click()`);
-      await waitFor(`document.querySelector('[data-card=prj_portail]')?.closest('li').querySelector('[data-project-status="in-review"]')`);
-      await evaluate(`document.querySelector('[data-card=prj_portail]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch',clientX:50,clientY:300}))`);
-      await waitFor(`document.querySelector('.ao-projects-mobile__destinations')`);
-      await key('Escape');
-      await evaluate(`document.querySelector('[data-card=prj_portail]').dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch'}));document.querySelector('[data-card=prj_portail]').click()`);
-      assert.ok(await evaluate(`location.pathname.endsWith('/projets')`),'long-press suppresses accidental navigation');
-      await evaluate(`document.querySelector('[data-card=prj_portail]').click()`);
+      await evaluate(`document.querySelector('[data-card=prj_portail] .ao-projects-server__link').click()`);
       await waitFor(`document.querySelector('.ao-project-status')`);
       assert.ok(await evaluate(`document.scrollingElement.scrollWidth<=innerWidth`),'detail has no horizontal overflow');
-      assert.ok(await evaluate(`(() => {const selectors=['#resume','#commentaires','#historique','.ao-section--repo'];const tops=selectors.map(s=>document.querySelector(s).closest('section').getBoundingClientRect().top);return tops.every((n,i)=>i===0||tops[i-1]<n);})()`),'phone detail puts summary, comments and history before the repository');
-      await evaluate(`document.querySelector('.ao-project-status').click()`);
-      await waitFor(`document.querySelector('[role=dialog]')`);
-      await evaluate(`document.querySelector('[role=dialog] [data-project-status="shipped"]').closest('button').click()`);
-      await waitFor(`document.querySelector('.ao-project-status [data-project-status="shipped"]')`);
+      assert.ok(await evaluate(`document.querySelector('.bu-project-header')&&document.querySelector('#commentaires')`),'compact detail retains its header and discussion');
       await checkAxe();
-      assert.deepEqual(JSON.parse(await evaluate(`sessionStorage.getItem('ao.csp') || '[]'`)),[],'mobile views and sheets obey CSP');
+      assert.deepEqual(JSON.parse(await evaluate(`sessionStorage.getItem('ao.csp') || '[]'`)),[],'mobile views obey CSP');
     }
-    await go('/v2/projets?mock=1&lecture=tout');await waitFor(`document.querySelector('.ao-projects-mobile__list [data-card]')`);
-    assert.equal(await evaluate(`document.querySelectorAll('.ao-projects-mobile__fab,.ao-mobile-card__more').length`),0,'read-only hides writes');
+    await go('/v2/projets?mock=1&lecture=tout');await waitFor(`document.querySelector('.ao-projects-server__card[data-card]')`);
+    assert.equal(await evaluate(`document.querySelectorAll('.ao-projects-server__card .ao-projects-move').length`),0,'read-only hides project writes');
     assert.deepEqual(consoleErrors.slice(errorsFrom),[]);
     const build=await evaluate(`document.querySelector('meta[name=ao-build]').content`);
     assert.ok(requests.filter(r=>new URL(r.url).pathname.endsWith('.js') || new URL(r.url).pathname.endsWith('.mjs')).every(r=>new URL(r.url).searchParams.get('v')===build),'every executed module uses the release URL');
@@ -1486,5 +1535,227 @@ test('frontend-29: owned retries, working indicator, inline nested mentions and 
   } finally {
     await evaluate(`localStorage.removeItem('ao.order.history')`);
     await send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  }
+});
+
+test('Discuter: lifecycle menu, inline rename, swipe delete and undo captures', { skip, timeout: 60_000 }, async () => {
+  const diagnosticStart = { requests: requests.length, failures: requestFailures.length, responses: badResponses.length, pageErrors: pageErrors.length, consoleErrors: consoleApiErrors.length };
+  const captureDir = join(UI_ROOT, '../../design/reports/t0189-captures');
+  mkdirSync(captureDir, { recursive: true });
+  const capture = async name => {
+    await sleep(180);
+    const issue = await evaluate(`(() => {const text=[document.body.innerText,...[...document.querySelectorAll('[aria-label]')].map(el=>el.getAttribute('aria-label'))].join(' ');const workspace=document.querySelector('.ao-messenger__workspace')?.getBoundingClientRect(),slot=document.querySelector('.ao-messenger__conversation-slot')?.getBoundingClientRect(),pane=document.querySelector('.ao-messenger__conversation-slot > .ao-messenger__pane')?.getBoundingClientRect();return {rawLabel:/Autre\\s*\\(/.test(text),error:/NOT_FOUND|Discussion introuvable/i.test(text)||!!document.querySelector('.bu-empty--error'),right:workspace?.right??null,paneRight:pane?.right??null,slotRight:slot?.right??null,width:innerWidth}})()`);
+    assert.equal(issue.rawLabel, false, `untranslated chat label in ${name}`);
+    assert.equal(issue.error, false, `chat error state in ${name}`);
+    if (name.startsWith('desktop-')) assert.ok(issue.right >= issue.width - 2, `chat workspace leaves an empty right strip in ${name}: ${JSON.stringify(issue)}`);
+    if (name.startsWith('desktop-')) assert.ok(issue.paneRight >= issue.slotRight - 2, `conversation pane does not fill its slot in ${name}: ${JSON.stringify(issue)}`);
+    const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    writeFileSync(join(captureDir, name), Buffer.from(shot.data, 'base64'));
+  };
+  const diagnostics = () => ({requestFailed:requestFailures.slice(diagnosticStart.failures),httpErrors:badResponses.slice(diagnosticStart.responses),pageErrors:pageErrors.slice(diagnosticStart.pageErrors),consoleErrors:consoleApiErrors.slice(diagnosticStart.consoleErrors)});
+  await send('Emulation.setEmulatedMedia',{features:[{name:'hover',value:'hover'},{name:'pointer',value:'fine'}]});
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  await go('/v3/discuter?mock=capture-t0189', v3Base);
+  try {
+    await openChat();
+    // Headless Chrome reports hover:none even after CDP media emulation. Mirror the fine-pointer CSS branch for captures.
+    await evaluate(`(()=>{if(matchMedia('(hover:hover) and (pointer:fine)').matches)return;const sheet=[...document.styleSheets].find(item=>item.href?.includes('chat.css'));if(!sheet)throw Error('chat stylesheet unavailable for fine-pointer capture');window.__t0189PointerRules=[sheet,sheet.cssRules.length];sheet.insertRule('.ao-messenger__row-menu .bu-control-menu__trigger{opacity:0!important}',sheet.cssRules.length);sheet.insertRule('.ao-messenger__session-line:hover .ao-messenger__row-menu .bu-control-menu__trigger,.ao-messenger__session-line:focus-within .ao-messenger__row-menu .bu-control-menu__trigger{opacity:1!important}',sheet.cssRules.length);})()`);
+    await waitFor(`document.querySelector('[data-chat-thread]') && !document.body.innerText.includes('NOT_FOUND')`);
+    const sessionId = await evaluate(`document.querySelector('[data-chat-session]')?.getAttribute('data-chat-session')`);
+    assert.ok(sessionId);
+    await capture('desktop-active-1440.png');
+    const desktopVisibility=await evaluate(`({hover:matchMedia('(hover:hover) and (pointer:fine)').matches,current:getComputedStyle(document.querySelector('[data-chat-session="${sessionId}"]').closest('li').querySelector('.bu-control-menu__trigger')).opacity,other:getComputedStyle(document.querySelector('[data-chat-list="sessions"] li:last-child .bu-control-menu__trigger')).opacity})`);
+    assert.equal(desktopVisibility.current,'0','desktop action button stays hidden until hover or keyboard focus');
+    assert.equal(desktopVisibility.other,'0');
+    const rowGeometry=await evaluate(`(()=>{const row=document.querySelector('[data-chat-session="${sessionId}"]'),li=row.closest('li'),button=li.querySelector('.bu-control-menu__trigger'),r=row.getBoundingClientRect(),l=li.getBoundingClientRect(),b=button.getBoundingClientRect();return {row:r.width,item:l.width,buttonInside:b.left>=r.left&&b.right<=r.right,edgeGap:r.right-b.right}})()`);
+    assert.ok(rowGeometry.row>=rowGeometry.item-2&&rowGeometry.row<=rowGeometry.item+2&&rowGeometry.buttonInside&&rowGeometry.edgeGap>=0&&rowGeometry.edgeGap<=24,`desktop action button overlays inside a full-width session row: ${JSON.stringify(rowGeometry)}`);
+
+    const firstTrigger = `document.querySelector('[data-chat-session="${sessionId}"]').closest('li').querySelector('.bu-control-menu__trigger')`;
+    const hoverPoint=await evaluate(`(()=>{const r=document.querySelector('[data-chat-session="${sessionId}"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:hoverPoint.x,y:hoverPoint.y});
+    await waitFor(`getComputedStyle(${firstTrigger}).opacity==='1'`);
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:2,y:2});
+    await waitFor(`getComputedStyle(${firstTrigger}).opacity==='0'`);
+    await evaluate(`${firstTrigger}.focus()`);
+    await waitFor(`getComputedStyle(${firstTrigger}).opacity==='1'`);
+    await evaluate(`${firstTrigger}.click()`);
+    await waitFor(`document.querySelector('[role=menu]')`);
+    await waitFor(`(() => {const m=document.querySelector('[role=menu]'),b=${firstTrigger}.getBoundingClientRect();return m&&m.getBoundingClientRect().top>=b.bottom})()`);
+    const menuAnchor=await evaluate(`(()=>{const m=document.querySelector('[role=menu]').getBoundingClientRect(),b=${firstTrigger}.getBoundingClientRect();return {menuRight:m.right,buttonRight:b.right}})()`);
+    assert.ok(Math.abs(menuAnchor.menuRight-menuAnchor.buttonRight)<2,`menu aligns to the trigger's right edge: ${JSON.stringify(menuAnchor)}`);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role=menuitem]')].map(item=>item.textContent.trim())`),['Renommer','Supprimer']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role=menuitem]')].map(item=>!!item.querySelector('svg'))`),[true,true]);
+    assert.equal(await evaluate(`Math.round(document.querySelector('[role=menu]').getBoundingClientRect().width)`),180);
+    await capture('desktop-menu-below-1440.png');
+    await key('Escape');
+    await waitFor(`!document.querySelector('[role=menu]')`);
+
+    await evaluate(`(() => {const list=document.querySelector('[data-chat-list="sessions"]');list.scrollTop=list.scrollHeight;})()`);
+    const lastTrigger = `document.querySelector('[data-chat-list="sessions"] li:last-child .bu-control-menu__trigger')`;
+    await evaluate(`${lastTrigger}.focus()`);
+    await evaluate(`${lastTrigger}.click()`);
+    await waitFor(`document.querySelector('[role=menu]')`);
+    await waitFor(`(() => {const m=document.querySelector('[role=menu]'),b=${lastTrigger}.getBoundingClientRect();return m&&m.getBoundingClientRect().bottom<=b.top})()`);
+    await capture('desktop-menu-above-1440.png');
+    await key('Escape');
+
+    await evaluate(`${firstTrigger}.click()`);
+    await waitFor(`document.querySelector('[role=menuitem]')`);
+    await evaluate(`[...document.querySelectorAll('[role=menuitem]')].find(item=>item.textContent.includes('Renommer')).click()`);
+    await waitFor(`document.querySelector('[data-chat-rename]') && document.activeElement===document.querySelector('[data-chat-rename]')`);
+    assert.equal(await evaluate(`(()=>{const i=document.querySelector('[data-chat-rename]');return i.selectionStart===0&&i.selectionEnd===i.value.length})()`),true);
+    const renamePresentation=await evaluate(`(()=>{const i=document.querySelector('[data-chat-rename]'),row=i.closest('.ao-messenger__session-line'),title=row.querySelector('.ao-messenger__session-row strong'),a=i.getBoundingClientRect(),b=title.getBoundingClientRect(),style=getComputedStyle(i);return {sameX:Math.abs(a.left-b.left)<2,sameY:Math.abs(a.top-b.top)<3,sameFont:style.font===getComputedStyle(title).font,border:style.borderTopWidth,background:style.backgroundColor,rowWidth:row.getBoundingClientRect().width}})()`);
+    assert.ok(renamePresentation.sameX&&renamePresentation.sameY&&renamePresentation.sameFont&&renamePresentation.border==='0px'&&renamePresentation.background==='rgba(0, 0, 0, 0)',`rename is visually in place without a box: ${JSON.stringify(renamePresentation)}`);
+    await capture('desktop-inline-rename-1440.png');
+    await evaluate(`(() => {const input=document.querySelector('[data-chat-rename]');input.focus();input.select();})()`);
+    await send('Input.insertText',{text:'Revue hebdomadaire'});
+    await key('Enter');
+    await waitFor(`document.querySelector('[data-chat-session="${sessionId}"] strong')?.textContent==='Revue hebdomadaire'`).catch(async error=>{const state=await evaluate(`(()=>({body:document.body.innerText.slice(-500),input:document.querySelector('[data-chat-rename]')?.value,focused:document.activeElement?.getAttribute('data-chat-rename'),row:document.querySelector('[data-chat-session="${sessionId}"]')?.innerText,alerts:[...document.querySelectorAll('[role=alert]')].map(x=>x.innerText)}))()`);console.error('T-0189 rename diagnostic '+JSON.stringify({state,chatRequests:requests.slice(diagnosticStart.requests).filter(x=>x.url.includes('/chat/sessions/')).map(x=>x.url),httpErrors:badResponses.slice(diagnosticStart.responses)}));throw error;});
+
+    const targetId = await evaluate(`new URLSearchParams(location.search).get('cible')`);
+    await evaluate(`(()=>{const stored=window.__t0189PointerRules;if(stored){stored[0].deleteRule(stored[1]+1);stored[0].deleteRule(stored[1]);delete window.__t0189PointerRules;}})()`);
+    await send('Emulation.setEmulatedMedia',{features:[{name:'hover',value:'none'},{name:'pointer',value:'coarse'}]});
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await go('/v3/discuter?mock=capture-t0189&cible='+encodeURIComponent(targetId)+'&vue=sessions',v3Base);
+    await waitFor(`document.querySelector('[data-chat-session]')`);
+    const mobileId = await evaluate(`document.querySelector('[data-chat-session]')?.getAttribute('data-chat-session')`);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ao-messenger__row-menu')).display`),'none','phones use swipe gestures without a three-dot action button');
+    await capture('mobile-session-list-swipe-only-390.png');
+    const swipe = async (id,from,to) => evaluate(`(() => {const row=document.querySelector('[data-chat-session="${id}"]').closest('li');const start=new Touch({identifier:1,target:row,clientX:${from},clientY:240});const end=new Touch({identifier:1,target:row,clientX:${to},clientY:240});row.dispatchEvent(new TouchEvent('touchstart',{bubbles:true,touches:[start],changedTouches:[start]}));row.dispatchEvent(new TouchEvent('touchend',{bubbles:true,touches:[],changedTouches:[end]}));})()`);
+    await swipe(mobileId,280,200);
+    await waitFor(`document.querySelector('[data-chat-rename]') && document.activeElement===document.querySelector('[data-chat-rename]')`);
+    await capture('mobile-swipe-left-rename-390.png');
+    await evaluate(`(() => {const input=document.querySelector('[data-chat-rename]');input.focus();input.select();})()`);
+    await send('Input.insertText',{text:'Nom mobile'});
+    await key('Enter');
+    await waitFor(`document.querySelector('[data-chat-session="${mobileId}"] strong')?.textContent==='Nom mobile'`);
+
+    const deleteId = await evaluate(`document.querySelectorAll('[data-chat-session]')[1]?.getAttribute('data-chat-session')`);
+    assert.ok(deleteId);
+    await swipe(deleteId,200,280);
+    await waitFor(`document.querySelector('[role=dialog]')?.textContent.includes('Supprimer cette discussion')`);
+    await waitFor(`document.querySelector('[role=dialog] .bu-modal__desc')?.textContent.trim().length>0`);
+    assert.match(await evaluate(`document.querySelector('[role=dialog] .bu-modal__desc')?.textContent||''`),/transcript|conversation/i,'delete dialog shows the backend retention notice');
+    const deleteTitleLayout=await evaluate(`(()=>{const title=document.querySelector('[role=dialog] .bu-modal__title'),node=title?.firstChild,range=document.createRange();if(!node)return {text:title?.textContent||'',punctuationRects:0};range.setStart(node,node.length-2);range.setEnd(node,node.length);return {text:title.textContent,punctuationRects:range.getClientRects().length};})()`);
+    assert.match(deleteTitleLayout.text,/discussion\u202f\?$/,'French delete title keeps punctuation attached with a narrow no-break space');
+    assert.equal(deleteTitleLayout.punctuationRects,1,'delete title keeps the question mark on the same line');
+    const deleteDialogGeometry=await evaluate(`(()=>{const r=document.querySelector('[role=dialog]').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height,viewport:innerWidth}})()`);
+    assert.ok(deleteDialogGeometry.left>0&&deleteDialogGeometry.right<deleteDialogGeometry.viewport&&deleteDialogGeometry.top>0,`phone delete confirmation stays a compact centered dialog: ${JSON.stringify(deleteDialogGeometry)}`);
+    await capture('mobile-swipe-right-delete-confirm-390.png');
+    await evaluate(`[...document.querySelectorAll('[role=dialog] button')].find(button=>button.textContent.includes('Supprimer la discussion')).click()`);
+    await waitFor(`document.querySelector('.bu-toast.ao-chat-undo-toast button.ao-toast-action--text')?.textContent.trim()==='Annuler'`);
+    const undoToastLayout=await evaluate(`(()=>{const toast=document.querySelector('.bu-toast.ao-chat-undo-toast'),text=toast?.querySelector('.bu-toast__text'),action=toast?.querySelector('.ao-toast-action--text'),range=document.createRange();if(!toast||!text||!action)return null;range.selectNodeContents(text);const r=toast.getBoundingClientRect(),t=text.getBoundingClientRect(),a=action.getBoundingClientRect();return {message:text.textContent.trim(),action:action.textContent.trim(),messageLines:range.getClientRects().length,toastWidth:r.width,actionWidth:a.width,actionHeight:a.height,viewport:innerWidth}})()`);
+    assert.ok(undoToastLayout&&undoToastLayout.message==='Discussion supprimée'&&undoToastLayout.action==='Annuler'&&undoToastLayout.messageLines===1&&undoToastLayout.actionWidth<80&&undoToastLayout.toastWidth<undoToastLayout.viewport,`phone undo toast stays a single line with a compact text action: ${JSON.stringify(undoToastLayout)}`);
+    await capture('mobile-delete-undo-toast-390.png');
+    await evaluate(`document.querySelector('.bu-toast.ao-chat-undo-toast .ao-toast-action--text').click()`);
+    await waitFor(`document.querySelector('[data-chat-session="${deleteId}"]')`);
+
+    await go('/v3/discuter?mock=capture-t0189&cible='+encodeURIComponent(targetId)+'&discussion='+encodeURIComponent(mobileId)+'&vue=conversation',v3Base);
+    await waitFor(`document.querySelector('[data-chat-thread]') && document.querySelector('.ao-messenger__workspace[data-chat-screen="conversation"]')`);
+    const phoneConversationLayout=await evaluate(`(()=>{const shell=document.querySelector('.bu-shell'),workspace=document.querySelector('.ao-messenger__workspace'),top=document.querySelector('.bu-mtopbar'),nav=document.querySelector('.bu-bottombar'),pane=document.querySelector('.ao-messenger__conversation'),bar=pane?.querySelector('.ao-messenger__pane-head'),thread=pane?.querySelector('[data-chat-thread]'),compose=pane?.querySelector('.ao-messenger__compose'),rect=el=>{const r=el?.getBoundingClientRect();return r?{top:r.top,bottom:r.bottom,height:r.height}:null};return {screen:workspace?.dataset.chatScreen,topDisplay:getComputedStyle(top).display,navDisplay:getComputedStyle(nav).display,pane:rect(pane),bar:rect(bar),thread:rect(thread),compose:rect(compose),height:innerHeight}})()`);
+    assert.ok(phoneConversationLayout.screen==='conversation'&&phoneConversationLayout.topDisplay==='none'&&phoneConversationLayout.navDisplay==='none',`phone conversation hides the app header and bottom navigation: ${JSON.stringify(phoneConversationLayout)}`);
+    assert.ok(phoneConversationLayout.bar&&phoneConversationLayout.thread&&phoneConversationLayout.compose&&phoneConversationLayout.pane.top===0&&Math.abs(phoneConversationLayout.pane.bottom-phoneConversationLayout.height)<2,`phone conversation uses the full viewport for its bar, messages and composer: ${JSON.stringify(phoneConversationLayout)}`);
+    await capture('mobile-conversation-fullscreen-390.png');
+    await evaluate(`document.querySelector('.ao-messenger__conversation .ao-messenger__pane-head button').click()`);
+    await waitFor(`document.querySelector('.ao-messenger__workspace[data-chat-screen="sessions"]') && document.querySelector('[data-chat-list="sessions"]')`);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.bu-mtopbar')).display`),'flex','returning to the list restores the app header');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.bu-bottombar')).display`),'grid','returning to the list restores the bottom navigation');
+
+    await send('Emulation.setDeviceMetricsOverride',{width:820,height:1180,deviceScaleFactor:1,mobile:true});
+    await send('Emulation.setEmulatedMedia',{features:[{name:'hover',value:'none'},{name:'pointer',value:'coarse'}]});
+    await go('/v3/discuter?mock=capture-t0189&cible='+encodeURIComponent(targetId)+'&vue=sessions',v3Base);
+    await waitFor(`document.querySelector('.ao-messenger__row-menu .bu-control-menu__trigger')`);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ao-messenger__row-menu .bu-control-menu__trigger')).opacity`),'1');
+    await capture('tablet-touch-menu-visible-820.png');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'hover',value:'hover'},{name:'pointer',value:'fine'}]});
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+    await go('/v3/discuter?mock=capture-t0189-empty&cible='+encodeURIComponent(targetId)+'&vue=sessions',v3Base);
+    await waitFor(`document.querySelector('.ao-messenger__list > .bu-empty .bu-empty__title')?.textContent.includes('Aucune discussion')`);
+    await capture('desktop-empty-sessions-1440.png');
+    await send('Emulation.setEmulatedMedia',{features:[]});
+    await send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  } catch (error) {
+    console.error('T-0189 browser diagnostics '+JSON.stringify(diagnostics()));
+    throw error;
+  }
+});
+
+test('T-0207 iPad: safe-area shell and Discuter conversation fill the viewport', { skip, timeout: 60_000 }, async () => {
+  const captureDir = join(UI_ROOT, '../../design/reports/t0207-ipad');
+  mkdirSync(captureDir, { recursive: true });
+  const targetUrl = async () => {
+    await go('/v3/discuter?mock=capture-t0189', v3Base);
+    await openChat();
+    const query = await evaluate(`location.search`);
+    return '/v3/discuter' + query;
+  };
+  const inspect = async name => {
+    const layout = await evaluate(`(()=>{const shell=document.querySelector('.bu-shell'),main=document.querySelector('.bu-shell__main'),sidebar=document.querySelector('.bu-sidebar'),header=document.querySelector('.bu-topbar'),workspace=document.querySelector('.ao-messenger__workspace'),conversation=document.querySelector('.ao-messenger__conversation'),rect=el=>{const r=el?.getBoundingClientRect();return r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}:null};return {viewport:{width:document.documentElement.clientWidth,height:innerHeight},shell:rect(shell),main:rect(main),sidebar:rect(sidebar),sidebarPaddingTop:getComputedStyle(sidebar).paddingTop,sidebarBasePaddingTop:getComputedStyle(document.documentElement).getPropertyValue('--bu-space-4').trim(),header:rect(header),workspace:rect(workspace),conversation:rect(conversation),shellTop:getComputedStyle(shell).top,screen:workspace?.dataset.chatScreen}})()`);
+    assert.ok(layout.conversation, `conversation is open in ${name}: ${JSON.stringify(layout)}`);
+    assert.ok(layout.header.top >= layout.shell.top - 1, `app header stays inside the safe-area shell in ${name}: ${JSON.stringify(layout)}`);
+    assert.ok(layout.sidebar.top >= layout.shell.top - 1 && layout.sidebarPaddingTop === layout.sidebarBasePaddingTop, `sidebar adds only normal spacing after the shell safe-area inset in ${name}: ${JSON.stringify(layout)}`);
+    assert.ok(layout.workspace.right >= layout.viewport.width - 2, `Discuter workspace reaches the iPad right edge in ${name}: ${JSON.stringify(layout)}`);
+    assert.ok(layout.conversation.right >= layout.workspace.right - 2, `conversation pane fills its slot in ${name}: ${JSON.stringify(layout)}`);
+    const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    writeFileSync(join(captureDir, name + '.png'), Buffer.from(shot.data, 'base64'));
+    return layout;
+  };
+  try {
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'hover', value: 'none' }, { name: 'pointer', value: 'coarse' }] });
+    await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 1024, deviceScaleFactor: 2, mobile: true });
+    const landscape = await targetUrl();
+    await evaluate(`document.querySelector('.bu-shell').style.setProperty('--bu-safe-area-top','24px')`);
+    await evaluate(`document.documentElement.setAttribute('data-theme','light')`);
+    const landscapeLayout = await inspect('ipad-landscape-light-1366x1024');
+    assert.equal(landscapeLayout.viewport.width, 1366);
+    assert.equal(landscapeLayout.shellTop, '24px', 'the shell consumes the simulated iPad top inset once');
+
+    await send('Emulation.setDeviceMetricsOverride', { width: 1024, height: 1366, deviceScaleFactor: 2, mobile: true });
+    await go(landscape, v3Base);
+    await waitFor(`document.querySelector('[data-chat-thread]')`);
+    await evaluate(`document.querySelector('.bu-shell').style.setProperty('--bu-safe-area-top','24px')`);
+    await evaluate(`document.documentElement.setAttribute('data-theme','dark')`);
+    const portraitLayout = await inspect('ipad-portrait-dark-1024x1366');
+    assert.equal(portraitLayout.viewport.width, 1024);
+  } finally {
+    await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await send('Emulation.setEmulatedMedia', { features: [] });
+  }
+});
+
+test('T-0209 capture compact Discuter agent rows at phone, desktop and iPad sizes', { skip, timeout: 60_000 }, async () => {
+  const captureDir = join(UI_ROOT, '../../design/reports/t0209-agent-list/after');
+  const vmIssuesFrom = vmIssues.length;
+  mkdirSync(captureDir, { recursive: true });
+  const capture = async (name, width, height, mobile) => {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });
+    await go('/v3/discuter?mock=capture-t0185', v3Base);
+    await waitFor(`document.querySelectorAll('[data-chat-agent]').length>=7`);
+    const rows = await evaluate(`Array.from(document.querySelectorAll('[data-chat-agent]')).map(button=>{const rect=el=>{const r=el.getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right}},portrait=button.querySelector('.ao-messenger__portrait'),primary=button.querySelector('.ao-messenger__row-primary'),dot=button.querySelector('.ao-messenger__state-dot'),badge=button.querySelector('.bu-count');return {row:rect(button),portrait:rect(portrait),primary:rect(primary),dotLabel:dot?.getAttribute('aria-label'),dotTitle:dot?.title,badge:badge?rect(badge):null}})`);
+    const emptyState = await evaluate(`({conversationTitles:[...document.querySelectorAll('.ao-messenger__conversation-slot .bu-empty__title')].map(node=>node.textContent.trim()),sessionsNotice:document.querySelector('[data-chat-list="sessions"] .ao-messenger__notice')?.textContent.trim()})`);
+    assert.ok(rows.length>=7, `fixture renders its agent and team rows at ${width}px`);
+    assert.equal(emptyState.conversationTitles.filter(title=>title==='Choisissez un agent').length,1,`only the conversation pane has the large empty state at ${width}px`);
+    assert.match(emptyState.sessionsNotice||'',/Sélectionnez un agent/,`sessions pane uses the concise hint at ${width}px`);
+    for (const row of rows) {
+      assert.equal(row.portrait.width,40,`portrait width at ${width}px`);
+      assert.equal(row.portrait.height,40,`portrait height at ${width}px`);
+      assert.ok(row.primary.height<=24,`name and role stay on one line at ${width}px: ${JSON.stringify(row)}`);
+      assert.ok(row.dotLabel&&row.dotTitle,`status dot exposes the supplied state label at ${width}px`);
+      if (row.badge) assert.ok(row.badge.right<=row.row.right-6,`unread badge stays inside the row edge at ${width}px`);
+    }
+    const teamRole = await evaluate(`document.querySelector('[data-chat-agent][data-chat-kind="team"] .ao-messenger__row-primary')?.textContent||''`);
+    assert.equal(teamRole,'Équipe du PM·Équipe',`team target uses its backend name and context label at ${width}px`);
+    const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    writeFileSync(join(captureDir, `${name}.png`), Buffer.from(shot.data, 'base64'));
+  };
+  try {
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'hover', value: 'none' }, { name: 'pointer', value: 'coarse' }] });
+    await capture('mobile-390x844', 390, 844, true);
+    await capture('desktop-1440x1000', 1440, 1000, false);
+    await capture('ipad-portrait-1024x1366', 1024, 1366, true);
+    assert.deepEqual(vmIssues.slice(vmIssuesFrom), [], 'strict browser vmcheck accepts the captured v3 agent rows and their contextLabel');
+  } finally {
+    await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await send('Emulation.setEmulatedMedia', { features: [] });
   }
 });

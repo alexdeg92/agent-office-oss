@@ -5,7 +5,9 @@ import { assetUrl } from '../config.js';
 import { getLang } from '../i18n.js';
 import { EXAMPLES, conform, exampleData } from './examples.js';
 const MIN = 60_000, H = 60 * MIN, D = 24 * H;
-const STATUSES = ['idea', 'todo', 'in-progress', 'in-review', 'shipped'];
+const statusOptions = EXAMPLES.candidatesVm.data.statusOptions;
+const statusIds = statusOptions.map(option => option.id);
+const statusLabel = id => statusOptions.find(option => option.id === id)?.label;
 const PRIORITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4, P5: 5, P6: 6, P7: 7, P8: 8, P9: 9 };   // architect-55
 const RISK_LABELS = { blocked: 'Bloqué', 'flow-failing': 'Flow en échec', 'cron-failing': 'Cron en échec', 'ci-red': 'CI rouge' };
 const RISK_SEVERITY = { blocked: 'high', 'flow-failing': 'high', 'cron-failing': 'high', 'ci-red': 'medium', stale: 'low' };
@@ -154,6 +156,9 @@ export function seed(now = Date.now()) {
   if (globalThis.location && new URLSearchParams(location.search).has('image-hostile')) {
     const lucie = P.find((x) => x.id === 'prj_lucie');
     lucie.repo.image = { kind: 'screenshot', url: "https://example.invalid/x');position:fixed;inset:0;z-index:999999;background:red;--x:url('x" };
+    // Exercise the image path the current server board actually renders. The hostile URL remains a
+    // valid string in the VM; the UI must reject it as an image source rather than interpolate it.
+    lucie.cover = { url: lucie.repo.image.url, thumbUrl: lucie.repo.image.url, source: 'agent', generatedAt: now };
   }
   P.push(fromExampleVM(exampleData(EXAMPLES.projectVm)));
   const projects = new Map();
@@ -203,7 +208,7 @@ function seedHistory(p, now) {
   const ev = [];
   const add = (at, actor, kind, extra = {}) => ev.push({ id: nextId('evt'), projectId: p.id, at, actor, dedupeKey: null, kind, ...extra });
   add(p.createdAt, Owner, 'project-created');
-  const path = STATUSES.slice(0, STATUSES.indexOf(p.status) + 1);
+  const path = statusIds.slice(0, statusIds.indexOf(p.status) + 1);
   const span = Math.max(1, p.lastActivityAt - p.createdAt);
   path.slice(1).forEach((to, i) => add(p.createdAt + ((i + 1) / path.length) * span * 0.8, i % 2 ? TIMMY : Owner, 'status', { from: path[i], to }));
   for (const f of p.flags) {
@@ -251,7 +256,7 @@ function historyText(group) {
   // Params carry raw data only; the actor is HistoryItemVM.actor (the client fills `{actor}` from it).
   const k = (key, params = {}) => (Object.keys(params).length ? { key: 'historyKind.' + key, params } : { key: 'historyKind.' + key });
   switch (e.kind) {
-    case 'status': return k('status', { from: { key: 'projectStatus.' + e.from }, to: { key: 'projectStatus.' + e.to } });
+    case 'status': return k('status', { from: statusLabel(e.from), to: statusLabel(e.to) });
     case 'renamed': case 'priority': return k(e.kind, { from: e.from, to: e.to });
     case 'commit': return k(n > 1 ? 'commit.other' : 'commit.one', { n, branch: e.branch });
     case 'flow-run': case 'cron-run': {
@@ -327,6 +332,18 @@ function sourceLabel(s) {
   if (s.kind === 'sessionGroup') return s.ref.by === 'group' ? s.ref.name : s.ref.by === 'keys' ? `${s.ref.sessionKeys.length} sessions` : s.ref.interlocutorId;
   return 'manuel';
 }
+function sourceDescriptor(s) {
+  const declared=EXAMPLES.projectVm.data.sourceDescriptors.find(row=>row.kind===s.kind);
+  const descriptor=structuredClone(declared);
+  if(s.kind==='github') { descriptor.id='source:github:'+s.ref.owner.toLowerCase();descriptor.label.params={owner:s.ref.owner}; }
+  if(s.kind==='workspace')descriptor.id='source:workspace:'+(s.ref.rootId||'local');
+  return descriptor;
+}
+const projectCapabilities = () => ({ read: true, write: true, comments: 'read-write', history: 'read-write', repository: 'read-only' });
+function projectCounts(p) {
+  return { sessions: p.sources.reduce((total, source) => total + (Number.isSafeInteger(source.sessionCount) ? source.sessionCount : 0), 0) || null,
+    agents: p.people.filter(person => PERSONS.get(person.personId)?.kind === 'agent').length, activity: null };
+}
 function repoVm(r, p) {
   if (!r) return null;
   const fetched = r.defaultBranch != null;
@@ -335,19 +352,30 @@ function repoVm(r, p) {
     fetchedAt: fetched ? r.fetchedAt : null, lastError: null };
 }
 
-export function buildBoardVM(db, filter = 'all') {
-  const sel = [...db.projects.values()].filter((p) => p.archivedAt == null).filter((p) =>
+export function buildBoardVM(db, filter = 'all', query = {}) {
+  const sourceFiltered = [...db.projects.values()].filter((p) => p.archivedAt == null).filter((p) =>
     filter === 'at-risk' ? p.flags.some((f) => f.kind === 'risk' && f.clearedAt == null)
-      : filter === 'with-timmy' ? p.people.some((pp) => pp.personId === 'per_timmy') : true);
-  const columns = STATUSES.map((status) => {
+      : filter === 'with-timmy' ? p.people.some((pp) => pp.personId === 'per_timmy') : true)
+    .filter(p => !query.search || p.name.toLocaleLowerCase('fr-CA').includes(query.search.toLocaleLowerCase('fr-CA')));
+  const sourceCounts = new Map();
+  for (const project of sourceFiltered) {
+    const unique = new Map(project.sources.map(source => { const descriptor=sourceDescriptor(source); return [descriptor.id,descriptor]; }));
+    for (const descriptor of unique.values()) sourceCounts.set(descriptor.id,{source:descriptor,count:(sourceCounts.get(descriptor.id)?.count||0)+1});
+  }
+  const sourceFilters = [...sourceCounts.values()].map(({source,count}) => ({id:source.id,label:source.label,count,selected:source.id===query.source,source}));
+  const sourceSelected = sourceFiltered.filter(project => !query.source || project.sources.some(source => sourceDescriptor(source).id===query.source));
+  const sel = query.stage && query.stage !== 'all' ? sourceSelected.filter(project=>project.status===query.stage) : sourceSelected;
+  const columns = statusIds.map((status) => {
     const cards = sel.filter((p) => p.status === status).sort(compareCards).map((p) => {
       const ppl = people(p).map(({ id, kind, name, avatarUrl, state }) => ({ id, kind, name, avatarUrl, state }));
-      return { id: p.id, name: p.name, priority: p.priority, revision: p.revision, status: p.status, thumb: thumbOf(p), flags: cardFlags(p.flags),
-        people: { visible: ppl.slice(0, CARD_PEOPLE_CAP), hiddenCount: Math.max(0, ppl.length - CARD_PEOPLE_CAP) }, lastActivityAt: p.lastActivityAt };
+      return { id: p.id, name: p.name, priority: p.priority, revision: p.revision, status: p.status, thumb: thumbOf(p), cover: p.cover || null, flags: cardFlags(p.flags),
+        people: { visible: ppl.slice(0, CARD_PEOPLE_CAP), hiddenCount: Math.max(0, ppl.length - CARD_PEOPLE_CAP) }, lastActivityAt: p.lastActivityAt,
+        sourceDescriptors: p.sources.map(sourceDescriptor), statusLabel: statusLabel(p.status), counts: projectCounts(p), capabilities: projectCapabilities() };
     });
     return { id: status, count: cards.length, cards };
   });
-  return conform(EXAMPLES.boardVm.data, { filter, columns });
+  return conform(EXAMPLES.boardVm.data, { filter, columns, sourceFilterId: query.source || null, sourceFilters,
+    emptyStateLabel: columns.some(column => column.cards.length) ? null : { key: 'project.empty.board' } });
 }
 
 export function buildProjectVM(db, id) {
@@ -357,7 +385,10 @@ export function buildProjectVM(db, id) {
   return conform(EXAMPLES.projectVm.data, {
     id: p.id, revision: p.revision, name: p.name, status: p.status, priority: p.priority, archived: p.archivedAt != null,
     summary: p.summary, summaryMeta: p.summaryMeta ? { author: actorVm(p.summaryMeta.author), at: p.summaryMeta.at } : null,
-    thumb: thumbOf(p),
+    thumb: thumbOf(p), cover: p.cover || null,
+    sourceDescriptors: p.sources.map(sourceDescriptor), statusLabel: statusLabel(p.status), statusTransitions: statusOptions.filter(option => option.id !== p.status),
+    counts: projectCounts(p), capabilities: projectCapabilities(),
+    capabilityRows: EXAMPLES.projectVm.data.capabilityRows,
     flags: p.flags.filter((f) => f.kind !== 'risk' || f.clearedAt == null).map(flagVm),
     sources: p.sources.map((s) => ({ id: s.id, kind: s.kind, label: sourceLabel(s), ref: s.ref ?? null, addedAt: s.addedAt, sessionCount: s.sessionCount ?? (s.kind === 'sessionGroup' && s.ref.by === 'keys' ? s.ref.sessionKeys.length : null) })),
     repo: repoVm(p.repo, p),
@@ -396,7 +427,7 @@ export function command(db, method, path, body, { conflictMode = false, actor = 
       checkBody(body, ['name', 'status', 'priority', 'summary', 'sources'], ['name']);
       const name = String(body.name).trim();
       if (!name || name.length > 80) throw new CmdError(400, 'validation_failed', 'Le nom doit compter entre 1 et 80 caractères.', [{ field: 'name', issue: 'longueur' }]);
-      if (body.status && !STATUSES.includes(body.status)) throw new CmdError(400, 'validation_failed', 'Statut inconnu.', [{ field: 'status', issue: 'enum' }]);
+      if (body.status && !statusIds.includes(body.status)) throw new CmdError(400, 'validation_failed', 'Statut inconnu.', [{ field: 'status', issue: 'enum' }]);
       if (body.priority && !(body.priority in PRIORITY_RANK)) throw new CmdError(400, 'validation_failed', 'Priorité inconnue.', [{ field: 'priority', issue: 'enum' }]);
       const now = Date.now();
       const id = 'prj_' + (slug(name) || 'projet') + '-' + (++seq).toString(36);
@@ -423,7 +454,7 @@ export function command(db, method, path, body, { conflictMode = false, actor = 
 
     if (method === 'PUT' && rest === '/status') {
       checkBody(body, ['status'], ['status']);
-      if (!STATUSES.includes(body.status)) throw new CmdError(400, 'validation_failed', 'Statut inconnu.', [{ field: 'status', issue: 'enum' }]);
+      if (!statusIds.includes(body.status)) throw new CmdError(400, 'validation_failed', 'Statut inconnu.', [{ field: 'status', issue: 'enum' }]);
       if (body.status === p.status) return { result: undefined, revision: p.revision, touched: [] };
       const from = p.status; p.status = body.status;
       touch(db, p, actor, 'status', { from, to: body.status });

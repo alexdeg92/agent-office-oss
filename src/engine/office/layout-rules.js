@@ -10,10 +10,11 @@ const ROLE_MAX = 32;
 const MAX_ACCESSORIES = 5;
 const ROLES = ['main', 'agent', 'subagent', 'cron', 'dm', 'channel'];
 /**
- * Station kinds an occupant can call home (auto allocation and explicit `station`), in allocation
- * order: every desk, then every lounge (contract 2.0, data-model §12). Others are destinations only.
+ * Workstation kinds an occupant can call home. Lounges remain valid legacy layout references and
+ * activity destinations, but they are never a pinned or automatic work home.
  */
-const HOME_KINDS = ['desk', 'lounge'];
+const HOME_KINDS = ['desk'];
+const LAYOUT_STATION_KINDS = ['desk', 'lounge'];
 /** O8: seen-agent presence. Default when the layout says nothing; 0 turns it off; at most a day. */
 const PRESENCE_DEFAULT_MINUTES = 30;
 const PRESENCE_MAX_MINUTES = 1440;
@@ -313,7 +314,7 @@ function validateLayout(layout, index, { allowNoDesk = false } = {}) {
       const item = layout.items.find((i) => i.uid === st);
       const sf = item && index.furniture.get(item.asset);
       if (!item || !sf?.station) err('missing-station', T('err.missing-station', { who }), { agentId: a.agentId });
-      else if (!HOME_KINDS.includes(sf.station.kind)) err('station-kind', T('err.station-kind', { who }), { agentId: a.agentId });
+      else if (!LAYOUT_STATION_KINDS.includes(sf.station.kind)) err('station-kind', T('err.station-kind', { who }), { agentId: a.agentId });
       else if (fixedDesks.has(st)) err('station-taken', T('err.station-taken', { item: itemName(layout, index, st), who: fixedDesks.get(st) }), { agentId: a.agentId });
       else fixedDesks.set(st, who);
     }
@@ -359,7 +360,7 @@ function displayRule(a) {
   return c && RULES_FR[`who.${c}`] != null ? T(`who.${c}`) : a.agentId;
 }
 
-/** Home stations in allocation order (desks in layout order, then lounges): their count is the seated capacity. */
+/** Work-home desks in layout order. Lounge seats are activity spots, never workstation capacity. */
 function homeStations(layout, index) {
   const kindOf = (i) => (i.wall == null ? index.furniture.get(i.asset)?.station?.kind : null);
   return HOME_KINDS.flatMap((k) => layout.items.filter((i) => kindOf(i) === k).map((i) => i.uid));
@@ -462,11 +463,19 @@ function resolveOccupants(layout, index, sources, { assignLook, stationAssignmen
     && !homeOwnerByStation.has(o._savedWant)) homeOwnerByStation.set(o._savedWant, o.id);
   for (const o of activeOrder) if (typeof o._savedWant === 'string' && desks.includes(o._savedWant)
     && !homeOwnerByStation.has(o._savedWant)) homeOwnerByStation.set(o._savedWant, o.id);
-  for (const field of ['_explicitWant', '_savedWant']) {
-    for (const o of activeOrder) if (!o.stationUid && o[field] && desks.includes(o[field]) && !taken.has(o[field])
-      && homeOwnerByStation.get(o[field]) === o.id) {
-      o.stationUid = o[field]; taken.add(o[field]);
-    }
+  for (const o of activeOrder) if (!o.stationUid && o._explicitWant && desks.includes(o._explicitWant) && !taken.has(o._explicitWant)
+    && homeOwnerByStation.get(o._explicitWant) === o.id) {
+    o.stationUid = o._explicitWant; taken.add(o._explicitWant);
+  }
+  // Keep a teammate's temporarily absent saved desk unavailable to both a
+  // present member's stale pin and new automatic assignments. Current explicit
+  // layout choices remain authoritative even when they overlap a reservation.
+  const explicitWants = new Set(out.map(o => o._explicitWant).filter(uid => typeof uid === 'string'));
+  for (const uid of [...new Set(reservedStationUids)].sort())
+    if (desks.includes(uid) && !taken.has(uid) && !explicitWants.has(uid)) taken.add(uid);
+  for (const o of activeOrder) if (!o.stationUid && o._savedWant && desks.includes(o._savedWant) && !taken.has(o._savedWant)
+    && homeOwnerByStation.get(o._savedWant) === o.id) {
+    o.stationUid = o._savedWant; taken.add(o._savedWant);
   }
   // Keep an idle occupant's explicitly or privately assigned home station when
   // spare desks remain after every active occupant has a workstation. Under
@@ -491,7 +500,6 @@ function resolveOccupants(layout, index, sources, { assignLook, stationAssignmen
       if (homeOwnerByStation.has(d) && homeOwnerByStation.get(d) !== o.id) o._borrowedHome = true;
     }
   }
-  for (const uid of [...new Set(reservedStationUids)].sort()) if (desks.includes(uid) && !taken.has(uid)) taken.add(uid);
   // Decide which idle/unknown occupants remain seated before honoring saved
   // preferences. Otherwise a lexically earlier old pin can consume the only
   // free desk and evict a more recently idle occupant, defeating longest-idle

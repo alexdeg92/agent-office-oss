@@ -37,6 +37,19 @@ test('office character view preserves backend grouping, applies search and expos
   assert.equal(createVmCheck({ mode: 'throw', version: 2 }).check('officeCharacters', legacy).count, 2);
 });
 
+test('office character v2/v3 contracts accept a backend-omitted duplicate sub-agent role label', () => {
+  const occupant = { id: 'agent:task', role: 'subagent', name: '', title: { key: 'occupantRole.subagent' },
+    roleLabel: null, state: 'idle', stateLabel: { key: 'agentState.idle' }, look,
+    groupId: null, lastSeenAt: null };
+  const base = { office: { occupants: [occupant], rosterGroups: [] }, layout: defaults.layout,
+    rules: { canonicalRuleId: id => id }, index: defaults.index };
+  for (const version of [2, 3]) {
+    const vm = buildOfficeCharactersVM({ ...base, projection: version === 2 ? project2x : project3x });
+    const check = createVmCheck({ mode: 'throw', version }).check('officeCharacters', vm);
+    assert.equal(check.count, 1, `v${version}: generic sub-agent row remains schema-valid`);
+  }
+});
+
 test('office character endpoint is authenticated, validates filters, and projects v2/v3 rows', async t => {
   const h = await startServer(loadScenario('synthetic-basic'));
   t.after(() => h.stop());

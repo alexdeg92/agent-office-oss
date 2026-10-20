@@ -20,9 +20,32 @@ const { normaliseConfig } = require('./normalise/config');
 const { normaliseSession } = require('./normalise/session');
 const { classifySession } = require('./classify/session-kind');
 const { createSessionWalker } = require('./session-walker');
+const { createAttachmentFiles } = require('./attachment-files');
 
 const SCHEMAS = Object.assign({}, require('./schemas/gateway.v1'), require('./schemas/cli.v1'), require('./schemas/config.v1'));
 const TESTED_WITH = ['2026.9.8'];
+const CHAT_MAX_BYTES=20*1024*1024,CHAT_IMAGE_MAX_BYTES=6*1024*1024;
+function chatAttachmentCapability(hello,enabled=true){
+  const policy=hello?.policy||{},advertised=policy.attachments||{};
+  let maxBytes=Number.isSafeInteger(advertised.maxBytes)&&advertised.maxBytes>0?Math.min(CHAT_MAX_BYTES,advertised.maxBytes):CHAT_MAX_BYTES;
+  let maxImageBytes=Number.isSafeInteger(advertised.maxImageBytes)&&advertised.maxImageBytes>0?Math.min(maxBytes,CHAT_IMAGE_MAX_BYTES,advertised.maxImageBytes):Math.min(maxBytes,CHAT_IMAGE_MAX_BYTES);
+  if(Number.isSafeInteger(policy.maxPayload)&&policy.maxPayload>0){const wireBudget=Math.max(0,policy.maxPayload-128*1024),decodedBudget=Math.floor(wireBudget*3/4);maxBytes=Math.min(maxBytes,decodedBudget);maxImageBytes=Math.min(maxImageBytes,maxBytes);}
+  return {enabled:enabled&&maxBytes>0,maxBytes,maxImageBytes,maxCountPerMessage:1,maxCountPerSession:20,
+    mimeTypes:['application/pdf','text/plain','image/png','image/jpeg','image/gif','image/webp']};
+}
+async function writeGatewayCall(cfg,method,params,timeoutMs=15000,GatewayOverride=null){
+  if(!['chat.send'].includes(method)||!params||typeof params!=='object'||Array.isArray(params))throw new TypeError('unsupported chat writer operation');
+  const Gateway=GatewayOverride||require('./transport').Gateway;const writer=new Gateway({url:cfg.gatewayUrl,gatewayToken:cfg.gatewayToken,identityPath:cfg.identityPath,stateDbPath:cfg.stateDbPath,retry:false,scopes:['operator.write']});
+  if(writer.notConfigured){const code=writer.notConfigured;writer.close();throw Object.assign(new Error('chat writer unavailable'),{code});}
+  let timer,settled=false;
+  try{return await new Promise((resolve,reject)=>{
+    const cleanup=()=>{clearTimeout(timer);writer.off('open',onOpen);writer.off('close',onClose);};
+    const onClose=()=>{if(settled)return;settled=true;cleanup();reject(new Error('chat writer disconnected'));};
+    const onOpen=async()=>{if(settled)return;settled=true;cleanup();try{resolve(await writer.call(method,params));}catch{reject(new Error('chat gateway request failed'));}};
+    writer.once('open',onOpen);writer.once('close',onClose);timer=setTimeout(()=>{if(settled)return;settled=true;cleanup();reject(new Error('chat writer timed out'));},Math.min(30000,Math.max(1000,timeoutMs)));
+    writer._connect();
+  });}finally{writer.close();}
+}
 
 // Raw channel → canonical operation (src/engine dispatches on `op`). `prep` adapts a raw shape to what the op
 // takes; `key` reads the request key (session key, job id, skill name) from the envelope.
@@ -69,9 +92,12 @@ const definition = {
   gatewayLabel: 'Passerelle OpenClaw',
   gatewayLabels: { fr: 'Passerelle OpenClaw', en: 'OpenClaw gateway' },   // G3c
   // OpenClaw's session-key grammar for an explicit key (`--session-key <ref>` → agent:<id>:explicit:<ref>)
-  sessionKeyFor: (agentId, ref, options = {}) => options.purpose === 'project'
-    ? 'agent:' + agentId + ':' + ref
-    : 'agent:' + agentId + ':explicit:' + ref,
+  sessionKeyFor: (agentId, ref, options = {}) => {
+    const key = options.purpose === 'project' ? 'agent:' + agentId + ':' + ref : 'agent:' + agentId + ':explicit:' + ref;
+    // OpenClaw canonicalizes principal-scoped explicit keys before storing or
+    // reading transcripts. Chat reconciliation must use that same key.
+    return options.purpose === 'chat' ? key.toLowerCase() : key;
+  },
   eventPrefix: 'gw.event.',          // unknown runtime events arrive as `${eventPrefix}<name>` (event.unknown)
   normalise: { agents: normaliseAgents, flows: normaliseCronJobs, flowRuns: normaliseCronRuns, skills: normaliseSkills, skillInfo: normaliseSkillInfo,
     channels: normaliseChannels, transcript: normaliseTranscript, config: normaliseConfig, session: normaliseSession, runtimeHealth,
@@ -86,10 +112,10 @@ const definition = {
   // architect-55: trace events no view shows (the project-tag call is metadata only)
   hiddenTraceEvent: (ev) => require('./project-hint').isProjectTagEvent(ev),
   // What this runtime can do (ADR-001 §3). G2 reports today's behaviour; the UI starts reading it in 3.0.
-  capabilities: () => ({ sessions: true, transcripts: true, senderCapture: true, activity: 'run-state',
+  capabilities: () => ({ sessions: true, transcripts: true, senderCapture: true, activity: 'run-state', conversations:{read:true,send:true,events:true},
     // G5: flows.multiAgent, since `cron add` takes --agent (api-v3.md D7)
     flows: { read: true, write: true, schedules: ['cron', 'every', 'at'], multiAgent: true }, skills: { read: true, toggle: true, detail: true },
-    channels: true, interlocutors: true, chat: true, restart: true, costs: true, subagents: true, sessionGroups: true }),
+    channels: true, interlocutors: true, chat: true, chatSessionScope: 'principal', restart: true, costs: true, subagents: true, sessionGroups: true }),
 };
 
 const GROUPS_REFRESH_MS = 60 * 1000;
@@ -107,14 +133,21 @@ function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
   const cli = createCli({ bin: cfg.openclawBin, home: cfg.openclawHome, readonly: cfg.readonly,
     env: { ...(cliEnv || process.env), OC_GATEWAY_URL: cfg.gatewayUrl, OC_GATEWAY_TOKEN: cfg.gatewayToken || '',
       OPENCLAW_GATEWAY_URL: cfg.gatewayUrl, OPENCLAW_GATEWAY_TOKEN: cfg.gatewayToken || '', OPENCLAW_GATEWAY_PASSWORD: '' } });
-  const reads = bindReads({ gw, cli });   // §12.4: every read here has its capability true
+  const commandApi = commands.bind(cli, { gw, gatewayUrl: cfg.gatewayUrl, readonly: !!cfg.readonly,
+    chatSendRpc:(method,params,timeoutMs)=>writeGatewayCall(cfg,method,params,timeoutMs) });
+  const attachmentInboxName=cfg.chatAttachmentInboxName||cfg.chatAttachmentInbox||process.env.OC_CHAT_ATTACHMENT_INBOX||'agent-office-inbox';
+  const reads = bindReads({ gw, cli, attachmentInboxName });   // §12.4: every read here has its capability true
   const capture = senderCaptures && cfg.senderCapture !== false && !cfg.readonlyStore ? require('./sender-capture').createSenderCapture(senderCaptures) : null;
   let sessionsListFailure = null, retrySessionsList = async () => ({ ok: false, category: 'not-started' });
   const boundDefinition = { ...definition,
-    capabilities: () => { const caps = definition.capabilities(); return { ...caps, senderCapture: !!capture, restart:!!caps.restart && commands.restartableUrl(cfg.gatewayUrl) }; },
+    capabilities: () => { const { conversations: _disabledConversations, ...caps } = definition.capabilities(); return { ...caps,
+      // Gateway chat.send remains fenced by sendPolicy=deny. Attachments use
+      // the ordinary webchat agent turn and private file references instead.
+      ...(cfg.readonly?{}:{attachmentDelivery:'file-reference'}),
+      chatAttachments:chatAttachmentCapability(gw.hello,!cfg.readonly), senderCapture: !!capture, restart:!!caps.restart && commands.restartableUrl(cfg.gatewayUrl) }; },
     normalise: { ...definition.normalise, transcript: (key, value, at, window, issue, ctx = {}) => {
       if (capture) { try { capture.observe(key, value.messages, ctx.session); } catch {} }
-      return normaliseTranscript(key, value, at, window, issue, { ...ctx, capturedSender: capture?.lookup });
+      return normaliseTranscript(key, value, at, window, issue, { ...ctx, attachmentInboxName, capturedSender: capture?.lookup });
     }, agents: (value) => normaliseAgents(value, require('./agent-settings').readAgentSettings(cfg.openclawConfigPath)) },
     resolveSender: (raw, ctx = {}) => definition.resolveSender(raw, { ...ctx, capturedSender: capture?.lookup }),
     health: {
@@ -125,12 +158,36 @@ function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
   };
   let stopCapture = null, disposed = false, nextSourceOrder = null;
   let groupsTimer = null, groupsSoon = null, attached = null, sessionWalker = null;
+  const attachmentFiles=createAttachmentFiles({inboxName:attachmentInboxName,
+    workspaceForAgent:agentId=>attached?.agents?.().find(agent=>agent.id===agentId)?.workspace||null});
   const loops = [];
   // R1-11: SKILL.md bodies, read only inside OpenClaw's documented skill roots (agent workspaces from the engine)
   const skillDocs = createSkillDocReader({ home: cfg.openclawHome, bin: cfg.openclawBin,
     workspaces: () => (attached ? attached.agents().map((a) => a.workspace).filter(Boolean) : []) });
   return {
     definition: boundDefinition, gw, cli, reads,
+    // Runtime-neutral chat surface: only this adapter knows how its Gateway
+    // authenticates writes and subscribes to session transcript events.
+    conversations: {
+      async send({agentId,sessionRef,conversationId,text,turnId,expectedLeafId,attachments=[]}) {
+        const attachmentPolicy=boundDefinition.capabilities().chatAttachments;
+        if(!Array.isArray(attachments)||attachments.length>attachmentPolicy.maxCountPerMessage||attachments.some(item=>
+          !item||!Buffer.isBuffer(item.content)||!Number.isSafeInteger(item.size)||item.size!==item.content.length||item.size<1||
+          !attachmentPolicy.enabled||item.size>attachmentPolicy.maxBytes||item.mimeType?.startsWith('image/')&&item.size>attachmentPolicy.maxImageBytes||!attachmentPolicy.mimeTypes.includes(item.mimeType)))return {failed:'invalid-attachment'};
+        const sessionKey=boundDefinition.sessionKeyFor(agentId,sessionRef,{purpose:'chat'});
+        const result=await commandApi.chatSend({sessionKey,agentId,sessionId:conversationId||undefined,message:text,idempotencyKey:turnId,expectedLeafEntryId:expectedLeafId,attachments});
+        return result?.ok?{accepted:true}:{failed:result?.failed||'dispatch-failed'};
+      },
+      history({agentId,sessionRef,cursor,limit}) {
+        const sessionKey=boundDefinition.sessionKeyFor(agentId,sessionRef,{purpose:'chat'});
+        return reads.conversationHistory({sessionKey,agentId,cursor,limit});
+      },
+      subscribe({agentId,sessionRef,onChange}) {
+        const sessionKey=boundDefinition.sessionKeyFor(agentId,sessionRef,{purpose:'chat'});
+        return reads.subscribeConversation({sessionKey,agentId,onChange});
+      },
+    },
+    attachmentFiles,
     updateConnection: (pair) => gw.updateConnection(pair),
     attach(engine) {
       attached = engine;
@@ -146,7 +203,7 @@ function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
       });
       groupsTimer = setInterval(refreshGroups, every(GROUPS_REFRESH_MS)); if (groupsTimer.unref) groupsTimer.unref();
     },
-    close() { disposed=true; sessionWalker?.invalidate(); gw.close(); stopCapture?.(); clearInterval(groupsTimer); clearTimeout(groupsSoon); for (const t of loops) clearInterval(t); },
+    close() { disposed=true; sessionWalker?.invalidate(); reads.close?.(); attachmentFiles.close?.(); gw.close(); stopCapture?.(); clearInterval(groupsTimer); clearTimeout(groupsSoon); for (const t of loops) clearInterval(t); },
     /**
      * The runtime's own read loops (moved out of the v1 legacy runtime at S16 prep, same order and periods). Every read
      * goes through the taps. `hooks.refreshed()` runs after each full refresh (interlocutor enrichment).
@@ -188,7 +245,7 @@ function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
       for (const t of loops) if (t.unref) t.unref();
     },
     skillDoc: (filePath) => skillDocs.read(filePath),
-    commands: commands.bind(cli, { gw, gatewayUrl:cfg.gatewayUrl, readonly: !!cfg.readonly }),
+    commands: commandApi,
     // S7c: re-reads after a write (ingested by the taps)
     refreshFlows: () => gw.call('cron.list', {}).catch(() => null),
     // G3a: the resolver's primary; without one (no listing yet) nothing is read
@@ -204,14 +261,16 @@ const projectTag = () => Object.assign({}, require('./integration'), {
   cli: ({ openclawBin, openclawHome, readonly = false, env }) => require('./cli').createCli({ bin: openclawBin, home: openclawHome, readonly, env }) });
 
 const setup = { connect: true, capabilities: { brand: { mark: 'OC', color: '#b54d31', foreground: '#ffffff', providerName: 'OpenClaw', logo: 'assets/connectors/openclaw.svg' } },
-  env: ({ runtime, token }) => ({ OC_GATEWAY_URL: runtime.openclaw.gatewayUrl, ...(token ? { OC_GATEWAY_TOKEN: token } : {}) }),
+  env: ({ runtime, token }) => ({ OC_GATEWAY_URL: runtime.openclaw.gatewayUrl,
+    ...(runtime.openclaw.chatAttachmentInbox?{OC_CHAT_ATTACHMENT_INBOX:runtime.openclaw.chatAttachmentInbox}:{}),...(token ? { OC_GATEWAY_TOKEN: token } : {}) }),
   overrideEnv({ env, runtime, effective }) {
     const { cleanUrl } = require('./connection');
     if (env.OC_GATEWAY_URL !== undefined && env.OC_GATEWAY_TOKEN === undefined &&
         cleanUrl(env.OC_GATEWAY_URL) !== cleanUrl(runtime.openclaw.gatewayUrl)) delete effective.OC_GATEWAY_TOKEN;
   },
-  configSchema: setupSchema.object({ adapter: setupSchema.literal('openclaw'), openclaw: setupSchema.object({ gatewayUrl: setupSchema.string().refine(url => /^wss?:\/\/[^\s/?#]+(?:\/[^\s]*)?$/.test(url), 'ws(s) URL') }, { extra: 'reject' }) }, { extra: 'reject' }), credential: require('./connection').credential, name: 'OpenClaw', fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789',
-  config: (rt) => ({ adapter: definition.id, openclaw: { gatewayUrl: rt.gatewayUrl } }),
+  configSchema: setupSchema.object({ adapter: setupSchema.literal('openclaw'), openclaw: setupSchema.object({ gatewayUrl: setupSchema.string().refine(url => /^wss?:\/\/[^\s/?#]+(?:\/[^\s]*)?$/.test(url), 'ws(s) URL'),
+    chatAttachmentInbox:setupSchema.string().refine(name=>/^[A-Za-z0-9_-]{1,48}$/.test(name),'safe inbox directory name').optional() }, { extra: 'reject' }) }, { extra: 'reject' }), credential: require('./connection').credential, name: 'OpenClaw', fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789',
+  config: (rt) => ({ adapter: definition.id, openclaw: { gatewayUrl: rt.gatewayUrl,...(rt.chatAttachmentInbox?{chatAttachmentInbox:rt.chatAttachmentInbox}:{}) } }),
   probe: (opts) => require('./transport').probeGateway(opts) };
 setup.discover = async ({ gw, detected = [] }) => {
   const listing = await gw.call('agents.list', {});
@@ -257,4 +316,4 @@ setup.settings = {
   },
 };
 const detect = (ctx) => require('../detectors/openclaw').detect(ctx);
-module.exports = { paths: require('./paths').paths, definition, createRuntime, runtimeHealth, ROUTES, doctor, projectTag, setup, detect };
+module.exports = { paths: require('./paths').paths, definition, createRuntime, runtimeHealth, ROUTES, doctor, projectTag, setup, detect, chatAttachmentCapability, writeGatewayCall };

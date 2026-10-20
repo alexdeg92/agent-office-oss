@@ -179,7 +179,7 @@ export function createOfficeMock({ manifest, layout, floorDefaults = [], scenari
           tokens: 52_300 + i * 8_100 + step * 640, lastSeenAt: now(), ...(s.parent ? { parentId: pid(s.parent) } : {}),
         };
       });
-      let visitIntent = { hostId: pid('main'), desk: [], meeting: [], talking: false, speaker: null, until: null, visitors: [] };
+      let visitIntent = { hostId: pid('main'), hosts: [], desk: [], meeting: [], talking: false, speaker: null, until: null, visitors: [] };
       if (scenario === 'visite') {
         const visitor = occupants.find(o => o.id === pid('dm:camille'));
         const elapsed = now() - visitLastAt;
@@ -193,7 +193,8 @@ export function createOfficeMock({ manifest, layout, floorDefaults = [], scenari
           visitor.visitPhase = phase; visitor.visitOnStage = true; visitor.visitStateLabel = visitor.stateLabel;
           visitor.stateDetailLabel = visitor.stateLabel; visitor.stateLastLabel = { key: 'office.lastState', params: { state: visitor.stateLabel } };
           const meeting = step === 2;
-          visitIntent = { hostId: pid('main'), desk: meeting ? [] : [visitor.id], meeting: meeting ? [pid('main'), visitor.id] : [],
+          visitIntent = { hostId: pid('main'), hosts: [{ id: pid('main'), visitorIds: [visitor.id] }],
+            desk: meeting ? [] : [visitor.id], meeting: meeting ? [pid('main'), visitor.id] : [],
             talking: phase !== 'linger', speaker: phase === 'person' ? visitor.id : phase === 'agent' ? pid('main') : null,
             until: phase === 'person' ? visitLastAt + 12_000 : phase === 'linger' ? visitLastAt + 60_000 : null,
             visitors: [{ id: visitor.id, phase, stateLabel: visitor.stateLabel, onStage: true }] };

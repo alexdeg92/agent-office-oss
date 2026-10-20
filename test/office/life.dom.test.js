@@ -63,10 +63,12 @@ test('Round 2: visible glyphs, generated seated gestures, landmark facings and s
      sc.setOccupants([{id:'main',role:'main',sourceName:'Agent',state:'idle',stateSince:Date.now(),stationUid:'st-timmy',look},peer]);sc.fit();const c=sc.chars.get('main');
      const label=width+'/'+look.character+'/'+look.variant;
      const check=async()=>{await H.until(()=>c.displayed===c.poseEl);if([...c.displayed.querySelectorAll('img')].some(i=>i.naturalWidth!==192))errors.push(label+': missing registered layers');};
-     for(const [kind,pose,glyph] of [['error','life-error-sw','!'],['success','life-success-sw','✓'],['stretch','life-stretch-ne','↔'],['waiting','working-ne','…'],['message','working-ne','✉']]) {
+     for(const [kind,pose] of [['error','life-error-sw'],['success','life-success-sw'],['stretch','life-stretch-ne'],['waiting','working-ne'],['message','working-ne']]) {
       sc.react('main',kind,{durationMs:60000});await check();const bubble=c.plate.querySelector('.ao-life-bubble');
-      if(c.renderedPose!==pose||bubble?.textContent!==glyph)errors.push(label+': wrong '+kind+' frame/glyph');
-      if(parseFloat(getComputedStyle(bubble).fontSize)!==20||bubble.getBoundingClientRect().height<30)errors.push(label+': bubble scaled down');
+      if(c.renderedPose!==pose)errors.push(label+': wrong '+kind+' frame');
+      if(c.seatMode==='desk'){
+       if(bubble||!c.marker.hidden)errors.push(label+': overhead indicator shown at desk');
+      }else if(!bubble||parseFloat(getComputedStyle(bubble).fontSize)!==20||bubble.getBoundingClientRect().height<30)errors.push(label+': visible glyph bubble scaled down');
       if(['error','success','stretch'].includes(kind)&&(!c.poseSeat||!c.displayed.querySelector('[data-layer=body]').src.endsWith(pose+'.webp')))errors.push(label+': gesture lost seated raster');
      }
      sc._clear(c,c.reactionTimer);c.reaction=null;
@@ -74,7 +76,7 @@ test('Round 2: visible glyphs, generated seated gestures, landmark facings and s
       if(!sc.interact('main',kind,{durationMs:60000})){errors.push(label+': unavailable '+kind);continue;}await check();
       const target=c.activity.target;
       if(target.landmark){const dir=sc._facingToward(c.pos,target.landmark);if(c.facing!==dir||!c.renderedPose.endsWith('-'+dir)&&['ne','nw'].includes(dir))errors.push(label+': faces away '+kind);}
-      if(kind==='sleep'&&(c.renderedPose!=='life-sleep-ne'||c.plate.querySelector('.ao-life-bubble')?.textContent!=='Zzz'))errors.push(label+': nap invisible');
+      if(kind==='sleep'&&(c.renderedPose!=='life-sleep-ne'||!c.sleepLetters))errors.push(label+': nap invisible');
       if(['chat','highfive'].includes(kind)){
        const other=sc.chars.get(target.partnerId);await H.until(()=>other.displayed===other.poseEl);
        if(c.seatMode==='desk'||other.seatMode==='desk'||c.facing===other.facing)errors.push(label+': social partner still in chair');

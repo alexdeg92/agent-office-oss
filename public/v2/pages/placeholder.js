@@ -1,12 +1,11 @@
 // The not-found page, the mobile « Plus » page, and a neutral placeholder for any route without a page yet.
 import { html, useEffect, useState } from '../lib.js';
 import { EmptyState, Icon } from '../components/ui.js';
-import { ThemeSwitch, LangSwitch } from '../components/shell.js';
+import { ThemeSwitch, LangSwitch, watchReleaseBadgeFor } from '../components/shell.js';
 import { NAV, routeByName, BOTTOM_TABS } from '../router.js';
 import { services } from '../services.js';
 import { msg } from '../i18n.js';
 import { runtimeCan } from '../hooks.js';
-import { watchReleaseBadge } from '../release-badge.js';
 
 export function PlaceholderPage({ match }) {
   const r = match.route.parent ? routeByName(match.route.parent) : match.route;
@@ -28,7 +27,7 @@ export function MorePage({ onLogout }) {
   const { router } = services;
   const email = services.me?.email || '';
   const [hasNewRelease, setHasNewRelease] = useState(false);
-  useEffect(() => watchReleaseBadge(email, setHasNewRelease), [email]);
+  useEffect(() => watchReleaseBadgeFor(email, setHasNewRelease), [email]);
   const extra = NAV.filter((r) => !BOTTOM_TABS.includes(r.name) && runtimeCan(r.needs));
   return html`<div class="bu-page">
     <ul class="bu-morelist">

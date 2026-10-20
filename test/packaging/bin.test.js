@@ -136,10 +136,14 @@ describe('agent-office bin', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('the Homebrew formula names node, the npm tarball, a service, and a test', () => {
+  it('the Homebrew formula names node, the GitHub release tarball, a service, and a test', () => {
     const src = fs.readFileSync(path.join(cli.packageRoot(), 'packaging', 'homebrew', 'agent-office.rb'), 'utf8');
     assert.match(src, /depends_on "node"/);
-    assert.match(src, /registry\.npmjs\.org\/@alexdeg92\/agent-office\/-\/agent-office-/);
+    const pkg = JSON.parse(fs.readFileSync(path.join(cli.packageRoot(), 'package.json'), 'utf8'));
+    const repository = pkg.repository.url.replace(/^git\+/, '').replace(/\.git$/, '');
+    const tarball = pkg.name.replace(/^@/, '').replace('/', '-') + `-${pkg.version}.tgz`;
+    assert.ok(src.includes(`url "${repository}/releases/download/v${pkg.version}/${tarball}"`));
+    assert.doesNotMatch(src, /registry\.npmjs\.org/);
     assert.match(src, /license "MIT"/);
     assert.match(src, /service do/);
     assert.match(src, /test do/);

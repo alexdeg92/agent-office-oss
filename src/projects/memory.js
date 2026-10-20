@@ -15,7 +15,7 @@ const { HISTORY_PAGE, SOURCE_ERROR_CATEGORIES } = require('./constants');
 const REPOSITORY_METHODS = Object.freeze([
   'getProject', 'listProjects', 'getHistory', 'findActiveByGithub', 'sourceStats',
   'getSummaryTurn', 'claimSummary', 'completeSummary', 'abandonSummary',
-  'createProject', 'rename', 'setStatus', 'reorder', 'setPriority', 'editSummary', 'edit',
+  'captureSourceProvenance', 'createProject', 'rename', 'setStatus', 'reorder', 'setPriority', 'editSummary', 'edit',
   'addLabel', 'addFlag', 'removeFlag', 'setBlocked', 'ackRisk', 'linkSource', 'unlinkSource',
   'setArchived', 'setPersonOverride', 'applyRisks', 'applyProjectRisks', 'ingestActivity',
   'replaceFeatureFlags', 'appendHistory', 'importCandidates', 'putRepoCache', 'recordRepoFailure', 'putWorkspaceSnapshot', 'putSessionSnapshot',
@@ -74,6 +74,7 @@ class MemoryRepository {
     this.ownerPersonId = options.ownerPersonId || null;
     this.timmyPersonId = options.timmyPersonId || null;
     this.primaryAgentId = options.primaryAgentId || null;
+    this.sourceConnectorIds = options.sourceConnectorIds || null;
     this.locale = options.locale || null;
     this.timeZone = options.timeZone || null;
     this.githubOwners = Array.isArray(options.githubOwners) ? options.githubOwners : [];
@@ -84,6 +85,27 @@ class MemoryRepository {
     this.clock = options.now || (() => Date.now());
     this._randomBytes = options.randomBytes;
     for (const person of options.persons || []) this.upsertPerson(person);
+  }
+
+  _sourceProvenance(sources) {
+    return sources.map(source => {
+      if(source.kind!=='sessionGroup'||!this.sourceConnectorIds)return source;
+      const ids=[...new Set([...(source.connectorIds||[]),...(this.sourceConnectorIds(source)||[])])];
+      if(!ids.length||JSON.stringify(ids)===JSON.stringify(source.connectorIds))return source;
+      return {...source,connectorIds:ids};
+    });
+  }
+
+  _captureSourceProvenance(id,previous,next) { this.sources.set(id,next); }
+
+  captureSourceProvenance() {
+    const changed=[];
+    for(const id of this.rows.keys()) {
+      const previous=this.sources.get(id)||[],next=this._sourceProvenance(previous);
+      if(next.every((source,index)=>source===previous[index]))continue;
+      if(this._captureSourceProvenance(id,previous,next)!==false)changed.push(id);
+    }
+    return changed;
   }
 
   now() { return this.clock(); }
@@ -128,6 +150,7 @@ class MemoryRepository {
         admit(HistoryEvent, e);
       }
     }
+    if(patch.sources)patch.sources=this._sourceProvenance(patch.sources);
     const overlay = {
       row: patch.row || this.rows.get(id),
       sources: patch.sources || this.sources.get(id) || [],
@@ -320,7 +343,7 @@ class MemoryRepository {
     const patch = plan.createProject({ ...input, takenGithub: this._takenGithub(null) }, env);
     for (const e of patch.events) parse(historySchema, e, 'Événement d’historique invalide.');
     this.rows.set(patch.row.id, patch.row);
-    this.sources.set(patch.row.id, patch.sources);
+    this.sources.set(patch.row.id, this._sourceProvenance(patch.sources));
     this.flags.set(patch.row.id, patch.flags);
     this.overrides.set(patch.row.id, patch.overrides);
     this.history.set(patch.row.id, []);
@@ -490,7 +513,7 @@ class MemoryRepository {
         }, env);
         for (const ev of patch.events) parse(historySchema, ev, 'Événement d’historique invalide.');
         this.rows.set(patch.row.id, patch.row);
-        this.sources.set(patch.row.id, patch.sources);
+        this.sources.set(patch.row.id, this._sourceProvenance(patch.sources));
         this.flags.set(patch.row.id, patch.flags);
         this.overrides.set(patch.row.id, []);
         this.history.set(patch.row.id, []);

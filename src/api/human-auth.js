@@ -98,6 +98,13 @@ function createHumanAuthTransport({store,auth,boundary,me,partitioned=false,time
           if(!assertCurrent(req,res,state))return;
           if(verified.retryAfterSec){res.setHeader('Retry-After',String(verified.retryAfterSec));throw new ApiError('rate_limited');}
           if(!verified.ok||!verified.identity?.userId)throw new ApiError('unauthorized');
+          // A recovery credential is deliberately confined to the signed repair
+          // cookie flow in /api/login. It must never be exchanged for a bearer
+          // family, even when the same stable Owner account is returned.
+          if(verified.identity.recoveryOnly===true) {
+            auditWrite(store.users.byId(verified.identity.userId),'rejected','recovery-login');committed();
+            state.release(false);throw new ApiError('unauthorized');
+          }
           // Verify actual HMAC cookie with the historical auth implementation; its
           // user/generation/SID/expiry are checked again inside loginFamily.
           state.capture({kind:'human',personId:verified.identity.personId},'login');

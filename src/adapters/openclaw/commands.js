@@ -7,6 +7,8 @@
  * Every command → { ok: true, … } or { failed: category }; upstream text is never returned.
  */
 const { errorCategory } = require('../../engine/redact');
+const { checkDispatchAuthority } = require('../../security/dispatch-context');
+const crypto = require('node:crypto');
 
 const failure = (r) => ({ failed: r && r.refused ? (r.refused === 'readonly' ? 'readonly' : r.refused) : errorCategory(r && (r.err || r.out)) });
 
@@ -17,7 +19,7 @@ function restartableUrl(value) {
   if (value == null) return false;
   try { const u=new URL(value); return ['ws:','wss:'].includes(u.protocol) && ['localhost','127.0.0.1','[::1]'].includes(u.hostname) && !u.username && !u.password; } catch { return false; }
 }
-function bind(cli, { gw = null, readonly = false, gatewayUrl = null } = {}) {
+function bind(cli, { gw = null, readonly = false, gatewayUrl = null, chatSendRpc = null, log = (message) => console.log(message) } = {}) {
   // R15-08: a zero exit is not enough: an explicit JSON refusal ({ok:false}) is a failure too
   const run = async (argv, timeoutMs) => {
     const r = await cli.run(argv, timeoutMs);
@@ -27,20 +29,76 @@ function bind(cli, { gw = null, readonly = false, gatewayUrl = null } = {}) {
     return { ok: true, r, json: j };
   };
 
+  const pinWebchatPolicy = async (key, agentId, timeoutMs, signal) => {
+    if (typeof key !== 'string' || !key || !key.toLowerCase().startsWith('agent:' + String(agentId).toLowerCase() + ':') || /[\r\n]/.test(key)) return { failed: 'invalid-session' };
+    if (readonly) return { failed: 'readonly' };
+    const fencedKey=key.toLowerCase();
+    const policy=await cli.run(['gateway','call','sessions.patch','--params='+JSON.stringify({key:fencedKey,sendPolicy:'deny'}),'--json'],Math.min(timeoutMs,15000),{signal});
+    if(!policy?.ok||policy.refused)return failure(policy);
+    const receipt=cli.parseJson(policy.out);
+    if(receipt?.ok===true&&receipt.key===fencedKey&&receipt.entry?.sendPolicy==='deny')return {ok:true};
+    const output=String(policy.out||''),lines=output.split(/\r?\n/);let offset=0,jsonOffset=null;
+    for(const line of lines){const trimmed=line.trimStart();if(trimmed.startsWith('{')){jsonOffset=offset+line.length-trimmed.length;break;}offset+=line.length+1;}
+    const sendPolicy=receipt?.entry?.sendPolicy;
+    try{log('[openclaw] '+JSON.stringify({event:'chat.delivery_policy_unconfirmed',policyOk:policy.ok===true,
+      refused:policy.refused==='readonly'||policy.refused==='busy'?policy.refused:(policy.refused?'other':null),outLength:output.length,
+      parseOk:!!receipt,receiptOk:receipt?.ok===true,keyType:typeof receipt?.key,keyMatchesExpected:receipt?.key===fencedKey,
+      hasEntry:!!receipt?.entry&&typeof receipt.entry==='object',entrySendPolicy:sendPolicy==='deny'||sendPolicy==='allow'?sendPolicy:(sendPolicy==null?'absent':'other'),
+      firstNonJsonPrefixLength:jsonOffset}));}catch{}
+    return {failed:'delivery-policy-unconfirmed'};
+  };
+
   return {
+    // Discuter uses OpenClaw's stored chat protocol. The adapter supplies a
+    // short-lived operator.write socket, separate from the read-only ingest socket.
+    async chatSend({ sessionKey, agentId, sessionId, message, idempotencyKey, expectedLeafEntryId, attachments = [], timeoutMs = 12000 }) {
+      if (readonly) return { failed: 'readonly' };
+      if (typeof sessionKey !== 'string' || !sessionKey || typeof agentId !== 'string' || !agentId ||
+          typeof message !== 'string' || typeof idempotencyKey !== 'string' || !idempotencyKey||!Array.isArray(attachments)||attachments.length>5) return { failed: 'invalid-request' };
+      if(!sessionKey.toLowerCase().startsWith('agent:'+agentId.toLowerCase()+':')||/[\r\n]/.test(sessionKey))return {failed:'invalid-session'};
+      const protocolAttachments=[];
+      for(const attachment of attachments){
+        if(!attachment||!Buffer.isBuffer(attachment.content)||attachment.content.length<1||attachment.content.length>20*1024*1024||attachment.size!==attachment.content.length||
+            typeof attachment.name!=='string'||!attachment.name||attachment.name.length>120||/[\u0000-\u001f\u007f/\\]/.test(attachment.name)||
+            !['application/pdf','text/plain','image/png','image/jpeg','image/gif','image/webp'].includes(attachment.mimeType)||
+            typeof attachment.sha256!=='string'||!/^([a-f0-9]{64})$/.test(attachment.sha256)||crypto.createHash('sha256').update(attachment.content).digest('hex')!==attachment.sha256)
+          return {failed:'invalid-attachment'};
+        protocolAttachments.push({fileName:attachment.name,mimeType:attachment.mimeType,content:attachment.content.toString('base64'),sizeBytes:attachment.size,origin:'file'});
+      }
+      const params = { sessionKey, agentId, ...(typeof sessionId === 'string' && sessionId ? { sessionId } : {}),
+        message, idempotencyKey, ...(expectedLeafEntryId === null || typeof expectedLeafEntryId === 'string' ? { expectedLeafEntryId } : {}),...(protocolAttachments.length?{attachments:protocolAttachments}:{}) };
+      // sessions.patch(sendPolicy) needs operator.admin, which the short-lived
+      // write socket deliberately lacks; the CLI owns that paired authority.
+      const policy=await pinWebchatPolicy(sessionKey,agentId,timeoutMs);
+      if(policy.failed)return policy;
+      let payload;
+      if(chatSendRpc){try{checkDispatchAuthority();payload=await chatSendRpc('chat.send',params,timeoutMs);}catch{return {failed:'dispatch-failed'};}}
+      else{
+        const args = ['gateway', 'call', 'chat.send', '--params=' + JSON.stringify(params), '--json', '--timeout=' + String(Math.max(1000, Math.min(30000, timeoutMs)))];
+        if (gatewayUrl) args.push('--expect-url=' + gatewayUrl);
+        try{checkDispatchAuthority();}catch{return {failed:'dispatch-failed'};}
+        const result = await cli.run(args, Math.max(15000, timeoutMs + 3000));
+        if (!result?.ok || result.refused) return failure(result);
+        payload = cli.parseJson(result.out);
+      }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.ok === false) return { failed: 'invalid-output' };
+      // A successful Gateway response is an admission receipt, not a reply.
+      return { ok: true, receipt: payload };
+    },
+
     // → { text, meta: { model, provider, tokens, durationMs } | null } or { failed: category }
     async agentTurn({ agentId, text, sessionRef, timeoutMs = 150000, signal, canDispatch }) {
       if (!/^[a-zA-Z0-9_-]{1,80}$/.test(String(agentId))) return { failed: 'invalid-agent' };
       const ref = sessionRef ? String(sessionRef) : 'agent:' + agentId + ':ao-internal';
-      const key = ref.startsWith('agent:') ? ref : 'agent:' + agentId + ':explicit:' + ref;
-      if (!key.startsWith('agent:' + agentId + ':') || /[\r\n]/.test(key)) return { failed: 'invalid-session' };
+      // OpenClaw canonicalizes agent session keys to lowercase. Keep the same
+      // canonical key for the policy fence and the subsequent agent request.
+      const key = (ref.startsWith('agent:') ? ref : 'agent:' + agentId + ':explicit:' + ref).toLowerCase();
+      if (!key.startsWith('agent:' + String(agentId).toLowerCase() + ':') || /[\r\n]/.test(key)) return { failed: 'invalid-session' };
       if (readonly) return { failed: 'readonly' };
       // Persistent session policy also fences recovery of old AO sessions which
       // already inherited an external route. Refuse dispatch without its receipt.
-      const policy = await cli.run(['gateway', 'call', 'sessions.patch', '--params=' + JSON.stringify({ key, sendPolicy: 'deny' }), '--json'], Math.min(timeoutMs, 15000), { signal });
-      if (!policy?.ok || policy.refused) return failure(policy);
-      const receipt = cli.parseJson(policy.out);
-      if (receipt?.ok !== true || receipt.key !== key || receipt.entry?.sendPolicy !== 'deny') return { failed: 'delivery-policy-unconfirmed' };
+      const policy = await pinWebchatPolicy(key,agentId,timeoutMs,signal);
+      if(policy.failed)return policy;
       if (signal?.aborted) return { failed: 'killed-or-timeout' };
       if (canDispatch && !canDispatch()) return { failed: 'wrong-runtime' };
       // AO owns these replies. An omitted channel can inherit the owner's last

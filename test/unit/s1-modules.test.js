@@ -34,9 +34,10 @@ describe('cli wrapper', () => {
     assert.equal(r.refused, 'missing-agent');
   });
 
-  it('parseJson reads from the first {', () => {
+  it('parseJson accepts the OpenClaw version banner but rejects arbitrary preamble', () => {
     const cli = createCli({ bin: BIN, home: tmp, readonly: false });
-    assert.deepEqual(cli.parseJson('🦞 banner\n{"a":1}'), { a: 1 });
+    assert.deepEqual(cli.parseJson('🦞 OpenClaw 2026.9.8\n{"a":1}'), { a: 1 });
+    assert.equal(cli.parseJson('🦞 banner\n{"a":1}'), null);
     assert.equal(cli.parseJson('no json'), null);
     assert.equal(cli.parseJson('{broken'), null);
   });

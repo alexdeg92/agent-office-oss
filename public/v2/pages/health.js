@@ -52,10 +52,23 @@ export function HealthPage({ match }) {
     ${isEmpty ? html`<${EmptyState} icon="sante" title=${msg('health.empty.title')} text=${msg('health.empty.text')} />` : html`
       <${Summary} h=${h} notFresh=${notFresh} />
       <${Cards} h=${h} />
+      ${h.engineParity ? html`<${EngineParity} rows=${h.engineParity} />` : null}
       <${Channels} channels=${h.channels} />
       <${HealthChecks} checks=${h.healthChecks || []} audit=${h.healthAudit || []} />
       ${dataQuality?html`<${DataQuality} dq=${dataQuality} query=${match.query} />`:null}`}
   </div>`;
+}
+
+function EngineParity({ rows }) {
+  return html`<section class="bu-section" aria-labelledby="sante-parite">
+    <h2 class="bu-eyebrow" id="sante-parite">${msg('health.parity.title')}</h2>
+    <div class="ao-health__cards">
+      ${rows.map((row, index) => html`<div class="bu-stat" key=${index}>
+        <strong class="bu-stat__label">${label(row.surface)}</strong>
+        <span class="bu-stat__sub">${label(row.labels.comparisons)}: ${fmt.number(row.comparisons)} · ${label(row.labels.mismatches)}: ${fmt.number(row.mismatches)} · ${label(row.labels.changedRows)}: ${fmt.number(row.changedRows)} · ${label(row.labels.overflowKeys)}: ${fmt.number(row.overflowKeys)} · ${label(row.labels.overflowSurfaces)}: ${fmt.number(row.overflowSurfaces)}</span>
+      </div>`)}
+    </div>
+  </section>`;
 }
 
 function Summary({ h, notFresh }) {

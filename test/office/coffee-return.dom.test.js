@@ -29,7 +29,7 @@ test('26c Round 2: coffee returns beside the chair, drops the walking body befor
         if(c.walking || c.carryProp || c.seatMode!=='desk' || !c.poseSeat || c.displayed.dataset.pose.startsWith('life-cupwalk-')) errors.push(ch.id+': not seated');
         if(!mug || mug.hidden || !mug.src.endsWith('/mug.webp') || !n.stack.includes('mug')) errors.push(ch.id+': mug missing from desktop');
         sc.setOccupants([{...c.occ,state:'calling'}]); c.reaction=null; sc._renderPose(c); await H.until(()=>c.displayed===c.poseEl);
-        if(c.markerKind!=='phone' || c.marker.querySelector('.ao-mk--plug')) errors.push(ch.id+': wrong calling glyph');
+        if(c.markerKind!==null || !c.marker.hidden) errors.push(ch.id+': overhead calling marker shown at desk');
         if(c.renderedPose!=='life-phone-ne') errors.push(ch.id+': phone not seated');
         checks++;
       }

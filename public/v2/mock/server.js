@@ -33,7 +33,7 @@ function setLoggedIn(v) { loggedIn = v; try { if (v) sessionStorage.removeItem(S
 const TICK_MS = 3000;
 
 export function configure(opts) {
-  settingsDb=null;
+  settingsDb=null;chatV3Db=null;chatV3Flight=null;
   externalAccessDb={};
   scenario = opts.scenario || '1';
   standalone = !!opts.standalone;
@@ -158,22 +158,27 @@ const boardTopic = (filter) => (filter === 'all' ? 'projects' : `projects?filter
 /** Builds the current VM of a topic, or undefined when the topic is unknown. */
 /** A topic's VM in the configured contract: v3 topics name 3.0 query values (D2 kind, D8 filter + agent). */
 function build(topic) {
-  if (config.apiVersion !== 3) return build2(topic);
+  // Projects pins its transport to v3 even while the rest of the UI still uses the
+  // configured contract. Its topic snapshots must match the same v3 VM as its GET.
+  if (config.apiVersion !== 3 && !/^projects(?:\?|$)/.test(topic)) return build2(topic);
   const [base, query = ''] = topic.split(/\?(.*)/s);
   const t = v3.queryTo2x(query);
   let vm = build2(base + (t.query.toString() ? '?' + t.query : ''));
   const name = schemaForTopic(topic);
   if (vm === undefined || !name) return vm;
-  vm = v3.project(name, vm, { primaryId: META.primaryAgent && META.primaryAgent.id });
+  vm = v3.project(name, vm, { primaryId: META.primaryAgent && META.primaryAgent.id, query:t.query });
   if (name === 'logs' && t.internalOnly) vm = { ...vm, items: vm.items.filter((i) => i.kind === 'internal') };
   if (name === 'projects' && t.agent) vm = { ...vm, agent: t.agent };
   return vm;
 }
 function build2(topic) {
   if (topic === 'health') return healthVM();
-  if (topic === 'projects') return projects.buildBoardVM(projectsDb(), 'all');
-  const f = /^projects\?filter=(.+)$/.exec(topic);
-  if (f && BOARD_FILTERS.includes(f[1])) return projects.buildBoardVM(projectsDb(), f[1]);
+  const board = /^projects(?:\?(.*))?$/.exec(topic);
+  if (board) {
+    const q = new URLSearchParams(board[1] || ''), filter = q.get('filter') || 'all';
+    if (!BOARD_FILTERS.includes(filter)) return undefined;
+    return projects.buildBoardVM(projectsDb(), filter, { search:q.get('search') || '', source:q.get('source') || null, stage:q.get('stage') || 'all' });
+  }
   const cm = /^comments:(.+)$/.exec(topic);
   if (cm) return projects.buildCommentsVM(projectsDb(), decodeURIComponent(cm[1]), { canComment: META.capabilities.storeWrites, canMention: META.capabilities.storeWrites && META.capabilities.openclawWrites && META.runtime.capabilities?.projectComments !== false }) || undefined;
   const pr = /^project:(.+)$/.exec(topic);
@@ -194,6 +199,7 @@ function build2(topic) {
     for (const k of q.keys()) if (!['kind', 'heartbeat', 'connector', 'agent'].includes(k)) return undefined;
     return logsDb().page(q.get('kind'), null, undefined, { heartbeats: q.get('heartbeat') === 'include', connector: q.get('connector'), agent: q.get('agent') });
   }
+  if (/^chat-(?:agents|agent-sessions|session)(?::|$)/.test(topic)) return chatV3Db?.build(topic);
   if (topic === 'chat') return chatDb().vm();
   const se = /^session:(.+)$/.exec(topic);
   if (se) { const key=decodeURIComponent(se[1]); const vm=logsDb().session(key) || (key.includes(':ao-projet-') ? logsDb().session('agent:main:main') : null); return vm ? {...vm,key} : undefined; }
@@ -216,6 +222,11 @@ async function viewDelay() {
 }
 
 const LOG_KINDS_2X = ['main', 'cron', 'chat-direct', 'chat-group', 'dashboard', 'acp', 'explicit'];
+let chatV3Db,chatV3Flight;
+async function chatV3Mock(){
+ if(!chatV3Db)chatV3Flight ||= loadModule(()=>import('./chat-v3.js'+buildQuery)).then(module=>chatV3Db=module.createChatV3Mock({scenario,slow:!!(globalThis.location&&new URLSearchParams(location.search).has('chat-lent')),full:!!(globalThis.location&&new URLSearchParams(location.search).has('chat-plein')),failTurns:!!(globalThis.location&&new URLSearchParams(location.search).has('echec-chat')),readonly:!!(globalThis.location&&new URLSearchParams(location.search).has('lecture')),onChange:()=>republishMatching(topic=>/^chat-(?:agents|agent-sessions(?:-archived)?|session)(?::|$)/.test(topic))}));
+ return chatV3Db||await chatV3Flight;
+}
 let settingsDb;
 let externalAccessDb={};
 function externalAccessMock(path) {
@@ -237,6 +248,12 @@ async function settingsMock() {
 }
 /** handle(method, path, body) → { status, body }. /api/v3 paths: the 2.5 mock, then the 3.0 projection (mock/v3.js). */
 export async function handle(method, path, body) {
+  if (/^\/api\/v3\/chat\/(?:agents|sessions|attachments)(?:\/|$|\?)/.test(path)) {
+    const delay=await viewDelay();if(delay)return delay;
+    const result=await (await chatV3Mock()).handle(method,path,body);
+    if(method==='POST'&&/\/messages$/.test(path)&&globalThis.location&&new URLSearchParams(location.search).has('chat-lent'))await sleep(1500);
+    return result;
+  }
   if (/^\/api\/v3\/(?:setup|settings)\/access(?:\/|$|\?)/.test(path)) return externalAccessMock(path)(method,path,body);
   if (/^\/api\/v3\/settings(?:\/|$|\?)/.test(path)) {
     await sleep(scenario === 'settings-fixall-delayed' && method === 'POST' && path.endsWith('/fix-all') ? 8000 : scenario === 'lent' ? 900 : 50);
@@ -255,7 +272,7 @@ export async function handle(method, path, body) {
   let data = r.body.data;
   const name = method === 'GET' ? schemaForPath(u.pathname) : null;
   if (name === 'meta') data = v3.meta(data, { capabilities: v3.capabilitiesFrom(globalThis.location ? location.search : '') });
-  else if (name) data = v3.project(name, data, { primaryId });
+  else if (name) data = v3.project(name, data, { primaryId, query:u.searchParams });
   else if (data.vm && /^\/api\/v3\/flows\//.test(u.pathname)) data = { ...data, vm: v3.project('flow', data.vm, { primaryId }) };   // flow commands' CommandResult
   if (name === 'logs' && t.internalOnly) data = { ...data, items: data.items.filter((i) => i.kind === 'internal') };
   if (name === 'projects' && t.agent) data = { ...data, agent: t.agent };
@@ -301,7 +318,9 @@ async function handle2(method, path, body) {
   if (method === 'GET' && p === '/api/v2/views/projects') {
     const filter = url.searchParams.get('filter') || 'all';
     if (!BOARD_FILTERS.includes(filter)) return fail(400, 'validation_failed', 'Filtre invalide.', [{ field: 'filter', issue: 'enum' }]);
-    return (await viewDelay()) || read(boardTopic(filter));
+    const query = new URLSearchParams();
+    for (const key of ['filter','search','source','stage']) if (url.searchParams.has(key)) query.set(key,url.searchParams.get(key));
+    return (await viewDelay()) || read('projects' + (query.size ? '?' + query : ''));
   }
   if (method === 'GET' && p === '/api/v2/views/project-candidates') {
     return (await viewDelay()) || ok(candidatesVM(candidateList(), Date.now() - 4 * 60_000));
@@ -601,6 +620,7 @@ export class MockEventSource {
   constructor(url) {
     const u = new URL(url, 'http://mock');
     this.url = url;
+    this.apiVersion = /^\/api\/v3(?:\/|$)/.test(u.pathname) ? 3 : 2;
     this.readyState = 0;
     this.listeners = new Map();
     this.seq = 0;
@@ -610,7 +630,7 @@ export class MockEventSource {
     setTimeout(() => {
       if (this.readyState === 2) return;
       this.readyState = 1;
-      this._emit('hello', { type: 'hello', streamId: this.streamId, serverEpoch: SERVER_EPOCH, modelVersion: META.modelVersion, contractVersion: config.apiVersion === 3 ? v3.meta(META).contractVersion : META.contractVersion,
+      this._emit('hello', { type: 'hello', streamId: this.streamId, serverEpoch: SERVER_EPOCH, modelVersion: META.modelVersion, contractVersion: this.apiVersion === 3 ? v3.meta(META).contractVersion : META.contractVersion,
         serverTime: Date.now(), resumed: false, topics: [...this.topics] });
       this._emit('system', { type: 'system', gateway: scenario === 'panne' ? 'down' : 'up', capabilities: META.capabilities });
       for (const t of this.topics) this._snapshot(t);

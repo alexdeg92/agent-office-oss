@@ -505,3 +505,9 @@ Authenticated routes (v2 and v3):
 
 These routes keep the agent-token allowlist unchanged. Store read-only mode refuses regeneration/uploads
 and disables backfill; runtime read-only mode permits code covers/uploads but sends no agent turn.
+
+### Durable conversation-source ownership (T-0174)
+
+Stored session-group links have optional private `connectorIds` (canonical runtime instance IDs, at most 20). The SQL repository persists them in `project_sources.connector_ids_json`; source VMs expose only their existing descriptor, never the private provenance. They are supplied by canonical connector/session/group/project-hint ownership at creation, link, import, and engine refresh, and survive session retention or an application restart. Mixed-instance links retain each proven owner; projects count once per connector.
+
+Migration **030** stamps links whose `addedAt` predates migration 019's multi-runtime checkpoint with its canonical `legacy` instance. It does not assign later unknown links. Append-only history is unchanged. Existing scoped references remain proof of their registered instance even if their session has expired. For `projet:<slug>` links without surviving hints, exactly one registered connector declaring `capabilities.projectHints=true` is sufficient provenance; the service persists that decision at boot/refresh/link time and logs counts only. With zero or multiple producers the tag stays unresolved. Exact scoped/hint ownership and existing persisted owners take priority over this capability fallback. A genuinely unresolved native reference in a multi-runtime registry keeps the generic Conversations label; neither provider names nor arbitrary active/default instances are used as ownership evidence. Metadata comes from the registered connector instance and adapter declaration. Caller-provided provenance is discarded by the source-input parser.

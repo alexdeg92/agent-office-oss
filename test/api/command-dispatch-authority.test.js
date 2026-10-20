@@ -6,6 +6,8 @@ const {feed}=require('../helpers/feed'),{loadScenario}=require('../helpers/scena
 const {createAuth}=require('../../src/auth'),{hashPassword}=require('../../src/security/password');
 const {mountV2}=require('../../src/api/v2/routes'),{requestId}=require('../../src/api/v2/errors');
 const {waitFor}=require('../helpers/harness');
+const {openSse}=require('../helpers/sse-client');
+const {scopeForAccount,sessionRefForScope}=require('../../src/api/chat-identity');
 let hash;before(async()=>{hash=await hashPassword('synthetic-dispatch-password');});
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 async function fixture(t,{multi=false}={}) {
@@ -16,7 +18,7 @@ async function fixture(t,{multi=false}={}) {
   store.userManagement.accept({token:link.token,purpose:'invite',passwordHash:hash},{requestId:'req_accept'});
   const user=store.users.byId(link.user.id);let engine=feed(createEngine(),loadScenario('synthetic-basic'));
   const auth=createAuth({secret:'synthetic-dispatch-secret',identity:{users:store.users,state:store.rbac.state},allowMultiUser:true});
-  const calls=[],childRuntime={definition:{id:'synthetic'},commands:{},refreshFlows:async()=>{calls.push('refreshFlows');},refreshSkills:async()=>{calls.push('refreshSkills');}};
+  const calls=[],childRuntime={definition:{id:'synthetic',sessionKeyFor:(agentId,ref)=>'agent:'+agentId+':explicit:'+ref},commands:{},refreshFlows:async()=>{calls.push('refreshFlows');},refreshSkills:async()=>{calls.push('refreshSkills');}};
   let runtime=childRuntime,controller=null;
   if(multi) {
     const {definition}=require('../../src/adapters/openclaw');
@@ -38,7 +40,7 @@ async function fixture(t,{multi=false}={}) {
   };
   const set=(resource,level)=>store.db.prepare('INSERT INTO user_overrides(user_id,resource,level) VALUES (?,?,?) ON CONFLICT(user_id,resource) DO UPDATE SET level=excluded.level').run(user.id,resource,level);
   t.after(async()=>{api.close();controller?.close();server.closeAllConnections();await new Promise(r=>server.close(r));store.close();fs.rmSync(dir,{recursive:true,force:true});});
-  return {store,user,admin,engine,auth,api,calls,runtime,childRuntime,request,set,cookie};
+  return {store,user,admin,engine,auth,api,calls,runtime,childRuntime,base,request,set,cookie};
 }
 test('real flow writes do not acquire log-read authority; permitted history refreshes still work on both aliases',async t=>{
   const f=await fixture(t),job=f.engine.cronJobs()[0].id;
@@ -76,6 +78,7 @@ test('revocation during an already dispatched flow or skill write prevents every
 test('the real mounted chat handler rechecks permission and generation after acknowledgement before queued dispatch',async t=>{
   for(const change of ['permission','generation']) {
     const f=await fixture(t);f.runtime.commands.agentTurn=async()=>{f.calls.push('turn');return {text:'reply'};};
+    const chatState=()=>f.api.commands.chatState(scopeForAccount(f.user.id,f.store));
     const route=f.api.router.stack.find(l=>l.route?.path==='/chat/messages').route;
     const req={method:'POST',apiVersion:3,headers:{cookie:f.cookie(f.user)},body:{text:'Queued'},params:{},requestId:'req_queued'};
     let response;
@@ -85,33 +88,198 @@ test('the real mounted chat handler rechecks permission and generation after ack
     // Dispatch the actual route stack; the acknowledgement hook creates the precise pre-microtask race.
     route.dispatch(req,res,error=>{if(error)throw error;});
     assert.equal(res.statusCode,202);assert.ok(response.data.result.turnId);
-    await waitFor(()=>f.api.commands.chatState().pending===null,{what:'cancelled queued turn'});
-    assert.deepEqual(f.calls,[]);assert.equal(f.api.commands.chatState().errors.length,1);
+    await waitFor(()=>chatState().pending===null,{what:'cancelled queued turn'});
+    assert.deepEqual(f.calls,[]);assert.equal(chatState().errors.length,1);
     const observed=await f.request('GET','/api/v3/views/chat',undefined,f.admin);
     assert.ok(!observed.json.data.messages.some(m=>m.text==='Queued'),'cancelled turns do not become sent messages');
   }
 });
+test('chat history, live topic and send session are isolated between the admin and a member',async t=>{
+  const f=await fixture(t),sent=[],adminRuns=new Map();
+  f.runtime.commands.agentTurn=async({agentId,text,sessionRef})=>{
+    sent.push({agentId,text,sessionRef});
+    const gate=adminRuns.get(text);
+    if(gate){gate.started.resolve();await gate.finish.promise;}
+    return {text:'reply:'+text};
+  };
+  for(const version of [2,3]) {
+    const adminStream=openSse(f.base,`/api/v${version}/stream?topics=chat`,{cookie:f.cookie(f.admin)});
+    const memberStream=openSse(f.base,`/api/v${version}/stream?topics=chat`,{cookie:f.cookie(f.user)});
+    const spoofedStream=openSse(f.base,`/api/v${version}/stream?topics=${encodeURIComponent('chat?scope=owner')}`,{cookie:f.cookie(f.user)});
+    t.after(()=>{adminStream.close();memberStream.close();spoofedStream.close();});
+    await Promise.all([adminStream.opened,memberStream.opened,spoofedStream.opened]);
+    await Promise.all([
+      adminStream.next(frame=>frame.event==='snapshot'&&frame.data.topic==='chat'),
+      memberStream.next(frame=>frame.event==='snapshot'&&frame.data.topic==='chat'),
+      spoofedStream.next(frame=>frame.event==='snapshot'&&frame.data.topic==='chat?scope=owner'),
+    ]);
+    const adminText=`admin-private-message-v${version}`,memberText=`member-private-message-v${version}`;
+    const gate={started:deferred(),finish:deferred()};adminRuns.set(adminText,gate);
+    assert.equal((await f.request('POST',`/api/v${version}/chat/messages`,{text:adminText},f.admin)).status,202);
+    await gate.started.promise;
+    assert.equal((await f.request('POST',`/api/v${version}/chat/messages`,{text:memberText},f.user)).status,202,'another account can chat while the admin turn is pending');
+    gate.finish.resolve();
+    await waitFor(async()=> (await f.request('GET',`/api/v${version}/views/chat`,undefined,f.admin)).json.data.turnPending===null,{what:'admin chat turn'});
+    await waitFor(async()=> (await f.request('GET',`/api/v${version}/views/chat`,undefined,f.user)).json.data.turnPending===null,{what:'member chat turn'});
+
+    const adminHistory=(await f.request('GET',`/api/v${version}/views/chat`,undefined,f.admin)).json.data;
+    const memberHistory=(await f.request('GET',`/api/v${version}/views/chat`,undefined,f.user)).json.data;
+    const texts=vm=>vm.messages.map(message=>message.text);
+    assert.ok(texts(adminHistory).includes(adminText));
+    assert.ok(!texts(adminHistory).includes(memberText),'admin chat history cannot reveal the member conversation');
+    assert.ok(texts(memberHistory).includes(memberText));
+    assert.ok(!texts(memberHistory).includes(adminText),'member chat history cannot reveal the admin conversation');
+    assert.notEqual(adminHistory.sessionKey,memberHistory.sessionKey,'each account dispatches through its own runtime chat session');
+    f.set('logs','none');
+    const knownSession=f.engine.sessions().find(session=>session.class.kind==='explicit'&&session.class.explicitKey==='portal-chat')?.key;
+    assert.ok(knownSession,'fixture has an existing owner session');
+    const knownDetail=await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(knownSession)}`,undefined,f.user);
+    const missingDetail=await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent('agent:main:explicit:not-a-session')}`,undefined,f.user);
+    assert.equal(knownDetail.status,403);
+    assert.equal(missingDetail.status,knownDetail.status,'unauthorized session reads do not reveal whether a session exists');
+    assert.equal((await f.request('GET',`/api/v${version}/views/logs`,undefined,f.user)).status,403,'session lists require explicit Logs permission');
+    f.set('logs','read');
+    await waitFor(()=>adminStream.frames.some(frame=>JSON.stringify(frame.data).includes(adminText))
+      && memberStream.frames.some(frame=>JSON.stringify(frame.data).includes(memberText)),{what:'owner-specific live chat frames'});
+    assert.ok(!adminStream.frames.some(frame=>JSON.stringify(frame.data).includes(memberText)),'admin SSE never receives member chat');
+    assert.ok(!memberStream.frames.some(frame=>JSON.stringify(frame.data).includes(adminText)),'member SSE never receives admin chat');
+    assert.ok(!spoofedStream.frames.some(frame=>JSON.stringify(frame.data).includes(adminText)),'a member cannot select the owner topic scope');
+  }
+  assert.equal(sent.length,4);
+  assert.notEqual(sent[0].sessionRef,sent[1].sessionRef,'the adapter receives distinct account-scoped session references');
+});
 test('chat pending, completed and echoed messages preserve the actual accepted Person',async t=>{
   const f=await fixture(t),start=deferred(),finish=deferred();
+  const chatState=()=>f.api.commands.chatState(scopeForAccount(f.user.id,f.store));
   f.runtime.commands.agentTurn=async()=>{start.resolve();await finish.promise;return {text:'A reply'};};
   const accepted=await f.request('POST','/api/v3/chat/messages',{text:'A unique new message'});assert.equal(accepted.status,202);await start.promise;
-  const since=f.api.commands.chatState().pending.since;
+  const since=chatState().pending.since;
   const identity=vm=>{const m=vm.messages.find(m=>m.text==='A unique new message');assert.ok(m);assert.equal(m.senderInfo.id,f.user.person_id);assert.equal(m.senderInfo.name,'Actual caller');assert.notEqual(m.senderInfo.id,f.store.owner.id);};
   identity((await f.request('GET','/api/v3/views/chat')).json.data);
-  finish.resolve();await waitFor(()=>f.api.commands.chatState().pending===null,{what:'completed chat'});
+  finish.resolve();await waitFor(()=>chatState().pending===null,{what:'completed chat'});
   identity((await f.request('GET','/api/v3/views/chat')).json.data);
   f.engine.transcript=()=>({events:[{id:'echo_new',kind:'user',text:'A unique new message',at:since+1},{id:'echo_reply',kind:'assistant',text:'A reply',at:since+2,model:null,outputTokens:null}]});
   f.api.topics.invalidate('chat');
   const response=await f.request('GET','/api/v3/views/chat');assert.equal(response.status,200,JSON.stringify(response));const echoed=response.json.data;identity(echoed);
   assert.equal(echoed.messages.filter(m=>m.text==='A unique new message').length,1);
 });
+test('portal chat ownership is private across Chat, Logs, session detail, Office projection inputs and SSE for admins and Logs readers',async t=>{
+  const f=await fixture(t);f.set('logs','read');
+  f.engine.runtimeFor=()=>({capabilities:{chat:true,chatSessionScope:'principal'}});
+  const ownerScope=scopeForAccount(f.admin.id,f.store),memberScope=scopeForAccount(f.user.id,f.store);
+  const byKey=new Map(),template=f.engine.sessions()[0];
+  const make=(key,ref,label,kind='explicit')=>{
+    const row=structuredClone(template);row.key=key;row.class={...row.class,kind,explicitKey:ref,agentId:'main'};
+    row.displayName=label;row.updatedAt=Date.now();row.usage={...row.usage,total:11};row.run={...row.run,status:'idle'};return row;
+  };
+  const ownerRow=make('agent:main:explicit:'+sessionRefForScope(ownerScope),sessionRefForScope(ownerScope),'Owner private');
+  ownerRow.usage.total=12345;ownerRow.run={...ownerRow.run,status:'running',evidence:'status-field'};
+  const memberRow=make('agent:main:explicit:'+sessionRefForScope(memberScope),sessionRefForScope(memberScope),'Member private');
+  const legacy=make('agent:main:explicit:portal-chat','portal-chat','Legacy shared history');
+  const ordinary=make('agent:main:discord:dm:synthetic','not-a-portal-chat','Other channel session','conversation-direct');
+  const rows=[ownerRow,memberRow,legacy,ordinary];
+  for(const row of rows)byKey.set(row.key,row);
+  f.engine.sessions=()=>rows;
+  f.engine.session=key=>byKey.get(key)||null;
+  const legacyCanary='LEGACY_MEMBER_PRIVATE_CANARY';
+  const transcripts=new Map([[legacy.key,{events:[{id:'legacy-user',kind:'user',text:legacyCanary,at:Date.now(),truncated:false}],participants:[],window:{from:0,to:1}}]]);
+  f.engine.transcript=key=>transcripts.get(key)||null;
+  f.engine.request=async()=>({ok:true});
+  for(const version of [2,3]) {
+    const adminLogs=openSse(f.base,`/api/v${version}/stream?topics=logs`,{cookie:f.cookie(f.admin)});
+    const memberLogs=openSse(f.base,`/api/v${version}/stream?topics=logs`,{cookie:f.cookie(f.user)});
+    const adminChat=openSse(f.base,`/api/v${version}/stream?topics=chat`,{cookie:f.cookie(f.admin)});
+    const memberChat=openSse(f.base,`/api/v${version}/stream?topics=chat`,{cookie:f.cookie(f.user)});
+    const adminForeignSession=openSse(f.base,`/api/v${version}/stream?topics=${encodeURIComponent('session:'+memberRow.key)}`,{cookie:f.cookie(f.admin)});
+    const memberForeignSession=openSse(f.base,`/api/v${version}/stream?topics=${encodeURIComponent('session:'+ownerRow.key)}`,{cookie:f.cookie(f.user)});
+    for(const stream of [adminLogs,memberLogs,adminChat,memberChat,adminForeignSession,memberForeignSession])t.after(()=>stream.close());
+    const opened=await Promise.all([adminLogs,memberLogs,adminChat,memberChat,adminForeignSession,memberForeignSession].map(stream=>stream.opened));
+    const [aHello,mHello]=await Promise.all([adminForeignSession.next(frame=>frame.event==='hello'),memberForeignSession.next(frame=>frame.event==='hello')]);
+    assert.ok(aHello.data.rejected.some(item=>item.issue==='permission-denied'));
+    assert.ok(mHello.data.rejected.some(item=>item.issue==='permission-denied'));
+    const [aLogs,mLogs]=await Promise.all([
+      adminLogs.next(frame=>frame.event==='snapshot'&&frame.data.topic==='logs'),
+      memberLogs.next(frame=>frame.event==='snapshot'&&frame.data.topic==='logs'),
+    ]);
+    const serialized=frame=>JSON.stringify(frame.data.data);
+    assert.ok(serialized(aLogs).includes(ownerRow.key));
+    assert.ok(!serialized(aLogs).includes(memberRow.key));
+    assert.ok(serialized(mLogs).includes(memberRow.key));
+    assert.ok(!serialized(mLogs).includes(ownerRow.key));
+    assert.match(serialized(aLogs),/Legacy shared history/,'ambiguous legacy history remains visible under Logs permission');
+    const adminChatVm=(await f.request('GET',`/api/v${version}/views/chat`,undefined,f.admin)).json.data;
+    const memberChatVm=(await f.request('GET',`/api/v${version}/views/chat`,undefined,f.user)).json.data;
+    assert.ok(!JSON.stringify(adminChatVm).includes(legacyCanary));assert.ok(!JSON.stringify(memberChatVm).includes(legacyCanary));
+    await waitFor(()=>adminChat.frames.some(frame=>frame.event==='snapshot')&&memberChat.frames.some(frame=>frame.event==='snapshot'),{what:'isolated chat snapshots'});
+    assert.ok(!adminChat.frames.some(frame=>JSON.stringify(frame.data).includes(legacyCanary)));
+    assert.ok(!memberChat.frames.some(frame=>JSON.stringify(frame.data).includes(legacyCanary)));
+    assert.equal((await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(ownerRow.key)}`,undefined,f.admin)).status,200);
+    assert.equal((await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(memberRow.key)}`,undefined,f.user)).status,200);
+    assert.equal((await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(memberRow.key)}`,undefined,f.admin)).status,404);
+    assert.equal((await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(ownerRow.key)}`,undefined,f.user)).status,404);
+    assert.equal((await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(legacy.key)}`,undefined,f.user)).status,200);
+    // Canonical explicit sessions do not create standalone occupants. Office
+    // must still scope their token/run contributions for HTTP and SSE.
+    const adminOffice=(await f.request('GET',`/api/v${version}/views/office`,undefined,f.admin)).json.data;
+    const memberOffice=(await f.request('GET',`/api/v${version}/views/office`,undefined,f.user)).json.data;
+    const kpi=(vm,id)=>vm.kpis.find(row=>row.id===id)?.value;
+    assert.ok(!adminOffice.occupants.some(row=>row.sessionKey===memberRow.key));
+    assert.ok(!memberOffice.occupants.some(row=>row.sessionKey===ownerRow.key));
+    assert.equal(kpi(adminOffice,'tokens'),12356,'owner sees own session plus ordinary sessions, not legacy history');
+    assert.equal(kpi(memberOffice,'tokens'),22,'member does not see the owner private session or ambiguous legacy history');
+    assert.equal(kpi(adminOffice,'runs'),1,'owner run total includes only own private running session');
+    assert.equal(kpi(memberOffice,'runs'),0,'foreign private run does not change the member total');
+    const adminOfficeStream=openSse(f.base,`/api/v${version}/stream?topics=office`,{cookie:f.cookie(f.admin)});
+    const memberOfficeStream=openSse(f.base,`/api/v${version}/stream?topics=office`,{cookie:f.cookie(f.user)});
+    t.after(()=>adminOfficeStream.close());t.after(()=>memberOfficeStream.close());
+    await Promise.all([adminOfficeStream.opened,memberOfficeStream.opened]);
+    const [adminFrame,memberFrame]=await Promise.all([
+      adminOfficeStream.next(frame=>frame.event==='snapshot'&&String(frame.data.topic).includes('office')),
+      memberOfficeStream.next(frame=>frame.event==='snapshot'&&String(frame.data.topic).includes('office')),
+    ]);
+    assert.equal(kpi(adminFrame.data.data,'tokens'),12356);
+    assert.equal(kpi(memberFrame.data.data,'tokens'),22);
+    assert.deepEqual(opened.map(response=>response.statusCode),[200,200,200,200,200,200]);
+  }
+  // The bounded event journal may outlive a removed canonical session. Missing
+  // inventory cannot turn an owner-private event into public office activity.
+  rows.splice(rows.indexOf(ownerRow),1);byKey.delete(ownerRow.key);
+  const retainedPrivateEvent={id:'retained-owner-private-run',at:Date.now(),kind:'run.started',sessionKey:ownerRow.key,
+    occupantId:'primary',actor:{kind:'system'},count:1};
+  f.engine.liveEvents=()=>[retainedPrivateEvent];
+  for(const version of [2,3]) {
+    f.api.topics.invalidate('office');
+    const http=(await f.request('GET',`/api/v${version}/views/office`,undefined,f.user)).json.data;
+    assert.equal(http.journal.some(event=>event.id===retainedPrivateEvent.id),false,'HTTP fails closed when the source session left the snapshot');
+    const stream=openSse(f.base,`/api/v${version}/stream?topics=office`,{cookie:f.cookie(f.user)});t.after(()=>stream.close());await stream.opened;
+    const frame=await stream.next(event=>event.event==='snapshot'&&String(event.data.topic).includes('office'));
+    assert.equal(frame.data.data.journal.some(event=>event.id===retainedPrivateEvent.id),false,'SSE applies the same lifecycle fence');
+  }
+});
+test('chat capability without principal-scoped sessions is denied on HTTP, cached topic builds, and v2/v3 SSE',async t=>{
+  const f=await fixture(t),row=structuredClone(f.engine.sessions()[0]);
+  row.key='agent:main:explicit:portal-chat';row.class={...row.class,kind:'explicit',explicitKey:'portal-chat',agentId:'main'};f.engine.sessions=()=>[row];
+  f.engine.runtimeFor=()=>({capabilities:{chat:true}});
+  f.engine.transcript=()=>({events:[{id:'legacy-leak',kind:'user',text:'UNSCOPED_CHAT_PRIVATE_CANARY',at:Date.now()}],participants:[],window:{from:0,to:1}});
+  for(const version of [2,3]) {
+    assert.equal((await f.request('GET',`/api/v${version}/views/chat`,undefined,f.admin)).status,404);
+    const direct=()=>f.api.topics.current('chat?scope='+encodeURIComponent(scopeForAccount(f.admin.id,f.store)),version);
+    assert.throws(direct,{code:'not_found'},'a cached/topic builder cannot bypass the same adapter capability fence');
+    const stream=openSse(f.base,`/api/v${version}/stream?topics=chat`,{cookie:f.cookie(f.admin)});t.after(()=>stream.close());await stream.opened;
+    const hello=await stream.next(frame=>frame.event==='hello');
+    assert.ok(hello.data.rejected.some(item=>item.topic==='chat'&&item.issue==='permission-denied'));
+    assert.equal(stream.frames.some(frame=>JSON.stringify(frame.data).includes('UNSCOPED_CHAT_PRIVATE_CANARY')),false);
+  }
+});
 test('revoking chat during an accepted turn preserves its result and actor, but skips the follow-up transcript read',async t=>{
   const f=await fixture(t),start=deferred(),finish=deferred();
+  const chatState=()=>f.api.commands.chatState(scopeForAccount(f.user.id,f.store));
   f.runtime.commands.agentTurn=async()=>{f.calls.push('turn');start.resolve();await finish.promise;return {text:'Accepted reply'};};
   assert.equal((await f.request('POST','/api/v3/chat/messages',{text:'Accepted text'})).status,202);await start.promise;
-  f.set('chat','none');finish.resolve();await waitFor(()=>f.api.commands.chatState().pending===null,{what:'accepted turn to settle'});
+  f.set('chat','none');finish.resolve();await waitFor(()=>chatState().pending===null,{what:'accepted turn to settle'});
   assert.deepEqual(f.calls,['turn']);
-  const vm=(await f.request('GET','/api/v3/views/chat',undefined,f.admin)).json.data;
+  f.set('chat','write');
+  const vm=(await f.request('GET','/api/v3/views/chat',undefined,f.user)).json.data;
   assert.equal(vm.messages.find(m=>m.text==='Accepted text').senderInfo.id,f.user.person_id);
   assert.ok(vm.messages.some(m=>m.text==='Accepted reply'));
 });
@@ -150,7 +318,7 @@ test('same-text local and pending turns from different Persons never reconcile w
   const sender=id=>({kind:'human',id,name:id,runtime:'synthetic',channel:null,avatarHint:null});
   const local=[{id:'first',role:'user',text:'Same text',at:10000,since:10000,meta:null,senderInfo:sender('person-first')},
     {id:'second',role:'user',text:'Same text',at:10001,since:10001,meta:null,senderInfo:sender('person-second')}];
-  for(const events of [[],[{id:'one-echo',kind:'user',text:'Same text',at:10000}]]) {
+  for(const events of [[],[{id:'one-echo',kind:'user',text:'Same text',at:10000,senderInfo:sender('person-first')}]]) {
     const vm=buildChatVM({sessionKey:'portal',transcript:{events},local,pending:{turnId:'third',text:'Same text',since:10002,senderInfo:sender('person-third')}});
     assert.equal(vm.messages.length,3);assert.deepEqual(vm.messages.map(m=>m.senderInfo.id),['person-first','person-second','person-third']);
     assert.equal(new Set(vm.messages.map(m=>m.id)).size,3);

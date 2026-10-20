@@ -23,9 +23,9 @@ test('operator-enabled server binds env/database identities and exposes guarded 
     t.after(()=>h.stop());
     const adminCookie=h.cookie;
     const row=h.withStore(db=>db.prepare('SELECT * FROM users WHERE id=(SELECT owner_user_id FROM authorization_state)').get());
-    assert.equal(row.credential_source,database?'database':'env');assert.equal(row.role_id,'rol_admin');
+    assert.equal(row.credential_source,'database');assert.equal(row.role_id,'rol_admin');
     if(database){assert.equal(row.id,historical.id);assert.equal(row.person_id,historical.person_id);assert.equal(row.auth_generation,historical.auth_generation);}
-    else {assert.equal(row.password_hash,null);assert.match(h.withStore(db=>db.prepare('SELECT env_fingerprint FROM authorization_state').get()).env_fingerprint,/^[a-f0-9]{64}$/);}
+    else {assert.match(row.password_hash,/^scrypt:/);assert.equal(h.withStore(db=>db.prepare('SELECT env_fingerprint FROM authorization_state').get()).env_fingerprint,null);}
     const list=await h.get('/api/v3/users');assert.equal(list.status,200);assert.equal(list.json.data.items[0].id,row.id);
     assert.equal((await h.get('/api/v2/users')).status,404);
     assert.equal((await h.post('/api/v3/settings/reauth',{password:TEST_PASSWORD})).status,200);
@@ -58,25 +58,26 @@ test('operator-enabled server binds env/database identities and exposes guarded 
     assert.equal(h.gw.callsTo('gateway.restart.request').length,0);
   }
 });
-test('boot identity keeps ids and migration grace across restart; changed env credentials invalidate the original identity only',async t=>{
+test('boot identity preserves stable ids across restart and changed env credentials cannot replace migrated database identity',async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ao-rbac-identity-boot-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const cfg={sessionSecret:'synthetic-env-secret',sessionTtlMs:60000,loginEmail:'ENV@example.invalid',loginPassword:'synthetic-env-password',authDatabase:false};
   let store=openStore({dir,instance:'test',ownerName:'Historical',log:()=>{}});
   let identity=prepareAuthIdentity({cfg,store}),user=store.users.owner(),state=store.rbac.state();
   const makeAuth=()=>createAuth({secret:cfg.sessionSecret,ttlMs:cfg.sessionTtlMs,password:cfg.loginPassword,identity,revocations:store.sessions,allowMultiUser:true});
   const oldAuth=makeAuth(),legacy=oldAuth.signSession({email:'untrusted-signed@example.invalid',exp:Date.now()+30000});
-  assert.equal(oldAuth.verifySession(legacy).userId,user.id);
+  assert.equal(oldAuth.verifySession(legacy),null,'migration generation bump revokes pre-migration legacy cookies');
   const rows=JSON.stringify(store.db.prepare('SELECT * FROM users').all());assert.ok(!rows.includes(cfg.loginPassword));
   store.close();store=openStore({dir,instance:'test',ownerName:'Historical',log:()=>{}});t.after(()=>store.close());
   identity=prepareAuthIdentity({cfg:{...cfg,sessionTtlMs:120000},store});
   assert.equal(store.users.owner().id,user.id);assert.equal(store.users.owner().person_id,user.person_id);assert.equal(store.users.owner().auth_generation,user.auth_generation);
-  assert.equal(store.rbac.state().legacy_cookie_deadline,state.legacy_cookie_deadline);assert.equal(makeAuth().verifySession(legacy).userId,user.id);
+  assert.equal(store.rbac.state().legacy_cookie_deadline,state.legacy_cookie_deadline);assert.equal(makeAuth().verifySession(legacy),null,'conversion invalidates pre-migration legacy cookies');
   const ctx={userId:user.id,authGeneration:user.auth_generation,requestId:'req_identity',authorize:()=>{}};
   const link=store.userManagement.invite({name:'Reader',email:'reader@example.invalid',roleId:'rol_reader'},ctx);
   store.userManagement.accept({token:link.token,purpose:'invite',passwordHash:await hashPassword('synthetic-reader-password')},{requestId:'req_accept'});
   const reader=store.users.byId(link.user.id),readerCookie=makeAuth().signSession({userId:reader.id,authGeneration:reader.auth_generation,sid:'reader-session',exp:Date.now()+30000});
   identity=prepareAuthIdentity({cfg:{...cfg,loginPassword:'changed-synthetic-password'},store});
-  assert.equal(store.users.owner().id,user.id);assert.equal(store.users.owner().auth_generation,user.auth_generation+1);
+  assert.equal(store.users.owner().id,user.id);assert.equal(store.users.owner().auth_generation,user.auth_generation);
+  assert.equal(store.users.owner().credential_source,'database');assert.equal(store.users.owner().password_hash!==null,true,'changed env credentials cannot replace DB credentials');
   assert.equal(makeAuth().verifySession(legacy),null);assert.equal(makeAuth().verifySession(readerCookie).userId,reader.id);
 });
 test('actual setup boot validates both API aliases with operator-enabled coverage in static and API-only modes',async t=>{

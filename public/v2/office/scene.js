@@ -1458,7 +1458,7 @@ export class OfficeScene {
     // only participants without a station stay where they are. Physical meetings come back later, rarely.
     const deskTalkers = new Set();
     if (plan && !this.editing && plan.talking !== false) {
-      for (const id of [plan.hostId, ...(plan.desk ?? []), ...(plan.meeting ?? [])]) {
+      for (const id of [plan.hostId, ...(plan.hosts ?? []).map(host => host.id), ...(plan.desk ?? []), ...(plan.meeting ?? [])]) {
         const c = id && this.chars.get(id);
         if (c?.occ?.stationUid && !c.occ.destination) deskTalkers.add(id);
       }

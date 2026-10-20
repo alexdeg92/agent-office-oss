@@ -48,10 +48,12 @@ printf '%s  %s\n' "$sha" "alexdeg92-agent-office-${version}.tgz" > "dist/alexdeg
 
 node -e '
 const fs = require("fs");
+const path = require("path");
 const { updateFormula } = require("./packaging/release-tools");
 const file = "packaging/homebrew/agent-office.rb";
-fs.writeFileSync(file, updateFormula(fs.readFileSync(file, "utf8"), process.argv[1], process.argv[2]));
-' "$version" "$sha"
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+fs.writeFileSync(file, updateFormula(fs.readFileSync(file, "utf8"), process.argv[1], process.argv[2], pkg, path.basename(process.argv[3])));
+' "$version" "$sha" "$tarball"
 
 mkdir -p dist/homebrew-tap/Formula
 cp packaging/homebrew/agent-office.rb dist/homebrew-tap/Formula/agent-office.rb

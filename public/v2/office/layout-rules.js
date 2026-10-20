@@ -11,10 +11,11 @@ export const ROLE_MAX = 32;
 export const MAX_ACCESSORIES = 5;
 export const ROLES = ['main', 'agent', 'subagent', 'cron', 'dm', 'channel'];
 /**
- * Station kinds an occupant can call home (auto allocation and explicit `station`), in allocation
- * order: every desk, then every lounge (contract 2.0, data-model §12). Others are destinations only.
+ * Workstation kinds an occupant can call home. Lounges remain valid legacy layout references and
+ * activity destinations, but they are never a pinned or automatic work home.
  */
-export const HOME_KINDS = ['desk', 'lounge'];
+export const HOME_KINDS = ['desk'];
+const LAYOUT_STATION_KINDS = ['desk', 'lounge'];
 /** O8: seen-agent presence. Default when the layout says nothing; 0 turns it off; at most a day. */
 export const PRESENCE_DEFAULT_MINUTES = 30;
 export const PRESENCE_MAX_MINUTES = 1440;
@@ -289,7 +290,7 @@ export function validateLayout(layout, index, { allowNoDesk = false } = {}) {
       const item = layout.items.find((i) => i.uid === st);
       const sf = item && index.furniture.get(item.asset);
       if (!item || !sf?.station) err('missing-station', T('err.missing-station', { who }), { agentId: a.agentId });
-      else if (!HOME_KINDS.includes(sf.station.kind)) err('station-kind', T('err.station-kind', { who }), { agentId: a.agentId });
+      else if (!LAYOUT_STATION_KINDS.includes(sf.station.kind)) err('station-kind', T('err.station-kind', { who }), { agentId: a.agentId });
       else if (fixedDesks.has(st)) err('station-taken', T('err.station-taken', { item: itemName(layout, index, st), who: fixedDesks.get(st) }), { agentId: a.agentId });
       else fixedDesks.set(st, who);
     }
@@ -335,7 +336,7 @@ function displayRule(a) {
   return c && RULES_FR[`who.${c}`] != null ? T(`who.${c}`) : a.agentId;
 }
 
-/** Home stations in allocation order (desks in layout order, then lounges): their count is the seated capacity. */
+/** Work-home desks in layout order. Lounge seats are activity spots, never workstation capacity. */
 export function homeStations(layout, index) {
   const kindOf = (i) => (i.wall == null ? index.furniture.get(i.asset)?.station?.kind : null);
   return HOME_KINDS.flatMap((k) => layout.items.filter((i) => kindOf(i) === k).map((i) => i.uid));
@@ -408,7 +409,7 @@ export function resolveOccupants(layout, index, sources, { assignLook } = {}) {
     };
   });
   // Pass 1: explicit stations (first in roster order wins a contested one). Pass 2: automatic, in roster
-  // order, first free home station (desks, then lounges). None left → null (overflow, standing area).
+  // order, first free home desk. Lounges are activity destinations, not work-home capacity.
   const desks = homeStations(layout, index);
   const taken = new Set();
   for (const o of out) if (o._want && desks.includes(o._want) && !taken.has(o._want)) { o.stationUid = o._want; taken.add(o._want); }

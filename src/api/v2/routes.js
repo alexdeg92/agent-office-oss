@@ -26,6 +26,7 @@ const { createCapturer, findChrome, shotPath } = require('../../capture/capturer
 const { createPublicUrls } = require('./urls');
 const { every } = require('../../ops/timescale');
 const readBuild = require('../ui-build').createBuildReader();
+const { scopeForAccount, visibleToAccount } = require('../chat-identity');
 
 // (method, path) → 'transport' | 'store' | 'openclaw'
 // G5: the same classes on /api/v2 and /api/v3
@@ -47,6 +48,7 @@ const WRITE_CLASSES = [
   { method: 'PUT', re: /^\/api\/v[23]\/skills\/[^/]+\/enabled\/?$/i, cls: 'openclaw' },
   { method: 'POST', re: /^\/api\/v[23]\/gateway\/restart\/?$/i, cls: 'openclaw' },
   { method: 'POST', re: /^\/api\/v[23]\/chat\/messages\/?$/i, cls: 'openclaw' },
+  { method: '*', re: /^\/api\/v3\/chat\/(?!sessions\/[^/]+\/read(?:\/|$))(agents|sessions|attachments)(\/.*)?$/i, cls: 'openclaw' },
   // S14b: the office layout and the UI prefs (store)
   { method: 'PUT', re: /^\/api\/v[23]\/office\/layout(\/theme)?\/?$/i, cls: 'store' },
   { method: 'PATCH', re: /^\/api\/v[23]\/prefs\/?$/i, cls: 'store' },
@@ -61,12 +63,16 @@ const writeClassOf = (method, p) => { const w = WRITE_CLASSES.find((x) => (x.met
  * (createVersionedTopics), each version has its own runtime check and its own stream hub.
  */
 function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, setup = null, settings = null, externalAccess = null, orchestratorTeams = null, sourcePrincipalFor = null, sessionsReadable: readable = null,
-  enforceAuthorization = false, reauthenticationElapsed = undefined, log = (entry) => console.error(typeof entry === 'string' ? entry : JSON.stringify(entry)), now = () => Date.now() }) {
+  enforceAuthorization = false, reauthenticationElapsed = undefined, chatDispatchScheduler = undefined, chatLateReply = undefined,
+  officeEngineOrchestration = process.env.AO_OFFICE_ENGINE_ORCHESTRATION !== '0',
+  log = (entry) => console.error(typeof entry === 'string' ? entry : JSON.stringify(entry)), now = () => Date.now() }) {
   // Internal integration switch only. Server boot keeps this off until the whole auth surface is reviewed.
   if(enforceAuthorization&&!store?.policy)throw new Error('authorization store required');
   let teamProjectById = () => null;
   let projectExistsById = () => false;
   const projector=enforceAuthorization?require('../../security/view-projection').createViewProjection({store,cfg,
+    chatSessionForKey:(key,version)=>{try{return engine.session(key)||engine.session(require('./runtime-projection').resolveWireId(engine,key,'session',version));}catch{return null;}},
+    officeSessions:()=>engine.sessions(),officeEvents:()=>engine.liveEvents(),
     isTeamProject: id => !!teamProjectById(id)?.teamProject}):null;
   const reauthentication=enforceAuthorization?require('../../security/reauthentication').createReauthentication({store,auth,now,elapsed:reauthenticationElapsed}):null;
   if(reauthentication)settings?.useAuthorization?.({reauthentication});
@@ -85,7 +91,17 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     if (name === 'health') engine.quarantine.markClean('core:vm.health');
   };
   const vms = { 2: createVmCheck({ mode: vmMode, report, resolve: resolveVmIssue, version: 2 }), 3: createVmCheck({ mode: vmMode, report, resolve: resolveVmIssue, version: 3 }) };
-  const topics = createVersionedTopics({ 2: { P: project2x, check: (name, vm, id) => vms[2].check(name === 'office-scope' ? 'office' : name, require('./runtime-projection').projectLegacy(vm, name === 'office-scope' ? 'office' : name), id) }, 3: { P: project3x, check: (name, vm, id) => vms[3].check(name === 'office-scope' ? 'office' : name, vm, id) } }, {
+  const projectLegacyChecked = (vm, name) => {
+    const projected = require('./runtime-projection').projectLegacy(vm, name);
+    // Runtime namespaces are removed from legacy wire IDs above. That projection
+    // can make two distinct canonical senders share an ID, so restore the
+    // SessionVM collection invariant after aliasing and before schema checks.
+    if (name !== 'session' || !projected) return projected;
+    return require('./vm/logs').repairSessionCollections(projected, (path, count) => {
+      try { log({ event: 'api.vm.repaired', severity: 'warn', vm: 'session', path, count }); } catch { /* diagnostics cannot break a read */ }
+    });
+  };
+  const topics = createVersionedTopics({ 2: { P: project2x, check: (name, vm, id) => { if(name.startsWith('chat-'))throw new ApiError('not_found');const n=(name==='office-scope'?'office':name==='health-admin'?'health':name);return vms[2].check(n,projectLegacyChecked(vm,n),id); } }, 3: { P: project3x, check: (name, vm, id) => {const n=({'chat-agents':'chatAgents','chat-agent-sessions':'chatAgentSessions','chat-agent-sessions-archived':'chatAgentSessions','chat-session':'chatSession','chat-agents-scope':'chatAgents','chat-agent-sessions-scope':'chatAgentSessions','chat-session-scope':'chatSession'})[name]|| (name==='office-scope'?'office':name==='health-admin'?'health':name);return vms[3].check(n,vm,id);} } }, {
     policyDeclarations:require('../../security/route-declarations').TOPICS,
     resourceRegistry:store?.registry || require('../../security/resources').createResourceRegistry(),
     onError: diagnostic => { try { log({ event: 'api.topic.build_failed', ...diagnostic }); } catch (_) { /* logging cannot break requests */ } },
@@ -109,19 +125,29 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   };
   const permissionFingerprint = principal => JSON.stringify([principal.id, principal.role, principal.permissionRevision || 0,
     Object.fromEntries(Object.keys(principal.permissions || {}).sort().map(key => [key, principal.permissions[key]]))]);
+  const canReadHealth = principal => principal?.role === 'admin'
+    || ['read', 'write'].includes(principal?.effectivePermissions?.health ?? principal?.permissions?.health);
+  topics.define('health-admin', { params: 'path', permission: { resource: 'health', level: 'read' }, build: ({ key }, P) => {
+    const scope = sourceScopes.get(key);
+    if (!scope || scope.principal?.role !== 'admin') throw new ApiError('not_found');
+    return buildHealthVM({ engine, series, P, includeEngineParity: true });
+  } });
   const sourceTopic = (req, kind) => {
     const principal = sourcePrincipal(req, true);
-    if (!principal || (kind !== 'office' && !sourcePermissions.allowsPrincipal(principal, kind, 'read'))) throw new ApiError('forbidden');
+    const resource = kind === 'health-admin' ? 'health' : kind;
+    if (!principal || (kind !== 'office' && !(resource === 'health' ? canReadHealth(principal) : sourcePermissions.allowsPrincipal(principal, resource, 'read')))
+      || (kind === 'health-admin' && principal.role !== 'admin')) throw new ApiError('forbidden');
     const enabled = kind === 'orchestrators' ? !!orchestratorTeams?.hasHerdr : kind === 'teams' ? !!orchestratorTeams?.hasTeamStore : true;
     if (!enabled) throw new ApiError('not_found');
     const fingerprint = permissionFingerprint(principal);
     let token = sourceScopesByPrincipal.get(fingerprint);
     if (!token) {
       if (sourceScopes.size >= 256) {
-        const candidate = [...sourceScopes.keys()].find(old => !['teams:', 'orchestrators:', 'office-scope:'].some(prefix => hubs[3].isSubscribed(prefix + old)));
+        const candidate = [...sourceScopes.keys()].find(old => !['teams:', 'orchestrators:', 'office-scope:', 'health-admin:'].some(prefix => hubs[2].isSubscribed(prefix + old) || hubs[3].isSubscribed(prefix + old)));
         if (!candidate) throw new ApiError('rate_limited');
         const expired = sourceScopes.get(candidate);
         topics.of(3).forget('teams:' + candidate); topics.of(3).forget('orchestrators:' + candidate); topics.of(3).forget('office-scope:' + candidate);
+        topics.of(2).forget('health-admin:' + candidate); topics.of(3).forget('health-admin:' + candidate);
         sourceScopes.delete(candidate); sourceScopesByPrincipal.delete(expired?.fingerprint);
       }
       token = require('node:crypto').randomBytes(18).toString('base64url');
@@ -134,11 +160,29 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     // request, never to whichever endpoint happened to mint the token first.
     if (kind === 'office') {
       const scope = sourceScopes.get(token);
-      if (scope) scope.officeLimited = !sessionsReadable({ session: req?.session || null, principal });
+      if (scope) {
+        const officeLimited = !sessionsReadable({ session: req?.session || null, principal });
+        if (scope.officeLimited !== officeLimited) {
+          scope.officeLimited = officeLimited;
+          // The principal token is stable across Office/Logs grant changes;
+          // discard both cached Office versions when its safe projection
+          // boundary changes so a full row set cannot be replayed as limited.
+          for (const version of [2, 3]) topics.of(version).forget('office-scope:' + token);
+        }
+      }
     }
     return kind + ':' + token;
   };
+  let chatBackend=null;
   const authorizeSourceTopic = (topic, context) => {
+    if(topic?.name==='chat')return !!commands?.chatAvailable?.(context);
+    if(topic?.name==='chat-session'||topic?.name==='chat-agents'||topic?.name==='chat-agent-sessions'||topic?.name==='chat-agent-sessions-archived')return !!chatBackend?.authorizeTopic?.(topic,context);
+    if (topic?.name === 'session') {
+      const key=(()=>{try{return require('./runtime-projection').resolveWireId(engine,topic.params?.key,'session',context?.apiVersion||3);}catch{return null;}})();
+      const row=key&&engine.session(key);
+      if(!row)return false;
+      return visibleToAccount(row,scopeForAccount(context?.session?.userId,store));
+    }
     if (topic?.name === 'comments') {
       const id=topic.params?.key;
       if(!projectExistsById(id))return false;
@@ -152,12 +196,14 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
       }
       return true;
     }
-    if (!['orchestrators', 'teams', 'office-scope'].includes(topic?.name)) return true;
+    if (!['orchestrators', 'teams', 'office-scope', 'health-admin'].includes(topic?.name)) return true;
     const principal = sourcePrincipal({ session: context?.session });
     const key = topic.params?.key;
     const scope = typeof key === 'string' ? sourceScopes.get(key) : null;
     if (!principal || !scope || permissionFingerprint(principal) !== scope.fingerprint) return false;
-    if (topic.name !== 'office-scope' && !sourcePermissions.allowsPrincipal(principal, topic.name, 'read')) return false;
+    const resource = topic.name === 'health-admin' ? 'health' : topic.name;
+    if (topic.name !== 'office-scope' && !(resource === 'health' ? canReadHealth(principal) : sourcePermissions.allowsPrincipal(principal, resource, 'read'))) return false;
+    if (topic.name === 'health-admin' && (principal.role !== 'admin' || scope.principal?.role !== 'admin')) return false;
     if (topic.name === 'orchestrators' && !orchestratorTeams?.hasHerdr) return false;
     if (topic.name === 'teams' && !orchestratorTeams?.hasTeamStore) return false;
     return true;
@@ -177,22 +223,31 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     const active = engine.runtime?.();
     if (active?.definition) runtimeRows.push({ id: active.definition.id, adapter: active.definition.id,
       capabilities: active.definition.capabilities, mark: active.definition.mark });
+    const adapters = require('../../adapters');
     const adapterIds = new Set((snapshot.members || []).map(member => member?.runtimeKind).filter(id => typeof id === 'string'));
     for (const id of adapterIds) {
-      if (runtimeRows.some(row => (row?.adapter || row?.adapterId || row?.id) === id)) continue;
+      if (runtimeRows.some(row => (row?.runtimeKind || row?.adapter || row?.adapterId || row?.id) === id)) continue;
+      const presentation = adapters.runtimePresentationFor(id);
+      if (presentation) {
+        runtimeRows.push({ id: presentation.runtime, runtimeKind: id, name: presentation.brand?.providerName,
+          mark: presentation.brand, runtimeLabel: presentation.label });
+        continue;
+      }
       try {
-        const adapter = require('../../adapters').adapterById(id);
-        runtimeRows.push({ id, adapter: id, name: adapter.definition?.name || id, mark: adapter.definition?.mark,
-          capabilities: adapter.definition?.capabilities });
-      } catch (_) { /* unknown providers keep the neutral shared-brand fallback */ }
+        const adapter = adapters.adapterById(id);
+        runtimeRows.push({ id, adapter: id, name: adapter.definition?.name || 'Runtime', mark: adapter.definition?.mark,
+          runtimeLabel: adapter.definition?.runtimePresentation?.label, capabilities: adapter.definition?.capabilities });
+      } catch (_) { /* unrecognized runtime IDs receive the generic backend label */ }
     }
     const seenBrands = new Set();
     const brands = runtimeRows.flatMap(row => {
-      const id = row?.adapter || row?.adapterId || row?.id;
+      const id = row?.runtimeKind || row?.adapter || row?.adapterId || row?.id;
       const source = row?.capabilities?.brand || row?.definition?.capabilities?.brand || row?.brand || row?.mark || row?.definition?.mark;
       if (typeof id !== 'string' || !source || seenBrands.has(id)) return [];
       seenBrands.add(id);
-      return [{ id, brand: { mark: source.mark || source.monogram || null, color: source.color || '#596579',
+      const display = require('../../adapters').runtimePresentationFor(id);
+      return [{ id, label: row.runtimeLabel || display?.label || { key: 'team.runtime.other' }, qualifier: row.runtimeQualifier || display?.qualifier || null,
+        brand: { mark: source.mark || source.monogram || 'R', color: source.color || '#596579',
         foreground: source.foreground || '#ffffff', providerName: source.providerName || row.name || id,
         ...(typeof source.logo === 'string' ? { logo: source.logo } : {}), ...(typeof source.logoDark === 'string' ? { logoDark: source.logoDark } : {}) } }];
     });
@@ -220,6 +275,31 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     return !!session;
   });
   const resolveTopic = (id, session) => {
+    if (id === 'health' || id.startsWith('health?')) {
+      try { return sourceTopic({ session }, 'health-admin'); } catch { return 'health'; }
+    }
+    // `chat` is a public wire alias. Ignore any caller-provided owner scope and
+    // route each stream to the authenticated account's private topic instance.
+    if (id === 'chat' || id.startsWith('chat?')) return 'chat?scope=' + encodeURIComponent(commands.identifyChatSession(session));
+    if(id==='chat-agents'||id.startsWith('chat-agents?'))return 'chat-agents-scope?scope='+encodeURIComponent(chatBackend?.topicScope?.(session,'agents')||'');
+    if(id.startsWith('chat-agent-sessions:')) {
+      const targetId=id.slice('chat-agent-sessions:'.length);return 'chat-agent-sessions-scope?scope='+encodeURIComponent(chatBackend?.topicScope?.(session)||'')+'&targetId='+encodeURIComponent(targetId)+'&filter=active';
+    }
+    if(id.startsWith('chat-agent-sessions-archived:')) {
+      const targetId=id.slice('chat-agent-sessions-archived:'.length);return 'chat-agent-sessions-scope?scope='+encodeURIComponent(chatBackend?.topicScope?.(session)||'')+'&targetId='+encodeURIComponent(targetId)+'&filter=archived';
+    }
+    if(id.startsWith('chat-session:')) {
+      const sessionId=id.slice('chat-session:'.length);return 'chat-session-scope?scope='+encodeURIComponent(chatBackend?.topicScope?.(session)||'')+'&sessionId='+encodeURIComponent(sessionId);
+    }
+    // Logs topics are shared by default; give each authenticated account its
+    // own cached projection key and discard caller-supplied scope parameters.
+    if (id === 'logs' || id.startsWith('logs?')) {
+      const parsed=topics.parse(id,3);
+      if(parsed) {
+        const params={...parsed.params,scope:scopeForAccount(session?.userId,store)};
+        return 'logs?'+Object.keys(params).sort().map(key=>encodeURIComponent(key)+'='+encodeURIComponent(params[key])).join('&');
+      }
+    }
     const ordinary = officeTopicFor({ session }, sessionsReadable, id);
     if (id !== 'office' || !['office', 'office?view=limited'].includes(ordinary)
       || !(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected)) return ordinary;
@@ -250,9 +330,11 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   engine.on('change', (c) => { if (c?.channel === 'settings') office?.refreshSettings(); topics.invalidate(); if (c && c.channel === 'gateway.connection') { hubs[2].broadcastSystem(); hubs[3].broadcastSystem(); } });
   const onOfficeLive = e => { for (const P of [project2x, project3x]) { const frame = officeSignalFrame(e, P); if (frame) hubs[P.version].broadcastOffice(frame); } };
   engine.on('live', onOfficeLive);
-  const sampler = setInterval(() => { series.sample(); topics.invalidate('health'); }, every(60000));
+  const sampler = setInterval(() => { series.sample(); topics.invalidate('health'); topics.invalidate('health-admin'); }, every(60000));
   if (sampler.unref) sampler.unref();
   series.sample();
+  const stopParityReporter = require('../../engine/parity-observability').startReporter({ engine, log,
+    onSample: () => { topics.invalidate('health'); topics.invalidate('health-admin'); } });
   auth.onRevoke((s) => { hubs[2].revokeSession(s); hubs[3].revokeSession(s); });
 
   const {trackMounts,exceptionMiddleware:except}=require('../../security/route-policy');
@@ -260,7 +342,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   if(enforceAuthorization)require('../../security/route-policy').decorateRouter(r,require('../../security/route-declarations').ROUTES,{auth,store});
   r.use(except('api.version',(req, res, next) => { req.apiVersion = apiVersionOf(req); res.setHeader('Cache-Control', 'no-store'); next(); }));
   // S7d: an allowed token request (the gate set req.principal) is authenticated as the agent, never as a cookie session
-  const authed = (req, res, next) => { if (req.principal||req.session) return next(); const s = auth.sessionOf(req); if (!s) return next(new ApiError('unauthorized')); req.session = s; next(); };
+  const authed = auth.requireSession || ((req, res, next) => { if (req.principal||req.session) return next(); const s = auth.sessionOf(req); if (!s) return next(new ApiError('unauthorized')); req.session = s; next(); });
   const guard = (cls) => (req, res, next) => {
     const caps = capabilitiesOf(cfg);
     if ((cls === 'store' && !caps.storeWrites) || (cls === 'openclaw' && !caps.openclawWrites)) return next(new ApiError('readonly'));
@@ -313,7 +395,11 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     ok(res, topic.vm, { id: topic.id, rev: topic.rev }, 'teams');
   });
 
-  r.get('/views/health', authed, (req, res) => { const t = topics.current('health', req.apiVersion); ok(res, t.vm, { id: t.id, rev: t.rev }); });
+  r.get('/views/health', authed, (req, res) => {
+    let id = 'health';
+    try { if (sourcePrincipal(req, true)?.role === 'admin') id = sourceTopic(req, 'health-admin'); } catch { /* ordinary HealthVM stays available */ }
+    const t = topics.current(id, req.apiVersion); ok(res, t.vm, t, 'health');
+  });
 
   r.put('/health/issues/:id/muted', authed, guard('store'), (req, res) => {
     noExtra(req.body, ['muted']);
@@ -351,12 +437,15 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   });
 
   const views = mountViews({ configuredAgents: cfg.agentNames || {}, r, engine, topics, store, runtime, enrichment, orchestratorTeams,
+    officeEngineOrchestration,
+    log,
     officeTimings: settings?.officeTimings,
     officePrincipalFor: key => sourceScopes.get(key)?.principal || null, officeScopeFor: key => sourceScopes.get(key) || null,
   officeTopicFor: req => orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected
     ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : null,
     authed, ok, now, sessionsReadable, isSubscribed: (id,version) => version ? hubs[version].isSubscribed(id) : hubs[2].isSubscribed(id) || hubs[3].isSubscribed(id) });
   const commands = mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, views, now, log });
+  chatBackend=require('../v3/chat').mountChat({r,engine,topics,store,runtime,runtimeWritable:capabilitiesOf(cfg).openclawWrites,dataDir:cfg.dataDir,orchestratorTeams,avatarFor:views.chatAvatarFor,authed,guard,ok,now,log,...(chatDispatchScheduler?{dispatchScheduler:chatDispatchScheduler}:{}),...(chatLateReply?{lateReply:chatLateReply}:{})});
   // S14b: the office layout and the UI prefs (store)
   const office = store ? mountOfficeLayout({ r, store, topics, authed, guard, ok, now, actorOf: views.actorOf, timeZone: () => cfg.timeZone,
     officeTimings: settings?.officeTimings,
@@ -373,7 +462,9 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   // architect-57: the project threads (comments, agent replies, the summary request), on the projects module
   const dispatchAuthority=enforceAuthorization?require('../../security/dispatch-authority').createDispatchAuthority({store,now}):null;
   const thread = store && store.comments ? createProjectThread({ store, engine, runtime, topics, cfg, log, now, dispatchAuthority }) : null;
-  const projects = store ? mountProjects(r, { capturer, store, engine, topics, cfg, runtime, authed, guard, ok, enrichment, log, thread, enforceAuthorization, orchestratorTeams }) : null;
+  const projects = store ? mountProjects(r, { capturer, store, engine, topics, cfg, runtime, authed, guard, ok, enrichment, log, thread, enforceAuthorization, orchestratorTeams, chatBackend,
+    officeTopicFor: req => orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected
+      ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : null }) : null;
   teamProjectById = projects?.teamProjectById || (() => null);
   projectExistsById = projects?.projectExistsById || (() => false);
   if (thread) { thread.attach(projects); thread.mount(r, { authed, guard, ok }); }
@@ -388,6 +479,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
       const topic=topics.of(req.apiVersion).parse(raw);
       if(!topic||topic.id!==raw)throw invalid('topics','invalid-topic');
       if(!policy.can(binding,topic.id))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
+      if(!authorizeSourceTopic(topic,{session,apiVersion:req.apiVersion}))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
       if(!ids.includes(topic.id))ids.push(topic.id);
     }
     const issued=store.humanTokens.createStreamTicket({userId:session.userId,familyId:session.familyId,sessionId:session.sid,origin:session.origin,audience:session.audience,
@@ -407,7 +499,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   app.use(['/api/v2', '/api/v3'], r);
   app.use(['/api/v2', '/api/v3'], except('api.error',errorMiddleware(log)));   // errors raised before the router (body parsing)
   return { router:r, reauthentication, topics, hub, hubs, series, projects, thread, views, commands, office,
-    close: () => { reauthentication?.close();engine.removeListener('live', onOfficeLive); clearInterval(sampler); views.close(); if (thread) thread.close(); if (office) office.close(); externalAccess?.close(); settings?.close(); topics.close(); hubs[2].closeAll(); hubs[3].closeAll(); if (projects) projects.close(); offOrchestratorTeams?.(); orchestratorTeams?.close?.(); } };
+    close: () => { reauthentication?.close();engine.removeListener('live', onOfficeLive); clearInterval(sampler); stopParityReporter(); views.close(); if (thread) thread.close(); if (office) office.close(); externalAccess?.close(); settings?.close(); chatBackend?.close?.(); topics.close(); hubs[2].closeAll(); hubs[3].closeAll(); if (projects) projects.close(); offOrchestratorTeams?.(); orchestratorTeams?.close?.(); } };
 }
 
 module.exports = { mountV2, writeClassOf, WRITE_CLASSES, apiVersionOf };

@@ -16,6 +16,43 @@ const workspace = (text = ORIGINAL) => { const w = fs.mkdtempSync(path.join(root
 const read = (a, f = 'AGENTS.md') => fs.readFileSync(path.join(a.workspace, f), 'utf8');
 // PM: backups live in Agent Office's data dir, never in the workspace
 const backups = (a) => (fs.existsSync(a.bdir) ? fs.readdirSync(a.bdir).filter((f) => f.startsWith('main-AGENTS.md-')).map((f) => path.join(a.bdir, f)) : []);
+
+describe('OpenClaw CLI JSON output', () => {
+  it('parses a receipt after log lines with brace-delimited metadata', () => {
+    const cli = createCli({ bin: BIN, home: '/home/x', readonly: true });
+    const receipt = cli.parseJson('[session-sqlite] opened {store=agent}\n[agent-db] ready\n{\n  "ok": true, "key": "agent:main:explicit:private", "entry": {"sendPolicy":"deny"}\n}\n');
+    assert.deepEqual(receipt, { ok: true, key: 'agent:main:explicit:private', entry: { sendPolicy: 'deny' } });
+    assert.deepEqual(cli.parseJson('🦞 OpenClaw 2026.9.8\n{"ok":true}'), { ok: true }, 'the supported CLI version banner may precede JSON');
+  });
+  it('strips ANSI colors and accepts logger-tag lines before and after a single receipt', () => {
+    const cli = createCli({ bin: BIN, home: '/home/x', readonly: true });
+    const output = '\u001b[33m[state/agent-db]\u001b[39m opened {store=agent}\n' +
+      '\u001b[34m[agents/agent-command.v2]\u001b[39m loaded\n' +
+      '{"ok":true,"key":"agent:main:explicit:private","entry":{"sendPolicy":"deny"}}\n' +
+      '\u001b[33m[gateway]\u001b[39m patched session';
+    assert.deepEqual(cli.parseJson(output), { ok: true, key: 'agent:main:explicit:private', entry: { sendPolicy: 'deny' } });
+  });
+  it('rejects a valid receipt followed by another JSON document or trailing output', () => {
+    const cli = createCli({ bin: BIN, home: '/home/x', readonly: true });
+    const receipt='{"ok":true,"key":"agent:main:explicit:private","entry":{"sendPolicy":"deny"}}';
+    assert.equal(cli.parseJson(receipt+'\n{"ok":true,"key":"agent:main:explicit:private","entry":{"sendPolicy":"deny"}}'),null,'two top-level documents are ambiguous');
+    assert.equal(cli.parseJson(receipt+'\nordinary trailing text'),null,'ordinary trailing output invalidates the receipt');
+    assert.deepEqual(cli.parseJson(receipt+'\n[new/subsystem.v2] trailing log'), { ok: true, key: 'agent:main:explicit:private', entry: { sendPolicy: 'deny' } }, 'new tag-shaped logger lines remain compatible');
+    assert.equal(cli.parseJson(receipt+'\n[not a logger tag] trailing log'),null,'malformed logger tags are rejected after the receipt');
+    assert.equal(cli.parseJson('{"log":"not a receipt"}\n'+receipt),null,'a JSON-shaped prefix cannot mask the real response');
+  });
+  it('does not skip malformed JSON before a receipt-shaped log line', () => {
+    const cli = createCli({ bin: BIN, home: '/home/x', readonly: true });
+    const fakeReceipt='{"ok":true,"key":"agent:main:explicit:private","entry":{"sendPolicy":"deny"}}';
+    assert.equal(cli.parseJson('{"ok":\n'+fakeReceipt),null,'the first malformed JSON-looking segment fails closed');
+    assert.equal(cli.parseJson('[gateway] command failed\n{not-json\n'+fakeReceipt),null,'malformed response after a logger line fails closed');
+    assert.equal(cli.parseJson('not-json\n'+fakeReceipt),null,'arbitrary text cannot be skipped before a receipt');
+    assert.equal(cli.parseJson('false\n'+fakeReceipt),null,'scalar JSON cannot be skipped before a receipt');
+    assert.deepEqual(cli.parseJson('[new/subsystem.v2] output\n'+fakeReceipt), { ok: true, key: 'agent:main:explicit:private', entry: { sendPolicy: 'deny' } }, 'new tag-shaped logger lines remain compatible before the receipt');
+    assert.equal(cli.parseJson('[not a logger tag] output\n'+fakeReceipt),null,'malformed logger tags are rejected before the receipt');
+  });
+});
+
 let t = 1000; const now = () => ++t;
 
 describe('project-tag installer · install', () => {

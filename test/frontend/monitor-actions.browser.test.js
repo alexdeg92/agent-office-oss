@@ -32,7 +32,12 @@ test(`real v${version} monitor action view ${width} ${theme}`,{skip:browserSkipR
   await p.waitForFunction(()=>{const s=document.querySelector('.ao-bureau__stage').aoScene;return s.reducedMotion&&[...s.itemNodes.values()].filter(n=>n.parts?.monitor?.dataset.screen).every(n=>n.parts.monitor.dataset.screen==='coding-1.png');});
   await p.clock.setFixedTime(new Date(h.clock.value+2100));await p.waitForTimeout(120);
   assert.equal(await p.evaluate(()=>[...document.querySelector('.ao-bureau__stage').aoScene.itemNodes.values()].filter(n=>n.parts?.monitor?.dataset.screen).every(n=>n.parts.monitor.dataset.screen==='coding-1.png')),true);
+  const debounceMs=(await h.get('/api/v3/settings')).json.data.office.idleTransitionDebounceMs.value;
   h.advance(1000,Array(11).fill('idle'));
+  await p.evaluate(async()=>{const {services}=await import('/services.js?v='+document.querySelector('meta[name=ao-build]').content);services.stream.resync('office');});
+  const pending=(await h.get(`/api/v${version}/views/office`)).json.data;assert.ok(pending.occupants.every(c=>c.state==='working'),'idle remains suppressed during the configured transition debounce');
+  h.advance(debounceMs,Array(11).fill('idle'));
+  const idle=(await h.get(`/api/v${version}/views/office`)).json.data;assert.ok(idle.occupants.every(c=>c.state==='idle'),'idle is projected after the configured transition debounce');
   await p.evaluate(async()=>{const {services}=await import('/services.js?v='+document.querySelector('meta[name=ao-build]').content);services.stream.resync('office');});
   await p.waitForFunction(()=>{const s=document.querySelector('.ao-bureau__stage').aoScene;return [...s.chars.values()].every(c=>c.occ.state==='idle')&&[...s.itemNodes.values()].filter(n=>n.parts?.monitor).every(n=>!n.parts.monitor.dataset.screen);});
   assert.equal(await p.evaluate(()=>[...document.querySelector('.ao-bureau__stage').aoScene.itemNodes.values()].some(n=>n.parts?.monitor?.src.includes('monitor-screens'))),false);

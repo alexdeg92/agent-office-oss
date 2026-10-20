@@ -64,6 +64,19 @@ test('reader executes only fixed argv with no shell, bounded process settings, a
     e => e.code === 'binary_not_configured');
 });
 
+test('pane messaging sends literal bounded text only to a currently observed exact pane, then presses Enter separately', async () => {
+  const calls=[];
+  const reader=createHerdrReader({...config,binaryPath:'/fixture/herdr',supportsStableSessionRef:true,now:()=>BASE,
+    run:async(_binary,args,options)=>{calls.push({args,options});return {stdout:response([row('pane-exact','idle')])};}});
+  await reader.refresh();
+  assert.deepEqual(await reader.sendPaneText('pane-exact','Hello, team.'),{sent:true});
+  assert.deepEqual(calls.slice(1).map(call=>call.args),[
+    ['pane','send-text','pane-exact','Hello, team.'],['pane','send-keys','pane-exact','enter']]);
+  assert.ok(calls.slice(1).every(call=>call.options.shell===false));
+  await assert.rejects(reader.sendPaneText('pane-exact','bad\n'),error=>error.code==='invalid_message');
+  assert.equal(calls.length,3,'invalid text does not reach the pane');
+});
+
 test('reader coalesces concurrent polls, retains a stale bounded snapshot, backs off, then recovers', async () => {
   let time = BASE; let count = 0; let fail = false;
   const reader = createHerdrReader({ ...config, binaryPath: '/fixture/herdr', now: () => time,

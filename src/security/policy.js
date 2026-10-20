@@ -4,6 +4,7 @@ function effective(snapshot, registry, key, visited = new Set()) {
   const resource = registry.get(key);
   if (!resource || !snapshot || !snapshot.activeResources.has(key) || snapshot.user.status!=='active' || visited.has(key)) return 'none';
   if (snapshot.role.id==='rol_admin') return 'write';
+  if (resource.adminOnly) return 'none';
   visited.add(key);
   const parent = resource.parent ? effective(snapshot,registry,resource.parent,visited) : null;
   if (resource.parent && RANK[parent]<RANK.read) return 'none';

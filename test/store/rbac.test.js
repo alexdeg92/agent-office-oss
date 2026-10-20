@@ -3,7 +3,7 @@ const {test,before}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {openStore}=require('../../src/store');
-const {openDatabase,MIGRATIONS_DIR}=require('../../src/store/db');
+const {openDatabase,MIGRATIONS_DIR,listMigrations}=require('../../src/store/db');
 const {hashPassword}=require('../../src/security/password');
 const {createAuth}=require('../../src/auth');
 const {CORE,createResourceRegistry}=require('../../src/security/resources');
@@ -28,7 +28,7 @@ test('registry/policy: core matrix, immutable admin, active status and unknown k
   for (const d of CORE) {
     assert.equal(store.policy.can(admin,d.key,'write'),true,d.key);
     const editorWrites=new Set(['chat','flows','projects','skills','store']),editorReads=new Set(['office','access','logs','health']);
-    const key=d.parent || d.key,expected=editorWrites.has(key)?'write':editorReads.has(key)?'read':'none';
+    const key=d.parent || d.key,expected=d.privileged?'none':editorWrites.has(key)?'write':editorReads.has(key)?'read':'none';
     for (const level of ['read','write']) assert.equal(store.policy.can(editor,d.key,level),expected==='write'||expected===level,d.key);
   }
   assert.equal(store.policy.can(reader,'logs','read'),false);
@@ -121,9 +121,12 @@ test('migration 024 upgrades a synthetic v23 single-owner copy, retaining cookie
   assert.equal(h.db.prepare('SELECT role_id FROM users WHERE id=?').get(row.id).role_id,'rol_admin');
   assert.deepEqual(h.db.prepare('PRAGMA foreign_key_check').all(),[]);
 });
-test('fresh installation has contiguous migrations through 029 after stable team placement and survives reopen',t=>{
+test('fresh installation applies stable team placement and private chat migrations and survives reopen',t=>{
   const {store,admin}=fixture(t),dir=store.dir;
-  assert.deepEqual(store.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(r=>r.version),Array.from({length:29},(_,i)=>i+1));
+  const versions=store.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(r=>r.version);
+  assert.ok(versions.includes(29)&&versions.includes(31));
+  assert.deepEqual(versions,listMigrations().map(({version})=>version),'applied versions match the declared migration inventory, including intentional gaps');
+  assert.ok(versions.includes(30),'030 records project source connector provenance');
   assert.equal(store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_detection'").get().name,'runtime_detection');
   const installationId=store.rbac.state().installation_id;
   store.db.prepare("INSERT INTO runtime_detection VALUES (1,'{}')").run();store.close();

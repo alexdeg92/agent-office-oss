@@ -37,7 +37,7 @@ describe('office mock in 3.0 (api-v3 D3/D4)', () => {
         for (const o of vm.occupants) {
           assert.ok(ROLES3.includes(o.role), o.role);
           assert.ok(o.id === 'primary' || /^(subagent|scheduled|direct|group|conversation):/.test(o.id), o.id);
-          assert.ok(o.roleLabel.key === 'custom' || o.roleLabel.key === `occupantRole.${o.role}`);
+          assert.ok(o.roleLabel === null || o.roleLabel.key === 'custom' || o.roleLabel.key === `occupantRole.${o.role}`);
           assert.ok(!o.ruleId || R.canonicalRuleId(o.ruleId) === o.ruleId, o.ruleId);
         }
         for (const c of om.tick()) assert.notEqual(c.occupantId, 'main');

@@ -31,7 +31,14 @@ function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm
 
   // → { id, name, params } with a canonical id, or null when the name or a param is unknown
   function parse(raw) {
-    if (typeof raw !== 'string' || !raw || raw.length > 300) {
+    // Projects search is bounded by decoded UTF-16 length (120). Legal
+    // non-ASCII input can occupy up to nine percent-encoded characters per
+    // code unit, so its canonical SSE topic needs a larger byte allowance.
+    // Keep that exception scoped to the declared projects query grammar.
+    const hasProjectsSearch = typeof raw === 'string' && raw.startsWith('projects?')
+      && /(?:^|&)search=/.test(raw.slice('projects?'.length));
+    const maxRawLength = hasProjectsSearch ? 1200 : 300;
+    if (typeof raw !== 'string' || !raw || raw.length > maxRawLength) {
       // Scoped path identities can be longer than the legacy query/topic bound;
       // only the declared single-key path grammar admits this extension.
       if (typeof raw !== 'string' || raw.length > 16532 || !/^(session|flow|skill):[^?]+$/.test(raw)) return null;
@@ -57,6 +64,8 @@ function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm
       const i = part.indexOf('='); if (i < 1) return null;
       let k, v; try { k = decodeURIComponent(part.slice(0, i)); v = decodeURIComponent(part.slice(i + 1)); } catch (_) { return null; }
       if (!kind.includes(k) || Object.prototype.hasOwnProperty.call(params, k)) return null;
+      const valueLimit = def.queryValueLimits?.[k];
+      if (valueLimit && v.length > valueLimit) return null;
       params[k] = v;
     }
     const keys = Object.keys(params).sort();

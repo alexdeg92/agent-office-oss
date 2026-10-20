@@ -1,3 +1,4 @@
+import { EXAMPLES } from './examples.js';
 // Contract 3.0 for the mock (G5, api-v3.md D1–D8): the 2.5 mock's view models projected to 3.0, the way the server's
 // one canonical core serves both versions. Every function is idempotent (a 3.0 value passes through unchanged), so
 // a VM built for a topic and then returned by a GET can be projected twice. Invented data only.
@@ -73,7 +74,7 @@ export function meta(m, { capabilities = null } = {}) {
   if (m.primaryAgent) labels['agent.' + m.primaryAgent.id] = m.primaryAgent.name;
   const { channel, ...enums } = m.enums || {};
   return {
-    ...m, apiVersion: 3, contractVersion: '3.3',
+    ...m, apiVersion: 3, contractVersion: '3.13',
     runtimes: m.runtime ? [{id:'legacy',adapter:m.runtime.id,name:m.runtime.name,enabled:true,connection:'connected',capabilities:capabilities || m.runtime.capabilities || CAPABILITIES}] : [],
     runtime: { ...m.runtime, version: m.runtime.version ?? null, capabilities: capabilities || m.runtime.capabilities || CAPABILITIES },
     instance: { name: null, ...m.instance },
@@ -85,7 +86,7 @@ export function meta(m, { capabilities = null } = {}) {
 }
 
 /** Projects one VM by its schema name (vmcheck's names); unknown names pass through (same shape in 3.0). */
-export function project(name, vm, { primaryId = null } = {}) {
+export function project(name, vm, { primaryId = null, query = null } = {}) {
   if (!vm || typeof vm !== 'object') return vm;
   switch (name) {
     case 'logs': return { ...vm, items: vm.items.map(logRow) };
@@ -95,7 +96,20 @@ export function project(name, vm, { primaryId = null } = {}) {
     case 'health': return Array.isArray(vm.channels) ? { ...vm, channels: vm.channels.map((c) => ({ ...c, id: channelRef(c.id) })) } : vm;
     case 'projects': {
       const filter = vm.filter === 'with-timmy' ? 'with-agent' : vm.filter;
-      return { ...vm, filter, agent: filter === 'with-agent' ? vm.agent ?? primaryId : null };
+      const columns = (vm.columns || []).map(column => ({ ...column,
+        label: column.label || EXAMPLES.candidatesVm.data.statusOptions.find(option => option.id === column.id)?.label,
+        taskCount: column.cards?.length ?? column.count ?? 0,
+        summaryLabel: column.summaryLabel || { key: 'project.board.column.summary', params: { n: column.cards?.length ?? column.count ?? 0 } },
+      }));
+      const count = columns.reduce((n, column) => n + column.cards.length, 0);
+      const stageSelected = query?.get('stage') || vm.controls?.stage?.selected || 'all';
+      const searchSelected = query?.get('search') || vm.controls?.search?.selected || null;
+      const stageOptions = [{ id: 'all', label: { key: 'project.control.stage.all' } }, ...columns.map(({ id, label }) => ({ id, label }))];
+      const stageCounts = [{ id: 'all', count }, ...columns.map(column => ({ id: column.id, count: column.count }))];
+      return { ...vm, columns, filter, agent: filter === 'with-agent' ? vm.agent ?? primaryId : null,
+        controls: { search: { options: [{ id: 'project-name', label: { key: 'project.control.search.name' } }], counts: [{ id: 'matches', count }], selected: searchSelected },
+          stage: { options: stageOptions, counts: stageCounts, selected: stageSelected } },
+        emptyStateLabel: count ? null : { key: 'project.empty.board' } };
     }
     case 'flow': {
       if (!vm.job) return vm;

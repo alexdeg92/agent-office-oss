@@ -16,12 +16,13 @@
 const crypto = require('crypto');
 const { hashPassword, verifyPassword } = require('./security/password');
 const { createLoginThrottle } = require('./security/login-throttle');
+const {recoveryRouteAllowed,recoverySessionAllowed}=require('./security/recovery-policy');
 
 const COOKIE = 'taco_sess';
 
 function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword = null, passwordHash = null, cookieSecure = false, revocations = null,
   throttle = createLoginThrottle(), audit = null, ownerPersonId = () => null, credential = null, credentialGeneration = () => 0,
-  identity = null, allowMultiUser = false }) {
+  identity = null, allowMultiUser = false, allowRecoveryLogin = false, log = () => {} }) {
   // the hash to verify against: the configured one, else the plaintext's (hashed once, lazily)
   let hashReady = null;
   const theHash = () => hashReady || (hashReady = passwordHash ? Promise.resolve(passwordHash) : loginPassword ? hashPassword(loginPassword) : Promise.resolve(null));
@@ -50,6 +51,7 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     if (!ok) return null;
     let p; try { p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch (_) { return null; }
     if (!p || typeof p !== 'object' || !Number.isFinite(p.exp) || p.exp <= Date.now()) return null;
+    if(p.recoveryOnly!==undefined&&p.recoveryOnly!==true||p.recoveryOnly&&!allowRecoveryLogin)return null;
     if (p.sid != null && (typeof p.sid !== 'string' || (revocations && revocations.isRevoked(p.sid)))) return null;
     if(identity) {
       let account;
@@ -78,9 +80,13 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     return out;
   }
   function sessionOf(req) {
-    if(Object.hasOwn(req.headers,'authorization'))return humanAccess?.resolve(req)||null;
+    if(Object.hasOwn(req.headers,'authorization')) {
+      const session=humanAccess?.resolve(req)||null;
+      return recoverySessionAllowed(req,session)?session:null;
+    }
     if(humanAccess&&!humanAccess.cookieAllowed(req))return null;
-    return verifySession(parseCookies(req)[COOKIE]);
+    const session=verifySession(parseCookies(req)[COOKIE]);
+    return recoverySessionAllowed(req,session)?session:null;
   }
   function useHumanAccess(value) {
     if(humanAccess||typeof value?.resolve!=='function'||typeof value?.cookieAllowed!=='function')throw new Error('invalid human credential resolver');
@@ -91,7 +97,14 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     req.session={...session,...(!session.sid&&session.legacyId?{sid:session.legacyId}:{})};
     refreshSession(req,res);
   }
-  function requireAuth(req, res, next) { const s = sessionOf(req); if (!s) return res.status(401).json({ error: 'unauthorized' }); req.session = s; upgradeLegacySession(req,res,s);next(); }
+  function requireSession(req,res,next) {
+    if(req.principal)return next();
+    const session=req.session||sessionOf(req);
+    if(!session)return next(new (require('./api/v2/errors').ApiError)('unauthorized'));
+    if(!recoverySessionAllowed(req,session))return next(new (require('./api/v2/errors').ApiError)('forbidden',{details:[{issue:'recovery-only'}]}));
+    req.session=session;upgradeLegacySession(req,res,session);return next();
+  }
+  function requireAuth(req,res,next) {return requireSession(req,res,next);}
   const onRevoke = (fn) => revokeListeners.push(fn);
   // Public credential-link acceptance uses the same IP/global/in-flight budget before body parsing.
   const admitted=new WeakMap();
@@ -119,13 +132,28 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     const emailOk=identity ? !!account&&account.status==='active'&&(account.credential_source==='database'||account.credential_source==='env'&&account.id===identity.users.owner()?.id)&&(allowMultiUser||account.id===identity.users.owner()?.id)
       : credential ? !!account&&account.id===credential(null)?.id&&account.status==='active' : crypto.timingSafeEqual(digest(email),emailDigest);
     // Unknown/unsupported users still perform the owner's normal derivation.
-    let passwordOk;admission.hashing=true;
-    try {passwordOk=await verifyPassword(password,await hashOf(account));}
+    let passwordOk,recoveryOnly=false,recoveryGeneration=null;admission.hashing=true;
+    try {passwordOk=await verifyPassword(password,await hashOf(account));
+      if(!emailOk||!passwordOk) {
+        const recoveryAccount=identity&&allowRecoveryLogin?identity.users.owner():null;
+        let matchesRecoveryEmail=false;
+        try {matchesRecoveryEmail=!!recoveryAccount&&crypto.timingSafeEqual(digest(email),emailDigest);}catch{}
+        if(matchesRecoveryEmail&&recoveryAccount.status==='active'&&recoveryAccount.credential_source==='database') {
+          recoveryGeneration=recoveryAccount.auth_generation;
+          recoveryOnly=await verifyPassword(password,await theHash());
+        }
+      }
+    }
     finally {admission.hashing=false;if(admission.released)admission.release(false);}
     const latest=identity?identity.users.byId(account?.id):credential?.(null);
-    if(admission.released||!emailOk||!passwordOk||(identity||credential)&&(generation!==generationOf(latest)||latest?.status!=='active'||latest?.id!==account?.id||latest?.email!==account?.email||latest?.credential_source!==account?.credential_source||latest?.password_hash!==account?.password_hash))return {ok:false};
+    const recoveryAccount=identity&&recoveryOnly?identity.users.owner():null;
+    const validRecovery=recoveryOnly&&allowRecoveryLogin&&recoveryAccount?.status==='active'&&recoveryAccount.credential_source==='database'
+      &&recoveryAccount.auth_generation===recoveryGeneration&&recoveryAccount.auth_generation===generationOf(recoveryAccount);
+    const validNormal=!admission.released&&emailOk&&passwordOk&&(!(identity||credential)||(generation===generationOf(latest)&&latest?.status==='active'&&latest?.id===account?.id&&latest?.email===account?.email&&latest?.credential_source===account?.credential_source&&latest?.password_hash===account?.password_hash));
+    if(admission.released||!validNormal&&!validRecovery)return {ok:false};
     admission.verified=true;
-    return {ok:true,identity:{email,...(identity||credential?{userId:account.id,personId:account.person_id,authGeneration:generation}:{})}};
+    const selected=validRecovery?recoveryAccount:account;
+    return {ok:true,identity:{email:validRecovery?loginEmail:email,...(identity||credential?{userId:selected.id,personId:selected.person_id,authGeneration:selected.auth_generation}:{}),...(validRecovery?{recoveryOnly:true}:{})}};
   }
 
   // POST /api/login, POST /api/logout, GET /api/me
@@ -153,10 +181,15 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
         return res.status(401).json({error:'Identifiants invalides.'});
       }
       const binding=verified.identity;
-      record(req,'ok',null,identity?binding.personId:ownerPersonId());
+      record(req,'ok',binding.recoveryOnly?'recovery-login':null,identity?binding.personId:ownerPersonId());
+      if(binding.recoveryOnly) {
+        try {log('Agent Office auth: recovery login accepted (repair-only)');} catch {}
+        try {audit?.({at:Date.now(),requestId:req.requestId||'req_unknown',actor:{kind:'human',personId:binding.personId},command:'access.recoveryLogin',target:null,outcome:'ok',detail:'recovery-login'});} catch {}
+      }
       identity?.users.touchSeen(binding.userId);
-      const cookie=signSession({email:binding.email,...(identity||credential?{userId:binding.userId,authGeneration:binding.authGeneration}:{}),exp:Date.now()+ttlMs,sid:crypto.randomBytes(16).toString('hex')});
-      res.setHeader('Set-Cookie',COOKIE+'='+cookie+attrs(ttlMs/1000));
+      const sessionTtl=binding.recoveryOnly?Math.min(ttlMs,10*60*1000):ttlMs;
+      const cookie=signSession({email:binding.email,...(identity||credential?{userId:binding.userId,authGeneration:binding.authGeneration}:{}),...(binding.recoveryOnly?{recoveryOnly:true}:{}),exp:Date.now()+sessionTtl,sid:crypto.randomBytes(16).toString('hex')});
+      res.setHeader('Set-Cookie',COOKIE+'='+cookie+attrs(sessionTtl/1000));
       res.json({ ok: true, email });
     });
     app.post('/api/logout', (req, res) => {
@@ -183,10 +216,14 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     if (!gate.ok) return { ok: false, rateLimit: gate };
     let valid = false;const session=sessionOf(req),account=currentAccount(session),generation=generationOf(account);
     try {
-      valid = await verifyPassword(password, await hashOf(account));
+      valid = session?.recoveryOnly
+        ? !!allowRecoveryLogin&&identity?.users.owner()?.id===account?.id&&account?.credential_source==='database'&&await verifyPassword(password,await theHash())
+        : await verifyPassword(password, await hashOf(account));
       if(identity) {
         const current=currentAccount(sessionOf(req));
-        const eligible=account?.credential_source==='database' || account?.credential_source==='env' && account.id===identity.users.owner()?.id;
+        const eligible=session?.recoveryOnly
+          ? allowRecoveryLogin&&account?.credential_source==='database'&&account.id===identity.users.owner()?.id
+          : account?.credential_source==='database' || account?.credential_source==='env' && account.id===identity.users.owner()?.id;
         valid=valid && eligible && !!session && current?.status==='active' && current?.id===account?.id && current?.auth_generation===generation && current?.password_hash===account?.password_hash && current?.credential_source===account?.credential_source;
       }
     }
@@ -198,6 +235,12 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
     // A bearer mutation cannot mint ambient cookie authority or silently upgrade
     // its revoked generation. The next token login establishes fresh authority.
     if(old?.familyId)return;
+    if(old?.recoveryOnly) {
+      if(old.sid&&revocations)revocations.revoke(old.sid,old.exp);
+      for(const fn of revokeListeners){try{fn(old);}catch{}}
+      res.setHeader('Set-Cookie',COOKIE+'='+attrs(0));
+      return;
+    }
     const current = currentAccount(old);
     const session = { ...old, email: current?.email || old.email, ...(current ? { userId: current.id } : {}), ...(identity || credential ? { authGeneration: generationOf(current) } : {}) };
     delete session.legacy;delete session.legacyId;
@@ -207,7 +250,7 @@ function createAuth({ secret, ttlMs, email: loginEmail, password: loginPassword 
   }
 
   const useDatabase = (read, generation) => { credential = read; credentialGeneration = generation; };
-  return { useDatabase, useHumanAccess, signSession, verifySession, parseCookies, sessionOf, requireAuth, onRevoke, mountRoutes, cookieSecure, loginRefused, confirmPassword, refreshSession, upgradeLegacySession, reserveCredentialAttempt, reserveCredentialWork, verifyAdmittedCredentials };
+  return { useDatabase, useHumanAccess, signSession, verifySession, parseCookies, sessionOf, requireSession, requireAuth, recoveryRouteAllowed, onRevoke, mountRoutes, cookieSecure, loginRefused, confirmPassword, refreshSession, upgradeLegacySession, reserveCredentialAttempt, reserveCredentialWork, verifyAdmittedCredentials };
 }
 
 module.exports = { createAuth, COOKIE };

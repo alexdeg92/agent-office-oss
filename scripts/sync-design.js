@@ -27,7 +27,7 @@ const FILES = [
   ['design/office/layout.example.json', 'office/layout.example.json'],
 ];
 // Authoritative contract examples (api.md 2.1, docs/architecture/examples/): the /v2 mocks are built from them.
-const EXAMPLES = ['office-palette-vm', 'office-store-vm', 'project-vm', 'board-vm', 'candidates-vm', 'import-result', 'history-page', 'session-vm', 'error-409-project', 'health-vm', 'comment-thread-vm'];
+const EXAMPLES = ['office-palette-vm', 'office-store-vm', 'project-vm', 'board-vm', 'candidates-vm', 'import-result', 'history-page', 'session-vm', 'error-409-project', 'health-vm', 'comment-thread-vm', 'v3/chat-agents-vm', 'v3/chat-agent-sessions-vm', 'v3/chat-session-vm'];
 const EXAMPLES_DEST = path.join(ROOT, 'public', 'v2', 'mock', 'examples');
 const ASSET_GROUPS = ['Logos', 'Office', 'Characters', 'Decor', 'Accessories', 'ProjectCovers', 'Illustrations'];
 const DERIVED = path.join(ROOT, 'design', 'derived', 'Illustrations');

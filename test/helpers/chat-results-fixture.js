@@ -8,7 +8,7 @@ const CHILDREN = ['agent:main:subagent:welcome-review', 'agent:main:subagent:mob
 const AUTHORS = ['Mira', 'Noor'];
 const TITLES = ['Vérifier le parcours d’accueil', 'Tester la confirmation mobile'];
 const RESULT = '**Vérifications terminées**\n\n| Contrôle | Résultat détaillé |\n| --- | --- |\n| Accueil | Parcours accessible sur téléphone et ordinateur |\n| Formulaire | Confirmation vérifiée après envoi |';
-async function chatResultsFixture(publicUrl, {result=RESULT,completedChildren=false}={}) {
+async function chatResultsFixture(publicUrl, {result=RESULT,completedChildren=false,durable=false}={}) {
   const scenario = loadScenario('synthetic-basic');
   const now = Date.now(); scenario.now = now;
   const list = readFixture(scenario.rpc['sessions.list']).body.value;
@@ -29,7 +29,7 @@ async function chatResultsFixture(publicUrl, {result=RESULT,completedChildren=fa
       'Child task 2:\n<prompt-data>' + TITLES[1] + '</prompt-data>\nstatus: error\nChild result 2:\n<prompt-data>Le service de démonstration n’a pas répondu. **Aucune publication.**</prompt-data>' },
   ];
   const original = gatewayHandlers(scenario)['sessions.get'];
-  const h = await startServer(scenario, { env: { PORTAL_DISPLAY_NAME: 'Camille', AO_ENRICHERS: '', AO_PROJECTS_OWNERS: 'generic-org', ...(publicUrl ? { AO_PUBLIC_URL: publicUrl } : {}) }, handlers: {
+  const h = await startServer(scenario, { env: { ...(durable?{AO_RBAC_ENABLED:'1'}:{}), PORTAL_DISPLAY_NAME: 'Camille', AO_ENRICHERS: '', AO_PROJECTS_OWNERS: 'generic-org', ...(publicUrl ? { AO_PUBLIC_URL: publicUrl } : {}) }, handlers: {
     'sessions.list': () => ({ ...list, sessions, totalCount: sessions.length, count: sessions.length, hasMore: false, nextOffset: null }),
     'sessions.get': params => params.key === CHAT ? { messages } : CHILDREN.includes(params.key) ? { messages: [{ role: 'assistant', timestamp: now - 1000, content: 'Vérification en cours.' }] } : original(params),
   } });
@@ -47,4 +47,26 @@ async function readChat(h, version) {
   assert.equal(response.status, 200, response.text);
   return response.json.data;
 }
-module.exports = { chatResultsFixture, readChat };
+// Stage the real adapter-normalized compatibility transcript into the new
+// durable session repository. This covers projection/rendering parity; it does
+// not stand in for the v3 dispatch service's completion-event ingestion test.
+async function chatResultsV3Fixture(publicUrl, options={}) {
+  const h=await chatResultsFixture(publicUrl,{...options,durable:true});
+  try {
+    const transcript=await h.get('/api/v3/views/sessions/'+encodeURIComponent(CHAT));assert.equal(transcript.status,200,transcript.text);
+    const canonical=require('../../src/api/v2/vm/chat').buildChatVM({sessionKey:CHAT,transcript:{events:transcript.json.data.events}});
+    const index=await h.get('/api/v3/chat/agents');assert.equal(index.status,200,index.text);
+    const target=index.json.data.agents.find(row=>row.kind==='agent');assert.ok(target);
+    const response=await fetch(h.base+'/api/v3/chat/agents/'+target.id+'/sessions',{method:'POST',headers:{cookie:h.cookie,'content-type':'application/json','x-ao-request':'1','Idempotency-Key':require('node:crypto').randomUUID()},body:'{}'});
+    assert.equal(response.status,201);const sessionId=(await response.json()).data.result.sessionId;
+    h.withStore(db=>{
+      const repo=require('../../src/store/repos/chat-v3').createChatV3Repo(db);
+      for(const message of canonical.messages)repo.addMessage(sessionId,{...message,id:'msg_'+require('node:crypto').randomBytes(24).toString('base64url'),body:{text:message.body?.text??message.text,blocks:message.body?.blocks||[]},meta:{...message.meta,senderInfo:message.senderInfo},attachments:[]});
+    });
+    return {...h,targetId:target.id,sessionId};
+  } catch(error) {await h.stop();throw error;}
+}
+async function readChatV3(h) {
+  const response=await h.get('/api/v3/chat/sessions/'+h.sessionId);assert.equal(response.status,200,response.text);return response.json.data;
+}
+module.exports = { chatResultsFixture, readChat, chatResultsV3Fixture, readChatV3 };

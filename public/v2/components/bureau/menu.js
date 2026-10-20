@@ -5,7 +5,7 @@ const normalized = text => String(text).normalize('NFD').replace(/[\u0300-\u036f
 const menuItems = panel => [...panel.querySelectorAll('[role=menuitem]')];
 
 /** Anchored menu. Native popover keeps the panel above contained row/body scrollers. */
-export function Menu({ label, items = [], id, class: cls = '', testId }) {
+export function Menu({ label, items = [], id, class: cls = '', testId, triggerLabel, disabled = false }) {
   const menuId = useControlId(id, 'bu-menu');
   const root = useRef(null), trigger = useRef(null), panel = useRef(null), first = useRef(0);
   const search = useRef({ text:'', at:0 });
@@ -92,10 +92,11 @@ export function Menu({ label, items = [], id, class: cls = '', testId }) {
   }
   return html`<div ref=${root} class=${['bu-control-menu', cls].filter(Boolean).join(' ')} data-testid=${testId}>
     <button ref=${trigger} type="button" class="bu-control-menu__trigger" aria-label=${label}
-      aria-haspopup="menu" aria-expanded=${open ? 'true' : 'false'} aria-controls=${open ? menuId : undefined}
+      disabled=${disabled} aria-haspopup="menu" aria-expanded=${open ? 'true' : 'false'} aria-controls=${open ? menuId : undefined}
       onClick=${() => open ? close() : show()} onKeyDown=${event => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); show(event.key === 'ArrowUp'); }
       }}>
+      ${triggerLabel ? html`<span>${triggerLabel}</span>` : null}
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
     </button>
     ${open ? html`<div ref=${panel} id=${menuId} role="menu" aria-label=${label} tabindex="-1" popover="manual"

@@ -14,6 +14,7 @@ function fixture(t) {
   const file = (project, id, rows = [record(id)]) => { const dir = path.join(home, 'projects', project); fs.mkdirSync(dir, { recursive: true }); const f = path.join(dir, id + '.jsonl'); fs.writeFileSync(f, rows.map(r => JSON.stringify(r)).join('\n') + '\n'); return f; };
   return { home, file };
 }
+async function completeScan(files,max=20){let rows=[];for(let n=0;n<max;n++){rows=await files.scan();if(!files.stats.scanPending)return rows;}throw Error('bounded Claude scan did not finish');}
 test('detected Claude settings prefill the detected home directory', t => {
   const h = fixture(t), values = A.setup.settings.detectedValues({ checkedPaths: [path.join(h.home, '.claude')] });
   assert.equal(values.home, path.join(h.home, '.claude'));
@@ -559,7 +560,9 @@ test('1000 synthetic sessions yield during indexing, keep bounded tails/cache, a
     const engine = createEngine({ adapter: runtime.definition, now: () => NOW }); runtime.attach(engine);
     try {
       const started=performance.now(),memoryBefore=process.memoryUsage();
-      await runtime.start(engine); assert.equal(yielded, true); assert.equal(engine.sessions().length, 1000);
+      await runtime.start(engine); assert.equal(yielded, true);
+      const readyBy=Date.now()+10000;while(Date.now()<readyBy&&(runtime.files.stats.scanPending||engine.sessions().length!==1000))await new Promise(resolve=>setTimeout(resolve,10));
+      assert.equal(runtime.files.stats.scanPending,false,'bounded scan continuations finish startup indexing');assert.equal(engine.sessions().length, 1000);
       const memoryAfter=process.memoryUsage();
       t.diagnostic(JSON.stringify({grouping:agentGrouping,indexMs:Math.round(performance.now()-started),heapDeltaBytes:memoryAfter.heapUsed-memoryBefore.heapUsed,rssDeltaBytes:memoryAfter.rss-memoryBefore.rss}));
       assert.equal(engine.agents().length, agentGrouping === 'project' ? 20 : 1);
@@ -567,12 +570,6 @@ test('1000 synthetic sessions yield during indexing, keep bounded tails/cache, a
       assert.ok(runtime.files.cacheBytes() <= BOUNDS.cacheBytes); assert.ok(runtime.files.stats.yields >= 10);
       const office = buildOfficeVM({ engine, canReadSessions: true, now: NOW, tracker: createStateTracker(), actorOf: x => x, P: project3x });
       assert.deepEqual(office.occupants.map(o => o.id), ['primary'], 'empty transcript metadata does not create project desks');
-      const cached=runtime.files.rows().find(r=>runtime.files.cached().includes(r.key));
-      fs.appendFileSync(cached.file,JSON.stringify(record(cached.sessionId,'New synthetic activity',{uuid:'new-scale-turn-'+agentGrouping}))+'\n');
-      await runtime.cycle();
-      const live=buildOfficeVM({engine,canReadSessions:true,now:NOW,tracker:createStateTracker(),actorOf:x=>x,P:project3x});
-      t.diagnostic(JSON.stringify({grouping:agentGrouping,observed:engine.activity(cached.key),file:runtime.files.rows().find(r=>r.key===cached.key)?.activityAt,states:live.occupants.map(o=>o.state)}));
-      assert.ok(live.occupants.some(o=>o.state==='working' && o.execution.evidence.level==='observed'), 'fresh transcript activity is Working with observed confidence retained: ' + JSON.stringify(live.occupants.map(o=>[o.id,o.state,o.execution])));
       t.diagnostic(JSON.stringify({grouping:agentGrouping,sessions:engine.sessions().length,agents:engine.agents().length,cacheSessions:runtime.files.cached().length,cacheBytes:runtime.files.cacheBytes(),...runtime.files.stats}));
     } finally { runtime.close(); }
   }
@@ -594,9 +591,9 @@ test('branch ancestry, replay, missing UUID offsets and injected prompts remain 
 });
 test('capacity selection is bounded and deterministic; deleting a retained session admits another candidate', async t => {
   const h=fixture(t); for(let n=0;n<BOUNDS.sessions+2;n++) h.file('p','s-'+String(n).padStart(5,'0'));
-  const files=createFiles({home:h.home});t.after(()=>files.close()); const rows=await files.scan();
+  const files=createFiles({home:h.home});t.after(()=>files.close()); const rows=await completeScan(files);
   assert.equal(rows.length,BOUNDS.sessions); assert.equal(files.stats.excluded,2); assert.equal(files.stats.truncated,true);
-  fs.unlinkSync(rows[0].file); const next=await files.scan(); assert.equal(next.length,BOUNDS.sessions); assert.equal(files.stats.excluded,1); assert.ok(!next.some(r=>r.key===rows[0].key));
+  fs.unlinkSync(rows[0].file); const next=await completeScan(files); assert.equal(next.length,BOUNDS.sessions); assert.equal(files.stats.excluded,1); assert.ok(!next.some(r=>r.key===rows[0].key));
 });
 
 test('deleting an on-demand transcript clears the admitted engine cache even when it was outside the tail set',async t=>{
@@ -622,7 +619,7 @@ test('partial transcript history does not take a live source down', async t => {
   assert.ok(fs.existsSync(file));
 });
 
-test('recently written transcripts are polled ahead of the bounded tail and keep fresh activity alive', async t => {
+test('changed recent transcripts bypass the bounded tail while unchanged transcripts back off', async t => {
   const h = fixture(t);
   for (let n = 0; n < BOUNDS.tails; n++) h.file('active-project', `active-${String(n).padStart(2, '0')}`);
   const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } });
@@ -639,8 +636,67 @@ test('recently written transcripts are polled ahead of the bounded tail and keep
   assert.equal(targetReads, 1, 'the recently written file is re-read even when outside the previous 32-file slice');
   assert.equal(engine.activity(row.key)?.kind, 'working');
   await runtime.cycle();
-  assert.equal(targetReads, 2, 'recently modified transcripts are refreshed every cycle');
+  assert.equal(targetReads, 1, 'an unchanged transcript is not reopened on the next cycle');
   assert.equal(engine.activity(row.key)?.kind, 'working', 'the observation lease survives the regular poll cadence');
+});
+
+test('Claude filesystem notifications update a changed session promptly and idle below five percent of one core', async t => {
+  const h=fixture(t),file=h.file('watch-project','watch-session'),secondFile=h.file('watch-project-two','watch-session-two');
+  const runtime=A.createRuntime({runtimeConfig:{claudeCode:{home:h.home}}}),engine=createEngine({adapter:runtime.definition});
+  t.after(()=>runtime.close());runtime.attach(engine);
+  let count=0,resolveUpdate;const changed=new Promise(resolve=>runtime.start(engine,{refreshed:()=>{count++;resolve();resolveUpdate?.();}}));
+  await Promise.race([changed,new Promise((_,reject)=>setTimeout(()=>reject(Error('initial Claude refresh timed out')),5000))]);
+  const updated=new Promise(resolve=>{resolveUpdate=resolve;});
+  const updateStarted=process.hrtime.bigint();
+  fs.appendFileSync(file,JSON.stringify(record('watch-session','Synthetic watched activity',{uuid:'watch-event',timestamp:new Date().toISOString()}))+'\n');
+  fs.appendFileSync(secondFile,JSON.stringify(record('watch-session-two','Synthetic second watched activity',{uuid:'watch-event-two',timestamp:new Date().toISOString()}))+'\n');
+  await Promise.race([updated,new Promise((_,reject)=>setTimeout(()=>reject(Error('Claude filesystem notification timed out')),1500))]);
+  const updateMs=Number(process.hrtime.bigint()-updateStarted)/1e6;t.diagnostic(`Claude transcript-to-engine update latency: ${updateMs.toFixed(0)}ms`);assert.ok(updateMs<1500);
+  const activities=runtime.files.rows().map(session=>engine.activity(session.key)?.kind);
+  assert.equal(activities.length,2);assert.ok(activities.every(kind=>kind==='working'),'a burst of debounced file events updates every changed session without waiting for the safety poll');
+  const started=process.hrtime.bigint(),cpu=process.cpuUsage();await new Promise(resolve=>setTimeout(resolve,2000));
+  const elapsed=Number(process.hrtime.bigint()-started)/1000,used=process.cpuUsage(cpu),percent=(used.user+used.system)/elapsed*100;
+  t.diagnostic(`Claude filesystem-watched idle CPU: ${percent.toFixed(2)}% of one core over 2s`);
+  assert.ok(percent<5,`idle watcher CPU was ${percent.toFixed(2)}% of one core`);
+});
+
+test('Claude safety poll recovers transcript changes when filesystem notifications are unavailable',async t=>{
+  const h=fixture(t),file=h.file('poll-project','poll-session');
+  const runtime=A.createRuntime({runtimeConfig:{claudeCode:{home:h.home}}},{pollIntervalMs:80}),engine=createEngine({adapter:runtime.definition});
+  t.after(()=>runtime.close());runtime.attach(engine);runtime.files.watch=()=>{};
+  await runtime.start(engine);
+  fs.appendFileSync(file,JSON.stringify(record('poll-session','Synthetic recovery turn',{uuid:'safety-poll-event',timestamp:new Date().toISOString()}))+'\n');
+  const started=process.hrtime.bigint(),deadline=Date.now()+1500;
+  while(engine.activity(runtime.files.rows()[0].key)?.kind!=='working'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+  const recovered=engine.activity(runtime.files.rows()[0].key)?.kind==='working',recoveryMs=Number(process.hrtime.bigint()-started)/1e6;
+  t.diagnostic(`Claude watcher-miss safety-poll recovery: ${recoveryMs.toFixed(0)}ms (80ms poll)`);
+  assert.ok(recovered,`the safety poll did not publish changed transcript activity within 1500ms (${recoveryMs.toFixed(0)}ms)`);
+  assert.ok(recoveryMs<500,`recovery should follow the injected poll cadence, measured ${recoveryMs.toFixed(0)}ms`);
+});
+
+test('Claude scan work is bounded per call and resumes to cover every session',async t=>{
+  const h=fixture(t),files=createFiles({home:h.home});t.after(()=>files.close());
+  const sessions=510;
+  for(let n=0;n<sessions;n++)h.file(`project-${String(n).padStart(4,'0')}`,`session-${n}`);
+  let rows=await files.scan(),calls=1;
+  assert.equal(files.stats.scanEntriesThisTick,BOUNDS.scanEntries,'each invocation inspects at most the global entry budget');
+  assert.equal(files.stats.scanPending,true,'large roots report a resumable partial scan');
+  while(files.stats.scanPending&&calls<10){rows=await files.scan();calls++;assert.ok(files.stats.scanEntriesThisTick<=BOUNDS.scanEntries);}
+  assert.equal(files.stats.scanPending,false,'continuations eventually finish the directory walk');
+  assert.equal(rows.length,sessions,'the resumed cursor covers sessions beyond the first tick');
+  assert.ok(calls>1);
+});
+
+test('unchanged complete transcripts do not trigger repeat canonical publication', async t => {
+  const h=fixture(t);h.file('stable-project','stable-session');
+  const runtime=A.createRuntime({runtimeConfig:{claudeCode:{home:h.home}}}),engine=createEngine({adapter:runtime.definition});
+  t.after(()=>runtime.close());runtime.attach(engine);await runtime.start(engine);
+  let reads=0,publishes=0;const read=runtime.files.read,ingest=engine.ingestCanonical;
+  runtime.files.read=(...args)=>{reads++;return read(...args);};
+  engine.ingestCanonical=(op,...args)=>{if(op==='agents'||op==='sessions.snapshot')publishes++;return ingest(op,...args);};
+  await runtime.cycle();
+  assert.equal(reads,0,'stable file signatures do not reopen transcripts');
+  assert.equal(publishes,0,'stable scans do not revalidate and republish all agents/sessions');
 });
 
 test('concurrent sources share the global read and queue bounds without retaining failed work',async t=>{

@@ -36,6 +36,12 @@ function safeText(value, max) {
   return cleaned ? cleaned.slice(0, max) : null;
 }
 
+function messageText(value) {
+  if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > 4000 ||
+      /[\u0000-\u001f\u007f-\u009f]/u.test(value)) throw new HerdrReadError('invalid_message');
+  return value;
+}
+
 // Herdr's native `claude` label names the adapter's canonical runtime ID.
 function canonicalRuntimeKind(value) {
   const runtime = safeText(value, 80);
@@ -187,7 +193,24 @@ function createHerdrReader({ binaryPath, hostId, orchestratorId, platform = 'unk
     pollTimer = null;
   }
 
-  return Object.freeze({ refresh, start, stop, disable, enable, get failureCount() { return failures; }, get enabled() { return !disabled; } });
+  async function sendPaneText(paneId, value) {
+    const text = messageText(value);
+    if (disabled || !current || now() - current.host.observedAt > STALE_RETENTION_MS) throw new HerdrReadError('stale_pane');
+    if (typeof paneId !== 'string' || !paneId || paneId.length > 256 ||
+        [...current.privatePaneRefs.values()].filter(value => value === paneId).length !== 1) throw new HerdrReadError('unknown_pane');
+    const agent = current.agents.find(row => current.privatePaneRefs.get(row.id) === paneId);
+    if (!agent || agent.staleAfter <= now() || agent.status === 'working') throw new HerdrReadError(agent?.status === 'working' ? 'pane_busy' : 'stale_pane');
+    const options = { shell: false, windowsHide: true, encoding: 'buffer', timeout: PROCESS_TIMEOUT_MS,
+      maxBuffer: MAX_OUTPUT_BYTES, env: safeEnv(env) };
+    // Text is passed as a literal argv element. A separate key command presses
+    // Enter, so callers can never turn the pane into a command runner.
+    await run(binary, ['pane', 'send-text', paneId, text], options);
+    await run(binary, ['pane', 'send-keys', paneId, 'enter'], options);
+    return { sent: true };
+  }
+
+  return Object.freeze({ refresh, start, stop, disable, enable, sendPaneText,
+    get failureCount() { return failures; }, get enabled() { return !disabled; } });
 }
 
 module.exports = { createHerdrReader, parseSnapshot, HerdrReadError, MAX_OUTPUT_BYTES, MAX_AGENTS, PROCESS_TIMEOUT_MS,

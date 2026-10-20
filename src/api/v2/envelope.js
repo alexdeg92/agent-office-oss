@@ -2,7 +2,7 @@
 // The one success envelope (api.md §2.1): { data, meta: { modelVersion, generatedAt, stale, topic? } }.
 const MODEL_VERSION = 1;          // data-model.md MODEL_VERSION
 const CONTRACT_VERSION = '2.10';  // Project source descriptors, server-owned source selection and team roster
-const CONTRACT_VERSION_V3 = '3.7'; // Project source descriptors, server-owned source selection and team roster
+const CONTRACT_VERSION_V3 = '3.13'; // pane queue message actions and delivered state
 
 function okBody(data, { engine, now = Date.now(), topic } = {}) {
   const stale = engine ? engine.sources().filter((s) => s.state !== 'fresh').map((s) => s.id) : [];

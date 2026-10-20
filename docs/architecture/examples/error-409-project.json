@@ -251,50 +251,41 @@
         "createdAt": 1790000000000,
         "sourceDescriptors": [
           {
-            "id": "src_gh",
+            "id": "source:github:example-org",
             "kind": "github",
             "runtime": null,
             "label": {
-              "key": "project.source.label",
+              "key": "project.source.github",
               "params": {
-                "label": "example-org/example-repo"
+                "owner": "example-org"
               }
             },
             "brand": null
           },
           {
-            "id": "src_ws",
+            "id": "source:workspace:local",
             "kind": "workspace",
             "runtime": null,
             "label": {
-              "key": "project.source.label",
-              "params": {
-                "label": "dev/project/agent-office-redesign"
-              }
+              "key": "project.source.workspace"
             },
             "brand": null
           },
           {
-            "id": "src_sg",
+            "id": "source:sessionGroup",
             "kind": "sessionGroup",
             "runtime": null,
             "label": {
-              "key": "project.source.label",
-              "params": {
-                "label": "Agent Office"
-              }
+              "key": "project.source.sessionGroup"
             },
             "brand": null
           },
           {
-            "id": "src_man",
+            "id": "source:manual",
             "kind": "manual",
             "runtime": null,
             "label": {
-              "key": "project.source.label",
-              "params": {
-                "label": "manuel"
-              }
+              "key": "project.source.manual"
             },
             "brand": null
           }
@@ -313,7 +304,80 @@
           "comments": "read-write",
           "history": "read-write",
           "repository": "read-only"
-        }
+        },
+        "statusTransitions": [
+          {
+            "id": "idea",
+            "label": {
+              "key": "projectStatus.idea"
+            }
+          },
+          {
+            "id": "todo",
+            "label": {
+              "key": "projectStatus.todo"
+            }
+          },
+          {
+            "id": "in-review",
+            "label": {
+              "key": "projectStatus.in-review"
+            }
+          },
+          {
+            "id": "shipped",
+            "label": {
+              "key": "projectStatus.shipped"
+            }
+          }
+        ],
+        "capabilityRows": [
+          {
+            "id": "read",
+            "label": {
+              "key": "project.team.capability.read"
+            },
+            "valueLabel": {
+              "key": "project.team.availability.true"
+            }
+          },
+          {
+            "id": "write",
+            "label": {
+              "key": "project.team.capability.write"
+            },
+            "valueLabel": {
+              "key": "project.team.availability.true"
+            }
+          },
+          {
+            "id": "comments",
+            "label": {
+              "key": "project.team.capability.comments"
+            },
+            "valueLabel": {
+              "key": "project.team.availability.read-write"
+            }
+          },
+          {
+            "id": "history",
+            "label": {
+              "key": "project.team.capability.history"
+            },
+            "valueLabel": {
+              "key": "project.team.availability.read-write"
+            }
+          },
+          {
+            "id": "repository",
+            "label": {
+              "key": "project.team.capability.repository"
+            },
+            "valueLabel": {
+              "key": "project.team.availability.read-only"
+            }
+          }
+        ]
       }
     }
   }

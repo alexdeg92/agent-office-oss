@@ -285,7 +285,7 @@ const BASE = {
     'chat.turnFailedAnnounce': 'Le tour a échoué. La réponse n’a pas pu être reçue.',
     // Shell and navigation (explorer-qa-03 Q03-F01)
     'nav.bureau': 'Bureau', 'nav.bureau.question': 'Que font {agent} et ses sous-agents en ce moment ?',
-    'nav.discuter': 'Discuter', 'nav.discuter.question': 'Parler directement avec {agent}.',
+    'nav.discuter': 'Discuter', 'nav.discuter.question': 'Vos agents et vos discussions.',
     'nav.flux': 'Flux de travail', 'nav.flux.question': 'Quelles tâches planifiées tournent, et quand ?',
     'nav.projets': 'Projets', 'nav.projets.question': 'Où en est chaque projet ?',
     'nav.habilitations': 'Habilitations', 'nav.habilitations.question': 'Qui peut parler à {agent}, et où ?',
@@ -919,7 +919,7 @@ const BASE = {
     'chat.replyReceived': 'Reply from {agent} received.',
     'chat.turnFailedAnnounce': 'The turn failed. The reply could not be received.',
     'nav.bureau': 'Office', 'nav.bureau.question': 'What are {agent} and its subagents doing right now?',
-    'nav.discuter': 'Chat', 'nav.discuter.question': 'Talk directly with {agent}.',
+    'nav.discuter': 'Chat', 'nav.discuter.question': 'Your agents and conversations.',
     'nav.flux': 'Workflows', 'nav.flux.question': 'Which scheduled tasks run, and when?',
     'nav.projets': 'Projects', 'nav.projets.question': 'Where does each project stand?',
     'nav.habilitations': 'Access', 'nav.habilitations.question': 'Who can talk to {agent}, and where?',

@@ -7,12 +7,12 @@ import { assetUrl } from '../config.js';
 import { html, useState, useEffect, useRef } from '../lib.js';
 import { useFetch } from '../hooks.js';
 import { services } from '../services.js';
-import { t, msg, label } from '../i18n.js';
+import { msg, label } from '../i18n.js';
 import * as fmt from '../fmt.js';
 import { get, post, toastError } from '../api.js';
 import { toast } from '../toast.js';
 import { Frame, Icon, EmptyState, ErrorState, Ago, Skeleton } from '../components/ui.js';
-import { STATUSES, labelTone } from '../board.js';
+import { labelTone } from '../board.js';
 
 export const CANDIDATES_URL = '/api/v2/views/project-candidates';
 export const IMPORT_URL = '/api/v2/projects/import';
@@ -21,7 +21,6 @@ const SOURCE_FILTERS = [['', 'import.f.all'], ['github', 'import.f.github'], ['w
 const CONF_FILTERS = [['', 'import.f.all'], ['high', 'import.conf.high'], ['medium', 'import.conf.medium'], ['low', 'import.conf.low']];
 const CONF = { high: ['success', 'success', 'import.confidence.high'], medium: ['warning', 'warning', 'import.confidence.medium'], low: [null, 'info', 'import.confidence.low'] };
 const SOURCE_ICON = { github: 'branche', workspace: 'folder', sessionGroup: 'journaux', manual: 'pencil' };
-const statusLabel = (s) => t('projectStatus.' + s);
 const slug = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 const sourceText = (s) => label(s.label);
@@ -116,14 +115,14 @@ ${list?.length ? html`      <div class="bu-toolbar ao-import__filters">
         <a class="bu-btn" href=${back}>${msg('project.backToBoard')}</a></div>` : html`
       ${visible.length ? html`<ul class="bu-list ao-import__list">
         ${visible.map((c) => html`<${Candidate} key=${c.key} c=${c} checked=${sel.has(c.key)} o=${overrides[c.key] || {}}
-          onToggle=${(on) => toggle(c.key, on)} onOverride=${(patch) => patchOverride(c.key, patch)} />`)}
+          statusOptions=${vm.data.statusOptions || []} onToggle=${(on) => toggle(c.key, on)} onOverride=${(patch) => patchOverride(c.key, patch)} />`)}
       </ul>` : html`<div class="bu-card bu-card--sunken"><${EmptyState} compact icon="filter" title=${msg('import.noMatch')} text=${msg('import.noMatch.text')} /></div>`}
       ${visible.length < list.length ? html`<p class="bu-caption bu-text-tertiary">${msg(list.some((c) => sel.has(c.key) && !visible.includes(c)) ? 'import.hiddenChecked' : 'import.hidden', { n: list.length - visible.length })}</p>` : null}
 `}
   </${Frame}>`;
 }
 
-function Candidate({ c, checked, o, onToggle, onOverride }) {
+function Candidate({ c, checked, o, statusOptions, onToggle, onOverride }) {
   const [editing, setEditing] = useState(false);
   const [labelDraft, setLabelDraft] = useState('');
   const nameRef = useRef(null);
@@ -158,8 +157,8 @@ function Candidate({ c, checked, o, onToggle, onOverride }) {
       <div class="ao-cand__field">
         <label class="bu-field__label" for=${id + '-status'}>${msg('projects.new.stage')}</label>
         <div class="ao-cand__status">
-          <select class="bu-select bu-input--sm" id=${id + '-status'} onChange=${(e) => onOverride({ status: e.currentTarget.value === c.suggestedStatus ? undefined : e.currentTarget.value })}>
-            ${STATUSES.map((s) => html`<option value=${s} selected=${s === status}>${s === c.suggestedStatus ? msg('import.suggestedStage', { stage: statusLabel(s) }) : statusLabel(s)}</option>`)}
+          <select class="bu-select bu-input--sm" id=${id + '-status'} disabled=${!statusOptions.length} onChange=${(e) => { const target = statusOptions.find(option => option.id === e.currentTarget.value); if (target) onOverride({ status: target.id === c.suggestedStatus ? undefined : target.id }); }}>
+            ${statusOptions.map(option => html`<option value=${option.id} selected=${option.id === status}>${label(option.label)}</option>`)}
           </select>
           <span class=${'bu-chip bu-chip--sm' + (tone ? ' bu-chip--' + tone : '')}><${Icon} name=${icon} />${msg(confKey)}</span>
         </div>

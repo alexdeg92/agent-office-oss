@@ -71,3 +71,9 @@ export function Markdown({ source, headingOffset = 2 }) {
     }
   })}</div>`;
 }
+
+/** Structured VM cells are plain text, using the same bounded table scroller. */
+export function DataTable({headers,rows}) {
+ const cell=text=>[{t:'text',v:text}];
+ return html`<${Table} block=${{header:headers.map(cell),align:headers.map(()=>null),rows:rows.map(row=>row.map(cell))}} />`;
+}

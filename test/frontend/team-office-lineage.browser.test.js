@@ -7,10 +7,10 @@ const skip = browserSkipReason();
 const evidenceDir = 'design/reports/orchestrators-teams-1';
 const at = Date.UTC(2026, 9, 11, 12);
 const teamData = { team: { id: 'team_fixture', label: 'Équipe de test · agents mixtes', status: 'active' }, members: [
-  { id: 'member:pm-fixture', name: 'Camille', roleKind: 'lead', roleLabel: 'pm', status: 'active', runtimeKind: 'claude-code', brand: { mark: 'CC', color: '#6655aa', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' }, hostAgentId: 'host:pm-fixture', parentMemberId: null },
-  { id: 'member:builder-fixture', name: 'Builder', roleKind: 'member', roleLabel: 'builder', status: 'active', runtimeKind: 'codex', brand: { mark: 'CX', color: '#187b67', providerName: 'Codex', logo: 'assets/connectors/codex.svg' }, hostAgentId: 'host:builder-fixture', parentMemberId: 'member:pm-fixture', sessionStatus: 'unknown' },
-  { id: 'member:critic-fixture', name: 'Critic', roleKind: 'member', roleLabel: 'reviewer', status: 'active', runtimeKind: 'cursor', hostAgentId: 'host:critic-fixture', parentMemberId: 'member:pm-fixture' },
-  { id: 'member:unregistered-fixture', name: 'Unregistered participant', roleKind: 'unknown', roleLabel: null, status: 'active', runtimeKind: null, hostAgentId: null, parentMemberId: null },
+  { id: 'member:pm-fixture', name: 'Camille', roleKind: 'lead', roleLabel: 'pm', status: 'active', statusLabel: { key: 'team.member.status.active' }, runtimeKind: 'claude-code', runtimeLabel: { key: 'team.runtime.claudeCode' }, runtimeQualifierLabel: null, brand: { mark: 'CC', color: '#6655aa', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' }, hostAgentId: 'host:pm-fixture', parentMemberId: null },
+  { id: 'member:builder-fixture', name: 'Builder', roleKind: 'member', roleLabel: 'builder', status: 'active', statusLabel: { key: 'team.member.sessionUnknown' }, runtimeKind: 'codex', runtimeLabel: { key: 'team.runtime.codex' }, runtimeQualifierLabel: null, brand: { mark: 'CX', color: '#187b67', providerName: 'Codex', logo: 'assets/connectors/codex.svg' }, hostAgentId: 'host:builder-fixture', parentMemberId: 'member:pm-fixture', sessionStatus: 'unknown' },
+  { id: 'member:critic-fixture', name: 'Critic', roleKind: 'member', roleLabel: 'reviewer', status: 'active', statusLabel: { key: 'team.member.status.active' }, runtimeKind: 'cursor', runtimeLabel: { key: 'team.runtime.other' }, runtimeQualifierLabel: null, hostAgentId: 'host:critic-fixture', parentMemberId: 'member:pm-fixture' },
+  { id: 'member:unregistered-fixture', name: 'Unregistered participant', roleKind: 'unknown', roleLabel: null, status: 'active', statusLabel: { key: 'team.member.status.active' }, runtimeKind: null, runtimeLabel: { key: 'team.runtime.unknown' }, runtimeQualifierLabel: null, hostAgentId: null, parentMemberId: null },
 ], tasks: [{ id: 'task:fixture', title: 'Build the mixed-runtime team view with a deliberately long title that must be clamped to two lines and remain readable in its expanded details', state: 'working', priority: 1, ownerMemberId: 'member:builder-fixture',
     reviewerMemberIds: ['member:critic-fixture'], createdAt: at, updatedAt: at, reportPresent: false, briefPresent: true, messageCount: 0, reviews: [] }], diagnostics: { skippedTaskCount: 1, skippedMemberCount: 0,
     skippedCount: 4, partialLabel: { key: 'team.board.partial', params: { count: 4 } }, quality: 'partial' }, revision: 1 };
@@ -42,13 +42,13 @@ test('Bureau shell renders the mixed-runtime team hierarchy with exact stable pa
       assert.ok((await builder.getAttribute('class')).includes('ao-team-member-child'));
       assert.ok((await critic.getAttribute('class')).includes('ao-team-member-child'));
       assert.match(await builder.innerText(), /Session inconnue/i);
-      for (const [runtime, label] of [['claude-code', 'Claude Code'], ['codex', 'Codex'], ['cursor', 'Cursor']]) {
-        const badge = page.locator(`.ao-team-runtime[data-runtime-kind="${runtime}"]`);
-        assert.equal(await badge.count(), 1, runtime);
-        assert.equal(await badge.getAttribute('aria-label'), label, runtime + ' readable provider label');
-        assert.ok((await badge.innerText()).trim().endsWith(label), runtime + ' visible provider label');
+      for (const [memberId, label] of [['member:pm-fixture', 'Claude Code'], ['member:builder-fixture', 'Codex'], ['member:critic-fixture', 'Runtime']]) {
+        const badge = page.locator(`[data-testid="team-member"][data-member-id="${memberId}"] .ao-project-member__runtime`);
+        assert.equal(await badge.count(), 1, memberId);
+        assert.equal(await badge.getAttribute('aria-label'), label, memberId + ' uses its adapter-declared provider label');
+        assert.ok((await badge.innerText()).trim().endsWith(label), memberId + ' visible provider label');
       }
-      const logoMarks = page.locator('.ao-team-runtime .ao-brand-mark--with-logo');
+      const logoMarks = page.locator('[data-testid="team-member"] .ao-brand-mark--with-logo');
       assert.equal(await logoMarks.count(), 2, 'adapter-declared connector marks use the shared logo helper');
       const taskTitle = teamData.tasks[0].title;
       assert.equal(await page.locator('.ao-team-partial').count(), 1);
@@ -58,8 +58,7 @@ test('Bureau shell renders the mixed-runtime team hierarchy with exact stable pa
       assert.equal(await taskHeading.evaluate(node => getComputedStyle(node).webkitLineClamp), '2', 'board titles clamp to two lines');
       await page.locator('[data-testid="team-task"] summary').click();
       assert.equal(await page.locator('.ao-team-task__full-title').innerText(), taskTitle, 'expanded task shows the complete title');
-      const unknownRuntime = page.locator('[data-testid="team-member"][data-member-id="member:unregistered-fixture"] .ao-team-runtime');
-      assert.equal(await unknownRuntime.getAttribute('data-runtime-kind'), 'unknown');
+      const unknownRuntime = page.locator('[data-testid="team-member"][data-member-id="member:unregistered-fixture"] .ao-project-member__runtime');
       assert.equal(await unknownRuntime.getAttribute('aria-label'), 'Runtime inconnu');
       if (process.env.TEAM_OFFICE_SCREENSHOTS === '1') {
         await mkdir(evidenceDir, { recursive: true });

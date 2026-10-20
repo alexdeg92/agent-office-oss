@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {openLayoutBrowser,browserSkipReason} from './helpers/layout-browser.js';
 const require=createRequire(import.meta.url);
 const {settingsFixture}=require('../helpers/settings-fixture');
-const ids=['finishedSessionWindowMinutes','agentPresenceWindowMinutes','idleRelocationMinutes'];
+const ids=['finishedSessionWindowMinutes','agentPresenceWindowMinutes','idleRelocationMinutes','idleTransitionDebounceMs'];
 const getVM=async h=>{const r=await h.get('/api/v3/settings');assert.equal(r.status,200,r.text);return r.json.data;};
 async function capture(page,width,theme,phase){
  await page.locator('#settings-office-title').evaluate(el=>el.scrollIntoView({block:'start'}));
@@ -38,13 +38,13 @@ for(const width of [1440,390])for(const theme of ['light','dark'])test(`backend 
   assert.ok(officeCopy.includes('Cette durée est définie par la configuration du serveur.'));assert.ok(!officeCopy.includes('AGENT_OFFICE_'));
   assert.equal(before.office.agentPresenceWindowMinutes.source,'env');assert.equal(before.office.agentPresenceWindowMinutes.editable,false);
   await capture(page,width,theme,'managed');
-  await page.locator('#settings-office-finishedSessionWindowMinutes').fill('12');await page.locator('#settings-office-idleRelocationMinutes').fill('20');
+  await page.locator('#settings-office-finishedSessionWindowMinutes').fill('12');await page.locator('#settings-office-idleRelocationMinutes').fill('20');await page.locator('#settings-office-idleTransitionDebounceMs').fill('3200');
   await page.locator('.ao-settings__footer button[type=submit]').click();
   await page.waitForFunction(()=>document.querySelector('#settings-section-form')?.getAttribute('aria-busy')==='false'&&!document.querySelector('.ao-settings__dirty--active'));
-  assert.equal(writes.length,1);assert.deepEqual(writes[0].office,{finishedSessionWindowMinutes:12,idleRelocationMinutes:20});
-  const after=await getVM(h);assert.equal(after.office.finishedSessionWindowMinutes.value,12);assert.equal(after.office.idleRelocationMinutes.value,20);assert.equal(after.office.agentPresenceWindowMinutes.value,45);
+  assert.equal(writes.length,1);assert.deepEqual(writes[0].office,{finishedSessionWindowMinutes:12,idleRelocationMinutes:20,idleTransitionDebounceMs:3200});
+  const after=await getVM(h);assert.equal(after.office.finishedSessionWindowMinutes.value,12);assert.equal(after.office.idleRelocationMinutes.value,20);assert.equal(after.office.idleTransitionDebounceMs.value,3200);assert.equal(after.office.agentPresenceWindowMinutes.value,45);
   await page.reload({waitUntil:'domcontentloaded'});await page.locator('#settings-office-title').waitFor({state:'visible'});
-  assert.equal(await page.locator('#settings-office-finishedSessionWindowMinutes').inputValue(),'12');assert.equal(await page.locator('#settings-office-idleRelocationMinutes').inputValue(),'20');
+  assert.equal(await page.locator('#settings-office-finishedSessionWindowMinutes').inputValue(),'12');assert.equal(await page.locator('#settings-office-idleRelocationMinutes').inputValue(),'20');assert.equal(await page.locator('#settings-office-idleTransitionDebounceMs').inputValue(),'3200');
   assert.equal(await page.locator('#settings-office-agentPresenceWindowMinutes').isDisabled(),true);
   await capture(page,width,theme,'saved');assert.deepEqual(errors,[]);
  }finally{await b?.close();await h?.close();}

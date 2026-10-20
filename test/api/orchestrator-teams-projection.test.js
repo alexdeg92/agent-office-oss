@@ -95,9 +95,10 @@ describe('T-0045 · wired orchestrator/team projections', () => {
     assert.equal(new Set(projectedMembers.map(row => row.id)).size, people.length, 'one stable office occupant per team member');
     const active = office.json.data.kpis.find(row => row.id === 'active');
     const subagents = office.json.data.kpis.find(row => row.id === 'subagents');
-    assert.equal(active.value, office.json.data.occupants.filter(row => !['idle', 'offline'].includes(row.state)).length,
-      'activity KPI counts the exact occupant set rendered in the office');
-    assert.equal(active.sub.params.n, office.json.data.occupants.length, 'on-stage detail uses the same final occupant set');
+    const officeAgents = office.json.data.occupants.filter(row => !row.visitPhase);
+    assert.equal(active.value, officeAgents.filter(row => !['idle', 'offline'].includes(row.state)).length,
+      'activity KPI counts the projected agents; visiting conversations have their own state');
+    assert.equal(active.sub.params.n, officeAgents.length, 'on-stage detail uses the same final agent set');
     assert.equal(subagents.value, office.json.data.occupants.filter(row => row.role === 'subagent').length,
       'subagent KPI includes registered panes in the office projection');
 
@@ -546,7 +547,11 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       for (const version of [2, 3]) {
         const response = await fixture.get(`/api/v${version}/views/office`);
         assert.equal(response.status, 200, response.text);
-        assert.equal(JSON.stringify(response.json.data).includes(canary), true, `v${version} preserves the owner legacy-cookie grant`);
+        assert.equal(JSON.stringify(response.json.data).includes(canary), false,
+          `v${version} never promotes a transcript-derived title into a registered member name, even for the owner`);
+        const primary = response.json.data.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
+        assert.equal(primary.name, member.name, `v${version} keeps the registered team-member name for the owner`);
+        assert.equal(primary.sessionKey, sessionKey, `v${version} preserves the owner's Logs-granted session fields`);
       }
     } finally { await fixture.close(); }
   });
@@ -626,7 +631,7 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         const pm = occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
         const builder = occupants.find(row => row.name === 'Builder');
         assert.ok(pm, `v${version} projects the team lead from the store without a Herdr row`);
-        assert.equal(pm.name, 'Runtime lead', `v${version} preserves the configured primary display name`);
+        assert.equal(pm.name, 'PM', `v${version} uses the registered team-member name instead of the runtime title`);
         assert.ok(builder, `v${version} projects the registered Codex member without a Herdr row`);
         assert.equal(builder.parentId, pm.id, `v${version} membership parent does not depend on host availability`);
         assert.equal(builder.state, 'working', `v${version} retains the fresh runtime evidence`);
@@ -745,8 +750,9 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         const readerRows = await officeRows(version);
         assert.deepEqual(readerRows, adminRows, `v${version} session-visible team occupants have identical parent/floor/order placement across principals`);
         assert.equal(readerRows.occupants.length, memberRows.length, `v${version} has one on-stage row per project agent, with old session occupants omitted`);
-        const lead = readerRows.occupants.find(row => row.name === 'Runtime lead');
+        const lead = readerRows.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
         assert.ok(lead, `v${version} lead remains the primary team row`);
+        assert.equal(lead.name, 'Lead', `v${version} uses the registered team-member name instead of the runtime title`);
         for (const member of readerRows.occupants.filter(row => row.name.startsWith('Builder '))) {
           assert.equal(member.parentId, lead.id, `v${version} keeps ${member.name} under the canonical lead`);
           assert.equal(member.teamId, 'team:session-backed');
@@ -823,5 +829,34 @@ describe('T-0045 · wired orchestrator/team projections', () => {
       assert.equal(readerOffice.status, 200, readerOffice.text);
       assert.equal('orchestratorActivationAvailable' in readerOffice.json.data, false);
     } finally { await fixture.close(); }
+  });
+
+  it('invalidates cached team Project portraits after a committed Office appearance save over HTTP and SSE', async () => {
+    const board = await h.get('/api/v3/views/projects'); assert.equal(board.status, 200, board.text);
+    const card = board.json.data.columns.flatMap(column => column.cards).find(row => row.origin === 'orchestrator-team'); assert.ok(card);
+    const projectPath = `/api/v3/views/projects/${card.id}`;
+    const before = await h.get(projectPath); assert.equal(before.status, 200, before.text);
+    const lead = before.json.data.teamProject.roster.members.find(row => row.identity.name === 'pm'); assert.ok(lead);
+    const prior = lead.portrait.look;
+    const stream = openSse(h.base, '/api/v3/stream?topics=projects', { cookie: h.cookie });
+    try {
+      const initial = await stream.next(frame => frame.event === 'snapshot' && frame.data.topic === 'projects');
+      const layout = await h.get('/api/v3/office/layout'); assert.equal(layout.status, 200, layout.text);
+      const data = structuredClone(layout.json.data.layout.data);
+      const rule = data.agents.find(row => row.agentId === 'primary' || row.agentId === 'main'); assert.ok(rule);
+      rule.appearance = 'manual'; rule.character = 'timmy'; rule.variant = null; rule.accessories = [];
+      const saved = await h.put('/api/v3/office/layout', { expectedRevision: layout.json.data.layout.revision, data });
+      assert.equal(saved.status, 200, saved.text);
+      const delta = await stream.next(frame => ['snapshot', 'delta'].includes(frame.event) && frame.data.topic === 'projects' && frame.data.rev > initial.data.rev);
+      assert.ok(delta, 'appearance save invalidates the board topic for existing subscribers');
+      const office = await h.get('/api/v3/views/office'); assert.equal(office.status, 200, office.text);
+      const currentPrimary = office.json.data.occupants.find(row => row.role === 'primary'); assert.ok(currentPrimary?.look);
+      assert.deepEqual(currentPrimary.look, { character: 'timmy', variant: null, accessories: [] },
+        'the committed layout save changed the primary appearance');
+      const after = await h.get(projectPath); assert.equal(after.status, 200, after.text);
+      const current = after.json.data.teamProject.roster.members.find(row => row.identity.name === 'pm')?.portrait.look;
+      assert.deepEqual(current, prior, 'a distinct team member retains its persisted look after the primary appearance changes');
+      assert.notDeepEqual(current, currentPrimary.look, 'the team portrait never inherits the primary appearance');
+    } finally { stream.close(); }
   });
 });

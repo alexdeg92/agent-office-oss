@@ -24,6 +24,16 @@ async function hashPassword(password, opts = {}) {
   return ['scrypt', o.N, o.r, o.p, salt.toString('base64url'), key.toString('base64url')].join(':');
 }
 
+// Boot migration helper: server startup is synchronous today. Keep the same
+// scrypt format/costs as hashPassword; callers persist only this derived value.
+function hashPasswordSync(password, opts = {}) {
+  const o = Object.assign({}, DEFAULT, opts);
+  if (typeof password !== 'string' || password.length < 1 || password.length > 1024) throw new Error('password: 1 to 1024 characters');
+  const salt = crypto.randomBytes(o.saltLen);
+  const key = crypto.scryptSync(String(password).normalize('NFC'), salt, o.keyLen, { N:o.N, r:o.r, p:o.p, maxmem:MAXMEM });
+  return ['scrypt', o.N, o.r, o.p, salt.toString('base64url'), key.toString('base64url')].join(':');
+}
+
 const parse = (stored) => {
   const m = FORMAT.exec(String(stored || ''));
   if (!m) return null;
@@ -48,4 +58,4 @@ async function verifyPassword(password, stored) {
   } catch (_) { return false; }
 }
 
-module.exports = { hashPassword, verifyPassword, isHash, DEFAULT };
+module.exports = { hashPassword, hashPasswordSync, verifyPassword, isHash, DEFAULT };

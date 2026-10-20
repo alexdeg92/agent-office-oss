@@ -226,7 +226,7 @@ function BureauContent({ match }) {
   const sel = roster.find((o) => o.id === selected) || null;
   const detailLayout = floorLay;
   const select = (id,team=null) => {
-    setDetailTeam(id ? team || (mobileSheet?.team ? {...mobileSheet.team,fromSheet:true} : mobileSheet?.conversationIds ? {conversationIds:mobileSheet.conversationIds} : null) : null);
+    setDetailTeam(id ? team || mobileSheet?.team || (mobileSheet?.conversationIds ? {conversationIds:mobileSheet.conversationIds,label:i18n.msg('office.mobile.backConversations')} : null) : null);
     closeMobileSheet();
     const o = roster.find(x => x.id === id);
     const query = { agent: id };
@@ -283,11 +283,11 @@ function BureauContent({ match }) {
       <aside class="ao-bureau__side" aria-label=${editing ? tr('office.customize') : tr('office.rosterLabel')}>
         <div id="ao-bureau-editaside" hidden=${!editing}></div>
         ${editing ? null : html`<${Roster} occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} groupedFloors onJumpFloor=${selectFloor} hostAnnotation=${teamUI?.hostAnnotation} />`}
-        ${!editing && teamUI && html`<${teamUI.TeamOffice} hint=${office.data.orchestratorActivationAvailable} />`}
+        ${!editing && teamUI && html`<${teamUI.TeamOffice} hint=${office.data.orchestratorActivationAvailable} office=${office.data} />`}
       </aside>
     </div>
     ${editing ? null : html`<${Feed} vm=${vm} stale=${stale} tab=${feed} setTab=${setFeed} mobile=${mobile} />`}
-    ${mobileSheet && !editing ? html`<${Modal} size="md" class=${'ao-office-sheet' + (mobileSheet === 'options' ? ' ao-office-options' : '')} title=${mobileSheet?.conversationIds ? i18n.msg('office.mobile.conversationsTitle') : mobileSheet?.team ? i18n.msg('office.mobile.team',{name:mobileSheet.team.name}) : mobileSheet === 'floors' ? tr('office.floor.picker') : mobileSheet === 'roster' ? tr('office.rosterLabel') : i18n.msg('office.mobile.options')} onClose=${closeMobileSheet}
+    ${mobileSheet && !editing && !sel ? html`<${Modal} size="md" class=${'ao-office-sheet' + (mobileSheet === 'options' ? ' ao-office-options' : '')} title=${mobileSheet?.conversationIds ? i18n.msg('office.mobile.conversationsTitle') : mobileSheet?.team ? L(mobileSheet.team.label) : mobileSheet === 'floors' ? tr('office.floor.picker') : mobileSheet === 'roster' ? tr('office.rosterLabel') : i18n.msg('office.mobile.options')} onClose=${closeMobileSheet}
       footer=${mobileSheet === 'options' ? null : html`<button type="button" class="bu-btn" onClick=${closeMobileSheet}>${tr('office.close')}</button>`}>
       ${mobileSheet?.conversationIds ? html`<${Roster} all occupants=${roster.filter(o=>mobileSheet.conversationIds.includes(o.id))} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} />`
         : mobileSheet === 'floors' ? html`<${FloorPicker} floors=${floorPlan.floors} current=${currentFloor.id} onSelect=${selectFloor} mobile />`
@@ -301,7 +301,7 @@ function BureauContent({ match }) {
         </div>
         ${canWrite ? html`<${ThemeToggle} lay=${floorLay} store=${currentStore} labelId="ao-mobile-theme-label" visibleLabel=${i18n.msg('office.mobile.lighting')} icons />` : html`<p class="ao-bureau__ro">${tr(lay.readOnly ? 'office.readonlyLayout' : 'office.readonly')}</p>`}`}
     </${Modal}>` : null}
-    ${sel && !editing ? html`<${Drawer} o=${sel} lay=${detailLayout} unconfirmed=${unconfirmed} sourceStale=${!!sel.sourceStale} onClose=${() => select(null)} onBack=${mobile&&detailTeam ? backToTeam : null} teamLabel=${detailTeam?.conversationIds ? i18n.msg('office.mobile.backConversations') : detailTeam?.fromSheet ? i18n.msg('office.mobile.backTeam') : i18n.msg('office.mobile.team',{name:detailTeam?.name||''})} onCustomize=${canWrite ? () => setEditing({ agent: sel.id }) : null} />` : null}
+    ${sel && !editing ? html`<${Drawer} o=${sel} lay=${detailLayout} unconfirmed=${unconfirmed} sourceStale=${!!sel.sourceStale} onClose=${() => select(null)} onBack=${mobile&&detailTeam ? backToTeam : null} teamLabel=${L(detailTeam?.label)} onCustomize=${canWrite ? () => setEditing({ agent: sel.id }) : null} />` : null}
   </${Frame}>`;
 }
 
@@ -558,10 +558,10 @@ function Roster({ all = false, occupants, rosterFloors = [], selected, onSelect,
       aria-current=${selected === o.id ? 'true' : undefined} onClick=${() => onSelect(o.id)}>
       <${Avatar} o=${o} manifest=${manifest} />
       <span class="bu-cell-main" data-by=${o.parentName || undefined}><span class="ao-roster__name ao-agentcard__name" title=${nameOf(o)}>${nameOf(o)}</span>
-        <span class="bu-cell-sub ao-roster__summary" title=${o.summary || undefined}>${o.summary && o.summary !== o.name ? o.summary : o.project ? tr('office.inProject', { project: o.project }) : L(o.roleLabel)}${o.stationUid || o.visitPhase || o.summary || o.project ? '' : ` · ${tr('office.noStation')}`}</span>
+        <span class="bu-cell-sub ao-roster__summary" data-visit=${o.visitPhase || undefined} title=${o.summary || undefined}>${o.visitLabel ? L(o.visitLabel) : o.summary && o.summary !== o.name ? o.summary : o.project ? tr('office.inProject', { project: o.project }) : L(o.roleLabel)}${o.stationUid || o.visitPhase || o.summary || o.project ? '' : ` · ${tr('office.noStation')}`}</span>
         ${hostAnnotation?.(o) ? html`<span class="bu-cell-sub ao-host-annotation" data-host-agent=${o.hostAgentId}>${hostAnnotation(o)}</span>` : null}
         ${o.presence ? html`<span class="ao-agentcard__seen">${o.presenceLabel}</span>` : null}</span>
-      ${eggs[o.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[o.id]}>${tr('egg.'+eggs[o.id])}</span>` : html`<${StateChip} state=${o.state} stateLabel=${o.stateLabel} stateActive=${o.stateActive} live=${!unconfirmed && !o.presence && !o.sourceStale} title=${unconfirmed || o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`}
+      ${eggs[o.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[o.id]}>${tr('egg.'+eggs[o.id])}</span>` : html`<${StateChip} state=${o.state} stateKind=${o.stateKind} stateLabel=${o.stateLabel} stateActive=${o.stateActive} live=${!unconfirmed && !o.presence && !o.sourceStale} title=${unconfirmed || o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`}
     </button></li>`;
   if (!occupants.length) return html`<p class="bu-text-secondary">${tr('office.empty')}</p>`;
   if (groupedFloors && rosterFloors.length) {
@@ -591,11 +591,11 @@ function FloorPicker({ floors, current, onSelect, mobile = false }) {
   </nav>`;
 }
 
-/** The state pill (O3): icon and label, the state's colour; « live » pulses only while confirmed and active. */
-function StateChip({ state, stateLabel: stateRef, stateActive = false, live = true, title }) {
+function StateChip({ state, stateKind, stateLabel: stateRef, stateActive = false, live = true, title }) {
   const on = live && stateActive;
-  return html`<span class=${'bu-state ao-roster__state' + (on ? ' bu-state--live ao-roster__state--live' : '')} data-agent-state=${state} title=${title || undefined}>
-    <${Icon} name=${STATES.includes(state) ? stateIconFor(state) : 'info'} />${L(stateRef)}</span>`;
+  const visitor = stateKind === 'visitor';
+  return html`<span class=${'bu-state ao-roster__state' + (on ? ' bu-state--live ao-roster__state--live' : '')} data-agent-state=${visitor ? 'visitor' : state} data-state-kind=${visitor ? 'visitor' : undefined} title=${title || undefined}>
+    <${Icon} name=${visitor ? 'discuter' : STATES.includes(state) ? stateIconFor(state) : 'info'} />${L(stateRef)}</span>`;
 }
 
 /** Journal (O3): time, then the event's sentence (it already names its subject, set in bold when it leads); a repeated

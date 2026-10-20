@@ -17,8 +17,8 @@ export function MobileRoster({all=false,occupants,rosterItems=[],rosterPreviewIt
       if(item.isGroup)return html`<div class="bu-roster ao-mobile-group" key=${o.id}>
         <${Button} class="ao-mobile-stack" iconOnly variant="ghost" label=${label(item.openLabel)}
           icon=${html`<span class="ao-mobile-stack__avatars">${preview.map(person=>html`<${Avatar} o=${person} manifest=${manifest} />`)}${item.overflowCount>0?html`<span class="ao-mobile-stack__count">${label(item.overflowLabel)}</span>`:null}</span>`}
-        onPress=${()=>onTeam({name:nameOf(o),ids:item.occupantIds})} />
-        <button type="button" class="ao-mobile-parent" data-mobile-agent=${o.id} aria-current=${selected===o.id?'true':undefined} onClick=${()=>onSelect(o.id,{name:nameOf(o),ids:item.occupantIds})}>
+        onPress=${()=>onTeam({name:nameOf(o),ids:item.occupantIds,label:item.teamLabel})} />
+        <button type="button" class="ao-mobile-parent" data-mobile-agent=${o.id} aria-current=${selected===o.id?'true':undefined} onClick=${()=>onSelect(o.id,{name:nameOf(o),ids:item.occupantIds,label:item.teamLabel})}>
           <span class="ao-agentcard__name" title=${nameOf(o)}>${nameOf(o)}</span><span class="bu-cell-sub">${o.runtime || roleLabel(o.roleLabel)}</span><span class="bu-cell-sub">${label(item.delegatesLabel)}</span>
         </button>${chip}</div>`;
       return html`<button type="button" key=${o.id} class=${'bu-roster ao-agentcard'+(index?' ao-mobile-peer':'')} data-mobile-agent=${o.id} data-source-stale=${o.sourceStale||undefined} aria-current=${selected===o.id?'true':undefined} onClick=${()=>onSelect(o.id)}>

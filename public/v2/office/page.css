@@ -116,6 +116,7 @@
 .bu-cell-main[data-by]::after { content: "Lancé par " attr(data-by); display: block; font: var(--bu-type-caption); color: var(--bu-text-secondary); }
 :lang(en) .bu-cell-main[data-by]::after { content: "Launched by " attr(data-by); }
 .ao-roster__summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--bu-type-body-sm); }
+.ao-roster__summary[data-visit] { white-space: normal; }
 
 /* O9: annex rooms below the office when its desks run out (read-only scenes, same art). */
 .ao-bureau__annexes { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--bu-space-4); }
@@ -248,8 +249,9 @@
 .ao-team-list { min-width:0; margin:0; padding:var(--bu-space-2) var(--bu-space-2) var(--bu-space-1); list-style:none; }
 .ao-team-list .bu-list-row { min-width:0; padding-inline:var(--bu-space-2); }
 .ao-team-list .ao-team-member-child { margin-inline-start:var(--bu-space-4); border-inline-start:2px solid var(--bu-border-subtle); padding-inline-start:var(--bu-space-3); }
-.ao-team-runtime { display:inline-flex; align-items:center; gap:var(--bu-space-1); padding:2px var(--bu-space-2); border:1px solid var(--bu-border-default); border-radius:999px; color:var(--bu-text-secondary); font:var(--bu-type-caption); white-space:nowrap; }
-.ao-team-runtime__brand { width:18px; height:18px; flex:none; border-radius:50%; }
+.ao-team-office .ao-team-members-sheet .bu-modal__header { display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box; gap:var(--bu-space-3); }
+.ao-team-office .ao-team-members-sheet .bu-modal__headtext { flex:1; min-width:0; }
+.ao-team-office .ao-team-members-sheet .bu-modal__header > button { flex:none; margin-inline-start:auto; width:44px; min-width:44px; min-height:44px; }
 .ao-team-host-label { margin:0; padding:var(--bu-space-1) var(--bu-space-4); color:var(--bu-text-secondary); font:var(--bu-type-caption); }
 .ao-team-empty { margin:0; padding:var(--bu-space-4); }
 .ao-team-state { display:flex; flex-wrap:wrap; align-items:center; gap:var(--bu-space-3); margin:var(--bu-space-3); padding:var(--bu-space-3); color:var(--bu-text-secondary); font:var(--bu-type-body-sm); }
@@ -301,7 +303,8 @@
   .ao-team-board__scroll { max-height:62svh; }
   .ao-team-task > summary { min-height:var(--bu-size-touch); padding-inline:var(--bu-space-2); }
   .ao-team-task__detail { padding-left:var(--bu-space-4); }
-  .ao-team-office .bu-modal__body { max-height:calc(85svh - 10rem); overflow:auto; overscroll-behavior:contain; }
+  .ao-team-office .bu-modal__body { min-height:0; max-height:calc(85svh - 11rem); overflow:auto; overscroll-behavior:contain; }
+  .ao-team-office .ao-team-members-sheet { margin-block-end:calc(env(safe-area-inset-bottom, 0px) + var(--bu-space-3)); }
 }
 @media(prefers-reduced-motion:reduce) { .ao-team-task > summary::after { transition:none; } }
 

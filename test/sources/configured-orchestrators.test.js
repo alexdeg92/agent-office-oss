@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { createConfiguredOrchestrators } = require('../../src/sources/configured-orchestrators');
+const { createEngine } = require('../../src/engine');
 
 test('Herdr source check and activation use only injected fixture I/O and keep correlation refs private', async () => {
   let calls = 0; const now = Date.parse('2026-10-10T20:00:00Z');
@@ -121,6 +122,36 @@ test('agent-team-pm is opt-in through an explicit absolute root and reads its st
       assert.equal(JSON.stringify(source.getSnapshot()).includes('private-fixture-session'), false);
       assert.equal(await fs.readFile(memberFile, 'utf8'), before, 'the source reader does not write to the selected root');
     } finally { source.close(); }
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('configured Herdr and team adapters feed canonical engine rows while keeping exact refs private', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ao-engine-team-source-'));
+  const engine = createEngine(); t.after(() => engine.close());
+  try {
+    for (const directory of ['members', 'tasks', 'inbox']) await fs.mkdir(path.join(root, directory));
+    const member = { id: 'member:11111111-1111-4111-8111-111111111111', name: 'builder', role: 'builder', runtime: 'codex',
+      herdrPane: 'pane-builder', session: { source: 'herdr:codex', kind: 'agent_session', value: 'shared-session' }, spawnedBy: null };
+    await fs.writeFile(path.join(root, 'members', 'builder.json'), JSON.stringify(member), { mode: 0o600 });
+    const source = createConfiguredOrchestrators({ engine, env: { HOME: '/tmp/fixture', PATH: '' }, binaryPath: '/fixture/bin/herdr',
+      hostId: 'host_fixture', teamRoot: root, now: () => Date.now(),
+      runtimeIdentityAgents: hostId => [{ id: 'runtime-agent', hostId, runtimeKind: 'codex', sessionRef: 'shared-session' }],
+      runtimeIdentitySessions: () => [{ agentId: 'runtime-agent', runtimeKind: 'codex', sessionRef: 'shared-session', sessionKey: 'runtime-session-key' }],
+      run: async () => ({ stdout: Buffer.from(JSON.stringify({ id: 'fixture', result: { type: 'ok', agents: [{ pane_id: 'pane-builder',
+        agent: 'codex', name: 'Builder', agent_status: 'working', agent_session: { value: 'shared-session' } }] } })) }),
+    });
+    t.after(() => source.close());
+    await source.refresh();
+    const canonical = engine.orchestrationSnapshot();
+    assert.equal(canonical.hostAgents.length, 1);
+    assert.equal(canonical.members.length, 1);
+    assert.equal(canonical.members[0].hostAgentId, canonical.hostAgents[0].id);
+    assert.equal(engine.orchestrationSourceStatus().find(row => row.id === 'herdr').status, 'available');
+    assert.equal(engine.orchestrationSourceStatus().find(row => row.id === 'agent-team-pm').status, 'available');
+    const privateRefs = engine.orchestrationSourcePrivateRefs('agent-team-pm');
+    assert.equal(privateRefs[member.id].sessionRef, 'shared-session');
+    assert.equal(privateRefs[member.id].memberId, member.id);
+    assert.equal(JSON.stringify(engine.orchestrationProjectionSnapshot()).includes('shared-session'), false);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 

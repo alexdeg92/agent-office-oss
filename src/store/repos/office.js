@@ -31,6 +31,8 @@ function createOfficeRepo(db, { now = () => Date.now() } = {}) {
   const autoGet = db.prepare('SELECT look_json FROM office_automatic_looks WHERE identity_id = ?');
   const autoCounts = db.prepare('SELECT family, count(*) AS n FROM office_automatic_looks GROUP BY family');
   const autoPut = db.prepare('INSERT INTO office_automatic_looks (identity_id, family, look_json, assigned_at) VALUES (?, ?, ?, ?)');
+  const autoPutMember = db.prepare(`INSERT INTO office_automatic_looks (identity_id, family, look_json, assigned_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(identity_id) DO UPDATE SET family = excluded.family, look_json = excluded.look_json, assigned_at = excluded.assigned_at`);
   // The placement table arrives in migration 029. Keep construction usable by
   // earlier-schema migration fixtures that exercise unrelated repositories.
   let teamPlacement = null;
@@ -69,6 +71,40 @@ function createOfficeRepo(db, { now = () => Date.now() } = {}) {
         const chosen = chooseAutomaticLook(index, id, usage, options);
         autoPut.run(id, chosen.family, JSON.stringify(chosen.look), now());
         return chosen.look;
+      });
+    },
+    // Registered team portraits are allocated as a stable set. Existing member
+    // choices are retained; newly observed IDs use deterministic probing and
+    // assignments are persisted in the same bounded appearance table.
+    memberAppearances(memberIds, index, { reservedLooks = [], preferredLooks = {}, canonicalLooks = {}, primaryLook = null } = {}) {
+      const { allocateMemberAppearances, lookKey, memberOrderKey } = require('../../engine/office/member-appearance');
+      const ids = [...new Set((memberIds || []).filter(id => typeof id === 'string' && id.length > 0))]
+        .sort((a, b) => memberOrderKey(a).localeCompare(memberOrderKey(b)) || a.localeCompare(b)).slice(0, 256);
+      return tx(() => {
+        const existing = new Map();
+        for (const id of ids) {
+          const row = autoGet.get(`team-member:${id}`);
+          if (row) { try { existing.set(id, JSON.parse(row.look_json)); } catch (_) { /* replace corrupt appearance */ } }
+          else if (preferredLooks instanceof Map ? preferredLooks.has(id) : preferredLooks?.[id]) {
+            existing.set(id, preferredLooks instanceof Map ? preferredLooks.get(id) : preferredLooks[id]);
+          }
+          const canonical = canonicalLooks instanceof Map ? canonicalLooks.get(id) : canonicalLooks?.[id];
+          if (canonical) existing.set(id, canonical);
+        }
+        // A look already assigned to a team member remains theirs even if a
+        // runtime occupant later appears on the same floor. Protect these
+        // stable assignments from the transient Office reservation set.
+        const { lookKey } = require('../../engine/office/member-appearance');
+        const memberLookKeys = new Set([...existing.values()].map(lookKey).filter(Boolean));
+        const availableReservations = (reservedLooks || []).filter(look => !memberLookKeys.has(lookKey(look)));
+        const allocated = allocateMemberAppearances(ids, index, { existing, reservedLooks: availableReservations, primaryLook });
+        for (const [id, look] of allocated) {
+          if (lookKey(existing.get(id)) === lookKey(look)
+            && JSON.stringify(existing.get(id)?.accessories || []) === JSON.stringify(look.accessories || [])) continue;
+          const character = index.characters.get(look.character);
+          autoPutMember.run(`team-member:${id}`, character?.family || character?.id || look.character, JSON.stringify(look), now());
+        }
+        return Object.fromEntries(allocated);
       });
     },
     // The active layout; seeded with `seed()` (the shipped default) the first time.

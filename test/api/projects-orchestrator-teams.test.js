@@ -41,6 +41,10 @@ test('orchestrator team work appears as a read-only project with mapped task car
     const response = await h.get('/api/v2/views/projects');
     return response.json?.data?.columns?.some(column => column.cards.some(row => row.origin === 'orchestrator-team'));
   }, { what: 'the canonical team project after its read-only source scan' });
+  for (const [name, status] of [['Control probe todo', 'todo'], ['Control probe active', 'in-progress']]) {
+    const created = await h.post('/api/v3/projects', { name, status, priority: 'P2', summary: null, sources: [] });
+    assert.equal(created.status, 200, created.text);
+  }
   for (const version of [2, 3]) {
     const board = await h.get(`/api/v${version}/views/projects`);
     assert.equal(board.status, 200, board.text);
@@ -52,8 +56,55 @@ test('orchestrator team work appears as a read-only project with mapped task car
     assert.equal(card.statusLabel.key, `projectStatus.${card.status}`);
     assert.equal(card.counts.agents, 3);
     assert.equal(card.sourceDescriptors[0].kind, 'orchestrator-team');
+    assert.equal(card.sourceDescriptors[0].id, 'team-source:agent-team-pm');
+    assert.deepEqual(card.sourceDescriptors[0].label,
+      { key: 'project.source.team', params: { label: 'Agent Team PM' } });
+    assert.equal(card.name, 'Team · Project Manager', 'the project title keeps the team label and lead identity');
     assert.deepEqual(card.capabilities, { read: true, write: false, comments: 'read-only', history: 'unsupported', repository: 'unsupported' });
-    assert.ok(board.json.data.sourceFilters.some(row => row.id === card.sourceDescriptors[0].id && row.selected === false));
+    const sourceFilter = board.json.data.sourceFilters.find(row => row.id === card.sourceDescriptors[0].id);
+    assert.ok(sourceFilter && !sourceFilter.selected);
+    assert.deepEqual(sourceFilter.label, card.sourceDescriptors[0].label);
+    if (version === 3) {
+      assert.deepEqual(board.json.data.columns[0].label, { key: 'projectStatus.idea' });
+      assert.equal(board.json.data.columns[0].taskCount, board.json.data.columns[0].count);
+      assert.deepEqual(board.json.data.columns[0].summaryLabel,
+        { key: 'project.board.column.summary', params: { n: board.json.data.columns[0].count } });
+      assert.deepEqual(board.json.data.controls.stage.selected, 'all');
+      assert.equal(board.json.data.controls.search.counts[0].count, cards.length,
+        'the empty search describes every card on the unfiltered board');
+      const queried = await h.get(`/api/v3/views/projects?search=${encodeURIComponent(card.name)}&stage=in-progress`);
+      assert.equal(queried.status, 200, queried.text);
+      assert.equal(queried.json.data.controls.search.selected, card.name);
+      assert.equal(queried.json.data.controls.stage.selected, 'in-progress');
+      assert.deepEqual(queried.json.data.columns.find(row => row.id === 'in-progress').cards.map(row => row.id), [card.id]);
+      assert.equal(queried.json.data.columns.find(row => row.id === 'todo').cards.length, 0);
+      const controlled = await h.get('/api/v3/views/projects?search=Control%20probe&stage=todo');
+      assert.equal(controlled.status, 200, controlled.text);
+      assert.equal(controlled.json.data.controls.search.counts[0].count, 2,
+        'search match count is from the pre-stage population even after the mounted v3 topic builder shapes the VM');
+      assert.deepEqual(controlled.json.data.controls.stage.counts.filter(row => ['todo', 'in-progress'].includes(row.id)),
+        [{ id: 'todo', count: 1 }, { id: 'in-progress', count: 1 }]);
+      const controlsTopic = 'projects?search=Control%20probe&stage=todo';
+      const controlsStream = openSse(h.base, `/api/v3/stream?topics=${encodeURIComponent(controlsTopic)}`, { cookie: h.cookie });
+      t.after(() => controlsStream.close());
+      const controlsFrame = await controlsStream.next(frame => frame.event === 'snapshot' && frame.data.topic === controlsTopic);
+      assert.equal(controlsFrame.data.data.controls.search.counts[0].count, 2,
+        'mounted SSE preserves the same non-enumerable pre-stage metadata as HTTP');
+      const accented = 'é'.repeat(60);
+      const accentedQuery = await h.get(`/api/v3/views/projects?search=${encodeURIComponent(accented)}`);
+      assert.equal(accentedQuery.status, 200, accentedQuery.text, 'legal Unicode search fits the HTTP route and canonical topic bounds');
+      assert.deepEqual(accentedQuery.json.data.controls.search, {
+        options: [{ id: 'project-name', label: { key: 'project.control.search.name' } }],
+        counts: [{ id: 'matches', count: 0 }], selected: accented,
+      });
+      const searchTopic = `projects?search=${encodeURIComponent(accented)}`;
+      const searchStream = openSse(h.base, `/api/v3/stream?topics=${encodeURIComponent(searchTopic)}`, { cookie: h.cookie });
+      t.after(() => searchStream.close());
+      const searchFrame = await searchStream.next(frame => frame.event === 'snapshot' && frame.data.topic === searchTopic);
+      assert.deepEqual(searchFrame.data.data.controls.search.selected, accented, 'the same legal Unicode search is accepted by SSE topic parsing');
+      const invalidV2 = await h.get('/api/v2/views/projects?stage=in-progress');
+      assert.equal(invalidV2.status, 400, invalidV2.text, 'v2 refuses v3-only query controls');
+    }
     const filtered = await h.get(`/api/v${version}/views/projects?source=${encodeURIComponent(card.sourceDescriptors[0].id)}`);
     assert.equal(filtered.status, 200, filtered.text);
     assert.equal(filtered.json.data.sourceFilterId, card.sourceDescriptors[0].id);
@@ -62,6 +113,9 @@ test('orchestrator team work appears as a read-only project with mapped task car
 
     const detail = await h.get(`/api/v${version}/views/projects/${encodeURIComponent(card.id)}`);
     assert.equal(detail.status, 200, detail.text);
+    assert.equal(detail.json.data.name, 'Team · Project Manager', 'the adapter source label must not replace the team project title');
+    assert.deepEqual(detail.json.data.sourceDescriptors[0].label, card.sourceDescriptors[0].label,
+      'detail and board agree on the adapter-declared source identity');
     const teamProject = detail.json.data.teamProject;
     assert.equal(teamProject.readOnly, true);
     assert.equal(teamProject.taskCount, 2);

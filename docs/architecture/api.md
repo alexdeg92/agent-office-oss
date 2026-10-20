@@ -2,12 +2,14 @@
 
 **Contract version 2.10** (2026-10-13: source-aware projects and server-shaped team rosters; 2.9: typed subagent results and backend-resolved chat author appearances; 2.8: adapter-declared canonical health checks and remedies; earlier history below). This document is the single source of truth for the HTTP and SSE wire format between the server and its consumers. Only the architect edits it; proposals go through the PM.
 
-**Contract 3.7** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.10 until the UI has moved (`migration-v3.md`).
+**Contract 3.8** (`/api/v3`, G5) is `api-v3.md`: this document plus the deltas listed there. `/api/v2` serves revision 2.10 until the UI has moved (`migration-v3.md`).
 
 ## Changelog
 | Version | Date | Changes |
 | --- | --- | --- |
-| 2.10 | 2026-10-13 | Projects add source descriptors/brands, backend-selected source filters, status/count/capability values and empty-state labels. TeamProject adds server-shaped roster groups/members/portraits, task/summary counts and column labels. For permission-scoped Projects reads, topic revisions are opaque payload-derived tokens and SSE sends snapshots only (§4.3). Same projection on v3; examples and shared schemas regenerated. |
+| 2.10 | 2026-10-13 | Source filters use canonical source identities (connector instance for conversations, owner for GitHub, declared root for folders, manual source), aggregate distinct project counts, and resolve every kind through FR/EN LabelRefs (2026-10-14). Projects import also supplies labelled statusOptions on CandidatesVM; Projects detail additionally supplies ordered statusTransitions with LabelRefs (2026-10-14); unavailable transitions are empty after source/caller/store policy. Projects add source descriptors/brands, backend-selected source filters, status/count/capability values and empty-state labels. TeamProject adds server-shaped roster groups/members/portraits, task/summary counts and column labels. For permission-scoped Projects reads, topic revisions are opaque payload-derived tokens and SSE sends snapshots only (§4.3). Same projection on v3; examples and shared schemas regenerated. |
+| 2.10 additive (T-0140) | 2026-10-14 | Office visits follow each conversation's canonical owning agent. VisitIntent groups visitors by host; visiting occupants carry a localized `visitLabel`, nest under that host, use its floor, and receive a backend-computed reachable visitor target without consuming a desk. The scene only animates these supplied targets. |
+| 2.10 additive (T-0237) | 2026-10-18 | Authorized team occupants may include `OccupantVM.memberId`, a stable team-member identity used to join the Bureau character to the Projects roster across runtime session changes. It is omitted without `teams.read`. Team portraits use this exact join or a stable member-derived non-primary look; a role label equal to the member name is omitted. |
 | 2.9 | 2026-10-13 | Chat messages add `kind`, structured `body`, backend-resolved `avatar`, and nullable result metadata. Trusted adapter-projected delegated output is `subagent-result` on the assistant side with task title, canonical status and `statusLabel`; the original Markdown body is preserved. Same ChatVM shape on 3.6. Examples `chat-vm` and SessionVM event variant updated. |
 | T-0102 additive | 2026-10-12 | Backend floor-scoped LayoutVM/topic, commands and history via `floorId`; `allowNoDesk?: boolean` supplies editor validation policy. Floor saves preserve the other layouts and global appearance rules. Same addition on v3; §3.10. |
 | 2.8 | 2026-10-10 | Add canonical adapter-declared `HealthCheckVM` rows, bounded automatic/one-click/guided remedies and audit outcomes; `POST /health/checks/:id/fix` and `POST /health/fix-all`. Santé uses localized explanations instead of raw source/path names. Unknown session classifications remain generic and count once. **T-0053 additive:** `OccupantVM.isNew?: boolean` marks an auto-added agent during its first 24 hours; absent or false means no marker. |
@@ -133,7 +135,7 @@ interface Kpi { id: string; label: LabelRef; value: number | null; unit: Unit; s
 ```ts
 interface MetaVM {
   bootId: string; // opaque process identity; stable until the owning process restarts
-  modelVersion: number; apiVersion: 2; contractVersion: '2.9'; serverVersion: string;
+  modelVersion: number; apiVersion: 2; contractVersion: '2.10'; serverVersion: string;
   env: 'production' | 'staging' | 'dev';     // mock mode is allowed only when meta is 404 or env !== 'production'
   capabilities: {                            // R3-10: two independent switches
     openclawWrites: boolean;                 // false when PORTAL_READONLY=1 (flows, skills, restart, chat)
@@ -158,7 +160,7 @@ interface MeVM { email: string; displayName: string /* 2.2: owner's name (PORTAL
                gateway: 'up' | 'down'; capabilities: MetaVM['capabilities']; sessionExpiresAt: Ms }
 ```
 ```json
-{ "data": { "bootId": "fixture-process-before-restart", "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.9", "serverVersion": "2026.10.5-s6", "env": "staging",
+{ "data": { "bootId": "fixture-process-before-restart", "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.10", "serverVersion": "2026.10.5-s6", "env": "staging",
   "capabilities": { "openclawWrites": false, "storeWrites": true }, "readonly": true,
   "labels": { "agentState.working": "Exécute", "projectStatus.in-progress": "En cours", "healthSub.cores": "Sur {n} cœurs" },
   "enums": { "projectStatus": ["idea", "todo", "in-progress", "in-review", "shipped"] } },
@@ -172,6 +174,7 @@ interface OfficeVM {
   kpis: Collection<Kpi>;                     // ids: active, runs, subagents, flows, tokens, cpu
   occupants: Collection<OccupantVM>;         // roster order (main first); the scene and the roster read this one list
   occupantOverflowCount?: number;            // eligible rows omitted by the bounded office projection (limit 64); absent on older VMs
+  visitIntent?: VisitIntent;                   // visits are host-specific; placement and labels are backend-owned
   journal: Collection<JournalItemVM>;        // newest 14
   layoutRevision: number;                    // client refetches GET /office/layout when it changes (or follows the `layout` topic)
   queue: Collection<{ id: CronJobId; name: string; schedule: LabelRef }>;   // « File »: enabled jobs, next 8
@@ -179,7 +182,7 @@ interface OfficeVM {
 interface OccupantVM {
   id: OccupantId; role: OccupantRole; name: string;
   title: LabelRef;                           // 2.4 (Q03-A01): the name as a LabelRef (sessionTitle.*; genuine names as raw params), shown in the UI's language
-  roleLabel: LabelRef;                       // semantic role label; a custom layout role replaces it as { key: 'custom', params: { text } }
+  roleLabel: LabelRef | null;                // semantic role label; null when it would duplicate the rendered name; a custom layout role replaces it as { key: 'custom', params: { text } }
   state: AgentState; stateSince: Ms;
   execution: { status: 'unknown' | 'idle' | 'running' | 'succeeded' | 'failed'; evidence: { level: 'verified' | 'observed' | 'unknown'; observedAt: Ms | null; expiresAt: Ms | null } };
   stationUid: string | null;                 // null = no free eligible station (overflow), see data-model §12
@@ -188,11 +191,13 @@ interface OccupantVM {
   automaticLook?: { character: string; variant: string | null; accessories: string[] }; // T-0052: durable first-sight look, reused in previews
   look: { character: string; variant: string | null; accessories: string[] };   // resolved server-side (data-model §12); final
   ruleId: string | null;                     // 2.1 (R3-14): the agentId of the layout rule that styled it ('main', '*subagent', …)
+  teamId?: string | null; teamIds?: string[]; memberId?: string; // stable team member join only with teams.read; one primary team plus additional memberships
   destination: { kind: 'server' | 'meeting'; stationUid: string } | null;   // 2.1 (R3-15): server-authoritative; null on 2.0 data
   sessionKey: SessionKey | null; tokens: number; lastSeenAt: Ms | null;
   isNew?: boolean;                              // T-0053: auto-added agent, for 24 hours after first sighting
   summary?: string; model?: string; project?: string; runtime?: string;
   startedAt?: Ms; lastActivityAt?: Ms; tokensKnown?: boolean; // session read grant only
+  visitPhase?: 'person' | 'agent' | 'linger'; visitOnStage?: boolean; visitStateLabel?: LabelRef; visitLabel?: LabelRef;
   // architect-55 (additive, v2 and v3): conversation occupants (direct/group/conversation) whose transcript is known.
   // An exchange = a message from the person answered by the agent, timed at the reply; recent = within windowMs (600000).
   exchanges?: { recent: number; windowMs: number; lastAt: Ms };
@@ -202,6 +207,9 @@ interface OfficeTarget { kind: 'station' | 'lounge' | 'standing' | 'destination'
   mode: 'stand' | 'desk' | 'sofa'; seatIndex: number | null; facing: 'ne' | 'se' | 'sw' }
 interface OfficeActivity { id: string; kind: 'idle' | 'gym' | 'smoke' | 'coffee'; spotId: string; since: Ms; label: LabelRef }
 interface SceneTravel { id: string; fromFloorId: string; toFloorId: string; departure: OfficeTarget; arrival: OfficeTarget }
+interface VisitIntent { hostId: OccupantId | null; hosts?: { id: OccupantId; visitorIds: OccupantId[] }[];
+  desk: OccupantId[]; meeting: OccupantId[]; talking: boolean; speaker: OccupantId | null; until: Ms | null;
+  visitors: { id: OccupantId; hostId?: OccupantId; phase: 'person' | 'agent' | 'linger'; stateLabel: LabelRef; onStage: boolean }[] }
 interface JournalItemVM { id: string; at: Ms; count: number; actor: ActorVM; text: LabelRef /* liveEvent.<kind> */; kind: LiveEventKind }
 ```
 
@@ -229,7 +237,7 @@ Authoritative example: `docs/architecture/examples/office-vm.json`. On 2026.9.8,
 ### 3.3 ChatVM
 ```ts
 interface ChatVM {
-  sessionKey: SessionKey;                    // the portal's chat session ('agent:main:explicit:portal-chat' expected)
+  sessionKey: SessionKey;                    // authenticated account's chat session; raw account ids never appear here
   turnPending: { turnId: string; since: Ms } | null;
   messages: Collection<{ id: string; kind: 'message' | 'subagent-result'; role: 'user' | 'assistant' | 'error'; at: Ms;
     text: string; body: { text: string }; title: string | null; status: 'completed' | 'failed' | 'running' | 'unknown' | null;
@@ -505,6 +513,7 @@ interface HealthVM {
   healthChecks: Collection<HealthCheckVM>; healthAudit: HealthAuditVM[];
   dataQuality: { open: { error: number; warn: number; info: number }; issues: Collection<IssueVM> };
   series: { cpu: number[]; mem: number[]; at0: Ms; stepMs: 60000 };
+  engineParity?: { surface: LabelRef; comparisons: number; mismatches: number; changedRows: number; overflowKeys: number; overflowSurfaces: number }[]; // admins only; cumulative, value-free Office shadow counters
 }
 interface HealthCheckVM { id: string; adapter: string; severity: 'error' | 'warn' | 'info'; causeCode: string; textKey: string; impactKey: string;
   remedy: 'none' | 'auto' | 'one-click' | 'guided'; active: boolean; actionId: string | null; guidedPath: string | null; target: string | null; changedAt: Ms; resolvedAt: Ms | null }
@@ -590,8 +599,16 @@ interface ProjectVM {
   historyNextCursor: string | null;
   sourceDescriptors: Collection<ProjectSourceDescriptorVM>; statusLabel: LabelRef;
   counts: ProjectCountsVM; capabilities: ProjectCapabilitiesVM;
+  statusTransitions?: Collection<{ id: ProjectStatus; label: LabelRef }>;
   lastActivityAt: Ms; createdAt: Ms;
 }
+```
+
+`statusLabel` is the current backend-authored display label. `statusTransitions` supplies the ordered allowed destination IDs and their LabelRefs; it is empty for read-only sources, callers without Projects write permission, and a read-only store. Older payloads may omit it; consumers show no choices in that case. Desktop and mobile render these values unchanged, submit only a supplied destination, and use the returned VM's labels/transitions for confirmation and undo. The command still enforces write permission and validates the submitted status.
+
+Source descriptor/filter IDs identify a canonical source, not a project-link row. Conversation sources use the owning canonical connector instance and its declared adapter name/brand; an unresolved source has the generic Conversations label. GitHub repositories share one owner identity; folders share their declared root (or local root); manual projects share one identity. Each project counts at most once per source even with multiple links. Source selection applies to that identity and is projected through existing source permissions. Board/card/detail descriptors agree; all labels resolve in FR and EN.
+
+```ts
 interface TeamProjectTaskVM {
   id: string; title: string; state: 'open' | 'claimed' | 'working' | 'review' | 'done' | 'blocked';
   column: ProjectStatus; columnLabel: LabelRef; priority: Priority | null;
@@ -681,7 +698,7 @@ Writable flag kinds are **label** (add/remove) and **risk `blocked`** (set/remov
 - **Manifest v2 (R3-08):** the encoding in the proposal §1 is adopted as is: `variants[].gearFree` and `defaultAccessories`; two-layer accessories `layers["<character>"|"<character>/<variant>"][pose] = {back?, front?}` (draw back → body → front; the variant key wins); legacy `images` + `legacy:true` overlays; head `landmarks`; frame loops `{frames, frameMs}`; `seatAnchor`; seated stations `station.seated`. **Facing:** `*-ne`/`*-sw` are pose families chosen inside a station; `station.facing` stays the standing facing.
 - **Accessory precedence (resolved once, server-side):** `rule.accessories` if present (an explicit `[]` = none) → `variant.defaultAccessories` → `[]`. `look.accessories` is final.
 - **Identity (R3-14):** a rule's `agentId` is an `OccupantId`, verbatim (`main`, `subagent:<id>`, `cron:<id>`, `dm:<id>`, `channel:<id>`); defaults are `*subagent`, `*cron`, `*dm`, `*channel`. Matching: exact id → `*<role>` → `*subagent`; `main` has no fallback (the validator requires a `main` rule). A default rule rotates through the character's variants in roster order. Names: an exact rule's `name`, else the source name. `OccupantVM.ruleId` names the rule. The inventory is `LayoutVM.agentsSeen` (storage: `office_agents_seen`, S14b).
-- **Stations and capacity (R3-16):** home kinds are desk, then lounge. Explicit stations first (roster order; the first occupant wins a contested one), then automatic occupants take the first free desk (layout item order), then lounge. None left → `stationUid: null` (overflow: a decorative standing area near the entrance; the occupant keeps its roster place and state). Capacity = desks + lounges.
+- **Stations and capacity (T-0158):** only desks are work homes. Explicit desk assignments resolve first; automatic placement fills desks in layout order. Lounge seats remain valid activity destinations and legacy layout references, but are never counted as home capacity; saved lounge homes migrate to a desk as soon as one is available. When desks are full, `stationUid: null` means overflow (a decorative standing area near the entrance; the occupant keeps its roster place and state). Capacity = desks.
 - **Validator issues** (`validateLayout`, PUT → 400 `validation_failed`, `details[] = {issue, field: 'items.<uid>' | 'agents.<agentId>'}`): `unknown-room`, `manifest-version`, `too-many`, `uid`, `duplicate-uid`, `unknown-asset`, `placement-kind`, `orientation`, `wrong-wall`, `outside`, `occupied`, `unreachable`, `no-desk`, `agent-id`, `duplicate-agent`, `match`, `unknown-character`, `unknown-variant`, `default-station`, `default-name`, `missing-station`, `station-kind`, `station-taken`, `unknown-accessory`, `slot-conflict`, `accessories`, `name-too-long`, `role-too-long`, `no-main`, `no-default`, `theme`, `theme-time`.
 - **Theme (R3-17, final):** `layout.data.theme` is the only owner. The server resolves it on the America/Toronto clock (the night window may wrap midnight), sets `LayoutVM.theme` and pushes the `layout` topic at `nextChangeAt`. A season adds extras on top of the resolved day/night theme. The quick toggle is `PUT /office/layout/theme` (§5.5); on 409 the client re-applies its choice to `current.vm` and resubmits once (accepted).
 - **Destinations and partners (R3-15):** lounge after 10 min idle, swivels and the standing area are client-side decoration only. `OccupantVM.destination` and the cue's `partnerId`/`interactionId` (§4.4) are server-authoritative and stay null/absent until the data exists (activity is run-state only on 2026.9.8). Meeting seats wait for the art (`station.seats`).
@@ -690,7 +707,8 @@ Writable flag kinds are **label** (add/remove) and **risk `blocked`** (set/remov
 ### 3.14 Project candidates (2.1, R7-02)
 `GET /api/v2/views/project-candidates` → `Ok<CandidatesVM>`: a **one-shot GET** (the page's *Actualiser* button), not a topic. The server runs discovery (`proposeCandidates`, projects.md); the browser never calls `gh` or `git`. Authoritative example: `docs/architecture/examples/candidates-vm.json`.
 ```ts
-interface CandidatesVM { scannedAt: Ms; candidates: Collection<CandidateVM> }
+interface CandidatesVM { scannedAt: Ms; candidates: Collection<CandidateVM>;
+  statusOptions?: Collection<{ id: ProjectStatus; label: LabelRef }> }
 interface CandidateVM {
   id: string;                                // = key (Collection identity)
   key: string;                               // what POST /projects/import sends back
@@ -703,6 +721,8 @@ interface CandidateVM {
   lastActivityAt: Ms | null;
 }
 ```
+
+Import's initial stage selector renders CandidatesVM.statusOptions in supplied order, with its exact LabelRefs. suggestedStatus is only the backend-selected initial value; the client does not construct choices or labels from it. The backend clears options when Projects writes/store writes are unavailable. Older payloads that omit the optional options field show a disabled stage selector. The import command continues to enforce permission and validate overrides.
 
 ### 3.15 OfficeCharactersVM (T-0105)
 `GET /api/v2/views/office/characters?scope=office|all&search=<text>` returns the server-built character editor inventory. The same path is available on v3; row roles use that contract's occupant vocabulary. `scope` defaults to `office` (only current office occupants); `all` also includes detected, non-private agent rows. Search, grouping, order, labels, and counts are all projected by the server. The browser renders the returned rows without deriving structure.
@@ -749,13 +769,13 @@ A **topic id** is `name` or `name:<param>` or `name?<k>=<v>[&…]`, with params 
 - **Client rule:** on ordinary topics, apply a delta only if `baseRev` equals the client's revision for that topic. Otherwise call `resync` and ignore deltas for that topic until the snapshot arrives.
 - **GET** responses that back a topic include `meta.topic {id, rev}`. A client may render a GET result and then wait for the snapshot; it must not apply deltas on top of a GET result whose `rev` differs from their `baseRev`.
 - **Entity revisions** (`Project.revision`, `layout.revision`) are unrelated to topic revisions and are used only for command concurrency (§5).
-- **Permission-scoped Projects exception (2.10 / 3.7):** `projects` board and `project:<id>` detail revisions are deterministic safe-integer tokens derived from the exact VM projected for that principal. They are **opaque equality tokens**, not counters: they may decrease, recur, or differ across principals; clients must not order them or infer hidden changes from them. The corresponding GET metadata and SSE snapshot use the same token. These scoped topics send snapshots only, never deltas. A client refreshes/render-replaces on each snapshot and may use token equality only to recognize an unchanged projected payload. This does not change entity `Project.revision` or command `expectedRevision`.
+- **Permission-scoped Projects exception (2.10 / 3.8):** `projects` board and `project:<id>` detail revisions are deterministic safe-integer tokens derived from the exact VM projected for that principal. They are **opaque equality tokens**, not counters: they may decrease, recur, or differ across principals; clients must not order them or infer hidden changes from them. The corresponding GET metadata and SSE snapshot use the same token. These scoped topics send snapshots only, never deltas. A client refreshes/render-replaces on each snapshot and may use token equality only to recognize an unchanged projected payload. This does not change entity `Project.revision` or command `expectedRevision`.
 
 ### 4.4 Frames
 Each frame has `event: <type>`, `id: <streamId>:<seq>` (seq starts at 1 per stream and increases by 1 per frame) and `data: <JSON>`.
 ```ts
 type SseFrame =
-  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.9'; serverTime: Ms; resumed: boolean; topics: string[];
+  | { type: 'hello'; streamId: string; serverEpoch: string; modelVersion: number; contractVersion: '2.10'; serverTime: Ms; resumed: boolean; topics: string[];
       rejected?: { topic: string; issue: 'unknown-topic' }[] /* 2.4: unknown topics asked at open */ }
   | { type: 'snapshot'; topic: string; rev: number; data: unknown }
   | { type: 'delta'; topic: string; rev: number; baseRev: number; ops: DeltaOp[] }
@@ -886,7 +906,7 @@ POST /api/v2/flows/ffffffff-0c01-4000-8000-000000000001/runs  {}
 `POST /api/v2/chat/messages` `{ text: string(1..8000) }` → **202** `Ok<CommandResult<{ turnId: string }>>`.
 - The CLI turn runs in the background, and its progress arrives on the `chat` topic (`turnPending`, then the assistant message or an `error` message).
 - A second POST while a turn is pending → 409 `conflict` (`issue:'turn-pending'`).
-- **S7c:** the chat session is the primary agent's explicit `portal-chat` session (OpenClaw: `agent:<id>:explicit:portal-chat`); `GET /api/v2/views/chat` re-reads its transcript. While pending, the sent message shows as a `user` message with id `pending_<turnId>` until the transcript has it. A failed turn adds an `error` message « La réponse n’a pas pu être obtenue (<category label>) » (label `chat.turnFailed`); a new turn is then accepted.
+- **S7c / T-0159:** each authenticated account gets its own chat history, live topic projection, pending state, and adapter session reference. The account scope is derived server-side from the authenticated user id; callers cannot select another scope. The owner retains the legacy `portal-chat` ref; other accounts receive stable opaque refs. Chat is unavailable (404 `not_found`) unless the adapter declares `chatSessionScope: 'principal'` and can map those refs to distinct conversations. `GET /api/v2/views/chat` re-reads only that account's transcript. While pending, the sent message shows as a `user` message with id `pending_<turnId>` until the transcript has it. A failed turn adds an `error` message « La réponse n’a pas pu être obtenue (<category label>) » (label `chat.turnFailed`); a new turn is then accepted. Explicit Logs/session permissions continue to govern the separate session-history views.
 
 ### 5.3 Data quality and preferences (store)
 | Command | Route | Body | `result` |
@@ -1104,3 +1124,9 @@ The engine projects installed manifest entries, including lazy packs, into secti
 ### OfficePaletteVM — Customize catalogue
 
 `GET /api/v2/views/office/palette?floorId=1&category=&search=` (same v3 path) requires Office read. Bounded selection: valid floor id, category <=64 characters, search <=120. Invalid selections return 400. The engine projects all installed furniture and decoration, including lazy registrations, as `{floorId,categoryId,search,categories:{label:LabelRef,options:[{id,label:LabelRef,count}]},itemIds}`. Empty category means all. Category counts describe the full catalogue; search matches normalized registered names/label/id. The backend owns options, category order, counts, membership and item order. The browser sends selections and maps supplied item IDs to registered display assets only. This static catalogue has no occupant/session data; layout changes retain the existing authenticated floor-scoped write/version API. Examples: `office-palette-vm.json` (v2/v3).
+
+### Project source access display (T-0167)
+
+`ProjectVM.capabilityRows` is an optional backend-ordered collection of `{id, label: LabelRef, valueLabel: LabelRef}`. It describes the effective source/caller/store access after permission projection. Existing scalar `capabilities` remain the command policy flags. Desktop source-access popovers and phone access panes render these rows unchanged; they never infer availability, translate scalar values into labels, or reconstruct row order. An omitted collection renders no rows. Canonical examples: `project-vm.json` and `error-409-project.json`.
+
+`ProjectVM.teamProject.defaultColumnId` optionally supplies the initial phone kanban stage: the first non-empty column in server order, or the first column when all are empty. The client applies this initial scroll position once per team; later user scrolling/selection is presentation state. It never chooses a default by inspecting tasks/counts. `teamProject.mobilePeopleLabel` is an optional backend LabelRef for the short phone action (for example Personnes · 6). Stage chips render the existing column labels/counts and only move the viewport. Canonical navigation fragment (not a standalone VM): `examples/fragments/team-project-navigation.json`; producers assert its two fields against their full TeamProjectVM. Older payloads may omit both; the renderer keeps its natural rail position and existing people label in that case.

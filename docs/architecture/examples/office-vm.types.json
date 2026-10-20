@@ -9,9 +9,11 @@
     "$.occupants[].lastSeenAt",
     "$.occupants[].look.variant",
     "$.occupants[].parentId",
+    "$.occupants[].roleLabel",
     "$.occupants[].parentName",
     "$.occupants[].ruleId",
     "$.occupants[].sessionKey",
+    "$.occupants[].stationUid",
     "$.occupants[].standingPoint",
     "$.occupants[].teamId",
     "$.rosterFloors[].activeCount",
@@ -24,6 +26,8 @@
     "$.visitIntent.speaker",
     "$.occupants[].homeTarget",
     "$.occupants[].sceneTarget",
+    "$.occupants[].sceneTarget.stationUid",
+    "$.occupants[].sceneTarget.seatContact",
     "$.occupants[].activity",
     "$.occupants[].sceneTravel",
     "$.occupants[].communication",
@@ -34,6 +38,8 @@
     "$.journal[].actor.avatarUrl": "string",
     "$.occupants[].execution.evidence.observedAt": "number",
     "$.occupants[].execution.evidence.expiresAt": "number",
+    "$.occupants[].standingPoint": "any",
+    "$.occupants[].parentName": "string",
     "$.rosterFloors[].capacity": "number",
     "$.visitIntent.until": "number",
     "$.occupantOverflowCount": "number"
@@ -94,6 +100,8 @@
     ]
   },
   "additional": {
+    "$.occupants[].visitLabel": { "key": "office.visitingWith", "params": { "name": "Worker" } },
+    "$.occupants[].stateKind": "visitor",
     "$.occupants[].exchanges": {
       "recent": 2,
       "windowMs": 600000,

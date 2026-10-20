@@ -60,18 +60,18 @@ describe('portability · no personal literals (ADR-001 §12.8)', () => {
       assert.ok(allowed, 'an allowed src line to mutate');
       const f1 = path.join(copy, allowed.file);
       fs.writeFileSync(f1, fs.readFileSync(f1, 'utf8').replace(allowed.line, `${allowed.line} const _m = '${TIMMY} au repos'; const _a = '${OWNER}';`));
-      // 2. in a VM builder: the office KPI says the home agent's name
-      const f2 = path.join(copy, 'src', 'api', 'v2', 'vm', 'office.js');
+      // 2. mutate the primary name in the canonical engine Office builder (the path used by mounted routes).
+      const f2 = path.join(copy, 'src', 'engine', 'office', 'base-view.js');
       const office = fs.readFileSync(f2, 'utf8');
       const mutated = office.replace("if (o.role === 'primary') return primaryName || 'Agent principal';", `if (o.role === 'primary') return '${TIMMY} au repos';`);
-      assert.notEqual(mutated, office, 'the VM builder mutation applies');
+      assert.notEqual(mutated, office, 'the engine Office builder mutation applies');
       fs.writeFileSync(f2, mutated);
       const run = (file) => spawnSync(process.execPath, ['--test', file], { cwd: copy, encoding: 'utf8', timeout: 200000,
         env: Object.assign(Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('NODE_TEST'))), { AO_IN_COPY: '1', UPDATE_GOLDEN: '' }) });
       const lint = run('test/portability/no-personal-literals.test.js');
       assert.notEqual(lint.status, 0, 'the lint must fail on the mutated tree');
       assert.match(lint.stdout, new RegExp(allowed.file.replace(/[/.]/g, '\\$&')), 'the lint names the mutated allowed line');
-      assert.match(lint.stdout, /src\/api\/v2\/vm\/office\.js/, 'the lint names the VM builder');
+      assert.match(lint.stdout, /src\/engine\/office\/base-view\.js/, 'the lint names the engine Office builder');
       const e2e = run('test/portability/foreign-instance.test.js');
       assert.notEqual(e2e.status, 0, 'the foreign-instance test must fail on the mutated tree');
       assert.match(e2e.stdout, /✖/);

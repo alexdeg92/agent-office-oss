@@ -37,7 +37,11 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
       if (typeof pane === 'string' && !hostByPane.has(pane)) hostByPane.set(pane, host);
       const sessionRef = h.privateIdentityRefs?.get(host.id);
       if (typeof sessionRef === 'string' && sessionRef) {
-        const key = JSON.stringify([host.runtimeKind, sessionRef]);
+        // Session refs are the adapter-neutral exact identity. Runtime labels on
+        // orchestrator members describe the launching harness (for example an
+        // ACP/native-task mode), while the session itself belongs to the runtime
+        // adapter that indexed it. Resolve by ref and accept only a unique match.
+        const key = sessionRef;
         const rows = hostBySession.get(key) || [];
         rows.push(host); hostBySession.set(key, rows);
       }
@@ -56,7 +60,7 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
       if (!parentRef) return null;
       const parentHost = parentRef.herdrPane ? hostByPane.get(parentRef.herdrPane) : null;
       const rawSessionRef = parentRef.session?.value || (parentHost && h.privateIdentityRefs?.get(parentHost.id));
-      const exactSessions = rawSessionRef ? (sessionRows.get(rawSessionRef) || []).filter(row => row.runtimeKind === parentRef.runtime) : [];
+      const exactSessions = rawSessionRef ? (sessionRows.get(rawSessionRef) || []) : [];
       if (exactSessions.length === 1) return { agentId: null, sessionKey: exactSessions[0].sessionKey, via: 'orchestrator', label: null };
       const currentPaneSession = parentHost && h.privateIdentityRefs?.get(parentHost.id);
       if (parentRef.session?.value && parentRef.session.value !== currentPaneSession) return null;
@@ -78,9 +82,9 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
       const recordedSession = source?.session?.value;
       const runtimeKind = source?.runtime === 'claude' ? 'claude-code' : source?.runtime;
       const sessionMatches = typeof recordedSession === 'string' && recordedSession
-        ? hostBySession.get(JSON.stringify([runtimeKind, recordedSession])) || [] : [];
+        ? hostBySession.get(recordedSession) || [] : [];
       const recordedRuntimeMatches = typeof recordedSession === 'string' && recordedSession
-        ? (sessionRows.get(recordedSession) || []).filter(row => row.runtimeKind === runtimeKind) : [];
+        ? sessionRows.get(recordedSession) || [] : [];
       const paneHost = source?.herdrPane ? hostByPane.get(source.herdrPane) : null;
       const paneSession = paneHost && h.privateIdentityRefs?.get(paneHost.id);
       const paneRuntimeMatches = paneHost && typeof paneSession === 'string' && paneSession
@@ -89,7 +93,7 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
         : recordedRuntimeMatches.length === 0 && paneRuntimeMatches.length === 1 ? paneRuntimeMatches[0] : null;
       if (runtimeMatch) {
         memberSessionKeys[member.id] = runtimeMatch.sessionKey;
-        memberSessionRefs[member.id] = Object.freeze({ runtimeKind: runtimeMatch.runtimeKind,
+        memberSessionRefs[member.id] = Object.freeze({ memberId: member.id, runtimeKind: runtimeMatch.runtimeKind,
           sessionRef: runtimeMatch.sessionRef, sessionKey: runtimeMatch.sessionKey,
           ...(typeof runtimeMatch.agentId === 'string' ? { agentId: runtimeMatch.agentId } : {}) });
       }
@@ -99,7 +103,8 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
       // link the member to a Herdr observation.
       const paneMatch = paneHost || (sessionMatches.length === 1 ? sessionMatches[0] : null);
       const observedSession = paneMatch ? h.privateIdentityRefs?.get(paneMatch.id) : null;
-      const sessionStatus = typeof recordedSession === 'string' && recordedSession && recordedSession === observedSession ? 'known' : 'unknown';
+      const sessionStatus = typeof recordedSession === 'string' && recordedSession
+        && (recordedSession === observedSession || (!paneHost && !!runtimeMatch)) ? 'known' : 'unknown';
       const spawnedBy = lineageFor(source);
       return TeamMember.from({ ...(member.toJSON?.() || member), hostAgentId: paneMatch?.id || member.hostAgentId || null, sessionStatus, spawnedBy });
     }).filter(Boolean);
@@ -140,8 +145,31 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
     // configured readers have delivered their first complete snapshot.
     Object.defineProperty(snapshot, 'sourcesReady', { enumerable: false, value:
       (!herdrReader || h !== null) && (!teamReader || t !== null) });
+    Object.defineProperty(snapshot, 'hostSourceReady', { enumerable: false, value: !herdrReader || h !== null });
+    Object.defineProperty(snapshot, 'teamSourceReady', { enumerable: false, value: !teamReader || t !== null });
+    Object.defineProperty(snapshot, 'privateHostRefs', { enumerable: false, value: Object.freeze(Object.fromEntries(
+      (h?.agents || []).map(row => [row.id, Object.freeze({
+        hostId: row.hostId,
+        runtimeKind: row.runtimeKind,
+        ...(h.privateIdentityRefs?.get(row.id) ? { sessionRef: h.privateIdentityRefs.get(row.id) } : {}),
+        ...(h.privatePaneRefs?.get(row.id) ? { paneRef: h.privatePaneRefs.get(row.id) } : {}),
+      })]))) });
     return Object.freeze(snapshot);
   };
+  async function sendPaneText({ memberId, sessionRef, runtimeKind, text }) {
+    if (!herdrReader || typeof herdrReader.sendPaneText !== 'function' || !teamSnapshot) throw new Error('pane messaging is unavailable');
+    const refs = teamSnapshot.privateMemberRefs || {}, member = refs[memberId];
+    const linked = get().privateMemberSessionRefs?.[memberId];
+    if (!member || typeof member.herdrPane !== 'string' || !member.herdrPane || member.session?.value !== sessionRef ||
+        !linked || linked.sessionRef !== sessionRef || linked.runtimeKind !== runtimeKind) throw new Error('pane identity is not exact');
+    const h = hostSnapshot;
+    const panes = (h?.agents || []).filter(row => h.privatePaneRefs?.get(row.id) === member.herdrPane);
+    if (panes.length !== 1) throw new Error('pane identity is not unique');
+    const pane = panes[0], observedRef = h.privateIdentityRefs?.get(pane.id);
+    if (observedRef !== sessionRef || pane.runtimeKind !== runtimeKind || pane.staleAfter <= now()) throw new Error('pane identity is stale');
+    if (pane.status === 'working') throw Object.assign(new Error('pane is busy'), { code: 'pane_busy' });
+    return herdrReader.sendPaneText(member.herdrPane, text);
+  }
   const start = () => {
     started = true;
     if (herdrReader?.start) herdrReader.start({ onSnapshot: value => publish('host', value) });
@@ -152,6 +180,7 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
   };
   return Object.freeze({
     getSnapshot: get,
+    sendPaneText,
     refresh: async () => {
       const jobs = [];
       if (herdrReader?.refresh) jobs.push(herdrReader.refresh().then(value => publish('host', value)));

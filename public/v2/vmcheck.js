@@ -11,7 +11,6 @@ function defaultReport(where, name, issues) {
   try { (globalThis.__AO_VM_ISSUES ||= []).push({ where, name, issues }); } catch { /* frozen global */ }
 }
 
-/** Turns checking on (dev/test). `validate` is injectable for tests; by default the generated module is loaded. */
 export async function enable({ validate = null, onIssue = null } = {}) {
   validateVM = validate || (await loadModule(() => import('./generated/vm-schemas.js' + buildQuery))).validateVM;
   if (onIssue) report = onIssue;
@@ -19,7 +18,6 @@ export async function enable({ validate = null, onIssue = null } = {}) {
 export function disable() { validateVM = null; report = defaultReport; }
 export const enabled = () => !!validateVM;
 
-/** The schema name for an API path (GETs of the api.md §3 views, meta, me, layout, prefs), else null. */
 export function schemaForPath(path) {
   if (String(path).split('?')[0].replace(/\/+$/, '') === '/api/v3/settings') return 'settings';
   const p = String(path).split('?')[0].replace(/\/+$/, '').replace(/^\/api\/v3(?=\/)/, '/api/v2');   // same routes on both versions
@@ -37,7 +35,6 @@ export function schemaForPath(path) {
   const list = { health: 'health', projects: 'projects', 'project-candidates': 'candidates', logs: 'logs', skills: 'skills', flows: 'flows', access: 'access', office: 'office', chat: 'chat' };
   return one ? single[view] || null : list[view] || null;
 }
-/** The schema name for an SSE topic id (api.md §4.1), else null. */
 export function schemaForTopic(topic) {
   const base = String(topic).split(/[:?]/)[0];
   const param = /^[a-z-]+:/.test(topic);
@@ -45,11 +42,10 @@ export function schemaForTopic(topic) {
   return { health: 'health', projects: 'projects', logs: 'logs', skills: 'skills', flows: 'flows', access: 'access', office: 'office', layout: 'layout', chat: 'chat', prefs: 'prefs' }[base] || null;
 }
 
-/** Checks one VM when checking is on; returns the issues (empty when valid, unknown or off). */
-export function check(name, vm, where) {
+export function check(name, vm, where,apiVersion) {
   if (!validateVM || !name || vm === undefined) return [];
-  if (name !== 'settings' && config.apiVersion !== 2) return [];   // Other v3 views still use contract tests.
-  const r = validateVM(name, vm, name === 'settings' ? 3 : 2);
+  if (apiVersion===undefined && name !== 'settings' && config.apiVersion !== 2) return [];   // Unpinned v3 views still use contract tests.
+  const r = validateVM(name, vm, name === 'settings' ? 3 : apiVersion ?? 2);
   if (r.ok) return [];
   report(where, name, r.issues);
   return r.issues;

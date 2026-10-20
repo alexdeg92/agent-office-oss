@@ -24,14 +24,19 @@ describe('delta diff (§4.5)', () => {
 
   it('the board move of §4.6: remove + count + upsert in the target column, granular for unchanged cards', () => {
     const vm = loadExample('board-vm').data;
-    const card = vm.columns[1].cards[0];
+    const source = vm.columns.find(column => column.cards.length > 0);
+    const target = vm.columns.find(column => column.id !== source?.id);
+    assert.ok(source && target, 'the example supplies a card and a distinct target stage');
+    const card = source.cards[0];
     const next = JSON.parse(JSON.stringify(vm));
-    next.columns[1].cards = []; next.columns[1].count = 0;
-    next.columns[2].cards.unshift(Object.assign({}, card, { status: 'in-progress', revision: card.revision + 1 })); next.columns[2].count++;
+    const nextSource = next.columns.find(column => column.id === source.id);
+    const nextTarget = next.columns.find(column => column.id === target.id);
+    nextSource.cards = []; nextSource.count = 0;
+    nextTarget.cards.unshift(Object.assign({}, card, { status: target.id, revision: card.revision + 1 })); nextTarget.count++;
     const ops = diff(vm, next);
     assert.deepEqual(ops.map((o) => o.op + ' ' + JSON.stringify(o.path)).sort(), [
-      'remove ["columns",{"id":"todo"},"cards"]', 'set ["columns",{"id":"todo"},"count"]',
-      'upsert ["columns",{"id":"in-progress"},"cards"]', 'set ["columns",{"id":"in-progress"},"count"]'].sort());   // field order follows the VM
+      `remove ["columns",{"id":"${source.id}"},"cards"]`, `set ["columns",{"id":"${source.id}"},"count"]`,
+      `upsert ["columns",{"id":"${target.id}"},"cards"]`, `set ["columns",{"id":"${target.id}"},"count"]`].sort());   // field order follows the VM
     assert.deepEqual(apply(vm, ops), next);
   });
 

@@ -5,11 +5,15 @@ const { createFiles, BOUNDS } = require('./files');
 const { PROFILE } = require('./profile');
 const { runFromTranscript, unknownRun, chooseTailsByAgent, transcriptActivity } = require('../transcript-execution');
 const label = key => ({ key: 'settings.claude.' + key });
+const POLL_INTERVAL_MS = 60000, WATCH_DEBOUNCE_MS = 350;
 const defaults = ({ home = path.join(os.homedir(), '.claude'), include = [], exclude = [], agentGrouping = 'project' } = {}) => ({ home, include, exclude, agentGrouping });
 const filters = s.array(s.string().min(1).max(256).refine(v => !/[\x00-\x1f/\\]/.test(v) && !['.', '..'].includes(v), 'project directory key')).max(2000);
 const optionsSchema = s.object({ home: s.string().min(1).max(4096).refine(v => path.isAbsolute(v) && !/[\x00-\x1f]/.test(v), 'absolute directory'),
   include: filters, exclude: filters, agentGrouping: s.enumOf(['project', 'runtime']) }, { extra: 'reject' });
-const definition = { id: 'claude-code', name: 'Claude Code', identity: { sessionRef: 'transcript session id; private cross-source matching only' }, projectSource: { kind: 'runtime', projectRefField: 'projectRef', projectLabelField: 'projectLabel', capabilities: { read: true, write: false, comments: 'unsupported', history: 'unsupported', repository: 'unsupported' } }, mark: { monogram: 'CC', color: '#a34a2c', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' }, gatewayLabel: 'Transcripts', eventPrefix: 'claude.', schemas: {}, routes: {},
+const definition = { id: 'claude-code', name: 'Claude Code', runtimePresentation: { label: { key: 'team.runtime.claudeCode' }, aliases: [
+  { id: 'claude-acp', qualifier: { key: 'team.runtime.transport.acp' } },
+  { id: 'claude-native-task', qualifier: { key: 'team.runtime.transport.nativeTask' } },
+] }, identity: { sessionRef: 'transcript session id; private cross-source matching only' }, projectSource: { kind: 'runtime', projectRefField: 'projectRef', projectLabelField: 'projectLabel', capabilities: { read: true, write: false, comments: 'unsupported', history: 'unsupported', repository: 'unsupported' } }, mark: { monogram: 'CC', color: '#a34a2c', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' }, gatewayLabel: 'Transcripts', eventPrefix: 'claude.', schemas: {}, routes: {},
   normalise: { session: x => ({ session: x }), runtimeHealth: () => ({ version: null, pluginsLoaded: null, eventLoop: null }) }, classifySession: () => ({ kind: 'unrecognized', agentId: null }), presence: 'agents',
   transcriptBounds: { sessions: BOUNDS.cacheSessions, bytes: BOUNDS.cacheBytes },
   capabilities: () => ({ agents: true, sessions: true, transcripts: true, flows: { read: false, write: false }, skills: { list: false, detail: false, toggle: false },
@@ -61,14 +65,68 @@ function selectDueRows({ continuationRows, changedRows, newRows, limit, lastSche
   }
   return chosen;
 }
-function createRuntime(cfg, { now = Date.now } = {}) {
+function createRuntime(cfg, { now = Date.now, pollIntervalMs = POLL_INTERVAL_MS } = {}) {
   const options = defaults(cfg.runtimeConfig?.claudeCode || { home: cfg.claudeHome }), files = createFiles({ ...options, now });
-  let engine, timer, closed = false, cycling = false, retryAt = 0, scanFailures = 0, overflowSeen = 0, healthFailure = null, failureTarget = null;
+  let engine, timer, debounceTimer, scanContinuationTimer, transcriptContinuationTimer, transcriptContinuationAt = 0, transcriptContinuationPending = false, closed = false, cycling = false, retryAt = 0, scanFailures = 0, overflowSeen = 0, healthFailure = null, failureTarget = null;
   const failures = new Set();
-  const last = new Map(), lastScheduled = new Map();
+  const last = new Map(), lastScheduled = new Map(), continuationRetries = new Map();
+  let lastPublishedSignature = null;
   let scheduleSequence = 0;
+  const pendingChangePaths = new Set(); let pendingFullScan = false;
   const loaded = new Set();
   const readRetries = new Map();
+  function scheduleTranscriptContinuation(rows) {
+    if (closed) {
+      clearTimeout(transcriptContinuationTimer);
+      transcriptContinuationTimer = null; transcriptContinuationAt = 0;
+      transcriptContinuationPending = false;
+      return;
+    }
+    const retryAt = rows.reduce((earliest, row) => {
+      if (!row.initialized || row.coverageComplete) return earliest;
+      const retry = continuationRetries.get(row.key)?.at;
+      return Number.isFinite(retry) ? Math.min(earliest, retry) : earliest;
+    }, Infinity);
+    if (!Number.isFinite(retryAt)) {
+      clearTimeout(transcriptContinuationTimer);
+      transcriptContinuationTimer = null; transcriptContinuationAt = 0;
+      return;
+    }
+    if (transcriptContinuationTimer && transcriptContinuationAt <= retryAt) return;
+    clearTimeout(transcriptContinuationTimer);
+    transcriptContinuationAt = retryAt;
+    transcriptContinuationTimer = setTimeout(() => {
+      transcriptContinuationTimer = null; transcriptContinuationAt = 0;
+      if (closed) return;
+      if (now() < retryAt) { scheduleTranscriptContinuation(files.rows()); return; }
+      if (cycling) { transcriptContinuationPending = true; return; }
+      void cycle();
+    }, Math.max(0, retryAt - now()));
+    transcriptContinuationTimer.unref?.();
+  }
+  function scheduleWatchFlush(hooks, delay = WATCH_DEBOUNCE_MS) {
+    if (closed) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => { void flushWatchChanges(hooks); }, delay);
+    debounceTimer.unref?.();
+  }
+  async function flushWatchChanges(hooks) {
+    if (closed) return;
+    if (cycling) { scheduleWatchFlush(hooks, 25); return; }
+    if (pendingFullScan) {
+      pendingFullScan = false;
+      await cycle();
+    } else {
+      const paths = [...pendingChangePaths].slice(0, BOUNDS.cacheSessions);
+      for (const file of paths) {
+        pendingChangePaths.delete(file);
+        await cycle({ path: file });
+        if (closed) return;
+      }
+    }
+    if (!closed) try { hooks.refreshed?.(); } catch {}
+    if (pendingFullScan || pendingChangePaths.size) scheduleWatchFlush(hooks, 25);
+  }
   const report = error => { healthFailure = error.code === 'EFORMAT' ? 'format' : error.code === 'ENOENT' ? 'missing' : 'unreadable'; engine?.notifyHealth?.(); };
   function publishAgents(rows) {
     const grouped = new Map();
@@ -125,14 +183,21 @@ function createRuntime(cfg, { now = Date.now } = {}) {
       failures.add(key); report(error); return { ok: false, category: error.code === 'EFORMAT' ? 'unsupported-format' : 'unreadable' };
     }
   }
-  async function cycle() {
+  async function cycle(change = null) {
     if (closed || cycling) return;
-    engine.expireObservedActivity(); if (now()<retryAt) return;
+    engine.expireObservedActivity(); if (!change && now()<retryAt) return;
     cycling = true;
     try {
-      const rows = await files.scan(); if (closed) return;
+      const changedKey = change?.path ? files.keyForPath(change.path) : null;
+      const changedRow = changedKey ? await files.refresh(changedKey) : null;
+      const rows = changedRow ? files.rows() : await files.scan(); if (closed) return;
       retryAt=0;scanFailures=0;
-      for (const row of rows) { const retry = readRetries.get(row.key); if (retry?.signature && retry.signature !== fileSignature(row)) readRetries.delete(row.key); }
+      for (const row of rows) {
+        const signature = fileSignature(row), retry = readRetries.get(row.key), continuation = continuationRetries.get(row.key);
+        if (retry?.signature && retry.signature !== signature) readRetries.delete(row.key);
+        if (continuation && continuation.signature !== signature) continuationRetries.delete(row.key);
+        if (row.coverageComplete) continuationRetries.delete(row.key);
+      }
       engine.setSourceDown('capacity', !!files.stats.truncated || (files.stats.queueOverflow || 0)>overflowSeen, 'capacity-limited');overflowSeen=files.stats.queueOverflow || 0;
       const keys = new Set(rows.map(r => r.key));
       for (const key of new Set([...last.keys(), ...loaded, ...failures, ...lastScheduled.keys()])) if (!keys.has(key)) { last.delete(key); loaded.delete(key); failures.delete(key); readRetries.delete(key); lastScheduled.delete(key); engine.forgetTranscript(key,{activity:true}); }
@@ -142,21 +207,40 @@ function createRuntime(cfg, { now = Date.now } = {}) {
       // continuation ahead of newly changed files so the next cycle advances
       // its cursor instead of treating the unchanged signature as complete.
       const continuationRows = rows.filter(r => r.initialized && !r.coverageComplete
-        && now()>=(readRetries.get(r.key)?.at || 0));
+        && now()>=(readRetries.get(r.key)?.at || 0) && now()>=(continuationRetries.get(r.key)?.at || 0));
       const changedRows = rows.filter(r => r.initialized && r.coverageComplete
-        && (r.mtime >= now() - 30000 || `${r.dev}:${r.ino}:${r.size}:${r.mtime}` !== last.get(r.key))
+        && `${r.dev}:${r.ino}:${r.size}:${r.mtime}` !== last.get(r.key)
         && now()>=(readRetries.get(r.key)?.at || 0));
       const newRows = rows.filter(r => !r.initialized && now()>=(readRetries.get(r.key)?.at || 0));
       const sortDue = (a, b) => Number(b.mtime >= now() - 30000) - Number(a.mtime >= now() - 30000)
         || b.mtime - a.mtime || a.key.localeCompare(b.key);
-      const due = selectDueRows({ continuationRows, changedRows, newRows,
+      const due = selectDueRows({ continuationRows: changedKey ? continuationRows.filter(r => r.key === changedKey) : continuationRows,
+        changedRows: changedKey ? changedRows.filter(r => r.key === changedKey) : changedRows,
+        newRows: changedKey ? [] : newRows,
         limit: Math.min(BOUNDS.tails, BOUNDS.cacheSessions), lastScheduled, sortDue, now });
       for (const row of due) lastScheduled.set(row.key, ++scheduleSequence);
-      publish(rows); engine.setGatewayConnected(true);
-      for (const r of due) { if (closed) break; if ((await load(r.key, true)).ok) last.set(r.key, `${r.dev}:${r.ino}:${r.size}:${r.mtime}`); }
-      // reads refresh titles, summaries and sub-agent tool-call links (T-0062): republish the whole snapshot
-      if (!closed && due.length) publish(rows);
-    } catch (error) { retryAt=now()+Math.min(30000,2000*2**Math.min(4,scanFailures++));report(error); } finally { cycling = false; }
+      // Register current sessions before transcript reads set their activity evidence.
+      if (due.length) publish(rows);
+      engine.setGatewayConnected(true);
+      for (const r of due) {
+        if (closed) break;
+        const signature = fileSignature(r), result = await load(r.key, true), current = files.rows().find(row => row.key === r.key);
+        if (result.ok) last.set(r.key, signature);
+        if (result.ok && current && !current.coverageComplete) {
+          const prior = continuationRetries.get(r.key), count = prior?.signature === signature ? prior.count : 0;
+          continuationRetries.set(r.key, { signature, count: count + 1, at: now() + Math.min(300000, 2000 * 2 ** Math.min(7, count)) });
+        } else continuationRetries.delete(r.key);
+      }
+      scheduleTranscriptContinuation(rows);
+      // File polling remains frequent, but canonical validation/publication is
+      // quiet until a session changes, arrives, disappears, or advances.
+      const published = JSON.stringify(rows.map(r => [r.key, r.dev, r.ino, r.size, r.mtime, r.initialized, r.coverageComplete, r.agentId, r.projectName, r.displayName]));
+      if (!closed && (due.length || published !== lastPublishedSignature)) { publish(rows); lastPublishedSignature = published; }
+    } catch (error) { retryAt=now()+Math.min(30000,2000*2**Math.min(4,scanFailures++));report(error); } finally {
+      cycling = false;
+      if (transcriptContinuationPending) { transcriptContinuationPending = false; if (!closed) scheduleTranscriptContinuation(files.rows()); }
+      if (!closed && files.stats.scanPending) { clearTimeout(scanContinuationTimer); scanContinuationTimer = setTimeout(() => { void cycle(); }, 25); scanContinuationTimer.unref?.(); }
+    }
   }
   const reads = { transcript: key => load(key), describeSession: async key => ({ ok: !!engine.session(key), category: 'not-found' }) };
   const boundDefinition = { ...definition, health: {
@@ -182,8 +266,8 @@ function createRuntime(cfg, { now = Date.now } = {}) {
   } };
   return { definition: boundDefinition, files, commands: {}, reads,
     attach(value) { engine = value; engine.setReads(reads); },
-    async start(value, hooks = {}) { engine = value; await cycle(); if (closed) return; hooks.refreshed?.(); timer = setInterval(() => { cycle().then(() => hooks.refreshed?.()); }, 2000); timer.unref?.(); },
-    cycle, close() { closed = true; clearInterval(timer); files.close(); engine?.close(); }, refreshFlows: async () => {}, refreshSkills: async () => {} };
+    async start(value, hooks = {}) { engine = value; await cycle(); if (closed) return; hooks.refreshed?.(); files.watch(change => { if (change?.path && pendingChangePaths.size < BOUNDS.sessions) pendingChangePaths.add(change.path); else pendingFullScan = true; scheduleWatchFlush(hooks); }); timer = setInterval(() => { if (cycling) { pendingFullScan = true; scheduleWatchFlush(hooks, 25); } else void cycle().then(() => hooks.refreshed?.()); }, pollIntervalMs); timer.unref?.(); },
+    cycle, close() { closed = true; transcriptContinuationPending = false; clearInterval(timer); clearTimeout(debounceTimer); clearTimeout(scanContinuationTimer); clearTimeout(transcriptContinuationTimer); transcriptContinuationTimer = null; transcriptContinuationAt = 0; files.close(); engine?.close(); }, refreshFlows: async () => {}, refreshSkills: async () => {} };
 }
 const fields = [{ id: 'home', label: label('home'), type: 'text', required: true, writeOnly: false, options: [] },
   ...['include', 'exclude'].map(id => ({ id, label: label(id), type: 'textarea', control: 'chips', required: false, writeOnly: false, options: [] })),

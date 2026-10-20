@@ -97,6 +97,10 @@ function bootFull(env, files) {
     if (!e.code) console.error(e.stack);
     process.exit(1);
   }
+  // Convert the legacy environment owner before deriving runtime instances or
+  // auth policy. Migration 036 is serialized with an atomic marker in the store.
+  const identity=authorizationEnabled||store.rbac.state().owner_user_id?require('./src/security/auth-identity').prepareAuthIdentity({cfg,store}):null;
+  if(identity?.authDatabase&&!cfg.authDatabase)cfg=Object.freeze({...cfg,authDatabase:true});
   if (cfg.authDatabase && !store.setup.reconcile(files.config)) {
     store.close();
     console.warn('Agent Office: database owner setup needs local recovery; use the fresh setup code.');
@@ -131,9 +135,8 @@ function bootFull(env, files) {
 
   // Keep migrated identity validation during owner-only rollback. An env verifier
   // without the persisted identity would accept any previously issued human cookie.
-  const identity=authorizationEnabled||store.rbac.state().owner_user_id?require('./src/security/auth-identity').prepareAuthIdentity({cfg,store}):null;
   const auth = createAuth({ secret: cfg.sessionSecret, ttlMs: cfg.sessionTtlMs, email: cfg.loginEmail, password: cfg.loginPassword, passwordHash: cfg.passwordHash,
-    identity,allowMultiUser:authorizationEnabled,
+    identity,allowMultiUser:authorizationEnabled,allowRecoveryLogin:process.env.PORTAL_RECOVERY_LOGIN==='1',
     credentialGeneration: () => store.users.authGeneration(),
     credential: cfg.authDatabase ? (email) => email == null ? store.users.owner() : store.users.credential(email) : null,
     cookieSecure: cfg.cookieSecure, revocations: store.sessions, audit: (row) => store.audit.append(row), ownerPersonId: () => store.owner.id, throttle });
@@ -183,6 +186,7 @@ function bootFull(env, files) {
         enabled: files.config?.sources?.herdr,
         teamRoot: process.env.AO_TEAM_STORE_ROOT || null,
         readInbox: process.env.AO_TEAM_STORE_READ_INBOX === '1',
+        engine,
         log: entry => console.warn('Agent Office source warning: ' + JSON.stringify(entry)),
         runtimeIdentityAgents: hostId => engine.identityAgents?.(hostId) || [],
         runtimeIdentitySessions: hostId => engine.identitySessions?.(hostId) || [] });

@@ -19,7 +19,7 @@ const legacyCeilings = new Map(Object.entries({
   'pages/flows.js':11, 'pages/health.js':6, 'pages/import.js':13,
   'pages/interlocutor.js':1, 'pages/journaux.js':8, 'pages/login.js':3,
   'pages/placeholder.js':1, 'pages/project-comments.js':8, 'pages/project.js':25,
-  'pages/projects-mobile.js':10, 'pages/projects.js':16, 'pages/session.js':2,
+  'pages/projects.js':16, 'pages/session.js':2,
   'pages/setup-identities.js':1, 'pages/setup-onboarding.js':14, 'pages/setup.js':18,
   'pages/skill.js':3, 'pages/skills.js':6,
 }));

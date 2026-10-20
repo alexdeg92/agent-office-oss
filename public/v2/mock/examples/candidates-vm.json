@@ -2,26 +2,125 @@
   "data": {
     "scannedAt": 1791223100000,
     "candidates": [
-      { "id": "gh:example-org/example-repo", "key": "gh:example-org/example-repo", "name": "Agent Office", "summary": "Tableau de bord des agents.",
-        "suggestedStatus": "in-progress", "confidence": "high", "reason": "Activité dans les 14 derniers jours.",
-        "labels": ["perso"],
-        "sources": [
-          { "kind": "github", "label": "example-org/example-repo", "ref": { "owner": "example-org", "repo": "example-repo" } },
-          { "kind": "workspace", "label": "dev/project/agent-office-redesign", "ref": { "path": "dev/project/agent-office-redesign" } },
-          { "kind": "sessionGroup", "label": "Agent Office", "ref": { "by": "group", "groupId": "Agent Office", "name": "Agent Office" } }
+      {
+        "id": "gh:example-org/example-repo",
+        "key": "gh:example-org/example-repo",
+        "name": "Agent Office",
+        "summary": "Tableau de bord des agents.",
+        "suggestedStatus": "in-progress",
+        "confidence": "high",
+        "reason": "Activité dans les 14 derniers jours.",
+        "labels": [
+          "perso"
         ],
-        "lastActivityAt": 1791223000000 },
-      { "id": "sg:discord-user:100000000000000001", "key": "sg:discord-user:100000000000000001", "name": "Soumissions client", "summary": "",
-        "suggestedStatus": "todo", "confidence": "low", "reason": "Aucune activité depuis plus de 180 jours, et rien n’indique que c’est livré.",
+        "sources": [
+          {
+            "kind": "github",
+            "label": "example-org/example-repo",
+            "ref": {
+              "owner": "example-org",
+              "repo": "example-repo"
+            }
+          },
+          {
+            "kind": "workspace",
+            "label": "dev/project/agent-office-redesign",
+            "ref": {
+              "path": "dev/project/agent-office-redesign"
+            }
+          },
+          {
+            "kind": "sessionGroup",
+            "label": "Agent Office",
+            "ref": {
+              "by": "group",
+              "groupId": "Agent Office",
+              "name": "Agent Office"
+            }
+          }
+        ],
+        "lastActivityAt": 1791223000000
+      },
+      {
+        "id": "sg:discord-user:100000000000000001",
+        "key": "sg:discord-user:100000000000000001",
+        "name": "Soumissions client",
+        "summary": "",
+        "suggestedStatus": "todo",
+        "confidence": "low",
+        "reason": "Aucune activité depuis plus de 180 jours, et rien n’indique que c’est livré.",
         "labels": [],
-        "sources": [ { "kind": "sessionGroup", "label": "discord-user:100000000000000001", "ref": { "by": "interlocutor", "interlocutorId": "discord-user:100000000000000001" } } ],
-        "lastActivityAt": null },
-      { "id": "sg:group:Automations", "key": "sg:group:Automations", "name": "Automations", "summary": "",
-        "suggestedStatus": "in-progress", "confidence": "medium", "reason": "Activité dans les 14 derniers jours.",
+        "sources": [
+          {
+            "kind": "sessionGroup",
+            "label": "discord-user:100000000000000001",
+            "ref": {
+              "by": "interlocutor",
+              "interlocutorId": "discord-user:100000000000000001"
+            }
+          }
+        ],
+        "lastActivityAt": null
+      },
+      {
+        "id": "sg:group:Automations",
+        "key": "sg:group:Automations",
+        "name": "Automations",
+        "summary": "",
+        "suggestedStatus": "in-progress",
+        "confidence": "medium",
+        "reason": "Activité dans les 14 derniers jours.",
         "labels": [],
-        "sources": [ { "kind": "sessionGroup", "label": "Automations", "ref": { "by": "group", "groupId": "Automations", "name": "Automations" } } ],
-        "lastActivityAt": 1791222000000 }
+        "sources": [
+          {
+            "kind": "sessionGroup",
+            "label": "Automations",
+            "ref": {
+              "by": "group",
+              "groupId": "Automations",
+              "name": "Automations"
+            }
+          }
+        ],
+        "lastActivityAt": 1791222000000
+      }
+    ],
+    "statusOptions": [
+      {
+        "id": "idea",
+        "label": {
+          "key": "projectStatus.idea"
+        }
+      },
+      {
+        "id": "todo",
+        "label": {
+          "key": "projectStatus.todo"
+        }
+      },
+      {
+        "id": "in-progress",
+        "label": {
+          "key": "projectStatus.in-progress"
+        }
+      },
+      {
+        "id": "in-review",
+        "label": {
+          "key": "projectStatus.in-review"
+        }
+      },
+      {
+        "id": "shipped",
+        "label": {
+          "key": "projectStatus.shipped"
+        }
+      }
     ]
   },
-  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [] }
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": []
+  }
 }

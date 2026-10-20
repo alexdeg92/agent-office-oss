@@ -22,10 +22,13 @@ const OFFICE_TIMINGS = Object.freeze([
   { key: 'finishedSessionWindowMinutes', env: 'AGENT_OFFICE_SESSION_PRESENCE_WINDOW_MS', default: DEFAULT_SESSION_PRESENCE_WINDOW_MS / 60000, unit: 'ms' },
   { key: 'agentPresenceWindowMinutes', env: 'AGENT_OFFICE_AGENT_PRESENCE_WINDOW_MS', default: DEFAULT_AGENT_PRESENCE_WINDOW_MS / 60000, unit: 'ms' },
   { key: 'idleRelocationMinutes', env: 'AGENT_OFFICE_IDLE_RELOCATION_MINUTES', default: 15, unit: 'minutes' },
+  { key: 'idleTransitionDebounceMs', env: 'AGENT_OFFICE_IDLE_TRANSITION_DEBOUNCE_MS', default: 3_000, unit: 'bounded-ms', minimum: 0, maximum: 15_000 },
 ]);
 function validOfficeEnv(raw, unit) {
   if (raw === undefined || raw === '') return null;
-  const value = Number(raw), minutes = unit === 'ms' ? value / 60000 : value;
+  const value = Number(raw);
+  if (unit === 'bounded-ms') return Number.isSafeInteger(value) && value >= 0 && value <= 15_000 ? value : null;
+  const minutes = unit === 'ms' ? value / 60000 : value;
   return Number.isSafeInteger(value) && Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 1440 ? minutes : null;
 }
 function createSettings({ env, files: initialFiles, cfg, store, auth, controller = null, engine,
@@ -90,7 +93,8 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     const values = officeTimingEntries();
     return { finishedSessionWindowMs: values.finishedSessionWindowMinutes.value * 60000,
       agentPresenceWindowMs: values.agentPresenceWindowMinutes.value * 60000,
-      idleRelocationMinutes: values.idleRelocationMinutes.value };
+      idleRelocationMinutes: values.idleRelocationMinutes.value,
+      idleTransitionDebounceMs: values.idleTransitionDebounceMs.value };
   }
   const currentEnv = () => IC.effectiveEnv(env, files);
   const ownerEnabled = () => cfg.authDatabase && !!store.users.owner();
@@ -298,7 +302,8 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     const office = Object.fromEntries(OFFICE_TIMINGS.map(def => [def.key, { ...field(timingEntries[def.key].value,
       timingEntries[def.key].source === 'env' ? def.env : null,
       timingEntries[def.key].source === 'file', true),
-      ...(!readonly() && timingEntries[def.key].source === 'env' ? { reason: label('office.managed') } : {}), label: label('office.' + def.key), help: label('office.help.' + def.key), minimum: 1, maximum: 1440 }]));
+      ...(!readonly() && timingEntries[def.key].source === 'env' ? { reason: label('office.managed') } : {}), label: label('office.' + def.key), help: label('office.help.' + def.key),
+      minimum: def.minimum ?? 1, maximum: def.maximum ?? 1440 }]));
     return { revision: revision(), readonly: readonly(), disabledReason: readonly() ? label('readonly') : null, reauth: { expiresAt, windowMs: 300000 },
       instance: { name: field(cfg.instanceName || 'Agent Office', 'AO_INSTANCE_NAME', !!conf), locale: field(cfg.instanceLocale.startsWith('en') ? 'en' : 'fr', 'AO_LOCALE', !!conf), timeZone: field(cfg.timeZone, 'AO_TIME_ZONE', !!conf) },
       office,
@@ -314,6 +319,11 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
         status: herdrDetection.status, checkedAt: herdrDetection.checkedAt ?? null },
       runtimes, agents, diagnostics };
   }
+  function recoveryVm(req) {
+    const session=auth.sessionOf(req),user=session&&store.users.byId(session.userId);
+    if(!session?.recoveryOnly||!user||user.id!==store.users.owner()?.id||user.status!=='active')throw new ApiError('unauthorized');
+    return {displayName:store.owner.name,email:user.email,expectedRevision:user.permission_revision};
+  }
   function planBinding(req) {
     const {userId,sessionId,generation,fingerprint}=authorization.reauthentication.identity(req);
     return {userId,sessionId,generation,fingerprint};
@@ -322,7 +332,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     active(req,true);
     const b=body(req.body,command==='password'?['expectedRevision','password']:['expectedRevision','displayName','email']);
     const binding=authorization.reauthentication.requireRecent(req);
-    const ctx={userId:binding.userId,authGeneration:binding.generation,requestId:req.requestId,authorize:()=>active(req,true)};
+    const ctx={userId:binding.userId,authGeneration:binding.generation,requestId:req.requestId,recoveryOnly:auth.sessionOf(req)?.recoveryOnly===true,authorize:()=>active(req,true)};
     let value;
     try {
       if(command==='password') {
@@ -439,11 +449,11 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
         config.instance[key] = value; fields.push('instance.'+key);
       }
       if (b.office !== undefined) {
-        body(b.office, ['finishedSessionWindowMinutes', 'agentPresenceWindowMinutes', 'idleRelocationMinutes']);
+        body(b.office, OFFICE_TIMINGS.map(def => def.key));
         const current = officeTimingEntries(), presence = { ...(config.office?.presence || {}) };
         for (const def of OFFICE_TIMINGS) if (b.office[def.key] !== undefined) {
           const value = b.office[def.key];
-          if (!Number.isInteger(value) || value < 1 || value > 1440) throw invalid('office.' + def.key, 'range');
+          if (!Number.isInteger(value) || value < (def.minimum ?? 1) || value > (def.maximum ?? 1440)) throw invalid('office.' + def.key, 'range');
           envGuard('office.' + def.key, current[def.key].source === 'env' ? def.env : null, value, current[def.key].value);
           presence[def.key] = value; fields.push('office.' + def.key);
         }
@@ -640,7 +650,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     return {ok:true,result,revision:revision(),vm:fresh};
   }
   auth.onRevoke(session => { if (session.allExcept) { for (const sid of confirmations.keys()) if (sid !== session.allExcept) confirmations.delete(sid); } else confirmations.delete(session.sid); });
-  return { vm, run, officeTimings, accessConfig: () => files.config?.access || null, accessRevision: () => files.config?.accessRevision ?? null,
+  return { vm, recoveryVm, run, officeTimings, accessConfig: () => files.config?.access || null, accessRevision: () => files.config?.accessRevision ?? null,
     useAuthorization: value => { if(!value?.reauthentication)throw new Error('shared reauthentication required');authorization=value; }, startDetection: options => discovery.start(options), close: () => { discovery.close(); confirmations.clear(); integration.invalidate(); for (const helper of integrations.values()) helper.invalidate(); planOwners.clear(); }, revision };
 }
 module.exports = { createSettings };

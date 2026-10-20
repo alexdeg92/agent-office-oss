@@ -7,6 +7,11 @@ function mountSettings({ r, settings, auth, authed, ok, check, reauthentication 
     if (req.principal || !session) return next(new ApiError('unauthorized'));
     req.session = session; next();
   };
+  r.get('/settings/recovery', authed, owner, (req,res,next) => {
+    if(!req.session?.recoveryOnly)return next(new ApiError('not_found'));
+    try { return res.json(require('../v2/envelope').okBody({recovery:settings.recoveryVm(req)})); }
+    catch(error){return next(error);}
+  });
   r.get('/settings', authed, owner, (req, res) => ok(res, settings.vm(req), null, 'settings'));
   if (externalAccess) {
     const respond = (res, result) => res.json(require('../v2/envelope').okBody({ ok: true, result, revision: null, vm: null }));

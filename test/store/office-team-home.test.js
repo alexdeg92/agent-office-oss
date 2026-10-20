@@ -163,13 +163,13 @@ test('temporary absence reserves a teammate station and explicit layout stations
 
   const capacityLayout = structuredClone(baseLayout);
   const explicitId = 'agent:capacity-explicit';
-  capacityLayout.agents.push({ agentId: explicitId, character: 'subagent', station: 'st-2' });
+  capacityLayout.agents.push({ agentId: explicitId, character: 'subagent', station: 'floor-2-desk-2', homeFloor: '2' });
   const capacityTeam = Array.from({ length: 7 }, (_, i) => ({ id: i === 1 ? explicitId : `agent:capacity-${i}`,
     role: 'agent', teamId: 'team:capacity', parentId: i ? 'agent:capacity-0' : null, state: 'working' }));
   const capacityPlan = planOfficePlacement({ index, layout: capacityLayout, occupants: capacityTeam,
-    homeAssignments: { [placementToken('team:capacity')]: { floorId: '1', stations: { [placementToken(explicitId)]: 'st-3' } } } });
+    homeAssignments: { [placementToken('team:capacity')]: { floorId: '1', stations: { [placementToken(explicitId)]: 'floor-2-desk-3' } } } });
   const capacityPlacements = capacityPlan.placements;
-  assert.equal(capacityPlacements.find(row => row.id === explicitId).stationUid, 'st-2',
+  assert.equal(capacityPlacements.find(row => row.id === explicitId).stationUid, 'floor-2-desk-2',
     'an occupant keeps its explicit station over its own conflicting saved pin');
   assert.equal(capacityPlacements.filter(row => row.stationUid).length, 7,
     'the explicit station remains available to the full seven-person team');

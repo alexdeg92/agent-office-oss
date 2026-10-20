@@ -98,7 +98,7 @@ async function useMock(scenario, { standalone }) {
 export async function request(method, path, body, { quiet = false, apiVersion, notifyUnauthorized: notifyAuth = true, signal, cache, live = false } = {}) {
   try {
     signal?.throwIfAborted();
-    if (!live && mode === 'mock' && /^\/api\/v[23]\//.test(path)) return checked(method, path, unwrapMock(await (await mock()).handle(method, versioned(path, apiVersion), body)));
+    if (!live && mode === 'mock' && /^\/api\/v[23]\//.test(path)) return checked(method, path, unwrapMock(await (await mock()).handle(method, versioned(path, apiVersion), body)),apiVersion);
     const url = apiUrl(path, apiVersion);
     const options = { method, signal, cache, credentials:'same-origin',
       headers: { accept: 'application/json', 'accept-language': getLang(), ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(method === 'GET' || method === 'HEAD' ? {} : { 'x-ao-request': '1' }) },
@@ -111,7 +111,7 @@ export async function request(method, path, body, { quiet = false, apiVersion, n
     try { json = await res.json(); } catch { /* empty or non-JSON body */ }
     signal?.throwIfAborted();
     if (!res.ok) throw withRetryAfter(toApiError(res.status, json, rid), res, json);
-    return checked(method, path, json);
+    return checked(method, path, json,apiVersion);
   } catch (err) {
     if (err instanceof ApiError) {
       if (err.code === 'unauthorized' && (typeof notifyAuth === 'function' ? notifyAuth(err) : notifyAuth)) for (const fn of authListeners) fn(err);
@@ -121,8 +121,8 @@ export async function request(method, path, body, { quiet = false, apiVersion, n
   }
 }
 /** Dev/test: a GET view model is checked against its schema (vmcheck.js); production never loads the validator. */
-function checked(method, path, json) {
-  if (method === 'GET' && json && json.data !== undefined) vmcheck.check(vmcheck.schemaForPath(path), json.data, 'GET ' + path);
+function checked(method, path, json,apiVersion) {
+  if (method === 'GET' && json && json.data !== undefined) vmcheck.check(vmcheck.schemaForPath(path), json.data, 'GET ' + path,apiVersion);
   return json;
 }
 function unwrapMock({ status, body }) {

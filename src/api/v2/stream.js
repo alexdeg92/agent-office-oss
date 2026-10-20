@@ -44,6 +44,12 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
     if (!permitted && !st.closed) closeStream(st, 'permission-changed');
     return permitted;
   }
+  // A public topic can resolve to a principal-specific projection. Never replay
+  // frames buffered for an older authorization partition after grants change.
+  function sameProjection(st, session) {
+    try { return [...st.topics].every(id => projected(st, id) === resolveTopic(id, session)); }
+    catch { return false; }
+  }
 
   function armDrain(st) {
     // writableLength can fall without a drain event while a large snapshot
@@ -229,7 +235,7 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
       const st = streams.get(m[1]);
       const seq = Number(m[2]);
       const first = st && st.buffer.length ? st.buffer[0].seq : st ? st.seq + 1 : 0;
-      if (st && !st.closed && current(st) && st.sessionKey === sessionKeyOf(session) && (!security || binding.fingerprint===st.binding.fingerprint && binding.userId===st.binding.userId && binding.sessionId===st.binding.sessionId) && st.exp > now() && !st.snapshotWaiting.size && !st.snapshotSending && (st.res || st.disconnectedAt != null && now() - st.disconnectedAt < resumeMs)
+      if (st && !st.closed && current(st) && st.sessionKey === sessionKeyOf(session) && sameProjection(st, session) && (!security || binding.fingerprint===st.binding.fingerprint && binding.userId===st.binding.userId && binding.sessionId===st.binding.sessionId) && st.exp > now() && !st.snapshotWaiting.size && !st.snapshotSending && (st.res || st.disconnectedAt != null && now() - st.disconnectedAt < resumeMs)
           && Number.isSafeInteger(seq) && seq <= st.seq && first <= seq + 1) {
         for (const id of st.topics) if (!authorizeQueuedTopic(st, id)) throw new ApiError('forbidden');
         st.session = req.session || session;

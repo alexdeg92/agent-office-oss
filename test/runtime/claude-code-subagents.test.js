@@ -6,6 +6,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const A = require('../../src/adapters/claude-code');
 const { createEngine } = require('../../src/engine');
 const { buildOfficeVM, createStateTracker } = require('../../src/api/v2/vm/office');
+const { project2x } = require('../../src/api/v2/project2x');
 const { buildSessionVM } = require('../../src/api/v2/vm/logs');
 const { project3x } = require('../../src/api/v2/project3x');
 
@@ -74,7 +75,18 @@ test('a Task sub-agent transcript is a canonical subagent session of its parent,
   const office = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), canReadSessions: true, actorOf: x => x, P: project3x });
   const sub = office.occupants.find(o => o.role === 'subagent');
   assert.ok(sub, 'the working sub-agent is an occupant: ' + JSON.stringify(office.occupants.map(o => [o.id, o.role, o.state])));
-  assert.equal(sub.name, 'Sous-agent', 'a Task description is not presented as a session title');
+  assert.equal(sub.name, '', 'generic sub-agents leave the display name empty so the client can localize it');
+  assert.deepEqual(sub.title, { key: 'occupantRole.subagent' }, 'the OfficeVM carries the generic localized role label');
+  assert.equal(sub.roleLabel, null, 'the OfficeVM omits a role label that would repeat the generic name');
+  const office2x = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), canReadSessions: true, actorOf: x => x, P: project2x });
+  assert.equal(office2x.occupants.find(o => o.role === 'subagent').name, '', 'the v2 Office alias leaves generic display text to the client');
+  assert.deepEqual(office2x.occupants.find(o => o.role === 'subagent').title, { key: 'occupantRole.subagent' });
+  assert.equal(office2x.occupants.find(o => o.role === 'subagent').roleLabel, null);
+  const engineOffice = engine.buildOfficeView({ baseOptions: { now: NOW, tracker: createStateTracker(), canReadSessions: true,
+    actorOf: x => x, P: project3x, P2: project2x, layout: require('../../src/api/v2/vm/office').officeDefaults() } });
+  assert.equal(engineOffice.occupants.find(o => o.role === 'subagent').name, '', 'the engine Office builder leaves generic display text to the client');
+  assert.deepEqual(engineOffice.occupants.find(o => o.role === 'subagent').title, { key: 'occupantRole.subagent' });
+  assert.equal(engineOffice.occupants.find(o => o.role === 'subagent').roleLabel, null);
   assert.equal(JSON.stringify(office).includes('Audit des tests'), false, 'OfficeVM omits the task description');
   assert.equal(JSON.stringify(office).includes('Lis les tests'), false, 'OfficeVM omits the first prompt');
   const agentOccupant = engine.primaryAgent()?.id === parent.class.agentId ? 'primary' : 'agent:' + parent.class.agentId;
@@ -109,17 +121,30 @@ test('security-187: nested sub-agent enumeration is bounded per directory and pe
     for (let i = 0; i < BOUNDS.subagentEntriesPerDir + 50; i++) fs.writeFileSync(path.join(dir, `noise-${i}.jsonl`), '');
   }
   const files = createFiles({ home: h.dir }); t.after(() => files.close());
-  const rows = await files.scan();
-  const topLevel = 1 + 1 + noisyDirs;   // parent transcript + its session dir + the noisy session dirs
-  assert.ok(files.stats.entries <= topLevel + BOUNDS.subagentEntriesPerScan + noisyDirs, `entries visited ${files.stats.entries}`);
+  let rows = await files.scan(), scans = 1;
+  const topLevel = 1 + 1 + 1 + noisyDirs;   // project directory + parent transcript + its session dir + noisy session dirs
+  while (files.stats.scanPending && scans++ < 10) {
+    const before = files.stats.entries;
+    rows = await files.scan();
+    assert.ok(files.stats.entries - before <= BOUNDS.scanEntries, 'each incremental scan stays within its general entry budget');
+  }
+  assert.equal(files.stats.scanPending, false, 'the bounded continuation eventually completes the scan');
+  assert.ok(files.stats.entries <= topLevel + BOUNDS.subagentEntriesPerScan + 1, `entries visited ${files.stats.entries}`);
   assert.equal(files.stats.truncated, true, 'discovery reports truncation');
   assert.equal(files.stats.nestedTruncated, true);
   // the clean directory is enumerated first or last depending on the FS; when inspected, its children are sorted
   const clean = rows.filter(r => r.subagent).map(r => r.subagent);
   if (clean.length) assert.deepEqual(clean, [...clean].sort());
   // a second scan stays within the same bounds (cycles every two seconds)
-  const before = files.stats.entries; await files.scan();
-  assert.ok(files.stats.entries - before <= topLevel + BOUNDS.subagentEntriesPerScan + noisyDirs);
+  const repeatStart = files.stats.entries;
+  let repeatScans = 0;
+  do {
+    const before = files.stats.entries;
+    await files.scan();
+    assert.ok(files.stats.entries - before <= BOUNDS.scanEntries, 'each repeated incremental scan stays within its general entry budget');
+  } while (files.stats.scanPending && repeatScans++ < 10);
+  assert.equal(files.stats.scanPending, false, 'the repeated bounded scan eventually completes');
+  assert.ok(files.stats.entries - repeatStart <= topLevel + BOUNDS.subagentEntriesPerScan + 1);
 });
 
 test('security-187: a clean session keeps all its valid children, sorted, without truncation', async (t) => {
@@ -142,7 +167,7 @@ test('critic-250: one noisy directory is capped locally and does not starve the 
   for (const id of ['aaa', 'bbb']) h.write(`synthetic-project/${PARENT}/subagents/agent-${id}.jsonl`, subRows(id, 'synthetic'));
   const files = createFiles({ home: h.dir }); t.after(() => files.close());
   const rows = await files.scan();
-  const topLevel = 3;   // parent transcript, its session dir, the noisy session dir
+  const topLevel = 4;   // project directory, parent transcript, its session dir, the noisy session dir
   assert.ok(files.stats.entries <= topLevel + BOUNDS.subagentEntriesPerDir + 2 + 1, `entries visited ${files.stats.entries}`);
   assert.equal(files.stats.nestedTruncated, true, 'the noisy directory reports truncation');
   assert.deepEqual(rows.filter(r => r.subagent).map(r => r.subagent).sort(), ['aaa', 'bbb'], 'the other session keeps its children');

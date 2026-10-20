@@ -68,50 +68,41 @@
             "lastActivityAt": 1790856000000,
             "sourceDescriptors": [
               {
-                "id": "src_gh",
+                "id": "source:github:example-org",
                 "kind": "github",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
+                  "key": "project.source.github",
                   "params": {
-                    "label": "example-org/example-repo"
+                    "owner": "example-org"
                   }
                 },
                 "brand": null
               },
               {
-                "id": "src_ws",
+                "id": "source:workspace:local",
                 "kind": "workspace",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
-                  "params": {
-                    "label": "dev/project/agent-office-redesign"
-                  }
+                  "key": "project.source.workspace"
                 },
                 "brand": null
               },
               {
-                "id": "src_sg",
+                "id": "source:sessionGroup",
                 "kind": "sessionGroup",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
-                  "params": {
-                    "label": "Agent Office"
-                  }
+                  "key": "project.source.sessionGroup"
                 },
                 "brand": null
               },
               {
-                "id": "src_man",
+                "id": "source:manual",
                 "kind": "manual",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
-                  "params": {
-                    "label": "manuel"
-                  }
+                  "key": "project.source.manual"
                 },
                 "brand": null
               }
@@ -149,93 +140,75 @@
     "sourceFilterId": null,
     "sourceFilters": [
       {
-        "id": "src_gh",
+        "id": "source:github:example-org",
         "label": {
-          "key": "project.source.label",
+          "key": "project.source.github",
           "params": {
-            "label": "example-org/example-repo"
+            "owner": "example-org"
           }
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_gh",
+          "id": "source:github:example-org",
           "kind": "github",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
+            "key": "project.source.github",
             "params": {
-              "label": "example-org/example-repo"
+              "owner": "example-org"
             }
           },
           "brand": null
         }
       },
       {
-        "id": "src_ws",
+        "id": "source:workspace:local",
         "label": {
-          "key": "project.source.label",
-          "params": {
-            "label": "dev/project/agent-office-redesign"
-          }
+          "key": "project.source.workspace"
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_ws",
+          "id": "source:workspace:local",
           "kind": "workspace",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
-            "params": {
-              "label": "dev/project/agent-office-redesign"
-            }
+            "key": "project.source.workspace"
           },
           "brand": null
         }
       },
       {
-        "id": "src_sg",
+        "id": "source:sessionGroup",
         "label": {
-          "key": "project.source.label",
-          "params": {
-            "label": "Agent Office"
-          }
+          "key": "project.source.sessionGroup"
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_sg",
+          "id": "source:sessionGroup",
           "kind": "sessionGroup",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
-            "params": {
-              "label": "Agent Office"
-            }
+            "key": "project.source.sessionGroup"
           },
           "brand": null
         }
       },
       {
-        "id": "src_man",
+        "id": "source:manual",
         "label": {
-          "key": "project.source.label",
-          "params": {
-            "label": "manuel"
-          }
+          "key": "project.source.manual"
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_man",
+          "id": "source:manual",
           "kind": "manual",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
-            "params": {
-              "label": "manuel"
-            }
+            "key": "project.source.manual"
           },
           "brand": null
         }

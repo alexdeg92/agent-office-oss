@@ -57,7 +57,8 @@
     "interactive": false,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:main:heartbeat",
@@ -117,7 +118,8 @@
     "interactive": false,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:subagent:ffffffff-0001-4000-8000-000000000001",
@@ -182,7 +184,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:subagent:ffffffff-0002-4000-8000-000000000002",
@@ -247,7 +250,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:cron:ffffffff-0c01-4000-8000-000000000001",
@@ -304,7 +308,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:discord:direct:100000000000000001",
@@ -364,7 +369,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:dashboard:ffffffff-da5b-4000-8000-000000000001",
@@ -429,7 +435,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:discord:channel:100000000000000002",
@@ -489,7 +496,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:explicit:portal-chat",
@@ -549,7 +557,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:wechat:group:fake-group",
@@ -609,7 +618,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:claude:acp:ffffffff-acb0-4000-8000-000000000001",
@@ -674,7 +684,8 @@
     "interactive": false,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:main:discord:channel:100000000000000002:heartbeat",
@@ -734,6 +745,7 @@
     "interactive": false,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   }
 ]

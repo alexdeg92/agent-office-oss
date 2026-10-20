@@ -46,11 +46,18 @@ function buildChatVM({ sessionKey, transcript, pending, errors = [], local = [],
       ? resolveSender({ role: 'assistant' }, senderContext) : null);
     const localSender = senderKey(localSenderInfo);
     const echo = transcriptMessages.find(t => !claimed.has(t.id) && t.kind === 'message' && t.role === m.role &&
-      senderKey(t.senderInfo) === localSender && t.text === m.text && t.at >= m.since - 1000);
+      (senderKey(t.senderInfo) === localSender
+        // A principal-scoped chat session has one human owner. When the runtime
+        // omits sender identity, an exact recent message echo belongs to that
+        // account's accepted turn; legacy/shared history never enters this VM.
+        || m.role === 'user' && /^human:unknown:/.test(t.senderInfo?.id || '')
+        || m.role === 'assistant' && t.senderInfo?.id === 'agent:agent' && !t.senderInfo?.delegation)
+      && t.text === m.text && t.at >= m.since - 1000);
     if (!echo) return false;
     claimed.add(echo.id);
     // The portal knows who accepted these recent turns even when the runtime omits human identity.
-    if (m.senderInfo) echo.senderInfo = m.senderInfo;
+    const acceptedSender=m.senderInfo || (m.role === 'assistant' ? resolveSender({ role: 'assistant' }, senderContext) : null);
+    if (acceptedSender) echo.senderInfo = acceptedSender;
     return true;
   };
   for (const m of local) if (!inTranscript(m)) msgs.push(message({ id: m.id, role: m.role, at: m.at, text: m.text, meta: m.meta,

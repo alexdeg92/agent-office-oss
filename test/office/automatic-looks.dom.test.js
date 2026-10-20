@@ -3,9 +3,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
+const os = require('node:os');
 const { launch, findChrome } = require('./helpers/browser');
-const { listMigrations } = require('../../src/store/db');
+const { openDatabase } = require('../../src/store/db');
 const { createOfficeRepo } = require('../../src/store/repos/office');
 const { indexManifest } = require('../../public/v2/office/assets.js');
 const { resolveOccupants } = require('../../public/v2/office/layout-rules.js');
@@ -13,13 +13,15 @@ const manifest = require('../../design/office/manifest.example.json');
 const layout = require('../../design/office/layout.example.json');
 
 test('persisted automatic looks: scene, roster and editor agree; owner edit saves; desktop/mobile captures', { skip: !findChrome(), timeout: 120000 }, async () => {
-  const db = new DatabaseSync(':memory:');
-  for (const m of listMigrations()) db.exec(m.sql);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'office-looks-dom-'));
+  const store = openDatabase({ dir, instance: 'test' });
+  const db = store.db;
   const repo = createOfficeRepo(db);
-  const browser = await launch();
+  let browser;
   const out = process.env.AO_LOOKS_CAPTURE_DIR;
   if (out) fs.mkdirSync(out, { recursive: true });
   try {
+    browser = await launch();
     const p = await browser.page('/public/v2/office/bureau-dev.html?tick=600000&nom=Atlas&scenario=foule');
     await p.waitFor('window.officeBench && document.querySelectorAll(".ao-roster").length === 30');
     const occupants = await p.eval('return (await officeBench.om.officeVM()).occupants;');
@@ -83,5 +85,5 @@ test('persisted automatic looks: scene, roster and editor agree; owner edit save
       fs.writeFileSync(path.join(out, 'mobile-night.png'), await p.screenshot());
     }
     assert.deepEqual(p.logs, []);
-  } finally { await browser.close(); db.close(); }
+  } finally { await browser?.close(); store.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

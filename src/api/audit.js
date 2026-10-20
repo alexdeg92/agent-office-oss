@@ -21,7 +21,7 @@ const AUDITED_COMMANDS = [
     const split=key.indexOf(' ');return {method:key.slice(0,split).toLowerCase(),path:key.slice(split+1),command:()=>spec.command,target:()=>null};
   }),
   ...[...require('../security/route-declarations').ROUTES].filter(([key,spec])=>spec.audit==='transaction').map(([key,spec])=>{
-    const split=key.indexOf(' ');return {method:key.slice(0,split).toLowerCase(),path:'/api/v3'+key.slice(split+1),command:()=>spec.command,target:p=>p.id||null};
+    const split=key.indexOf(' ');return {method:key.slice(0,split).toLowerCase(),path:'/api/v3'+key.slice(split+1),command:()=>spec.command,target:p=>p.id||p.sessionId||null};
   }),
   // API v2 store commands (transport control is never audited, api.md §4.2)
   { method: 'put', path: '/api/v2/health/issues/:id/muted', command: () => 'health.mute', target: (p) => p.id },

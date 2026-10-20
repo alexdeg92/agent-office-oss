@@ -1,0 +1,21 @@
+{
+  "data": {
+    "projectId": "prj_kickoffdemo0001",
+    "status": "queued",
+    "sessionId": "cs_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "turnId": "turn_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    "canRetry": false,
+    "label": {
+      "key": "project.kickoff.queued"
+    }
+  },
+  "meta": {
+    "modelVersion": 1,
+    "generatedAt": 1791223200000,
+    "stale": [],
+    "topic": {
+      "id": "projectKickoff",
+      "rev": 1
+    }
+  }
+}

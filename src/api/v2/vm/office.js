@@ -47,8 +47,12 @@ function createStateTracker() {
   const memberHostSeen = new Map(); // memberId → last known host presence during a short source-row gap
   const visitsByVersion = new Map(); // contract version → conversation id → last safe row retained for the visit lease
   const relocations = new Map(); // occupantId → stable backend-selected activity/scene travel
+  const idleDebounce = new Map(); // canonical placement id → raw observation signature, effective state and pending idle deadline
+  const idleIdentity = id => id === 'main' ? 'primary' : id;
+  const homeAssignments = {}; // unscoped fallback; durable callers supply store-backed assignments
   return {
     relocations,
+    homeAssignments,
     since(id, state, now) {
       const p = seen.get(id);
       if (p && p.state === state) return p.since;
@@ -99,6 +103,61 @@ function createStateTracker() {
     },
     keepHostStates(ids) { const keep = new Set(ids); for (const id of hostSeen.keys()) if (!keep.has(id)) hostSeen.delete(id); },
     keep(ids) { for (const id of [...seen.keys()]) if (!ids.has(id)) seen.delete(id); },
+    debounceIdleTransitions(rows, now, delayMs) {
+      const boundedDelay = Number.isSafeInteger(delayMs) ? Math.max(0, Math.min(15_000, delayMs)) : 3_000;
+      const current = new Set(rows.map(row => idleIdentity(row.id)));
+      for (const id of idleDebounce.keys()) if (!current.has(id)) idleDebounce.delete(id);
+      return rows.map(row => {
+        const id = idleIdentity(row.id), prior = idleDebounce.get(id);
+        // A scoped office projection can re-place the already-suppressed row
+        // from the shared full OfficeVM. Its effective working timestamp is
+        // unchanged, so preserve the pending raw idle observation instead of
+        // treating the derived value as a new runtime observation.
+        const repeatedSuppressedWorking = row.state === 'working' && prior?.pendingUntil
+          && prior.pendingObservation?.state === 'idle' && prior.state === 'working'
+          && row.stateSince === prior.effectiveStateSince;
+        if (repeatedSuppressedWorking) {
+          if (now >= prior.pendingUntil) {
+            idleDebounce.set(id, { state: 'idle', stateSince: prior.pendingSince, atDesk: prior.atDesk,
+              pendingSince: null, pendingUntil: null, pendingObservation: null, effectiveStateSince: prior.pendingSince });
+            return { ...row, state: 'idle', stateSince: prior.pendingSince };
+          }
+          return row;
+        }
+        if (row.state === 'idle' && boundedDelay > 0 && prior?.state === 'working') {
+          // A provider may refresh its observation timestamp while the
+          // canonical state remains idle. Keep the first pending deadline for
+          // that same raw state instead of extending it on every poll.
+          const sameRawObservation = prior.pendingObservation?.state === 'idle';
+          const pendingSince = sameRawObservation && Number.isSafeInteger(prior.pendingSince) ? prior.pendingSince : now;
+          const until = sameRawObservation && Number.isSafeInteger(prior.pendingUntil) ? prior.pendingUntil : pendingSince + boundedDelay;
+          if (now < until) {
+            idleDebounce.set(id, { ...prior, pendingSince, pendingUntil: until,
+              pendingObservation: { state: 'idle', stateSince: row.stateSince }, effectiveStateSince: pendingSince });
+            return { ...row, state: prior.state, stateSince: pendingSince };
+          }
+          idleDebounce.set(id, { state: 'idle', stateSince: pendingSince, atDesk: prior.atDesk, pendingSince: null, pendingUntil: null,
+            pendingObservation: null, effectiveStateSince: pendingSince });
+          return { ...row, state: 'idle', stateSince: pendingSince };
+        }
+        const stateSince = prior?.state === row.state ? prior.stateSince : row.stateSince;
+        idleDebounce.set(id, { state: row.state, stateSince, effectiveStateSince: stateSince, atDesk: prior?.atDesk === true,
+          pendingSince: null, pendingUntil: null, pendingObservation: null });
+        return { ...row, stateSince };
+      });
+    },
+    rememberIdlePlacements(rows) {
+      for (const row of rows) {
+        const id = idleIdentity(row.id), prior = idleDebounce.get(id);
+        if (!prior) continue;
+        idleDebounce.set(id, { ...prior, state: row.state, stateSince: row.stateSince,
+          atDesk: !!row.stationUid && row.sceneTarget?.mode === 'desk' });
+      }
+      while (idleDebounce.size > 2 * MAX_OFFICE_OCCUPANTS) idleDebounce.delete(idleDebounce.keys().next().value);
+    },
+    nextIdleDebounceAt() {
+      return [...idleDebounce.values()].map(row => row.pendingUntil).filter(Number.isSafeInteger).sort((a, b) => a - b)[0] || null;
+    },
     visitRows(rows, now, version) {
       if (!visitsByVersion.has(version)) visitsByVersion.set(version, new Map());
       return projectVisitRows(rows, visitsByVersion.get(version), now);
@@ -124,51 +183,73 @@ function refreshRetainedExecution(row, now) {
 }
 function projectVisitRows(rows, visits, now) {
   const byId = new Map(rows.map(row => [row.id, row]));
-  const host = rows.find(row => row.role === 'primary' || row.role === 'main') || null;
-  if (!host) {
+  const isConversation = row => VISITOR_ROLES.has(row?.role);
+  const hostFor = row => {
+    const linked = typeof row.parentId === 'string' ? byId.get(row.parentId) : null;
+    // A conversation's parent is its canonical owner, resolved from
+    // session.class.agentId before this projection. Spawn/session lineage is
+    // not a substitute, and an unresolved owner must not fall back to Main.
+    return linked && !isConversation(linked) ? linked : null;
+  };
+  const hasHost = rows.some(row => isConversation(row) && hostFor(row))
+    || [...visits.values()].some(saved => byId.has(saved.hostId));
+  if (!hasHost) {
     visits.clear();
     return { occupants: rows.map(({ visitPendingAt, visitUntilAt, ...row }) => row), visitIntent: undefined };
   }
   const liveVisitors = [];
+  const hosts = new Map();
   const retained = new Set();
+  const addVisitor = (row, hostId) => {
+    const visitor = { ...row, stationUid: null, visitPhase: row.visitPhase, visitOnStage: true };
+    liveVisitors.push(visitor);
+    const group = hosts.get(hostId) || [];
+    group.push(visitor.id); hosts.set(hostId, group);
+  };
   const lastAt = row => Math.max(row?.exchanges?.lastAt || 0, row?.lastActivityAt || 0, row?.stateSince || 0);
   for (const row of rows) {
     if (!VISITOR_ROLES.has(row.role)) continue;
+    const hostRow = hostFor(row);
+    if (!hostRow) { visits.delete(row.id); continue; }
     const active = !['idle', 'offline', 'unknown'].includes(row.state);
     const pendingAt = row.visitPendingAt || 0;
     const phase = active ? (pendingAt > (row.exchanges?.lastAt || 0) && now - pendingAt < PERSON_TURN_MS ? 'person' : 'agent')
       : now - lastAt(row) < VISIT_LINGER_MS ? 'linger' : null;
     if (!phase) { visits.delete(row.id); continue; }
-    const visitor = { ...row, stationUid: null, visitPhase: phase, visitOnStage: true };
+    const visitor = { ...row, parentId: hostRow.id, stationUid: null, visitPhase: phase, visitOnStage: true,
+      visitLabel: { key: 'office.visitingWith', params: { name: hostRow.name || '' } } };
     if (phase === 'person') visitor.visitUntilAt = pendingAt + PERSON_TURN_MS;
     else if (phase === 'linger') visitor.visitUntilAt = lastAt(row) + VISIT_LINGER_MS;
     delete visitor.visitPendingAt;
     visitor.visitStateLabel = visitor.stateLabel || { key: `agentState.${visitor.state}` };
     const prior = visits.get(row.id);
     const lastActivityAt = active ? now : Math.max(lastAt(row), prior?.lastActivityAt || 0);
-    visits.set(row.id, { row: visitor, lastActivityAt }); retained.add(row.id); liveVisitors.push(visitor);
+    visits.set(row.id, { row: visitor, hostId: hostRow.id, lastActivityAt }); retained.add(row.id); addVisitor(visitor, hostRow.id);
   }
   for (const [id, saved] of visits) {
-    if (retained.has(id) || byId.has(id) || !VISITOR_ROLES.has(saved.row.role)) continue;
+    if (retained.has(id) || byId.has(id) || !VISITOR_ROLES.has(saved.row.role) || !byId.has(saved.hostId)) continue;
     const old = refreshRetainedExecution(saved.row, now), until = saved.lastActivityAt + VISIT_LINGER_MS;
-    if (now >= until || !host) { visits.delete(id); continue; }
+    if (now >= until) { visits.delete(id); continue; }
     const linger = { ...old, stationUid: null, visitUntilAt: until,
-      visitPhase: 'linger', visitOnStage: true, visitStateLabel: old.visitStateLabel || old.stateLabel || { key: `agentState.${old.state}` } };
-    retained.add(id); liveVisitors.push(linger);
+      parentId: saved.hostId, visitPhase: 'linger', visitOnStage: true,
+      visitLabel: { key: 'office.visitingWith', params: { name: byId.get(saved.hostId)?.name || '' } },
+      visitStateLabel: old.visitStateLabel || old.stateLabel || { key: `agentState.${old.state}` } };
+    retained.add(id); addVisitor(linger, saved.hostId);
   }
-  const visible = rows.filter(row => !VISITOR_ROLES.has(row.role)).map(({ visitPendingAt, visitUntilAt, ...row }) => row)
+  const visible = rows.filter(row => !VISITOR_ROLES.has(row.role) || !hostFor(row)).map(({ visitPendingAt, visitUntilAt, ...row }) => row)
     .concat(liveVisitors.map(({ visitPendingAt, visitUntilAt, ...row }) => row));
-  const groups = liveVisitors.filter(row => row.role === 'group');
   const turns = row => row.exchanges?.recent || 0;
-  const meeting = liveVisitors.length > 1 || groups.length > 0 || liveVisitors.some(row => turns(row) >= MEETING_TURNS);
+  const meeting = liveVisitors.length > 1 || liveVisitors.some(row => row.role === 'group' || turns(row) >= MEETING_TURNS);
   const talker = liveVisitors.find(row => row.visitPhase === 'person');
   const talking = liveVisitors.some(row => row.visitPhase !== 'linger');
   const until = liveVisitors.flatMap(row => [row.visitUntilAt,
     row.execution?.evidence?.level === 'observed' ? row.execution.evidence.expiresAt : null])
     .filter(value => Number.isFinite(value) && value > now);
-  return { occupants: visible, visitIntent: { hostId: host.id, desk: meeting ? [] : liveVisitors.map(row => row.id),
-    meeting: meeting ? [host.id, ...liveVisitors.map(row => row.id)] : [], talking, speaker: talker?.id || (talking ? host.id : null),
-    until: until.length ? Math.min(...until) : null, visitors: liveVisitors.map(row => ({ id: row.id, phase: row.visitPhase, stateLabel: row.visitStateLabel, onStage: row.visitOnStage })) } };
+  const hostGroups = [...hosts].map(([hostId, visitorIds]) => ({ id: hostId, visitorIds }));
+  const hostId = hostGroups.length === 1 ? hostGroups[0].id : null;
+  return { occupants: visible, visitIntent: { hostId, hosts: hostGroups, desk: meeting ? [] : liveVisitors.map(row => row.id),
+    meeting: meeting ? hostGroups.flatMap(group => [group.id, ...group.visitorIds]) : [], talking, speaker: talker?.id || (talking ? hostId : null),
+    until: until.length ? Math.min(...until) : null, visitors: liveVisitors.map(row => ({ id: row.id, hostId: row.parentId, phase: row.visitPhase, stateLabel: row.visitStateLabel, onStage: row.visitOnStage })) } };
 }
 
 // G3b: derived roles are canonical (primary, scheduled, direct, group, conversation); the layout rules still speak 2.x
@@ -213,7 +294,8 @@ function pendingVisitAtOf(transcript) {
 }
 
 function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = officeDefaults(), configuredAgents = {}, canReadSessions = false, P = P2, assignLook,
-  isNewAgent = () => false, presenceWindowMs = DEFAULT_SESSION_PRESENCE_WINDOW_MS, agentPresenceWindowMs = DEFAULT_AGENT_PRESENCE_WINDOW_MS }) {
+  isNewAgent = () => false, presenceWindowMs = DEFAULT_SESSION_PRESENCE_WINDOW_MS, agentPresenceWindowMs = DEFAULT_AGENT_PRESENCE_WINDOW_MS,
+  idleTransitionDebounceMs = 3_000 }) {
   const gw = engine.gateway();
   const sessions = engine.sessions();
   const agents = engine.agents();
@@ -290,7 +372,7 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
     if (o.role === 'agent') { const a = agents.find(a => a.id === o.id.slice(6)); return configuredAgents[a?.id] || a?.name || 'Agent'; }
     const s = sessionFor(o);
     if (o.role === 'scheduled' && s && s.class.cronJobId && names.flowName) return names.flowName(s.class.cronJobId) || 'Tâche planifiée';
-    if (o.role === 'subagent') return runtimeTitle(s) || (s?.class.subagentId && names.agentName?.(s.class.subagentId)) || 'Sous-agent';
+    if (o.role === 'subagent') return titleOf(s?.label) || runtimeTitle(s) || (s?.class.subagentId && names.agentName?.(s.class.subagentId)) || 'Sous-agent';
     if (CHAT_SESSION_KINDS.has(s?.class.kind) && !s.class.channel) return sessionFallbackName(s);
     if (CHAT_SESSION_KINDS.has(s?.class.kind)) return interlocutorName(s) || sessionFallbackName(s);
     // Session titles, summaries, labels, and goals are transcript-derived. The
@@ -328,8 +410,22 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
     const lineage = s?.spawnedBy || a?.spawnedBy || null;
     const ofSession = (key) => (key ? bySession.get(key) || byAgent.get(engine.session(key)?.class.agentId) : null);
     const owner = CONVERSATION_ROLES.has(o.role) && s?.class.agentId ? byAgent.get(s.class.agentId) : null;   // critic-237: never a scheduled task
-    const p = ofSession(s?.parentKey || (s ? childOf.get(s.key) : null)) || ofSession(lineage?.sessionKey) || (lineage?.agentId ? byAgent.get(lineage.agentId) : null) || owner;
-    return p && p !== o.id ? p : null;
+    // Conversation ownership and spawn lineage are distinct relationships.
+    // Resolve the canonical owner directly and never substitute a parent
+    // conversation/session or unrelated primary when that owner is absent.
+    if (CONVERSATION_ROLES.has(o.role)) return owner && owner !== o.id ? owner : null;
+    const p = [s?.parentKey, s ? childOf.get(s.key) : null, lineage?.sessionKey]
+      .map(ofSession).find(parent => parent && parent !== o.id)
+      || (lineage?.agentId ? byAgent.get(lineage.agentId) : null);
+    if (p && p !== o.id) return p;
+    // Gateway lineage can name a transport-level parent which has no office occupant.
+    // A subagent of the primary runtime still belongs under the primary in that case.
+    // Human conversations deliberately do not use this fallback: their owner must resolve exactly.
+    if (o.role === 'subagent' && s?.class.agentId && s.class.agentId === primary?.id) {
+      const primaryOccupant = byAgent.get(primary.id);
+      if (primaryOccupant && primaryOccupant !== o.id) return primaryOccupant;
+    }
+    return null;
   };
   const occupants = derived.map((o, i) => {
     const r = resolved[i];
@@ -337,11 +433,13 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
     ids.add(o.id);
     // a layout rule's own name is user-authored (raw); otherwise the source title
     // every visible name passes the shared redactor too, whatever source (runtime config, layout rule) supplied it
+    const genericSubagent = o.role === 'subagent' && !titleOf(session?.label) && !runtimeTitle(session)
+      && !(session?.class.subagentId && titleOf(names.agentName?.(session.class.subagentId)));
     const baseName = redactText(r.name !== sourceName(o) ? r.name : sourceName(o), { maxLength: 120 }) || 'Agent';
     const folded = baseName.trim().toLocaleLowerCase('en');
     const duplicate = (usedNames.get(folded) || 0) + 1; usedNames.set(folded, duplicate);
     const labelName = duplicate === 1 ? baseName.slice(0, 32) : `${baseName.slice(0, 27)} · ${duplicate}`;
-    const title = named(labelName);
+    const title = genericSubagent ? { key: 'occupantRole.subagent' } : named(labelName);
     // A conversation-shaped backing session can belong to the primary or a named
     // configured agent. Only conversation occupants get the generic Session role;
     // preserve the owning agent's role in both contracts and read-limited views.
@@ -352,7 +450,9 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
       : null;
     // The v2 wire aliases the enum value to `channel`, while the label keeps
     // the distinction needed by clients to treat a coding session as a session.
-    const roleLabel = sessionKind ? { key: 'occupantRole.session', params: { provider } } : P.roleLabel(role, r.roleLabel);
+    // The generic sub-agent title is also the rendered name. Omit the duplicate
+    // role line in the VM so every client can render the card without inference.
+    const roleLabel = genericSubagent ? null : sessionKind ? { key: 'occupantRole.session', params: { provider } } : P.roleLabel(role, r.roleLabel);
     const ownerAgentId = o.role === 'primary' ? primary?.id : o.role === 'agent' ? o.id.slice(6) : null;
     const candidates = ownerAgentId
       ? sessions.filter(x => isStateEvidenceSession(x) && x.class.agentId === ownerAgentId)
@@ -373,7 +473,7 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
     const executionVM = { status: canReadSessions ? execution.status : 'unknown', evidence: canReadSessions
       ? { level: execution.level, observedAt: execution.observedAt, expiresAt: execution.expiresAt }
       : { level: 'unknown', observedAt: null, expiresAt: null } };
-    return { id: P.occupantId(o.id), role, name: labelName, title, roleLabel, state: o.state, stateSince: tracker.since(o.id, o.state, now),
+    return { id: P.occupantId(o.id), role, name: genericSubagent ? '' : labelName, title, roleLabel, state: o.state, stateSince: tracker.since(o.id, o.state, now),
       stationUid: r.stationUid, look: r.look, ...(r.automaticLook && { automaticLook: r.automaticLook }), ruleId: P.layoutRuleId(r.ruleId), destination: null, execution: executionVM,
       sessionKey: canReadSessions ? o.sessionKey : null, tokens: canReadSessions ? o.tokens : 0, lastSeenAt: canReadSessions ? o.lastSeenAt : null,
       ...(summary ? { summary } : {}), ...(canReadSessions && session?.model ? { model: session.model.id } : {}),
@@ -437,10 +537,18 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout = off
   for (const o of occupants) if (!spawned(o)) place(o);
   for (const o of occupants) place(o);
   const visitProjection = tracker.visitRows(listed, now, P.version);
-  const roster = projectOfficeRoster({ connection: { gateway: gw.connected ? 'up' : 'down', since: gw.since }, kpis,
+  const visitPopulation = countOfficePopulation(visitProjection.occupants);
+  const visitUnknown = visitProjection.occupants.some(row => !row.visitPhase && row.state === 'unknown');
+  const projectedKpis = kpis.map(row => row.id !== 'active' ? row : { ...row,
+    value: visitUnknown ? null : visitPopulation.active,
+    sub: visitUnknown ? { key: 'kpi.stateUnknown' } : visitPopulation.active === 0
+      ? { key: 'kpi.idle', params: { agent: primaryName || '' } }
+      : { key: 'kpi.onStage', params: { n: visitPopulation.onStage } } });
+  const roster = projectOfficeRoster({ connection: { gateway: gw.connected ? 'up' : 'down', since: gw.since }, kpis: projectedKpis,
     occupants: visitProjection.occupants, ...(canReadSessions ? { occupantOverflowCount } : {}),
-    visitIntent: visitProjection.visitIntent, journal, layoutRevision: layout.revision, queue });
-  return projectOfficePlacement(roster, { layout: layout.layout, index: layout.index, projectOccupantId: P.occupantId, now, tracker, engine, canReadSessions });
+    ...(visitProjection.visitIntent ? { visitIntent: visitProjection.visitIntent } : {}),
+    journal, layoutRevision: layout.revision, queue });
+  return projectOfficePlacement(roster, { layout: layout.layout, index: layout.index, projectOccupantId: P.occupantId, now, tracker, engine, canReadSessions, idleTransitionDebounceMs });
 }
 
 module.exports = { buildOfficeVM, createStateTracker, officeDefaults, exchangesOf, EXCHANGE_WINDOW_MS };

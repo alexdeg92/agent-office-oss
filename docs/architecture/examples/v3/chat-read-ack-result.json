@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/v3/chat/sessions/cs_Mk9qvR6vX2Z0JspN7xgTgD5Lz9WcB1yK/read",
+    "headers": { "Idempotency-Key": "idem_6pR2vM8xQ4nL0cH7zD1kF5sB9wT3yA6u" },
+    "body": { "throughMessageId": "msg_J3wC8pL1xR6mY9vN2tF5gH0sD4kQ7aB2" }
+  },
+  "response": {
+    "status": 200,
+    "data": { "ok": true, "result": { "unreadCount": 0, "indexRevision": 5, "sessionRevision": 19 }, "revision": null, "vm": null },
+    "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [] }
+  }
+}

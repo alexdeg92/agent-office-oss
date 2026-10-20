@@ -56,13 +56,15 @@ function buildMetaVM3(cfg, { engine = null, locale = 'fr', authenticated = false
   const capabilities = capabilitiesOf(cfg);
   const primary = engine && engine.primaryAgent ? engine.primaryAgent() : null;
   const rt = engine && engine.runtime();
+  const publicCapabilities = value => value?.chat && value.chatSessionScope !== 'principal'
+    ? { ...value, chat: false } : (value || {});
   const base = labelsFor(locale, 3);
   return { bootId: cfg.bootId || BOOT_ID, modelVersion: MODEL_VERSION, apiVersion: 3, contractVersion: CONTRACT_VERSION_V3, serverVersion: PACKAGE_VERSION + '+' + envOf(cfg.instance),
     env: envOf(cfg.instance), capabilities, readonly: !capabilities.openclawWrites,
-    runtime: rt ? Object.assign(runtimeOf(rt, locale), { version: rt.version || null, capabilities: rt.capabilities || {} }) : null,
+    runtime: rt ? Object.assign(runtimeOf(rt, locale), { version: rt.version || null, capabilities: publicCapabilities(rt.capabilities) }) : null,
     runtimes: engine?.runtimes ? engine.runtimes().map(r => ({ id: r.id, adapter: r.adapter, name: r.name || r.adapter, enabled: r.enabled,
-      connection: r.connection, capabilities: r.capabilities || {} })) : rt ? [{ id: 'legacy', adapter: rt.adapterId, name: rt.name,
-        enabled: true, connection: engine.gateway().connected ? 'connected' : 'disconnected', capabilities: rt.capabilities || {} }] : [],
+      connection: r.connection, capabilities: publicCapabilities(r.capabilities) })) : rt ? [{ id: 'legacy', adapter: rt.adapterId, name: rt.name,
+        enabled: true, connection: engine.gateway().connected ? 'connected' : 'disconnected', capabilities: publicCapabilities(rt.capabilities) }] : [],
     primaryAgent: primary ? { id: primary.id, name: primary.name, avatarUrl: null } : null,
     instance: { name: authenticated ? cfg.instanceName || null : null, timeZone: cfg.timeZone || 'UTC', locale: cfg.instanceLocale || 'fr-CA', configured: cfg.configured !== false },
     locale, locales: ['fr', 'en'], labels: Object.assign({}, base, dynamicLabels(engine, base)), enums: ENUMS_V3 };

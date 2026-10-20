@@ -810,7 +810,7 @@ interface LiveEvent {
 
 ## 12. OfficeLayout and customization
 
-**2.1:** office-dev's proposals are adopted (api.md §3.13): rule identity is the `OccupantId` verbatim (`main`, `subagent:<id>`, …; defaults `*<role>`), with `OccupantVM.ruleId`; stations are allocated explicit-first, then desks in item order, then lounges, else overflow (`stationUid: null`); the theme lives only in `data.theme` and gains `season`; the inventory of agents seen in 30 days is persisted (`office_agents_seen`, storage.md). The one implementation of these rules is `public/v2/office/layout-rules.js`.
+**2.1:** office-dev's proposals are adopted (api.md §3.13): rule identity is the `OccupantId` verbatim (`main`, `subagent:<id>`, …; defaults `*<role>`), with `OccupantVM.ruleId`; work homes are desks allocated explicit-first, then in layout order, else overflow (`stationUid: null`). Lounges remain activity destinations and legacy references, not work-home capacity. The theme lives only in `data.theme` and gains `season`; the inventory of agents seen in 30 days is persisted (`office_agents_seen`, storage.md). The one implementation of these rules is `public/v2/office/layout-rules.js`.
 
 The schema is already specified in `design/office/layout.schema.json` (layout) and `manifest.schema.json` (assets). The canonical type mirrors the layout schema exactly, plus storage metadata:
 
@@ -846,7 +846,7 @@ interface OfficeLayoutDataV1 {
   - every `station` is either **`'auto'` / omitted** (automatic allocation) or references an item that has a `station` in the manifest (R3-07). The shipped default layout uses `'auto'` and must pass these same checks; a test validates it;
   - at least one `desk` station exists for the main agent.
 - **Resolution:** `OfficeOccupant.look`, `.name` and `.stationUid` are resolved on the server from the active layout. Rule order is first match wins; `*` default rules rotate variants by occupant order. The client never re-implements this.
-  - **Automatic stations (R3-07, interim):** occupants without a fixed station take the first free station, in layout item order, whose manifest station kind suits the role (desk for every role, then lounge). When none is free, `stationUid` is `null` (overflow: the renderer places the character in a standing area). Final eligibility and capacity rules: pending office-dev's R3-16 proposal.
+  - **Automatic stations (T-0158):** occupants without a fixed desk take the first free desk in layout item order. A legacy saved lounge assignment is treated as a preference that is migrated to a desk; lounges remain interaction/activity destinations. When no desk is free, `stationUid` is `null` (overflow: the renderer places the character in a standing area).
   - **Accessories precedence (R3-08, server-side, decided here):** a rule **omitting** `accessories` gets the variant's manifest `defaultAccessories`. An explicit **`[]`** means none. A non-empty list replaces the defaults. The resolved list in `OccupantVM.look.accessories` is final, and the renderer adds nothing. Manifest encoding of layers and facing: pending office-dev and artist.
 - **Display-only rule:** layout names and roles are never written back to OpenClaw.
 - **Lifecycle:** a default layout (from `layout.example.json`) is seeded on first boot. Saves use `revision` for conflicts (api.md §5). The last 20 revisions are kept for *Annuler*/reset.

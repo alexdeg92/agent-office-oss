@@ -18,7 +18,7 @@ async function fixture(t,{limits}={}) {
   let policy=createAccessBoundary({installationId:store.rbac.state().installation_id,apiPublicUrl:API+'/backend',origins:[ORIGIN,API]});
   const agentGate=createAgentTokenGate({tokens:store.tokens,personOf:id=>store.persons.ensureAgent(id,id).person.id,allowedAgent:()=>engine.agents()[0].id,audit:row=>store.audit.append(row)});
   const tokenGate=createHumanTokenGate({store,auth,boundary:()=>policy,agentGate,limits});
-  const transport=createHumanAuthTransport({store,auth,boundary:()=>policy,me:()=>({})}),runtime={definition:{id:'synthetic'},commands:{}};let api;
+  const transport=createHumanAuthTransport({store,auth,boundary:()=>policy,me:()=>({})}),runtime={definition:{id:'synthetic',sessionKeyFor:(agentId,ref)=>'agent:'+agentId+':explicit:'+ref},commands:{}};let api;
   const app=createApp({readonly:false,apiOnly:true,publicDir:path.resolve('public'),trustProxy:'loopback',routeSecurity:{store,auth},humanTransport:transport,tokenGate,csrf:createCsrfGuard(),audit:auditMiddleware({store,sessionOf:req=>auth.sessionOf(req)}),mountRoutes:app=>{auth.mountRoutes(app,{isGwConnected:()=>false});api=mountV2(app,{store,auth,engine,enforceAuthorization:true,cfg:{instance:'test',dataDir:dir,capture:false,projectsDiscovery:false,timeZone:'UTC',splitAuthEnabled:true,apiPublicUrl:API+'/backend'},runtime});}});
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
   t.after(async()=>{api.close();await api.thread.idle();server.closeAllConnections();await new Promise(r=>server.close(r));store.close();fs.rmSync(dir,{recursive:true,force:true});});

@@ -64,9 +64,9 @@ test('Claude PM, Codex builder, and Cursor critic join by stable member IDs and 
     assert.deepEqual(snapshot.members.map(row => row.hostAgentId).filter(Boolean).length, 3, 'each stable record links to its exact Herdr pane');
     const builder = snapshot.members.find(row => row.id === IDs.builder);
     const critic = snapshot.members.find(row => row.id === IDs.critic);
-    assert.deepEqual(snapshot.privateMemberSessionRefs[IDs.pm], { runtimeKind: 'claude-code', sessionRef: 'session-pm', sessionKey: pmSessionKey,
+    assert.deepEqual(snapshot.privateMemberSessionRefs[IDs.pm], { memberId: IDs.pm, runtimeKind: 'claude-code', sessionRef: 'session-pm', sessionKey: pmSessionKey,
       agentId: 'rt:claude-code:agent:pm' });
-    assert.deepEqual(snapshot.privateMemberSessionRefs[IDs.builder], { runtimeKind: 'codex', sessionRef: 'session-builder',
+    assert.deepEqual(snapshot.privateMemberSessionRefs[IDs.builder], { memberId: IDs.builder, runtimeKind: 'codex', sessionRef: 'session-builder',
       sessionKey: scopedId('codex', 'session', 'builder'), agentId: 'rt:codex:agent:builder' });
     assert.equal(Object.keys(snapshot).includes('privateMemberSessionRefs'), false, 'runtime session refs stay non-enumerable/private');
     assert.equal(builder.parentMemberId, IDs.pm);
@@ -138,9 +138,73 @@ test('registered Claude and Codex session refs remain joinable when the Herdr re
       assert.deepEqual(snapshot.members.map(row => [row.id, row.parentMemberId, row.hostAgentId]).sort((a, b) => a[0].localeCompare(b[0])), [
         [pmId, null, null], [builderId, pmId, null],
       ].sort((a, b) => a[0].localeCompare(b[0])), 'the registered team graph survives without Herdr');
-      assert.deepEqual(snapshot.privateMemberSessionRefs[pmId], { runtimeKind: 'claude-code', sessionRef: 'claude-pm-session', sessionKey: 'rt:claude-code:session:pm', agentId: 'claude-primary' });
-      assert.deepEqual(snapshot.privateMemberSessionRefs[builderId], { runtimeKind: 'codex', sessionRef: 'codex-builder-session', sessionKey: 'rt:codex:session:builder', agentId: 'codex-worker' });
+      assert.deepEqual(snapshot.privateMemberSessionRefs[pmId], { memberId: pmId, runtimeKind: 'claude-code', sessionRef: 'claude-pm-session', sessionKey: 'rt:claude-code:session:pm', agentId: 'claude-primary' });
+      assert.deepEqual(snapshot.privateMemberSessionRefs[builderId], { memberId: builderId, runtimeKind: 'codex', sessionRef: 'codex-builder-session', sessionKey: 'rt:codex:session:builder', agentId: 'codex-worker' });
       assert.equal(Object.keys(snapshot).includes('privateMemberSessionRefs'), false, 'private exact join refs never become enumerable source data');
+    } finally { joined.close(); }
+  } finally { await fs.promises.rm(root, { recursive: true, force: true }); }
+});
+
+test('headless ACP and native-task team members join by exact private session ref across runtime labels', async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ao-headless-acp-team-'));
+  const ids = {
+    lead: 'member:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    claude: 'member:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    codex: 'member:cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  };
+  try {
+    for (const directory of ['members', 'tasks', 'inbox']) await fs.promises.mkdir(path.join(root, directory));
+    const members = [
+      { id: ids.lead, name: 'Atlas', role: 'lead', runtime: 'claude-acp', herdrPane: null,
+        session: { source: 'acp:claude', kind: 'agent_session', value: 'session-atlas' }, spawnedBy: null },
+      { id: ids.claude, name: 'Claude Worker', role: 'engineer', runtime: 'claude-native-task', herdrPane: null,
+        session: { source: 'acp:claude', kind: 'agent_session', value: 'session-claude-worker' }, spawnedBy: ids.lead },
+      { id: ids.codex, name: 'Codex Worker', role: 'engineer', runtime: 'codex-acp', herdrPane: null,
+        session: { source: 'acp:codex', kind: 'agent_session', value: 'session-codex-worker' }, spawnedBy: ids.lead },
+    ];
+    for (const row of members) await fs.promises.writeFile(path.join(root, 'members', `${row.name.replaceAll(' ', '-')}.json`), JSON.stringify(row), { mode: 0o600 });
+    const sessionRows = [
+      { agentId: 'acp-atlas', runtimeKind: 'openclaw', sessionRef: 'session-atlas', sessionKey: 'rt:openclaw:session:atlas' },
+      { agentId: 'claude-native', runtimeKind: 'claude-code', sessionRef: 'session-claude-worker', sessionKey: 'rt:claude-code:session:worker' },
+      { agentId: 'codex-native', runtimeKind: 'codex', sessionRef: 'session-codex-worker', sessionKey: 'rt:codex:session:worker' },
+    ];
+    const at = Date.UTC(2026, 9, 20, 12);
+    const teamStore = { start() {}, stop() {}, refresh: async () => projectSnapshot({ root, now: () => at }) };
+    const joined = createOrchestratorTeamSnapshots({ herdr: null, teamStore, now: () => at,
+      runtimeIdentitySessions: () => sessionRows });
+    try {
+      const snapshot = await joined.refresh();
+      for (const member of members) {
+        const row = snapshot.privateMemberSessionRefs[member.id];
+        assert.ok(row, `${member.runtime} member joins its runtime session`);
+        assert.equal(row.sessionRef, member.session.value);
+        assert.equal(snapshot.members.find(candidate => candidate.id === member.id).sessionStatus, 'known',
+          'a unique exact runtime session establishes member session identity without Herdr');
+      }
+      assert.equal(snapshot.members.find(row => row.id === ids.claude).parentMemberId, ids.lead);
+      assert.equal(snapshot.members.find(row => row.id === ids.codex).parentMemberId, ids.lead);
+      assert.deepEqual(snapshot.members.find(row => row.id === ids.claude).spawnedBy,
+        { agentId: null, sessionKey: sessionRows[0].sessionKey, via: 'orchestrator', label: null });
+
+      const sessions = sessionRows.map((row, index) => ({ key: row.sessionKey,
+        class: { kind: 'acp', agentId: row.agentId }, run: { status: index === 1 ? 'running' : 'succeeded', level: 'verified',
+          observedAt: at - 1000, expiresAt: at + 60_000 }, updatedAt: at - 1000, usage: { total: 0 }, tokensKnown: true }));
+      const office = { occupants: [{ id: 'primary', role: 'primary', name: 'Atlas' }, ...sessions.map(row => ({
+        id: 'session:' + row.key, role: 'conversation', sessionKey: row.key, name: 'Subagent',
+        state: row.run.status === 'running' ? 'working' : 'idle',
+        execution: { status: row.run.status, evidence: { level: row.run.level, observedAt: row.run.observedAt, expiresAt: row.run.expiresAt } },
+        stateSince: row.run.observedAt,
+      }))] };
+      const projected = projectOfficeTeamOccupants(office, snapshot, admin, { sourceEnabled: true, canReadSessions: true,
+        runtimeAgents: [{ id: 'acp-atlas', isPrimary: false }, { id: 'claude-native' }, { id: 'codex-native' }],
+        runtimeIdentitySessions: sessionRows, runtimeSessions: sessions, agentPresenceWindowMs: 60 * 60 * 1000 });
+      const teamOccupants = projected.occupants.filter(row => row.id !== 'primary');
+      assert.equal(teamOccupants.length, 3);
+      assert.deepEqual(teamOccupants.map(row => row.name).sort(), ['Atlas', 'Claude Worker', 'Codex Worker']);
+      assert.equal(teamOccupants.find(row => row.name === 'Claude Worker').state, 'working');
+      assert.equal(teamOccupants.find(row => row.name === 'Codex Worker').state, 'idle');
+      assert.equal(teamOccupants.find(row => row.name === 'Claude Worker').parentId, 'session:rt:openclaw:session:atlas');
+      assert.equal(JSON.stringify(projected).includes('session-claude-worker'), false, 'native refs stay private');
     } finally { joined.close(); }
   } finally { await fs.promises.rm(root, { recursive: true, force: true }); }
 });

@@ -8,6 +8,7 @@ const { executionState } = require('../engine/execution-state');
 const { tagTeamMember, teamMemberId, teamMemberAliases } = require('./v2/vm/office-placement-identity');
 const { projectOfficeRoster } = require('./v2/vm/office-roster');
 const { DEFAULT_AGENT_PRESENCE_WINDOW_MS, isStateEvidenceSession } = require('../engine/derive/occupants');
+const { memberAppearance, allocateMemberAppearances } = require('../engine/office/member-appearance');
 
 const reportRefs = createReportRefIssuer();
 const HOST_EXECUTION = Object.freeze({ working: 'running', idle: 'idle', waiting: 'idle', done: 'succeeded', blocked: 'failed' });
@@ -100,7 +101,7 @@ function projectOfficeOccupant(occupant, hostAgent, identityLink, principal, { s
 // been made from the private exact Herdr pane reference by the source joiner.
 // Reuse an existing runtime occupant only through an exact identity link;
 // otherwise the opaque team member ID is the single office identity.
-function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled = false, runtimeAgents = [], primaryAgentId = null, runtimeIdentitySessions = [], runtimeSessions = [], canReadSessions = false, version = 3, tracker = null, placementOnly = false, agentPresenceWindowMs = DEFAULT_AGENT_PRESENCE_WINDOW_MS } = {}) {
+function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled = false, runtimeAgents = [], primaryAgentId = null, runtimeIdentitySessions = [], runtimeSessions = [], canReadSessions = false, version = 3, tracker = null, placementOnly = false, agentPresenceWindowMs = DEFAULT_AGENT_PRESENCE_WINDOW_MS, index = null, assignMemberAppearances = null } = {}) {
   if (!sourceEnabled || (!placementOnly && (!principal || !can(principal, 'orchestrators'))) ||
       !office || !Array.isArray(office.occupants) || !snapshot) return office;
   const mayReadTeam = placementOnly || can(principal, 'teams');
@@ -254,8 +255,8 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
   const membersWithChildren = new Set(teamMembers.map(member => member?.parentMemberId).filter(Boolean));
   const roleKindFor = member => member?.roleKind === 'lead' || member?.roleKind === 'member'
     ? member.roleKind : member?.parentMemberId ? 'member' : membersWithChildren.has(member?.id) ? 'lead' : 'unknown';
-  const leadMembers = teamMembers.filter(member => roleKindFor(member) === 'lead');
-  const leadMember = leadMembers.length === 1 ? leadMembers[0] : null;
+  const teamOf = member => member?.teamId || snapshot.team?.id || null;
+  const leadMembersFor = member => teamMembers.filter(candidate => teamOf(candidate) === teamOf(member) && roleKindFor(candidate) === 'lead');
   for (const member of teamMembers) {
     const hostId = member?.hostAgentId;
     const exactSessionKey = snapshot.privateMemberSessionKeys?.[member.id];
@@ -264,7 +265,10 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
     const candidateHost = hostId && hosts.get(hostId);
     const memberRefKey = exactSessionIdentity ? JSON.stringify([exactSessionIdentity.runtimeKind, exactSessionIdentity.sessionRef]) : null;
     const paneRefs = seenHostRefs.get(hostId) || new Set();
-    const seenRef = memberRefKey || null;
+    // The same pane/session may be registered in multiple teams. Exact
+    // session refs allow distinct member records to aggregate memberships;
+    // host-only rows are ambiguous, so keep at most one per pane.
+    const seenRef = memberRefKey ? `${member.id}|${memberRefKey}` : 'host-only';
     // Duplicate records for one exact member/pane are one source row. Distinct
     // refs on a reused pane remain separate, but status is assigned only to the
     // member identified by the exact host↔runtime link.
@@ -289,6 +293,8 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
       ? identityMatchesMember && !paneHasAmbiguousNativeIdentity : !paneHasMultipleMembers) ? candidateHost : null;
     const sessionMatches = exactSessionKey ? occupantsBySessionKey.get(exactSessionKey) || [] : [];
     const roleKind = roleKindFor(member);
+    const leadMembers = leadMembersFor(member);
+    const leadMember = leadMembers.length === 1 ? leadMembers[0] : null;
     const inferredParentAmbiguous = roleKind === 'member' && !member.parentMemberId && leadMembers.length !== 1;
     const parentMemberId = member.parentMemberId || (roleKind === 'member' && leadMember?.id !== member.id ? leadMember?.id : null);
     // Limited Office VMs deliberately omit session keys. A unique exact
@@ -345,23 +351,54 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
       ? office.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary')) || null : null;
     const id = canonicalPrimary?.id || runtimeOccupant?.id || 'team-member:' + member.id;
     occupantForMember.set(member.id, id);
-    selectedMembers.push({ member, host, id, roleKind, parentMemberId, inferredParentAmbiguous, runtimeOccupant, activityOccupant, canonicalPrimary,
+    const sessionAgentOccupant = runtimeSession && sessionAgentId && sessionAgentId !== primaryAgentId
+      ? office.occupants.find(row => row.id === 'agent:' + sessionAgentId && row.role === 'agent') || null : null;
+    selectedMembers.push({ member, host, id, roleKind, parentMemberId, inferredParentAmbiguous, runtimeOccupant, activityOccupant, canonicalPrimary, sessionAgentOccupant,
       exactSessionKey, exactSessionIdentity, hostIdentity, matchingSessionOccupants, runtimeSession });
   }
   const templ = office.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary')) || office.occupants[0] || null;
   if (!templ) return office;
+  const primary = office.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'));
+  const primaryFloor = primary?.floorId ?? primary?.floor ?? null;
+  const primaryLook = primary?.look || null;
+  const reservedLooks = office.occupants.filter(row => row === primary || (primaryFloor !== null
+    && (row.floorId ?? row.floor) === primaryFloor)).map(row => row.look).filter(Boolean);
+  const fallbackMembers = selectedMembers.filter(({ canonicalPrimary, runtimeOccupant, sessionAgentOccupant }) => {
+    if (canonicalPrimary) return false;
+    const look = (sessionAgentOccupant || runtimeOccupant)?.look;
+    const character = typeof look?.character === 'string' ? index?.characters?.get?.(look.character) : null;
+    if (look && look.character !== primary?.look?.character && character?.role !== 'main') {
+      reservedLooks.push(look);
+      return false;
+    }
+    return true;
+  }).map(({ member }) => member.id);
+  const memberLookMap = typeof assignMemberAppearances === 'function'
+    ? assignMemberAppearances(fallbackMembers, index, { reservedLooks, primaryLook })
+    : Object.fromEntries(allocateMemberAppearances(fallbackMembers, index, { reservedLooks, primaryLook }));
   const additions = [];
   const updates = new Map();
   const consumed = new Set();
-  for (const { member, host, id, roleKind, parentMemberId, inferredParentAmbiguous, runtimeOccupant, activityOccupant, canonicalPrimary,
+  for (const { member, host, id, roleKind, parentMemberId, inferredParentAmbiguous, runtimeOccupant, activityOccupant, canonicalPrimary, sessionAgentOccupant,
     exactSessionKey, exactSessionIdentity, hostIdentity, matchingSessionOccupants, runtimeSession } of selectedMembers) {
     const safeMemberName = redactChatIdentity(member.name, { role: 'conversation', maxLength: 120 }) || 'Agent';
-    const runtimeSessionName = canReadSessions && runtimeSession?.summarySource === 'runtime'
-      ? redactChatIdentity(runtimeSession.displayName, { role: 'conversation', maxLength: 120 }) : null;
+    const sourceOccupant = runtimeOccupant || canonicalPrimary;
+    const appearanceOccupant = sessionAgentOccupant || sourceOccupant;
+    const primaryLook = office.occupants.find(row => row.role === (version === 2 ? 'main' : 'primary'))?.look;
+    const resolvedLook = appearanceOccupant?.look;
+    const resolvedCharacter = typeof resolvedLook?.character === 'string' ? index?.characters?.get?.(resolvedLook.character) : null;
+    const resolvedLookIsMemberSpecific = resolvedLook && resolvedLook.character !== primaryLook?.character && resolvedCharacter?.role !== 'main';
+    // A runtime-linked member already has a canonical Office occupant and its
+    // resolved look. Preserve that stable member appearance; only synthesize
+    // one from the member ID when the exact Office join has no safe look.
+    const appearance = canonicalPrimary ? null : resolvedLookIsMemberSpecific
+      ? { look: resolvedLook, ...(appearanceOccupant.automaticLook ? { automaticLook: appearanceOccupant.automaticLook } : {}) }
+      : (typeof assignMemberAppearances === 'function'
+        ? (memberLookMap[member.id] ? { look: memberLookMap[member.id], automaticLook: memberLookMap[member.id] } : null)
+        : memberAppearance(member.id, index, { primaryLook }));
     const parentId = parentMemberId ? occupantForMember.get(parentMemberId) : null;
     const sessionAgentId = runtimeSession?.class?.agentId || exactSessionIdentity?.agentId || hostIdentity?.agentId;
     if (sessionAgentId && absorbedAgents.has(sessionAgentId) && id !== 'agent:' + sessionAgentId) consumed.add('agent:' + sessionAgentId);
-    const sourceOccupant = runtimeOccupant || canonicalPrimary;
     if (sourceOccupant && existing.has(id)) {
       for (const duplicate of matchingSessionOccupants) if (duplicate.id !== id) {
         const duplicateAgentId = duplicate.id.startsWith('agent:') ? duplicate.id.slice('agent:'.length) : null;
@@ -383,10 +420,14 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
         return { ...safe, sessionKey: null, tokens: 0, lastSeenAt: null };
       })();
       const displayIdentity = canonicalPrimary;
-      const displayName = runtimeSessionName || (displayIdentity ? displayIdentity.name : safeMemberName) || safeMemberName;
-      updates.set(id, { ...safeRuntimeOccupant, id,
+      // Registered team data owns team-member names. Runtime session titles
+      // may be generated from transcript content, so never promote them into
+      // the Office projection, even after an exact private session join.
+      const displayName = safeMemberName;
+      updates.set(id, tagTeamMember({ ...safeRuntimeOccupant, id,
         ...(displayIdentity ? { name: displayName, title: { key: 'sessionTitle.named', params: { name: displayName } },
           look: displayIdentity.look, ...(displayIdentity.automaticLook ? { automaticLook: displayIdentity.automaticLook } : {}), ruleId: displayIdentity.ruleId } : {}),
+        ...(!displayIdentity && appearance ? { look: appearance.look, automaticLook: appearance.automaticLook } : {}),
         ...presence,
         // A team lead is not necessarily the instance's primary agent. Preserve
         // primary/main only when this exact session was folded into that row;
@@ -396,7 +437,7 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
         roleLabel: { key: 'occupantRole.' + (displayIdentity ? (version === 2 ? 'main' : 'primary') : roleKind === 'lead' ? 'agent' : 'subagent') },
         ...(version === 3 && host ? { hostAgentId: host.id, hostRole: host.role, hostStatus: host.status } : {}),
         parentId: parentId && parentId !== id ? parentId : null, parentAmbiguous: inferredParentAmbiguous,
-        teamId: mayReadTeam ? snapshot.team?.id || null : null });
+        teamId: mayReadTeam ? member.teamId || snapshot.team?.id || null : null }, member.id));
       continue;
     }
     // A host-only/team lead must not create a second primary in the OfficeVM.
@@ -405,9 +446,9 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
     const presence = memberPresenceWithGrace(host, canReadSessions ? activityOccupant : null,
       snapshot.observedAt, tracker, member.id, host?.id || id);
     const execution = presence.execution;
-    additions.push({ id, role, name: safeMemberName, title: { key: 'sessionTitle.named', params: { name: safeMemberName } },
+    additions.push(tagTeamMember({ id, role, name: safeMemberName, title: { key: 'sessionTitle.named', params: { name: safeMemberName } },
       roleLabel: { key: 'occupantRole.' + role },
-      stationUid: null, look: templ.look, ...(templ.automaticLook ? { automaticLook: templ.automaticLook } : {}), ruleId: templ.ruleId,
+      stationUid: null, look: appearance?.look || null, ...(appearance?.automaticLook ? { automaticLook: appearance.automaticLook } : {}), ruleId: null,
       destination: null, sessionKey: canReadSessions ? runtimeOccupant?.sessionKey || null : null,
       tokens: canReadSessions ? runtimeOccupant?.tokens || 0 : 0, lastSeenAt: canReadSessions ? runtimeOccupant?.lastSeenAt || host?.observedAt || snapshot.observedAt : host?.observedAt || snapshot.observedAt,
       ...(canReadSessions && runtimeOccupant?.model ? { model: runtimeOccupant.model } : {}),
@@ -419,7 +460,7 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
       execution, state: presence.state, stateSince: presence.stateSince,
       ...(version === 3 && host ? { hostAgentId: host.id, hostRole: host.role, hostStatus: host.status } : {}),
       parentId: parentId && parentId !== id ? parentId : null, parentAmbiguous: inferredParentAmbiguous,
-      teamId: mayReadTeam ? snapshot.team?.id || null : null });
+      teamId: mayReadTeam ? member.teamId || snapshot.team?.id || null : null }, member.id));
   }
   // A fresh, exact runtime↔pane identity link is live process presence even if
   // transcript evidence has gone quiet. Use it only for host-authorized office
@@ -439,9 +480,10 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
     const state = execution.status === 'running' ? 'working' : execution.status === 'failed' ? 'error'
       : execution.status === 'succeeded' || execution.status === 'idle' ? 'idle' : 'unknown';
     const stateSince = tracker?.hostStateSince?.(host.id, state, host.observedAt) ?? host.observedAt;
+    const appearance = memberAppearance('host-agent:' + host.id, index);
     additions.push({ id, role, name, title: { key: 'sessionTitle.named', params: { name } }, roleLabel: { key: 'occupantRole.' + role },
-      state, stateSince, stationUid: null, look: templ.look, ...(templ.automaticLook ? { automaticLook: templ.automaticLook } : {}),
-      ruleId: templ.ruleId, destination: null, sessionKey: null, tokens: 0, lastSeenAt: host.observedAt,
+      state, stateSince, stationUid: null, look: appearance?.look || null, ...(appearance?.automaticLook ? { automaticLook: appearance.automaticLook } : {}),
+      ruleId: null, destination: null, sessionKey: null, tokens: 0, lastSeenAt: host.observedAt,
       execution, ...(version === 3 ? { hostAgentId: host.id, hostRole: host.role, hostStatus: host.status } : {}) });
     representedOccupants.add(id);
   }
@@ -473,18 +515,42 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
     return office;
   }
   const occupants = [...office.occupants.filter(row => !consumed.has(row.id) || updates.has(row.id)).map(row => updates.get(row.id) || row), ...additions];
-  const result = projectOfficeRoster(refreshOfficePopulation({ ...office, occupants }));
+  // A canonical occupant may be registered in more than one team. Preserve
+  // every membership while selecting a deterministic primary team for the
+  // single-parent roster tree; never duplicate the runtime occupant by team.
+  const membershipsByOccupant = new Map();
+  for (const selected of selectedMembers) {
+    const rows = membershipsByOccupant.get(selected.id) || [];
+    rows.push(selected); membershipsByOccupant.set(selected.id, rows);
+  }
+  const membershipByOccupant = new Map([...membershipsByOccupant].map(([id, rows]) => [id,
+    rows.sort((a, b) => String(teamOf(a.member)).localeCompare(String(teamOf(b.member))) || a.member.id.localeCompare(b.member.id))]));
+  const withMemberships = occupants.map(row => {
+    const memberships = membershipByOccupant.get(row.id);
+    if (!memberships?.length) return row;
+    const primary = memberships[0];
+    const teamIds = [...new Set(memberships.map(item => teamOf(item.member)).filter(value => typeof value === 'string'))];
+    const parentId = primary.parentMemberId ? occupantForMember.get(primary.parentMemberId) || null : null;
+    return { ...row, teamId: teamOf(primary.member), teamIds, parentId: parentId && parentId !== row.id ? parentId : null,
+      parentAmbiguous: primary.inferredParentAmbiguous === true };
+  });
+  const result = projectOfficeRoster(refreshOfficePopulation({ ...office, occupants: withMemberships }));
   tagProjectedTeamMembers(result.occupants, selectedMembers);
   return result;
 }
 
 function tagProjectedTeamMembers(rows, selectedMembers) {
   const byAlias = new Map();
-  for (const selected of selectedMembers) for (const alias of memberAliases(selected)) if (alias) byAlias.set(alias, selected);
-  for (const row of rows) {
+  const orderedMembers = selectedMembers.slice().sort((a, b) => String(a.member.teamId || '').localeCompare(String(b.member.teamId || ''))
+    || a.member.id.localeCompare(b.member.id));
+  for (const selected of orderedMembers) for (const alias of memberAliases(selected)) if (alias && !byAlias.has(alias)) byAlias.set(alias, selected);
+  rows.forEach((row, index) => {
     const selected = byAlias.get(row.id);
-    if (selected) tagTeamMember(row, selected.member.id, memberAliases(selected));
-  }
+    if (selected) {
+      const tagged = tagTeamMember({ ...row, memberId: selected.member.id }, selected.member.id, memberAliases(selected));
+      rows[index] = tagged;
+    }
+  });
 }
 
 function memberAliases(selected) {
@@ -572,11 +638,13 @@ function projectTeamBoard(snapshot, principal, { sourceEnabled = false, runtimeB
   if (!sourceEnabled) return null;
   const canResolve = can(principal, 'teams.report.resolve');
   const brands = new Map((Array.isArray(runtimeBrands) ? runtimeBrands : []).filter(row => row && typeof row.id === 'string')
-    .map(row => [row.id, row.brand || null]));
+    .map(row => [row.id, { brand: row.brand || null, label: row.label || { key: 'team.runtime.other' }, qualifier: row.qualifier || null }]));
   return {
     team: { id: snapshot.team.id, label: snapshot.team.label, status: snapshot.team.status },
-    members: (snapshot.members || []).map((m) => ({ id: m.id, name: m.name, roleKind: m.roleKind || 'unknown', roleLabel: m.roleLabel ?? null, status: m.status, runtimeKind: m.runtimeKind ?? null,
-      ...(brands.has(m.runtimeKind) ? { brand: brands.get(m.runtimeKind) } : {}),
+    members: (snapshot.members || []).map((m) => ({ id: m.id, name: m.name, roleKind: m.roleKind || 'unknown', roleLabel: m.roleLabel ?? null, status: m.status,
+      statusLabel: { key: m.sessionStatus === 'unknown' ? 'team.member.sessionUnknown' : `team.member.status.${m.status || 'unknown'}` }, runtimeKind: m.runtimeKind ?? null,
+      runtimeLabel: brands.get(m.runtimeKind)?.label || { key: 'team.runtime.other' }, runtimeQualifierLabel: brands.get(m.runtimeKind)?.qualifier || null,
+      ...(brands.get(m.runtimeKind)?.brand ? { brand: brands.get(m.runtimeKind).brand } : {}),
       hostAgentId: can(principal, 'orchestrators') ? m.hostAgentId ?? null : null,
       parentMemberId: m.parentMemberId ?? null,
       ...(can(principal, 'orchestrators') ? { sessionStatus: m.sessionStatus || 'unknown' } : {}),

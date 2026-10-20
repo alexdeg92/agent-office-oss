@@ -69,6 +69,47 @@ function createMultiRuntimeController({ cfg: initial, store, cliEnv, resolveAdap
     });
     const engine = createMultiEngine({ instances, primary: next.primaryAgent, timeoutMs, liveState, core,
       persistAliases: store.runtimeAliases ? (hashes, overflow) => store.runtimeAliases.remember(hashes, overflow) : null });
+    const runtimeDescriptor = instance => {
+      if (!instance?.engine) return null;
+      const descriptor = instance.engine.runtime(), source = instance.runtime?.conversations, fileSource=instance.runtime?.attachmentFiles;
+      const declared = descriptor.capabilities?.conversations || {}, conversations = {};
+      for (const [method, capability] of [['send','send'],['history','read'],['subscribe','events']]) {
+        if (typeof source?.[method] !== 'function' || declared[capability] !== true) continue;
+        conversations[method] = async args => {
+          const owner = typeof args?.agentId === 'string' ? parseId(args.agentId, 'agent') : null;
+          if (owner && owner.runtime !== instance.id) return { ok: false, failed: 'wrong-runtime' };
+          if (method === 'send' && (cfg.readonly || declared.send !== true)) return { ok: false, failed: cfg.readonly ? 'readonly' : 'capability-unavailable' };
+          if (current && !current.instances.includes(instance) || instance.stopped || instance.failure) return { ok: false, failed: 'unavailable' };
+          const mapped = owner ? { ...args, agentId: owner.local } : args;
+          const result = await engine.bounded(instance, () => source[method](mapped), Math.max(timeoutMs, method === 'send' ? 15000 : timeoutMs));
+          return result?.ok === false && !result.failed && result.category
+            ? { ...result, failed: result.category === 'timeout' ? 'timeout' : 'unavailable' } : result;
+        };
+      }
+      const attachmentFiles={};
+      if(typeof fileSource?.canStage==='function')attachmentFiles.canStage=args=>{
+        const owner=typeof args?.agentId==='string'?parseId(args.agentId,'agent'):null;
+        if(owner&&owner.runtime!==instance.id||current&&!current.instances.includes(instance)||instance.stopped||instance.failure)return false;
+        return fileSource.canStage(owner?{...args,agentId:owner.local}:args);
+      };
+      for(const method of ['stage','remove','prune'])if(typeof fileSource?.[method]==='function')attachmentFiles[method]=async args=>{
+        const owner=typeof args?.agentId==='string'?parseId(args.agentId,'agent'):null;
+        if(owner&&owner.runtime!==instance.id)return method==='canStage'?false:method==='prune'?0:false;
+        if(current&&!current.instances.includes(instance)||instance.stopped||instance.failure)return method==='canStage'?false:method==='prune'?0:false;
+        const mapped=owner?{...args,agentId:owner.local}:args;
+        return engine.bounded(instance,()=>fileSource[method](mapped),Math.max(timeoutMs,method==='stage'?15000:timeoutMs));
+      };
+      return { ...descriptor, ...(Object.keys(conversations).length ? { conversations } : {}), ...(Object.keys(attachmentFiles).length?{attachmentFiles}:{}) };
+    };
+    // The canonical engine chooses the owning partition first. Attach only that
+    // partition's conversation methods so gateway/native IDs never fan out.
+    engine.runtimeFor = key => runtimeDescriptor(engine.owner(key, 'agent').instance);
+    engine.runtimeForInstance = key => runtimeDescriptor(instances.find(i => i.enabled && i.id === key));
+    const baseRuntime = engine.runtime.bind(engine);
+    engine.runtime = () => {
+      const selected = parseId(engine.primaryAgent()?.id, 'agent')?.runtime;
+      return runtimeDescriptor(instances.find(i => i.enabled && i.id === selected) || instances.find(i => i.enabled && i.runtime && !i.failure)) || baseRuntime();
+    };
     const chosen = () => {
       const primary = parseId(engine.primaryAgent()?.id, 'agent');
       return instances.find(i => i.enabled && i.id === primary?.runtime) || instances.find(i => i.enabled && i.runtime && !i.failure);
@@ -102,7 +143,11 @@ function createMultiRuntimeController({ cfg: initial, store, cliEnv, resolveAdap
       if (name === 'agentTurn' && args[0]?.background) args[0] = { ...args[0],
         canDispatch: () => !cfg.readonly && !i.stopped && current?.instances.includes(i) && i === primaryInstance() };
       if (args[0]?.runtimeId) { args[0] = { ...args[0] }; delete args[0].runtimeId; }
-      const result = await engine.bounded(i, () => i.runtime.commands[name](...args));
+      // An agent turn carries its own adapter timeout and runs for minutes; the
+      // short read budget would abandon a turn the runtime is still answering.
+      const turnMs = Number.isSafeInteger(args[0]?.timeoutMs) && args[0].timeoutMs > 0 ? args[0].timeoutMs : 150000;
+      const bounded = await engine.bounded(i, () => i.runtime.commands[name](...args), name === 'agentTurn' ? Math.max(timeoutMs, turnMs + 30000) : timeoutMs);
+      const result = bounded?.ok === false && !bounded.failed && bounded.category ? { ...bounded, failed: bounded.category === 'timeout' ? 'killed-or-timeout' : 'unavailable' } : bounded;
       try { return result?.jobId ? { ...result, jobId: scopedId(i.id, 'flow', result.jobId) } : result; }
       catch { i.engine.quarantine.record({channel:'canonical.flows',code:'shape.invalid',severity:'error',path:'$.canonical.cronJob.id'});return{ok:false,failed:'unavailable',category:'invalid-identity'}; }
     } : undefined });

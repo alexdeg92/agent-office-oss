@@ -1,0 +1,4 @@
+{
+  "request": { "headers": { "Idempotency-Key": "idem_4kqN3mV9R2xL7pA5dT8cY1wF6hB0sJ3z" }, "body": { "text": "Compare ces options", "attachmentIds": ["att_P4gN8xv2LmQ6cR0yK1zD5sW9hT3aB7uE"] } },
+  "response": { "status": 202, "data": { "ok": true, "result": { "turnId": "turn_R8mK3vW6xN1dP5qZ2aF9sH4yB7cL0tU9x" }, "revision": null, "vm": null }, "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [] } }
+}

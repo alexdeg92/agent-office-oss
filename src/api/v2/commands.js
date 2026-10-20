@@ -15,12 +15,13 @@ const { LABELS } = require('../../i18n/fr');
 const { humanPerson } = require('../../security/request-actor');
 const { resolveSender } = require('../../engine/model/sender');
 const { runAuthorized } = require('../../security/dispatch-context');
+const { CHAT_REF } = require('../chat-constants');
+const { scopeForAccount, sessionRefForScope, supportsPrincipalChat } = require('../chat-identity');
 
 const FLOW_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 const SKILL_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;   // no '.': the name becomes a config path segment
 const CRON_FIELD = /^[0-9A-Za-z*/,\-]+$/;
 const RESTART_COOLDOWN_MS = 2 * 60 * 1000;
-const CHAT_REF = 'portal-chat';
 const CHAT_TIMEOUT_MS = 150000;
 
 const TZS = (() => { try { return new Set(Intl.supportedValuesOf('timeZone').concat(['UTC'])); } catch (_) { return new Set(['UTC']); } })();
@@ -73,12 +74,17 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
 
   // R22-05 (api-v3.md D1): a command the adapter DECLARES unavailable doesn't exist on this instance: 404 not_found, before
   // the read-only guard, whatever functions the adapter happens to have.
-  const CAPS = { flowWrite: (c) => !!(c.flows && c.flows.write), skillToggle: (c) => !!(c.skills && c.skills.toggle), chat: (c) => !!c.chat, restart: (c) => !!c.restart };
+  const CAPS = { flowWrite: (c) => !!(c.flows && c.flows.write), skillToggle: (c) => !!(c.skills && c.skills.toggle),
+    // A shared runtime chat session is unsafe in a multi-user installation.
+    // Adapters opt into portal chat only when they can make a stable distinct
+    // session for each authenticated account.
+    chat: supportsPrincipalChat, restart: (c) => !!c.restart };
   const targetRuntime = req => {
-    const wire=req.params.jobId || req.params.name || req.body?.agentId;
-    const kind=req.params.jobId?'flow':req.params.name?'skill':'agent';
-    const key=wire?resolveWireId(engine,wire,kind,req.apiVersion):primary();
-    return req.body?.runtimeId && engine.runtimeForInstance ? engine.runtimeForInstance(req.body.runtimeId) : engine.runtimeFor ? engine.runtimeFor(key) : engine.runtime();
+    const params=req?.params||{},body=req?.body||{};
+    const wire=params.jobId || params.name || body.agentId;
+    const kind=params.jobId?'flow':params.name?'skill':'agent';
+    const key=wire?resolveWireId(engine,wire,kind,req?.apiVersion):primary();
+    return body.runtimeId && engine.runtimeForInstance ? engine.runtimeForInstance(body.runtimeId) : engine.runtimeFor ? engine.runtimeFor(key) : engine.runtime();
   };
   const capable = (name) => (req, res, next) => CAPS[name](targetRuntime(req)?.capabilities || {}) ? next() : next(new ApiError('not_found'));
 
@@ -185,63 +191,93 @@ function mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, v
   });
 
   // ---- chat: an async agent turn; progress on the `chat` topic ---------------------------------------------------
-  let pending = null;            // { turnId, since, text }
-  const errors = [];             // failed turns (role 'error'), newest last, at most 20
-  const local = [];              // R15-03: finished turns' messages, shown until the transcript confirms them (≤ 40)
-  // R22-07: the chat belongs to the resolver's primary; without one there is no chat (503 agent-unknown), never a guess
-  const chatKey = () => {
+  const chatStates = new Map(); // authenticated-account scope → isolated pending/errors/local transcript overlay
+  const chatOperators = new Map(); // authenticated-account scope → canonical Person used for transcript echoes
+  const identifyChatSession = session => {
+    const scope = scopeForAccount(session?.userId, store);
+    if (!chatOperators.has(scope)) {
+      const user = session?.userId && store?.users?.byId?.(session.userId);
+      const person = user && store?.persons?.list?.().find(row => row.id === user.person_id);
+      const owner = store?.users?.owner?.();
+      const singleOwner = scope === scopeForAccount(null, store);
+      chatOperators.set(scope, person || (singleOwner || owner && user?.id === owner.id ? store?.persons?.owner?.() || store?.owner : null));
+    }
+    return scope;
+  };
+  const identifyChatRequest = req => identifyChatSession({ userId: req?.user?.id || req?.session?.userId || req?.principal?.id || null });
+  const chatStateFor = scope => {
+    if (!chatStates.has(scope)) chatStates.set(scope, { pending: null, errors: [], local: [] });
+    return chatStates.get(scope);
+  };
+  // R22-07: every account chats with the resolver's primary, but through its
+  // own adapter-declared session identity. No account key is accepted from the
+  // request body or topic query.
+  const chatKey = scope => {
     const agentId = needPrimary();
-    const known = engine.sessions().find((s) => s.class.kind === 'explicit' && s.class.explicitKey === CHAT_REF && s.class.agentId === agentId);
+    const ref = sessionRefForScope(scope);
+    const known = engine.sessions().find((s) => s.class.kind === 'explicit' && s.class.explicitKey === ref && s.class.agentId === agentId);
     if (known) return known.key;
     const def = runtime && runtime.definition;
-    return def && def.sessionKeyFor ? def.sessionKeyFor(agentId, CHAT_REF) : CHAT_REF;
+    if (!def?.sessionKeyFor) throw new ApiError('not_found');
+    const key = def.sessionKeyFor(agentId, ref, { purpose: 'chat', ownerScope: scope });
+    if (!key || typeof key !== 'string') throw new ApiError('not_found');
+    return key;
   };
-  topics.define('chat', { build: () => buildChatVM({ sessionKey: chatKey(), transcript: engine.transcript(chatKey()), pending, errors, local,
+  const chatTopic = scope => 'chat?scope=' + encodeURIComponent(scope);
+  topics.define('chat', { params: ['scope'], build: ({ scope }) => {
+    if (!supportsPrincipalChat(targetRuntime({params:{},body:{}})?.capabilities || {})) throw new ApiError('not_found');
+    if (!/^[a-f0-9]{64}$/.test(String(scope || ''))) throw new ApiError('not_found');
+    const state = chatStateFor(scope), key = chatKey(scope);
+    return buildChatVM({ sessionKey: key, transcript: engine.transcript(key), pending: state.pending, errors: state.errors, local: state.local,
     avatarFor: views?.chatAvatarFor,
-    senderContext: { runtime: runtime?.definition?.id || 'generic', operator: store?.owner,
+    senderContext: { runtime: runtime?.definition?.id || 'generic', operator: chatOperators.get(scope) || null,
       agent: (() => { const a = engine.primaryAgent(); return a ? { ...a, id: 'agent:' + a.id } : null; })(),
-      people: store?.persons.senderPeople?.() || store?.persons.list() || [], sessionOf: key => engine.session(key) } }) });
-  r.get('/views/chat', authed, async (req, res) => {
-    const key = chatKey();
+      people: store?.persons.senderPeople?.() || store?.persons.list() || [], sessionOf: sessionKey => engine.session(sessionKey) } });
+  } });
+  r.get('/views/chat', authed, capable('chat'), async (req, res) => {
+    const scope = identifyChatRequest(req), key = chatKey(scope);
     req.authorize?.();
     if (views && engine.session(key)) await runAuthorized(req.authorize,()=>views.pull('transcript', key, {}, { force: true }));
-    const t = topics.current('chat', req.apiVersion); ok(res, t.vm, { id: t.id, rev: t.rev });
+    const t = topics.current(chatTopic(scope), req.apiVersion); ok(res, t.vm, { id: 'chat', rev: t.rev });
   });
   r.post('/chat/messages', authed, capable('chat'), guard('openclaw'), (req, res) => {
     noExtra(req.body, ['text']);
     const text = req.body.text;
     if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw invalid('text', 'length');
-    if (pending) throw new ApiError('conflict', { details: [{ issue: 'turn-pending' }] });
+    const scope = identifyChatRequest(req), state = chatStateFor(scope), key = chatKey(scope), ref = sessionRefForScope(scope);
+    if (state.pending) throw new ApiError('conflict', { details: [{ issue: 'turn-pending' }] });
     const turn = need('agentTurn');
     const agentId = needPrimary();
     const turnId = 'turn_' + crypto.randomBytes(8).toString('hex');
     req.authorize?.();
-    const senderInfo = resolveSender({ role: 'user' }, { runtime: runtime?.definition?.id || 'generic',
-      operator: store ? store.persons.list().find(p => p.id === humanPerson(req, store)) : null });
-    pending = { turnId, since: now(), text, senderInfo };
+    const acceptedPersonId=humanPerson(req,store),acceptedPerson=store?.persons?.list?.().find(p=>p.id===acceptedPersonId)||null;
+    if(acceptedPerson)chatOperators.set(scope,acceptedPerson);
+    const senderInfo = resolveSender({ role: 'user' }, { runtime: runtime?.definition?.id || 'generic', operator: acceptedPerson });
+    state.pending = { turnId, since: now(), text, senderInfo };
     topics.invalidate('chat');
     res.status(202);
     ok(res, result({ turnId }));
-    const sent = pending;
-    Promise.resolve().then(() => runAuthorized(req.authorize,()=>turn({ agentId, text, sessionRef: CHAT_REF, timeoutMs: CHAT_TIMEOUT_MS }))).then((x) => {
+    const sent = state.pending;
+    Promise.resolve().then(() => runAuthorized(req.authorize,()=>turn({ agentId, text, sessionRef: ref, timeoutMs: CHAT_TIMEOUT_MS }))).then((x) => {
       // R15-03: the sent message and a successful reply are kept until the transcript shows them
-      local.push({ id: 'sent_' + turnId, role: 'user', at: sent.since, since: sent.since, text: sent.text, senderInfo: sent.senderInfo, meta: null });
-      if (!x.failed && x.text) local.push({ id: 'reply_' + turnId, role: 'assistant', at: Math.max(now(), sent.since + 1), since: sent.since, text: x.text,
+      state.local.push({ id: 'sent_' + turnId, role: 'user', at: sent.since, since: sent.since, text: sent.text, senderInfo: sent.senderInfo, meta: null });
+      if (!x.failed && x.text) state.local.push({ id: 'reply_' + turnId, role: 'assistant', at: Math.max(now(), sent.since + 1), since: sent.since, text: x.text,
         meta: x.meta ? { model: x.meta.model, tokens: x.meta.tokens, durationMs: x.meta.durationMs } : null });
-      while (local.length > 40) local.shift();
+      while (state.local.length > 40) state.local.shift();
       if (x.failed) {
-        errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] + ' (' + (LABELS['sourceError.' + x.failed] || x.failed) + ')' });
-        if (errors.length > 20) errors.shift();
+        state.errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] + ' (' + (LABELS['sourceError.' + x.failed] || x.failed) + ')' });
+        if (state.errors.length > 20) state.errors.shift();
       }
-    }).catch(() => { errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] }); if (errors.length > 20) errors.shift(); })
+    }).catch(() => { state.errors.push({ id: 'err_' + turnId, at: now(), text: LABELS['chat.turnFailed'] }); if (state.errors.length > 20) state.errors.shift(); })
       .finally(async () => {
-        if (live(req) && views) { try { await runAuthorized(req.authorize,()=>views.pull('transcript', chatKey(), {}, { force: true })); } catch (_) { /* shown on the next read */ } }
-        pending = null;
+        if (live(req) && views) { try { await runAuthorized(req.authorize,()=>views.pull('transcript', key, {}, { force: true })); } catch (_) { /* shown on the next read */ } }
+        state.pending = null;
         topics.invalidate('chat');
       });
   });
 
-  return { chatState: () => ({ pending, errors: errors.slice() }) };
+  return { chatState: (scope = scopeForAccount(store?.users?.owner?.()?.id, store)) => { const state = chatStateFor(scope); return { pending: state.pending, errors: state.errors.slice() }; }, identifyChatSession,
+    chatAvailable: req => supportsPrincipalChat(targetRuntime(req || {params:{},body:{}})?.capabilities || {}) };
 }
 
 module.exports = { mountCommands, RESTART_COOLDOWN_MS, CHAT_REF };

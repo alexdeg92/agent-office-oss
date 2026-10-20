@@ -6,7 +6,17 @@
       {
         "id": "idea",
         "count": 0,
-        "cards": []
+        "cards": [],
+        "label": {
+          "key": "projectStatus.idea"
+        },
+        "taskCount": 0,
+        "summaryLabel": {
+          "key": "project.board.column.summary",
+          "params": {
+            "n": 0
+          }
+        }
       },
       {
         "id": "todo",
@@ -69,9 +79,20 @@
               "comments": "read-write",
               "history": "read-write",
               "repository": "read-only"
-            }
+            },
+            "cover": null
           }
-        ]
+        ],
+        "label": {
+          "key": "projectStatus.todo"
+        },
+        "taskCount": 1,
+        "summaryLabel": {
+          "key": "project.board.column.summary",
+          "params": {
+            "n": 1
+          }
+        }
       },
       {
         "id": "in-progress",
@@ -85,7 +106,7 @@
             "status": "in-progress",
             "thumb": {
               "kind": "opengraph",
-              "url": "https://images.example.invalid/example-org/example-repo.png",
+              "url": "https://opengraph.githubassets.com/1/example-org/example-repo",
               "repoLabel": "example-org/example-repo",
               "initials": "AO",
               "accent": "indigo"
@@ -129,50 +150,41 @@
             "lastActivityAt": 1791223000000,
             "sourceDescriptors": [
               {
-                "id": "src_gh",
+                "id": "source:github:example-org",
                 "kind": "github",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
+                  "key": "project.source.github",
                   "params": {
-                    "label": "example-org/example-repo"
+                    "owner": "example-org"
                   }
                 },
                 "brand": null
               },
               {
-                "id": "src_ws",
+                "id": "source:workspace:local",
                 "kind": "workspace",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
-                  "params": {
-                    "label": "dev/project/agent-office-redesign"
-                  }
+                  "key": "project.source.workspace"
                 },
                 "brand": null
               },
               {
-                "id": "src_sg",
+                "id": "source:sessionGroup",
                 "kind": "sessionGroup",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
-                  "params": {
-                    "label": "Agent Office"
-                  }
+                  "key": "project.source.sessionGroup"
                 },
                 "brand": null
               },
               {
-                "id": "src_man",
+                "id": "source:manual",
                 "kind": "manual",
                 "runtime": null,
                 "label": {
-                  "key": "project.source.label",
-                  "params": {
-                    "label": "manuel"
-                  }
+                  "key": "project.source.manual"
                 },
                 "brand": null
               }
@@ -191,117 +203,216 @@
               "comments": "read-write",
               "history": "read-write",
               "repository": "read-only"
-            }
+            },
+            "cover": null
           }
-        ]
+        ],
+        "label": {
+          "key": "projectStatus.in-progress"
+        },
+        "taskCount": 1,
+        "summaryLabel": {
+          "key": "project.board.column.summary",
+          "params": {
+            "n": 1
+          }
+        }
       },
       {
         "id": "in-review",
         "count": 0,
-        "cards": []
+        "cards": [],
+        "label": {
+          "key": "projectStatus.in-review"
+        },
+        "taskCount": 0,
+        "summaryLabel": {
+          "key": "project.board.column.summary",
+          "params": {
+            "n": 0
+          }
+        }
       },
       {
         "id": "shipped",
         "count": 0,
-        "cards": []
+        "cards": [],
+        "label": {
+          "key": "projectStatus.shipped"
+        },
+        "taskCount": 0,
+        "summaryLabel": {
+          "key": "project.board.column.summary",
+          "params": {
+            "n": 0
+          }
+        }
       }
     ],
     "sourceFilterId": null,
     "emptyStateLabel": null,
     "sourceFilters": [
       {
-        "id": "src_gh",
+        "id": "source:github:example-org",
         "label": {
-          "key": "project.source.label",
+          "key": "project.source.github",
           "params": {
-            "label": "example-org/example-repo"
+            "owner": "example-org"
           }
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_gh",
+          "id": "source:github:example-org",
           "kind": "github",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
+            "key": "project.source.github",
             "params": {
-              "label": "example-org/example-repo"
+              "owner": "example-org"
             }
           },
           "brand": null
         }
       },
       {
-        "id": "src_ws",
+        "id": "source:workspace:local",
         "label": {
-          "key": "project.source.label",
-          "params": {
-            "label": "dev/project/agent-office-redesign"
-          }
+          "key": "project.source.workspace"
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_ws",
+          "id": "source:workspace:local",
           "kind": "workspace",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
-            "params": {
-              "label": "dev/project/agent-office-redesign"
-            }
+            "key": "project.source.workspace"
           },
           "brand": null
         }
       },
       {
-        "id": "src_sg",
+        "id": "source:sessionGroup",
         "label": {
-          "key": "project.source.label",
-          "params": {
-            "label": "Agent Office"
-          }
+          "key": "project.source.sessionGroup"
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_sg",
+          "id": "source:sessionGroup",
           "kind": "sessionGroup",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
-            "params": {
-              "label": "Agent Office"
-            }
+            "key": "project.source.sessionGroup"
           },
           "brand": null
         }
       },
       {
-        "id": "src_man",
+        "id": "source:manual",
         "label": {
-          "key": "project.source.label",
-          "params": {
-            "label": "manuel"
-          }
+          "key": "project.source.manual"
         },
         "count": 1,
         "selected": false,
         "source": {
-          "id": "src_man",
+          "id": "source:manual",
           "kind": "manual",
           "runtime": null,
           "label": {
-            "key": "project.source.label",
-            "params": {
-              "label": "manuel"
-            }
+            "key": "project.source.manual"
           },
           "brand": null
         }
       }
-    ]
+    ],
+    "controls": {
+      "search": {
+        "options": [
+          {
+            "id": "project-name",
+            "label": {
+              "key": "project.control.search.name"
+            }
+          }
+        ],
+        "counts": [
+          {
+            "id": "matches",
+            "count": 2
+          }
+        ],
+        "selected": null
+      },
+      "stage": {
+        "options": [
+          {
+            "id": "all",
+            "label": {
+              "key": "project.control.stage.all"
+            }
+          },
+          {
+            "id": "idea",
+            "label": {
+              "key": "projectStatus.idea"
+            }
+          },
+          {
+            "id": "todo",
+            "label": {
+              "key": "projectStatus.todo"
+            }
+          },
+          {
+            "id": "in-progress",
+            "label": {
+              "key": "projectStatus.in-progress"
+            }
+          },
+          {
+            "id": "in-review",
+            "label": {
+              "key": "projectStatus.in-review"
+            }
+          },
+          {
+            "id": "shipped",
+            "label": {
+              "key": "projectStatus.shipped"
+            }
+          }
+        ],
+        "counts": [
+          {
+            "id": "all",
+            "count": 2
+          },
+          {
+            "id": "idea",
+            "count": 0
+          },
+          {
+            "id": "todo",
+            "count": 1
+          },
+          {
+            "id": "in-progress",
+            "count": 1
+          },
+          {
+            "id": "in-review",
+            "count": 0
+          },
+          {
+            "id": "shipped",
+            "count": 0
+          }
+        ],
+        "selected": "all"
+      }
+    }
   },
   "meta": {
     "modelVersion": 1,

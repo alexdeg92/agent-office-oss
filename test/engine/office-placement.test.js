@@ -44,13 +44,39 @@ test('oversized teams stay on one backend floor with real seats and reachable st
   assert.equal(new Set(result.placements.map(p=>p.floorId)).size,1);
   const floor=result.floors.find(f=>f.id===result.placements[0].floorId);
   const seated=result.placements.filter(p=>p.stationUid),standing=result.placements.filter(p=>!p.stationUid);
-  assert.equal(seated.length,floor.capacity);assert.equal(standing.length,3);
+  assert.equal(seated.length,floor.capacity);assert.equal(standing.length,14-floor.capacity);
   assert.equal(new Set(seated.map(p=>p.stationUid)).size,seated.length);
   const grid=buildGrid(12,10,floor.layout.items,index.furniture),reserved=new Set(R.elevatorAccess(floor.layout,index).tiles.map(p=>p.x+','+p.y));
   const seats=seated.map(p=>{const i=floor.layout.items.find(i=>i.uid===p.stationUid);return R.seatTile(i,index.furniture.get(i.asset));});
   for(const {standingPoint:p} of standing){assert.ok(p);assert.ok(isWalkable(grid,p.x,p.y));assert.ok(!reserved.has(p.x+','+p.y));assert.ok(seats.some(s=>Math.abs(p.x-s.x)+Math.abs(p.y-s.y)<=2));}
-  assert.equal(new Set(standing.map(p=>JSON.stringify(p.standingPoint))).size,3);
-  assert.equal(result.unseatedTeams[0].count,3);
+  assert.equal(new Set(standing.map(p=>JSON.stringify(p.standingPoint))).size,standing.length);
+  assert.equal(result.unseatedTeams[0].count,standing.length);
+});
+
+test('an active visitor follows its linked host floor to a reachable adjacent spot without taking a desk',()=>{
+  const layout=structuredClone(base);
+  layout.agents.push({agentId:'agent:worker',character:'subagent',station:'auto',homeFloor:'2'});
+  const occupants=[
+    {id:'primary',role:'primary',state:'working',stateSince:1},
+    {id:'agent:worker',role:'agent',parentId:null,teamId:null,state:'working',stateSince:2},
+    {id:'conversation:contact',role:'direct',parentId:'agent:worker',state:'working',stateSince:3,visitPhase:'agent'},
+  ];
+  const result=planOfficePlacement({index,layout,occupants});
+  const host=result.placements.find(row=>row.id==='agent:worker');
+  const visitor=result.placements.find(row=>row.id==='conversation:contact');
+  assert.equal(host.floorId,'2');
+  assert.equal(visitor.floorId,host.floorId,'canonical host placement owns the visitor floor');
+  assert.equal(visitor.stationUid,null,'the contact does not consume a work desk');
+  assert.equal(visitor.sceneTarget.kind,'visit');
+  assert.equal(visitor.sceneTarget.floorId,host.floorId);
+  assert.notDeepEqual(visitor.standingPoint,null);
+  const floor=result.floors.find(row=>row.id===host.floorId);
+  const grid=buildGrid(12,10,floor.layout.items,index.furniture);
+  assert.ok(isWalkable(grid,visitor.standingPoint.x,visitor.standingPoint.y),'the visitor target is traversable');
+  const station=floor.layout.items.find(row=>row.uid===host.stationUid);
+  const hostSeat=R.seatTile(station,index.furniture.get(station.asset));
+  assert.ok(Math.max(Math.abs(visitor.standingPoint.x-hostSeat.x),Math.abs(visitor.standingPoint.y-hostSeat.y))<=2,
+    'the visitor stands within two tiles of the host desk');
 });
 
 test('a sparse lead pin128 is bounded and a conflicting member pin cannot split the team',()=>{
@@ -185,6 +211,58 @@ test('an authored station claim displaces an idle stale pin for idle and working
   }
 });
 
+test('a lounge station is never an agent home; an active agent with a legacy sofa pin returns to a free desk',()=>{
+  const now=Date.UTC(2026,9,14,12);
+  const target='agent:resume-from-sofa';
+  const occupants=[{id:target,role:'agent',state:'idle',stateSince:now},
+    ...Array.from({length:5},(_,i)=>({id:`agent:worker-${i}`,role:'agent',state:'working',stateSince:now+i+1}))];
+  const saved={ [placementToken(target)]: { floorId:'1', stations:{[placementToken(target)]:'sofa'} } };
+  const away=planOfficePlacement({index,layout:base,occupants,homeAssignments:saved,now});
+  assert.ok(R.homeStations(base,index).includes(away.placements.find(row=>row.id===target).stationUid),
+    'a legacy sofa pin is migrated instead of establishing a lounge as the agent home');
+
+  const resumed=planOfficePlacement({index,layout:base,occupants:occupants.map(row=>({...row,state:'working',stateSince:now+1})),
+    homeAssignments:away.homeAssignments,now:now+1});
+  const returning=resumed.placements.find(row=>row.id===target);
+  assert.notEqual(returning.stationUid,'sofa');
+  assert.ok(R.homeStations(base,index).includes(returning.stationUid),'the agent takes a work desk instead of staying on the sofa');
+  assert.equal(returning.homeTarget.stationUid,returning.stationUid);
+  assert.equal(returning.sceneTarget.stationUid,returning.stationUid);
+  assert.equal(returning.sceneTarget.mode,'desk');
+  assert.equal(returning.activity,null);
+
+  const explicit=structuredClone(base);
+  explicit.agents.push({agentId:target,character:'subagent',station:'sofa'});
+  const startsActive=planOfficePlacement({index,layout:explicit,occupants:occupants.map(row=>({...row,state:'working',stateSince:now+2})),now:now+2});
+  const activeRow=startsActive.placements.find(row=>row.id===target);
+  assert.ok(R.homeStations(explicit,index).includes(activeRow.stationUid),'an active-from-start legacy explicit sofa rule resolves to a work desk');
+  assert.equal(activeRow.sceneTarget.mode,'desk');
+});
+
+test('implicit desk homes stay stable across unscoped projections when an idle owner returns active',()=>{
+  const tracker={relocations:new Map()};
+  const now=Date.UTC(2026,9,14,12), occupants=[
+    {id:'main',role:'primary',state:'idle',stateSince:now},
+    {id:'agent:idle-peer',role:'agent',state:'idle',stateSince:now},
+    ...Array.from({length:5},(_,i)=>({id:`agent:worker-${i}`,role:'agent',state:'working',stateSince:now+i+1})),
+  ];
+  const initial=planOfficePlacement({index,layout:base,occupants,tracker,now});
+  const originalHome=initial.placements.find(row=>row.id==='main').stationUid;
+  assert.ok(R.homeStations(base,index).includes(originalHome));
+
+  const away=planOfficePlacement({index,layout:base,occupants,tracker,now:now+16*60_000});
+  const awayOwner=away.placements.find(row=>row.id==='main');
+  assert.ok(awayOwner.activity);
+  assert.equal(awayOwner.homeTarget.stationUid,originalHome);
+
+  const returned=planOfficePlacement({index,layout:base,occupants:occupants.map(row=>row.id==='main'
+    ? {...row,state:'working',stateSince:now+16*60_000} : row),tracker,now:now+16*60_000});
+  const activeOwner=returned.placements.find(row=>row.id==='main');
+  assert.equal(activeOwner.stationUid,originalHome,'the implicit home survives the state/relocation transition');
+  assert.equal(activeOwner.sceneTarget.stationUid,originalHome);
+  assert.equal(activeOwner.activity,null);
+});
+
 test('fixed-seed active and idle pin mixes keep allocations and seated targets unique',()=>{
   const desks=R.homeStations(base,index);
   for(let seed=1;seed<=24;seed++){
@@ -223,7 +301,7 @@ test('deskless conversations follow canonical parent chains onto the host floor,
     assert.equal(placement.homeTarget.floorId,'2');assert.equal(placement.sceneTarget.floorId,'2');
     assert.equal(placement.homeTarget.kind,'standing');assert.equal(placement.sceneTarget.kind,'standing');
   }
-  assert.equal(result.placements.length,12);assert.equal(result.floors.find(f=>f.id==='2').capacity,11);
+  assert.equal(result.placements.length,12);assert.equal(result.floors.find(f=>f.id==='2').capacity,10);
 });
 
 test('missing/self/cyclic parent links terminate and retain every canonical row without inferring names or providers',()=>{
@@ -249,5 +327,6 @@ test('two thousand independent workers get bounded generated floors and real dis
   const occupants=Array.from({length:2000},(_,i)=>member(i));
   const result=planOfficePlacement({index,layout:base,occupants});
   assert.equal(result.placements.length,2000);assert.equal(new Set(result.placements.map(p=>p.id)).size,2000);
-  assert.ok(result.placements.every(p=>p.stationUid));assert.ok(result.floors.length<200);
+  assert.ok(result.placements.every(p=>p.stationUid));
+  assert.ok(result.floors.length<205,'desk-only work capacity keeps large rosters bounded after lounge seats are removed from home allocation');
 });

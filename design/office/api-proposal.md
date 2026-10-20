@@ -61,12 +61,7 @@ Answers review R3-08 and R3-14 … R3-18 on top of **contract 2.0** (api.md §3.
 | `no-main`, `no-default` | Rules for `main` and `*subagent` exist. |
 | `theme`, `theme-time` | `fixed` requires a day/night theme id. Auto times are `HH:MM` and differ. `season` is null or a season theme. |
 
-- **Home stations and capacity:** the eligible home kinds are **desk, then lounge** (contract 2.0's interim, kept). Allocation:
-  1. explicit stations first, in roster order (the first occupant wins a contested one);
-  2. automatic occupants in roster order take the first free home station: every desk in layout item order, then every lounge;
-  3. when none is left, `stationUid: null` (overflow).
-
-  Capacity is desks + lounges (7 in the default layout).
+- **Home stations and capacity (T-0158):** only desks are work homes. Explicit desk assignments resolve before automatic placement, which takes desks in layout item order. Lounge seats remain activity destinations; legacy saved lounge homes migrate to desks. When desks run out, `stationUid: null` (overflow). Capacity equals the number of desks.
 - **Overflow (`stationUid: null`):** the scene places the occupant in a decorative standing area, on the free walkable tiles nearest the entrance, one per occupant in roster order. Nothing else changes: the occupant stays in the roster and keeps its state.
 - **Schema fixes, done:** the `agentId` pattern; `match.kind` required when `match` is present; `fixed` required when `mode: 'fixed'`; descriptions of the omitted-vs-`[]` accessories and of `auto` stations. Semantic checks that JSON Schema can't express stay in the validator: uid uniqueness, wall side, and orientation per asset.
 

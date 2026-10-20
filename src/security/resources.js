@@ -3,9 +3,11 @@
 const ROOTS = ['office','chat','flows','projects','access','logs','skills','health','store','orchestrators','teams',
   'settings.runtimes','settings.integrations','settings.instance','settings.network','settings.restart','users','gateway.restart'];
 const CHILDREN = ['flows.create','flows.edit','flows.run','flows.enable','flows.delete','projects.comment','projects.regenerate'];
-const PRIVILEGED = new Set(['users','gateway.restart','orchestrators','teams', ...ROOTS.filter(k => k.startsWith('settings.'))]);
-const CORE = Object.freeze([...ROOTS.map(key => ({key,parent:null})), ...CHILDREN.map(key => ({key,parent:key.split('.')[0]}))]
-  .map(row => Object.freeze({...row, namespace:'core', labelKey:'permissions.'+row.key, privileged:PRIVILEGED.has(row.key)})));
+const PRIVILEGED = new Set(['users','gateway.restart','orchestrators','teams','chat.pane.send', ...ROOTS.filter(k => k.startsWith('settings.'))]);
+const ADMIN_ONLY = new Set(['chat.pane.send']);
+const CORE = Object.freeze([...ROOTS.map(key => ({key,parent:null})), ...CHILDREN.map(key => ({key,parent:key.split('.')[0]})),
+  ...[...ADMIN_ONLY].map(key=>({key,parent:key.split('.')[0]}))]
+  .map(row => Object.freeze({...row, namespace:'core', labelKey:'permissions.'+row.key, privileged:PRIVILEGED.has(row.key), adminOnly:ADMIN_ONLY.has(row.key)})));
 const LEVELS = Object.freeze(['none','read','write']);
 function createResourceRegistry(extensions = []) {
   const descriptors = new Map(CORE.map(d => [d.key,d]));
@@ -16,8 +18,9 @@ function createResourceRegistry(extensions = []) {
       const keyPattern=namespace==='core' ? /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)*$/ : new RegExp('^adapter\\.'+namespace+'\\.[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$');
       if (!row || typeof row.key!=='string' || !keyPattern.test(row.key)
         || row.key.length>128 || staged.has(row.key) || typeof row.labelKey!=='string' || !/^[a-zA-Z0-9_.-]{1,160}$/.test(row.labelKey)
-        || row.parent != null && (typeof row.parent!=='string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)*$/.test(row.parent)) || typeof row.privileged!=='boolean') throw new Error('invalid resource declaration');
-      staged.set(row.key,Object.freeze({key:row.key,parent:row.parent ?? null,namespace,labelKey:row.labelKey,privileged:row.privileged}));
+        || row.parent != null && (typeof row.parent!=='string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)*$/.test(row.parent)) || typeof row.privileged!=='boolean'
+        || row.adminOnly!==undefined&&typeof row.adminOnly!=='boolean') throw new Error('invalid resource declaration');
+      staged.set(row.key,Object.freeze({key:row.key,parent:row.parent ?? null,namespace,labelKey:row.labelKey,privileged:row.privileged,adminOnly:row.adminOnly===true}));
     }
     for (const d of staged.values()) {
       const seen = new Set([d.key]); let parent=d.parent;

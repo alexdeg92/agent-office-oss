@@ -37,7 +37,9 @@ function createHumanTokensRepo(db,{rbac,sessions,now=Date.now,changed=()=>{}}) {
     return {token,expiresAt};
   }
   function lifetime(value,min,max){if(!Number.isSafeInteger(value)||value<min||value>max)throw new TypeError('invalid token lifetime');return value;}
-  function familyOptions({userId,expectedGeneration,origin,audience,accessTtlMs=ACCESS_MS,idleMs=IDLE_MS,absoluteMs=ABSOLUTE_MS,linkedCookieSid=null,linkedCookieExpiresAt=null}) {
+  function familyOptions(options) {
+    if(options?.recoveryOnly===true)throw new TypeError('recovery-only identity cannot create token families');
+    let {userId,expectedGeneration,origin,audience,accessTtlMs=ACCESS_MS,idleMs=IDLE_MS,absoluteMs=ABSOLUTE_MS,linkedCookieSid=null,linkedCookieExpiresAt=null}=options||{};
     origin=originOf(origin);audience=audienceOf(audience);
     lifetime(accessTtlMs,300000,900000);lifetime(idleMs,300000,86400000);lifetime(absoluteMs,idleMs,2592000000);
     if(!Number.isSafeInteger(expectedGeneration)||expectedGeneration<0||linkedCookieSid!==null&&(typeof linkedCookieSid!=='string'||!linkedCookieSid||linkedCookieSid.length>256)

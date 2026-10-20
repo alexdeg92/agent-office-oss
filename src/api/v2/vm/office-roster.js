@@ -2,6 +2,7 @@
 
 const OFFICE_STATES = new Set(['unknown', 'observed', 'idle', 'thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting', 'blocked', 'error', 'offline']);
 const CONVERSATION_ROLES = new Set(['direct', 'group', 'conversation', 'session', 'dm', 'channel']);
+const HUMAN_CONTACT_ROLES = new Set(['direct', 'dm']);
 const ROSTER_ROOT_ROLES = new Set(['primary', 'main', 'agent']);
 const MOBILE_LABEL_LIMIT = 3;
 const WORKING_STATES = new Set(['thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting']);
@@ -132,10 +133,11 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
   const conversationIds = office.occupants.filter(row => CONVERSATION_ROLES.has(row.role)).map(row => row.id);
   const conversations = new Set(conversationIds);
   const stateOf = row => OFFICE_STATES.has(row?.state) ? row.state : 'unknown';
-  const activeCount = rows => rows.some(row => stateOf(row) === 'unknown') ? null : rows.filter(row => !['idle', 'offline'].includes(stateOf(row))).length;
+  const agentRows = rows => rows.filter(row => !row.visitPhase);
+  const activeCount = rows => agentRows(rows).some(row => stateOf(row) === 'unknown') ? null : agentRows(rows).filter(row => !['idle', 'offline'].includes(stateOf(row))).length;
   // Scene, floor totals, KPI population, and the mobile summary describe the
   // same on-stage set, including a conversation while it is visibly visiting.
-  const rosterSummary = { count: office.occupants.length, activeCount: activeCount(office.occupants) };
+  const rosterSummary = { count: agentRows(office.occupants).length, activeCount: activeCount(office.occupants) };
   const groupRoots = ordered.filter(entry => ROSTER_ROOT_ROLES.has(byId.get(entry.id)?.role)
     && ordered.some(candidate => candidate.rootId === entry.id && candidate.id !== entry.id && !conversations.has(candidate.id)));
   const rootFor = new Map(ordered.map(entry => [entry.id, entry.rootId]));
@@ -146,14 +148,17 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
     // Conversation rows retain canonical lineage (`parentId`) but are rendered as their own roster entries;
     // only spawned/runtime agents are indented as team members.
     return { ...row, state, parentId: parents.get(id), parentAmbiguous: row.parentAmbiguous === true, teamId, groupId: rootFor.get(id), rosterOrder,
-      stateActive: !['unknown', 'idle', 'offline'].includes(state),
+      stateActive: !row.visitPhase && !['unknown', 'idle', 'offline'].includes(state),
+      ...(row.visitPhase ? { stateKind: 'visitor' } : {}),
       floorId: typeof row.floorId === 'string' ? row.floorId : '1',
       standingPoint: row.standingPoint && Number.isFinite(row.standingPoint.x) && Number.isFinite(row.standingPoint.y)
         ? { x: row.standingPoint.x, y: row.standingPoint.y } : null,
-      rosterDepth: conversations.has(id) ? 0 : byId.get(parents.get(id))?.floorId !== row.floorId && parents.get(id) ? 1 : depth,
-      parentName: !conversations.has(id) && parents.get(id) ? byId.get(parents.get(id))?.name || null : null,
-      stateLabel: { key: `agentState.${state}` },
-      stateDetailLabel: stateDetailLabel(state),
+      rosterDepth: row.visitPhase && parents.get(id) && byId.get(parents.get(id))?.floorId !== row.floorId ? 1
+        : conversations.has(id) && !row.visitPhase ? 0 : depth,
+      parentName: !row.visitPhase && !conversations.has(id) && parents.get(id) ? byId.get(parents.get(id))?.name || null : null,
+      ...(row.visitPhase && HUMAN_CONTACT_ROLES.has(row.role) ? { roleLabel: { key: 'occupantRole.visitor' } } : {}),
+      stateLabel: row.visitPhase ? { key: 'occupantRole.visitor' } : { key: `agentState.${state}` },
+      stateDetailLabel: row.visitPhase ? { key: 'occupantRole.visitor' } : stateDetailLabel(state),
       stateLastLabel: { key: 'office.lastState', params: { state: { key: `agentState.${state}` } } } };
   });
   const rows = new Map(occupants.map(row => [row.id, row]));
@@ -170,16 +175,19 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
   });
   const rosterItems = ordered.filter(entry => !parents.get(entry.id) && !conversations.has(entry.id)).map(({ id: rootId }) => {
     const memberIds = ordered.filter(entry => entry.rootId === rootId && entry.id !== rootId && !conversations.has(entry.id)).map(entry => entry.id);
+    const visitIds = ordered.filter(entry => entry.rootId === rootId && conversations.has(entry.id) && rows.get(entry.id)?.visitPhase)
+      .map(entry => entry.id);
     const root = rows.get(rootId);
-    const childIds = memberIds;
+    const childIds = [...memberIds, ...visitIds];
     const previewOccupantIds = [rootId, ...childIds.slice(0, 2)];
     const overflowCount = Math.max(0, childIds.length - 2);
-    return { id: rootId, kind: childIds.length ? 'group' : 'occupant', isGroup: childIds.length > 0, rootId, occupantIds: [rootId, ...memberIds], childIds,
+    return { id: rootId, kind: childIds.length ? 'group' : 'occupant', isGroup: childIds.length > 0, rootId, occupantIds: [rootId, ...childIds], childIds,
       previewOccupantIds, overflowCount,
+      teamLabel: { key: 'office.mobile.team', params: { name: root.name } },
       openLabel: { key: 'office.mobile.openTeam', params: { name: root.name, n: memberIds.length } },
       delegatesLabel: { key: 'office.mobile.delegates', params: { n: memberIds.length } },
       overflowLabel: overflowCount ? { key: 'office.mobile.overflowCount', params: { n: overflowCount } } : null,
-      order: orderById.get(rootId), count: memberIds.length, label: root.title };
+      order: orderById.get(rootId), count: childIds.length, label: root.title };
   });
   const rosterPreviewItems = rosterItems.slice(0, 5);
   const rosterOverflowCount = Math.max(0, rosterItems.length - rosterPreviewItems.length);
@@ -190,9 +198,9 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
     floorsMap.get(id).push(row);
   }
   const floorOrder = id => id === 'rdc' ? 0 : id === 'gym' ? 10002 : Number(id) || 1;
-  const rosterFloors = [...floorsMap].map(([id, people]) => { const active = activeCount(people); return { id, order: floorOrder(id), label: floorLabel(id), countLabel: { key: 'office.floor.count', params: { n: people.length } }, occupantIds: people.map(row => row.id), mobileLabelIds: mobileLabelIds(people, rosterGroups), items: floorRosterItems(people, rows, projectReference),
-    count: people.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: people.filter(row => ['idle', 'offline'].includes(stateOf(row))).length } },
-    idleCount: people.filter(row => ['idle', 'offline'].includes(stateOf(row))).length,
+  const rosterFloors = [...floorsMap].map(([id, people]) => { const agents = agentRows(people); const active = activeCount(people); return { id, order: floorOrder(id), label: floorLabel(id), countLabel: { key: 'office.floor.count', params: { n: agents.length } }, occupantIds: people.map(row => row.id), mobileLabelIds: mobileLabelIds(people, rosterGroups), items: floorRosterItems(people, rows, projectReference),
+    count: agents.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: agents.filter(row => ['idle', 'offline'].includes(stateOf(row))).length } },
+    idleCount: agents.filter(row => ['idle', 'offline'].includes(stateOf(row))).length,
     kind: id === 'rdc' ? 'lobby' : id === 'gym' ? 'gym' : 'office', layout: null, capacity: null } })
     .sort((a, b) => a.order - b.order);
   const stateLabels = Object.fromEntries([...OFFICE_STATES].map(state => [state, { key: `agentState.${state}` }]));
@@ -205,7 +213,7 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
 }
 
 function projectOfficePlacement(office, { layout, index, projectOccupantId = id => id, now = Date.now(), tracker = null, planningOccupants = null,
-  homeAssignments = null, rememberHomeAssignments = null, engine = null, canReadSessions = false } = {}) {
+  homeAssignments = null, rememberHomeAssignments = null, engine = null, canReadSessions = false, idleTransitionDebounceMs = 3_000 } = {}) {
   if (!office || !Array.isArray(office.occupants) || !layout || !index) return office;
   const { planOfficePlacement } = require('../../../engine/office/placement');
   // Limited views can hide session rows. Plan their visible subset against the
@@ -259,7 +267,13 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
   };
   for (const row of suppliedPopulation) addToPopulation(row);
   for (const row of office.occupants) addToPopulation(row, true);
-  const population = boundedOccupants([...populationById.values()]).rows;
+  let population = boundedOccupants([...populationById.values()]).rows;
+  population = tracker?.debounceIdleTransitions?.(population, now, idleTransitionDebounceMs) || population;
+  const effectiveById = new Map(population.map(row => [row.id, row]));
+  office = { ...office, occupants: office.occupants.map(row => {
+    const id = placementIdBySourceId.get(row.id) || placementId(row), effective = effectiveById.get(id);
+    return effective ? { ...row, state: effective.state, stateSince: effective.stateSince } : row;
+  }) };
   // Exact-session folding can replace a runtime row ID with the stable private
   // member ID while a previously persisted plan still stores its station under
   // the old ID's placement token. Move those private saved tokens forward so
@@ -267,6 +281,8 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
   // if its former identity were a departed occupant.
   const placementHomeAssignments = remapSavedMemberStations(homeAssignments, suppliedPopulation, placementId);
   const plan = planOfficePlacement({ index, layout, occupants: population, now, tracker, homeAssignments: placementHomeAssignments });
+  const finalPlacementById = new Map(plan.placements.map(row => [row.id, row]));
+  tracker?.rememberIdlePlacements?.(population.map(row => ({ ...row, ...(finalPlacementById.get(row.id) || {}) })));
   if (typeof rememberHomeAssignments === 'function' && plan.homeAssignments) rememberHomeAssignments(plan.homeAssignments);
   const plannedById = new Map(plan.placements.map(row => [displayIdByPlacementId.get(row.id) || row.id, row]));
   // The placement engine enforces atomic team home-floor assignment before it
@@ -276,8 +292,10 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
       ? { ...sourceRow, parentId: displayIdBySourceId.get(sourceRow.parentId) } : sourceRow;
     const place = plannedById.get(row.id);
     if (row.visitPhase) {
-      const host = office.occupants.find(candidate => candidate.id === office.visitIntent?.hostId);
-      return { ...row, floorId: host?.floorId || place?.floorId || row.floorId, stationUid: null, standingPoint: null };
+      const host = office.occupants.find(candidate => candidate.id === row.parentId);
+      return { ...row, floorId: place?.floorId || host?.floorId || row.floorId, stationUid: null,
+        standingPoint: place?.standingPoint || null, ...(place?.sceneTarget ? { sceneTarget: place.sceneTarget } : {}),
+        ...(place?.sceneTravel ? { sceneTravel: place.sceneTravel } : {}) };
     }
     const sharedTarget = !canReadSessions && population.find(candidate => candidate.id === row.id)?.sceneTarget;
     const target = sharedTarget?.kind === 'visit' ? sharedTarget : place?.sceneTarget;
@@ -306,11 +324,12 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
   const rosterFloors = plan.floors.map(floor => {
     const people = byFloor.get(floor.id) || [];
     const finalPeople = people.map(row => byId.get(row.id)).filter(Boolean);
-    const active = finalPeople.some(row => !OFFICE_STATES.has(row.state) || row.state === 'unknown')
-      ? null : finalPeople.filter(row => !['idle', 'offline'].includes(row.state)).length;
-    return { id: floor.id, order: floorOrder(floor.id), label: floorLabel(floor.id), countLabel: { key: 'office.floor.count', params: { n: finalPeople.length } }, kind: floor.kind, occupantIds: finalPeople.map(row => row.id), mobileLabelIds: mobileLabelIds(finalPeople, rosterOffice.rosterGroups), items: floorRosterItems(finalPeople, byId, projectReference),
-      count: finalPeople.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: finalPeople.filter(row => ['idle', 'offline'].includes(row.state)).length } },
-      idleCount: finalPeople.filter(row => ['idle', 'offline'].includes(row.state)).length, layout: floor.layout, capacity: floor.capacity };
+    const agentPeople = finalPeople.filter(row => !row.visitPhase);
+    const active = agentPeople.some(row => !OFFICE_STATES.has(row.state) || row.state === 'unknown')
+      ? null : agentPeople.filter(row => !['idle', 'offline'].includes(row.state)).length;
+    return { id: floor.id, order: floorOrder(floor.id), label: floorLabel(floor.id), countLabel: { key: 'office.floor.count', params: { n: agentPeople.length } }, kind: floor.kind, occupantIds: finalPeople.map(row => row.id), mobileLabelIds: mobileLabelIds(finalPeople, rosterOffice.rosterGroups), items: floorRosterItems(finalPeople, byId, projectReference),
+      count: agentPeople.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: agentPeople.filter(row => ['idle', 'offline'].includes(row.state)).length } },
+      idleCount: agentPeople.filter(row => ['idle', 'offline'].includes(row.state)).length, layout: floor.layout, capacity: floor.capacity };
   }).sort((a, b) => a.order - b.order);
   return require('../../../engine/office/communication').projectCommunication(
     { ...rosterOffice, rosterFloors, unseatedTeams: visibleUnseatedTeams }, { engine, index, layout, now, canReadSessions });

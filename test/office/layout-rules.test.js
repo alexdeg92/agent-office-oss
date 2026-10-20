@@ -116,14 +116,25 @@ describe('resolveOccupants (what OfficeVM.occupants carries)', () => {
     assert.deepEqual(s.look.accessories, ['scarf']);
   });
 
-  it('allocates explicit stations first, then desks, then lounges, then null (overflow)', () => {
+  it('allocates work desks only; legacy lounge pins migrate to desks or remain unseated', () => {
     const many = [src('main', 'main'), ...Array.from({ length: 8 }, (_, i) => src(`subagent:${i}`, 'subagent'))];
     const r = R.resolveOccupants(layout, idx, many);
     const desks = R.homeStations(layout, idx);
-    assert.deepEqual(desks.slice(-1), ['sofa']);
-    assert.deepEqual(r.slice(0, desks.length).map((o) => o.stationUid).sort(), [...desks].sort());
-    assert.ok(r.slice(desks.length).every((o) => o.stationUid === null));
+    assert.equal(desks.includes('sofa'), false);
+    assert.ok(desks.every(uid => idx.furniture.get(layout.items.find(item => item.uid === uid)?.asset)?.station?.kind === 'desk'));
+    assert.equal(r.filter(o => o.stationUid).length, desks.length);
+    assert.ok(r.every(o => o.stationUid !== 'sofa'));
+    assert.ok(r.filter(o => !desks.includes(o.stationUid)).every(o => o.stationUid === null));
     assert.equal(new Set(r.filter((o) => o.stationUid).map((o) => o.stationUid)).size, desks.length);
+  });
+
+  it('keeps a legacy explicit sofa rule valid but never resolves it as the agent home', () => {
+    const legacy = clone(layout);
+    legacy.agents.push({ agentId: 'subagent:legacy-sofa', character: 'subagent', station: 'sofa' });
+    assert.deepEqual(R.validateLayout(legacy, idx), [], 'existing owner layout files remain loadable');
+    const [row] = R.resolveOccupants(legacy, idx, [src('subagent:legacy-sofa', 'subagent')]);
+    assert.notEqual(row.stationUid, 'sofa');
+    assert.ok(R.homeStations(legacy, idx).includes(row.stationUid));
   });
 });
 

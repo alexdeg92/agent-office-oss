@@ -117,6 +117,7 @@ function sourceSchemaFor(workspaceRootIds) {
     sessionGroup: s.object({
       id: sourceId, addedAt: s.ms(), addedBy: actorSchema,
       kind: s.literal('sessionGroup'), ref: sessionGroupRef,
+      connectorIds: s.array(s.string().refine(v => require('../runtime-ids').INSTANCE_ID.test(v), 'connector instance')).min(1).max(20).optional(),
     }, { extra: 'reject' }),
     manual: s.object({
       id: sourceId, addedAt: s.ms(), addedBy: actorSchema,

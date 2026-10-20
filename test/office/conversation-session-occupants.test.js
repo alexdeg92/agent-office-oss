@@ -7,13 +7,20 @@ const { project2x } = require('../../src/api/v2/project2x');
 const { project3x } = require('../../src/api/v2/project3x');
 const { schemasFor } = require('../../src/api/v2/vm/schemas');
 const { validate } = require('../../src/schema');
-const { projectOfficeTeamOccupants } = require('../../src/api/orchestrator-team-projection');
+const { projectOfficeTeamOccupants: projectOfficeTeamOccupantsImpl } = require('../../src/api/orchestrator-team-projection');
 const { createEngine } = require('../../src/engine');
 const { definition: claudeDefinition } = require('../../src/adapters/claude-code');
 const frLabels = require('../../src/i18n/fr').LABELS;
 const enLabels = require('../../src/i18n/en').LABELS;
 
 const NOW = 1791740000000;
+// The canonical projection requires the same installed appearance index that
+// the mounted Office builder supplies in production.
+const projectOfficeTeamOccupants = (...args) => {
+  const options = args[3] || {};
+  args[3] = { index: officeDefaults().index, ...options };
+  return projectOfficeTeamOccupantsImpl(...args);
+};
 function project({ kind = 'conversation', channel = null, displayName = 'agent-office-redesign', summary = 'Fix the session title', activity = null, primaryOwner = true, peerName = null } = {}) {
   const session = { key: 'rt:claude-code:session:synthetic', displayName, summary, projectLabel: 'agent-office-redesign', cwd: '/workspace/agent-office-redesign', updatedAt: NOW,
     interactive: true, usage: { total: 0 }, tokensKnown: false,
@@ -127,24 +134,24 @@ test('untitled coding sessions use agent identity before project/provider and ne
 });
 
 test('chat titles redact raw identifiers and OfficeVM omits transcript summaries', () => {
-  const chat = project({ kind: 'conversation', channel: 'discord', displayName: 'lulu_mimoumou user id:14694…',
-    summary: 'lulu_mimoumou user id:14694…' });
+  const chat = project({ kind: 'conversation', channel: 'discord', displayName: 'sample_handle user id:58213…',
+    summary: 'sample_handle user id:58213…' });
   const row = chat.build(project3x).occupants.find(o => o.sessionKey === chat.session.key && o.role === 'conversation');
   assert.equal(row.name, 'Conversation', 'redacts raw chat identifiers when no display label is available');
   const occupants = chat.build(project3x).occupants;
-  assert.equal(JSON.stringify(occupants).includes('14694'), false);
-  assert.equal(JSON.stringify(occupants).includes('lulu_mimoumou'), false);
+  assert.equal(JSON.stringify(occupants).includes('58213'), false);
+  assert.equal(JSON.stringify(occupants).includes('sample_handle'), false);
   assert.ok(occupants.every(item => item.summary === undefined), 'transcript summaries do not project into the office');
-  const labeled = project({ kind: 'conversation', channel: 'discord', displayName: 'lulu_mimoumou user id:14694…',
-    summary: 'lulu_mimoumou user id:14694…', peerName: 'Ada Lovelace' });
+  const labeled = project({ kind: 'conversation', channel: 'discord', displayName: 'sample_handle user id:58213…',
+    summary: 'sample_handle user id:58213…', peerName: 'Ada Lovelace' });
   const labeledRow = labeled.build(project3x).occupants.find(o => o.sessionKey === labeled.session.key && o.role === 'conversation');
   assert.ok(labeledRow.name.startsWith('Ada Lovelace'));
-  assert.equal(JSON.stringify(labeledRow).includes('14694'), false);
-  const rawLabel = project({ kind: 'conversation', channel: 'discord', displayName: 'lulu_mimoumou user id:14694…',
-    summary: 'lulu_mimoumou user id:14694…', peerName: 'lulu_mimoumou user id:14694…' });
+  assert.equal(JSON.stringify(labeledRow).includes('58213'), false);
+  const rawLabel = project({ kind: 'conversation', channel: 'discord', displayName: 'sample_handle user id:58213…',
+    summary: 'sample_handle user id:58213…', peerName: 'sample_handle user id:58213…' });
   const rawLabelRow = rawLabel.build(project3x).occupants.find(o => o.sessionKey === rawLabel.session.key && o.role === 'conversation');
   assert.equal(rawLabelRow.name, 'Conversation', 'a resolver result that is still an account identifier is not a display label');
-  assert.equal(JSON.stringify(rawLabelRow).includes('14694'), false);
+  assert.equal(JSON.stringify(rawLabelRow).includes('58213'), false);
 
   for (const kind of ['conversation-direct', 'conversation-group', 'conversation']) {
     const embedded = project({ kind, channel: 'discord', displayName: 'fixture_handle 123456789012345678',
@@ -336,7 +343,7 @@ test('an exact registered PM session keeps the canonical v2/v3 owner row and fol
     assert.equal(matching.length, 1, `v${version} folds the duplicate conversation into the registered primary`);
     assert.equal(matching[0].id, ownerId);
     assert.equal(matching[0].role, ownerRole);
-    assert.equal(matching[0].name, owner.name, 'registered role metadata does not replace the selected primary display name');
+    assert.equal(matching[0].name, 'Project lead', 'the registered team member name is authoritative after exact session matching');
     assert.equal(validate(schemasFor(version).office, projected).ok, true, `full v${version} OfficeVM schema`);
   }
 });
@@ -379,14 +386,14 @@ test('a distinct Claude PM session stays separate from the OpenClaw primary and 
   }
 });
 
-test('an exact PM main session keeps its user-set runtime name ahead of the member fallback', () => {
+test('an exact PM main session keeps the registered member name instead of its runtime title', () => {
   const principal = { id: 'synthetic-admin', role: 'admin', permissionRevision: 1 };
   for (const [P, version, ownerId, ownerRole] of [
     [project2x, 2, 'main', 'main'], [project3x, 3, 'primary', 'primary'],
   ]) {
     const { build, session } = project();
     const base = build(P), owner = base.occupants.find(row => row.id === ownerId);
-    const runtimeName = 'Project Manager';
+    const runtimeName = 'CANARY-SUMMARY-PM-runtime-title';
     const titledSession = { ...session, displayName: runtimeName, summarySource: 'runtime' };
     const ref = { runtimeKind: 'claude-code', sessionRef: 'primary-runtime-title', sessionKey: session.key, agentId: 'coding-agent' };
     const snapshot = { observedAt: NOW, team: { id: 'team:primary-title' }, agents: [], identityLinks: [],
@@ -398,8 +405,9 @@ test('an exact PM main session keeps its user-set runtime name ahead of the memb
       runtimeIdentitySessions: [{ ...ref }],
     });
     const primary = projected.occupants.find(row => row.role === ownerRole);
-    assert.equal(primary.name, runtimeName, `v${version} uses the session's user-set name rather than the member name`);
-    assert.deepEqual(primary.title.params, { name: runtimeName });
+    assert.equal(primary.name, 'pm', `v${version} uses the registered member name instead of its runtime title`);
+    assert.deepEqual(primary.title.params, { name: 'pm' });
+    assert.equal(JSON.stringify(projected).includes(runtimeName), false, `v${version} omits transcript-derived title text`);
     assert.equal(projected.occupants.filter(row => row.role === ownerRole).length, 1, `v${version} keeps one primary`);
     assert.equal(validate(schemasFor(version).office, projected).ok, true, `v${version} schema`);
   }
@@ -440,7 +448,14 @@ test('a distinct orchestrator lead is an agent root, never a second instance pri
     const leadKey = `rt:claude-code:session:separate-lead-v${version}`;
     const leadSession = { ...session, key: leadKey, class: { ...session.class, kind: 'conversation', agentId: 'claude-pm' } };
     const primary = base.occupants.find(row => row.id === primaryId);
-    const leadSessionRow = { ...primary, id: 'agent:claude-pm', role: 'agent', sessionKey: leadKey, name: 'Runtime default' };
+    const leadLook = { character: 'cosmo', variant: 'sage', accessories: [] };
+    const generatedLook = { character: 'fen', variant: 'clay', accessories: [] };
+    const sessionLook = { character: 'fen', variant: 'clay', accessories: [] };
+    const lookIndex = { manifest: { characters: [{ id: 'timmy', role: 'main' }, { id: 'cosmo', role: 'subagent' }, { id: 'fen', role: 'subagent' }] },
+      characters: new Map([['timmy', { id: 'timmy', role: 'main' }], ['cosmo', { id: 'cosmo', role: 'subagent' }], ['fen', { id: 'fen', role: 'subagent' }]]) };
+    const leadSessionRow = { ...primary, id: 'agent:claude-pm', role: 'agent', sessionKey: leadKey, name: 'Runtime default', look: leadLook };
+    const transcriptRow = { ...primary, id: leadKey, role: version === 2 ? 'channel' : 'session', sessionKey: leadKey,
+      name: 'Transcript row', look: sessionLook };
     const child = { ...primary, id: 'agent:codex-builder', role: 'agent', sessionKey: 'rt:codex:session:builder', name: 'Builder' };
     const members = [
       { id: 'member:pm', name: 'PM', roleKind: 'lead', hostAgentId: null, parentMemberId: null },
@@ -449,17 +464,18 @@ test('a distinct orchestrator lead is an agent root, never a second instance pri
     const snapshot = { observedAt: NOW, team: { id: 'team:distinct-lead' }, agents: [], identityLinks: [], members,
       privateMemberSessionKeys: { 'member:pm': leadKey },
       privateMemberSessionRefs: { 'member:pm': { runtimeKind: 'claude-code', sessionRef: `native-pm-${version}`, sessionKey: leadKey, agentId: 'claude-pm' } } };
-    const projected = projectOfficeTeamOccupants({ ...base, occupants: [primary, leadSessionRow, child] }, snapshot, principal, {
+    const projected = projectOfficeTeamOccupants({ ...base, occupants: [primary, leadSessionRow, transcriptRow, child] }, snapshot, principal, {
       sourceEnabled: true, version, canReadSessions: true, primaryAgentId: 'coding-agent',
       runtimeAgents: [{ id: 'coding-agent', isPrimary: true }, { id: 'claude-pm', isPrimary: false }],
       runtimeIdentitySessions: [{ agentId: 'claude-pm', sessionKey: leadKey, runtimeKind: 'claude-code', sessionRef: `native-pm-${version}` }],
-      runtimeSessions: [leadSession],
+      runtimeSessions: [leadSession], index: lookIndex, assignLook: () => generatedLook,
     });
     assert.equal(projected.occupants.filter(row => row.role === (version === 2 ? 'main' : 'primary')).length, 1,
       `v${version} only the instance primary uses the primary role`);
-    const pm = projected.occupants.find(row => row.id === 'agent:claude-pm');
+    const pm = projected.occupants.find(row => row.memberId === 'member:pm');
     const builder = projected.occupants.find(row => row.name === 'Builder');
     assert.equal(pm?.role, 'agent', `v${version} a distinct team lead remains an agent root`);
+    assert.deepEqual(pm?.look, leadLook, `v${version} preserves the canonical agent look joined to this member rather than the session-row or generated fallback look`);
     assert.equal(builder?.parentId, pm?.id, `v${version} children stay grouped under that lead`);
     assert.equal(validate(schemasFor(version).office, projected).ok, true, `v${version} schema-valid distinct lead`);
   }
@@ -905,7 +921,7 @@ test('generic lead preserves the selected primary identity and only folds runtim
         { agentId: 'unrelated-agent', runtimeKind: 'openclaw', sessionRef: 'other-native-ref', sessionKey: sharedKey },
       ], runtimeSessions: [{ key: sharedKey, class: { kind: 'conversation', agentId: 'selected-primary' }, run: { status: 'idle' } }],
     });
-    assert.ok(projected.occupants.some(row => row.id === ownerId && row.name === 'Runtime owner'), `v${version} keeps the selected primary display name`);
+    assert.ok(projected.occupants.some(row => row.id === ownerId && row.name === 'Project lead'), `v${version} uses the registered team member name on the primary row`);
     assert.ok(projected.occupants.some(row => row.id === 'agent:unrelated-agent'), `v${version} preserves an unrelated occupant sharing the key`);
     assert.equal(projected.occupants.some(row => row.id === `duplicate:${version}`), false, `v${version} folds the exact duplicate`);
     const child = projected.occupants.find(row => row.name === 'Engineer');
@@ -939,7 +955,7 @@ test('a real engine resolves the selected primary session through its private na
       assert.equal(matching.length, 1, `v${version} collapses same-runtime duplicate sessions`);
       assert.equal(matching[0].id, canonicalId);
       assert.equal(matching[0].role, canonicalRole);
-      assert.equal(matching[0].name, office.occupants.find(row => row.id === canonicalId).name);
+      assert.equal(matching[0].name, 'PM', 'the registered member name is used even when the member claims the canonical primary row');
       assert.equal(validate(schemasFor(version).office, projected).ok, true, `v${version} schema`);
     }
   } finally { real.close(); }

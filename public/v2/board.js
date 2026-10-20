@@ -1,7 +1,6 @@
 // Pure helpers for the Projets board (no DOM). The server orders cards; the client only needs the same rule to show
 // where a dragged card will land and to place an optimistic move until the server's VM confirms it.
 
-export const STATUSES = ['idea', 'todo', 'in-progress', 'in-review', 'shipped'];
 export const FILTERS = ['all', 'at-risk', 'with-timmy', 'with-agent'];   // D8: both contracts' names; vocab.boardFilter picks the configured one
 /** Priority rank from its digit (P0 first); anything unrecognised sorts after every priority. */
 export const priorityRank = (p) => { const m = /^P(\d)$/.exec(p || ''); return m ? Number(m[1]) : 99; };
@@ -59,12 +58,6 @@ export function settledOverrides(columns, overrides) {
 export function findCard(columns, id) {
   for (const col of columns) { const card = col.cards.find((c) => c.id === id); if (card) return { card, status: col.id }; }
   return null;
-}
-
-/** Next/previous column for the keyboard path (←/→), clamped at the ends. */
-export function stepStatus(status, delta) {
-  const i = STATUSES.indexOf(status);
-  return STATUSES[Math.max(0, Math.min(STATUSES.length - 1, i + delta))];
 }
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

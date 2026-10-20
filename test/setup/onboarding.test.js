@@ -190,7 +190,10 @@ test('new HTTP onboarding: DB owner, hidden detected token, names/styles, networ
     const layout = (await h.get('/api/v3/office/layout')).json.data;
     assert.equal(layout.layout.data.agents.find(a => a.agentId === 'primary').character, 'fen');
     assert.equal(layout.layout.data.agents.find(a => a.agentId === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).name, 'Lyra');
-    const bureau = (await h.get('/api/v3/views/office')).json.data;
+    const bureauResponse = await h.get('/api/v3/views/office');
+    assert.equal(bureauResponse.status, 200, bureauResponse.text + '\n' + h.output);
+    assert.ok(bureauResponse.json?.data, bureauResponse.text);
+    const bureau = bureauResponse.json.data;
     assert.equal(bureau.occupants.find(o => o.id === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).name, 'Lyra');
     assert.equal(bureau.occupants.find(o => o.id === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).look.character, body.agents.looks.scribe.character);
     assert.ok(bureau.occupants.find(o => o.id === 'agent:' + require('../../src/runtime-ids').scopedId('legacy', 'agent', 'scribe')).stationUid, 'selected agent already placed');
@@ -213,7 +216,7 @@ test('new HTTP onboarding: DB owner, hidden detected token, names/styles, networ
     restarted = spawn(process.execPath, ['--require', path.join(ROOT, 'test/helpers/freeze-env.js'), path.join(ROOT, 'server.js')], { cwd: ROOT, env: { ...env, PORTAL_EMAIL: 'legacy@example.invalid', PORTAL_PASSWORD: 'legacy-password', PORTAL_SECRET: 's'.repeat(48) }, stdio: ['ignore', 'pipe', 'pipe'] });
     output = ''; restarted.stdout.on('data', b => output += b); restarted.stderr.on('data', b => output += b);
     await waitFor(() => /AO_READY/.test(output));
-    assert.equal((await h.post('/api/login', { email: 'legacy@example.invalid', password: 'legacy-password' })).status, 200);
-    assert.equal((await h.post('/api/login', { email: owner.email, password: owner.password })).status, 401);
+  assert.equal((await h.post('/api/login', { email: 'legacy@example.invalid', password: 'legacy-password' })).status, 401,'changed environment credentials do not replace the database owner');
+  assert.equal((await h.post('/api/login', { email: owner.email, password: owner.password })).status, 200,'the migrated database owner remains authoritative');
   } finally { if (restarted) { const exit = once(restarted, 'exit'); restarted.kill('SIGTERM'); await exit; } await h.stop(); }
 });

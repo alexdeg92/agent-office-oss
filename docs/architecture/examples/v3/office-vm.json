@@ -321,7 +321,7 @@
         "count": 1,
         "actor": {
           "kind": "system",
-          "name": "Syst\u00e8me"
+          "name": "Système"
         },
         "text": {
           "key": "liveEvent.cron.fired",
@@ -443,6 +443,12 @@
         "count": 1,
         "label": {
           "key": "sessionTitle.named",
+          "params": {
+            "name": "Worker"
+          }
+        },
+        "teamLabel": {
+          "key": "team.named",
           "params": {
             "name": "Worker"
           }
@@ -593,6 +599,12 @@
         "count": 1,
         "label": {
           "key": "sessionTitle.named",
+          "params": {
+            "name": "Worker"
+          }
+        },
+        "teamLabel": {
+          "key": "team.named",
           "params": {
             "name": "Worker"
           }
@@ -806,6 +818,14 @@
     "unseatedTeams": [],
     "visitIntent": {
       "hostId": "primary",
+      "hosts": [
+        {
+          "id": "primary",
+          "visitorIds": [
+            "direct:example"
+          ]
+        }
+      ],
       "desk": [
         "direct:example"
       ],
@@ -820,6 +840,7 @@
       "visitors": [
         {
           "id": "direct:example",
+          "hostId": "primary",
           "phase": "person",
           "stateLabel": {
             "key": "agentState.waiting"

@@ -50,25 +50,32 @@ describe('sender identities through the real server, v2 and v3', () => {
       assert.equal(vm.participants.length, 4); assert.doesNotMatch(JSON.stringify(vm), /untrusted|```/);
     }
   });
-  it('unknown DM has stable channel-scoped ID and no raw ID name; operator shows the stored owner', async () => {
-    const dm = (await h.get('/api/v3/views/sessions/' + encodeURIComponent(DM))).json.data;
+  it('unknown DM has a channel-scoped ID without a raw name; the owner is attributed on accepted chat', async () => {
+    const dmResponse = await h.get('/api/v3/views/sessions/' + encodeURIComponent(DM));
+    assert.equal(dmResponse.status, 200, dmResponse.text);
+    const dm = dmResponse.json.data;
     assert.equal(dm.events[0].senderInfo.id, 'telegram-user:generic-peer'); assert.equal(dm.events[0].senderInfo.name, null);
-    const op = (await h.get('/api/v2/views/sessions/' + encodeURIComponent(OP))).json.data;
+    const opResponse = await h.get('/api/v2/views/sessions/' + encodeURIComponent(OP));
+    assert.equal(opResponse.status, 200, opResponse.text);
+    const op = opResponse.json.data;
+    assert.ok(op.events?.length, JSON.stringify(op));
     assert.equal(op.events[0].senderInfo.name, 'Camille'); assert.equal(op.participants[0].name, 'Camille');
+    const runtimeResult = op.events.find(event => event.kind === 'subagent-result');
+    assert.ok(runtimeResult, 'runtime sub-agent output remains available in its session trace');
+    assert.equal(runtimeResult.senderInfo.delegation.sessionKey, CHAT_CHILD);
+    const sent = await h.post('/api/v2/chat/messages', { text: 'Bonjour depuis le compte' });
+    assert.equal(sent.status, 202, sent.text);
     const response = await h.get('/api/v2/views/chat'); assert.equal(response.status, 200, response.text);
-    assert.equal(response.json.data.messages[0].senderInfo.name, 'Camille');
+    const ownerMessage = response.json.data.messages.find(message => message.text === 'Bonjour depuis le compte');
+    assert.ok(ownerMessage, 'the accepted chat message is present while its turn is pending');
+    assert.equal(ownerMessage.senderInfo.name, 'Camille');
     for (const v of [2, 3]) {
       const chat = await h.get(`/api/v${v}/views/chat`); assert.equal(chat.status, 200, chat.text);
-      const result = chat.json.data.messages.find(m => m.kind === 'subagent-result');
-      assert.ok(result); assert.equal(result.role, 'assistant'); assert.equal(result.status, 'completed');
-      assert.equal(result.senderInfo.delegation.sessionKey, CHAT_CHILD);
-      assert.equal(result.collapsedByDefault, true); assert.equal(result.body.text, result.text);
-      assert.match(result.body.text, /\| tests \| pass \|/);
-      assert.ok(Object.hasOwn(result, 'avatar'));
+      assert.equal(chat.json.data.messages.some(message => message.kind === 'subagent-result'), false,
+        'the account chat view does not merge an unrelated native runtime transcript');
       const office = await h.get(`/api/v${v}/views/office`); assert.equal(office.status, 200, office.text);
       const author = office.json.data.occupants.find(o => o.sessionKey === CHAT_CHILD);
       assert.equal(author, undefined, 'the completed child is outside the office presence window');
-      assert.ok(result.avatar, 'result portrait resolves from its canonical child occupant identity after it leaves the stage');
     }
   });
   it('the contract versions advertise the identity extension', async () => {

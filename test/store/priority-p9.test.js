@@ -36,8 +36,8 @@ describe('migration 010 · priorities P0–P9', () => {
       for (const f of fs.readdirSync(MIGRATIONS_DIR)) if (Number(f.slice(0, 3)) > 9) fs.copyFileSync(path.join(MIGRATIONS_DIR, f), path.join(mig, f));
       h = openDatabase({ dir: path.join(d, 'data'), instance: 'test', migrationsDir: mig });
       try {
-        const expected = before.map((rows, i) => i === 0 ? rows.map(row => ({ ...row, summary_turn: null })) : rows);
-        assert.deepEqual(snapshot(h.db), expected, 'every historical field identical; migration 016 initializes summary delivery identity to null');
+        const expected = before.map((rows, i) => i === 0 ? rows.map(row => ({ ...row, summary_turn: null })) : i === 1 ? rows.map(row => ({ ...row, connector_ids_json: null })) : rows);
+        assert.deepEqual(snapshot(h.db), expected, 'historical rows stay intact; migration-added summary and connector provenance fields initialize to null');
         assert.deepEqual(h.db.prepare('PRAGMA foreign_key_check').all(), []);
         assert.equal(h.db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'references enforced again');
         assert.ok(h.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'projects_board'").get());

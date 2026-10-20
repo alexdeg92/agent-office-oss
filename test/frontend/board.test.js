@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareCards, landingIndex, applyOverrides, settledOverrides, findCard, stepStatus, matchesQuery, labelTone, tintTone, accentTone, sortFlags, LABEL_TONES, priorityRank } from '../../public/v2/board.js';
+import { compareCards, landingIndex, applyOverrides, settledOverrides, findCard, matchesQuery, labelTone, tintTone, accentTone, sortFlags, LABEL_TONES, priorityRank } from '../../public/v2/board.js';
 
 const card = (id, priority, lastActivityAt) => ({ id, priority, lastActivityAt, name: id, revision: 1 });
 const board = () => [
@@ -45,13 +45,9 @@ test('settledOverrides: done once the VM shows the card in its target column (or
   assert.deepEqual(settledOverrides(cols, o).sort(), ['b', 'gone']);
 });
 
-test('findCard and stepStatus', () => {
+test('findCard', () => {
   assert.deepEqual(findCard(board(), 'c'), { card: card('c', 'P1', 90), status: 'todo' });
   assert.equal(findCard(board(), 'zz'), null);
-  assert.equal(stepStatus('idea', -1), 'idea');
-  assert.equal(stepStatus('idea', 1), 'todo');
-  assert.equal(stepStatus('shipped', 1), 'shipped');
-  assert.equal(stepStatus('in-review', -1), 'in-progress');
 });
 
 test('matchesQuery ignores accents and case, every word must match', () => {

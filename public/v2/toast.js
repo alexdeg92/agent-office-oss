@@ -9,9 +9,9 @@ const DURATION = { info: 5000, success: 4000, warning: 7000, danger: 9000 };
  * level: 'info' | 'success' | 'warning' | 'danger'. `code` is shown in mono under the message.
  * `action` = { label, run } adds a button (e.g. « Annuler »); running it dismisses the toast.
  */
-export function toast({ level = 'info', message, code = null, requestId = null, action = null, duration = undefined }) {
+export function toast({ level = 'info', message, code = null, requestId = null, action = null, duration = undefined, actionVariant = null, className = null }) {
   const id = ++seq;
-  toasts.set((s) => ({ items: [...s.items.filter((t) => t.message !== message).slice(-3), { id, level, message, code, requestId, action }] }));
+  toasts.set((s) => ({ items: [...s.items.filter((t) => t.message !== message).slice(-3), { id, level, message, code, requestId, action, actionVariant, className }] }));
   if (duration !== 0) setTimeout(() => dismiss(id), duration ?? ((DURATION[level] || 5000) + (action ? 3000 : 0)));
   return id;
 }

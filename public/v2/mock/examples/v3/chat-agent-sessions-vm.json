@@ -1,0 +1,21 @@
+{
+  "data": {
+    "revision": 4,
+    "agentId": "ca_gW0egUVdHn8cQKv0uHKIcfD71U9vYixX",
+    "filter": "active",
+    "labels": {
+      "active": { "key": "chat.sessions.active" },
+      "archived": { "key": "chat.sessions.archived" },
+      "archivedCount": { "key": "chat.sessions.archivedCount", "params": { "count": 1 } },
+      "empty": { "key": "chat.sessions.emptyActive" }
+    },
+    "archivedCount": 1,
+    "sessions": [
+      { "id": "cs_Mk9qvR6vX2Z0JspN7xgTgD5Lz9WcB1yK", "title": "Préparer la note", "preview": "Je vérifie les données…", "updatedAt": 1791223190000, "unread": { "count": 2, "label": { "key": "chat.unread.count", "params": { "count": 2 } } }, "stateLabel": { "key": "chat.session.waiting" }, "turnPending": false, "archived": false, "actions": { "rename": true, "archive": true, "restore": false, "delete": true }, "runtimeTranscriptDeleteLabel": { "key": "chat.session.runtimeTranscriptRetained" } },
+      { "id": "cs_tB8nYw3g5FhZ1aQkE2cL9sV7uX4mP0rD", "title": "Nouvelle conversation", "preview": null, "updatedAt": null, "unread": { "count": 0, "label": { "key": "chat.unread.none" } }, "stateLabel": { "key": "chat.session.idle" }, "turnPending": false, "archived": false, "actions": { "rename": true, "archive": true, "restore": false, "delete": true }, "runtimeTranscriptDeleteLabel": { "key": "chat.session.runtimeTranscriptRetained" } }
+    ],
+    "defaultSessionId": "cs_Mk9qvR6vX2Z0JspN7xgTgD5Lz9WcB1yK",
+    "capabilities": { "sendNowWarning": null, "read": true, "startSession": true, "sendMessage": true, "markRead": true, "storyboard": {"available": true, "reason": null}, "retry": true, "attachments": { "allowed": true, "maxBytes": 20971520, "maxCountPerMessage": 5, "maxCountPerSession": 20, "mimeTypes": ["application/pdf", "text/plain", "image/png", "image/jpeg"], "reason": null } }
+  },
+  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [], "topic": { "id": "chat", "rev": 4 } }
+}

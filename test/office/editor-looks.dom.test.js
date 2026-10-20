@@ -120,7 +120,7 @@ describe('Bureau editor: looks with the setup component (O6)', { skip, timeout: 
     const p = await openCharacters('lang=en');
     const text = await p.eval(`return document.querySelector('.ao-editpanel').innerText;`);
     assert.match(text, /Character/i);
-    assert.match(text, /Name, role and desk of/);
+    assert.match(text, /Identity and placement/);
     assert.doesNotMatch(text.replace(/Orion|Scout|Plume|Atlas|Archiviste/g, ''), /\\b(Personnage|Couleur|Accessoires|Rétablir|Nouveaux sous-agents|Règle par défaut)\\b/);
     await p.close();
   });

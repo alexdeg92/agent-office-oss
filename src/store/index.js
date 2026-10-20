@@ -22,6 +22,9 @@ const { createCommentsRepo } = require('./repos/comments');
 const { createSenderCapturesRepo } = require('./repos/sender-captures');
 const { createRuntimeAutoAddRepo } = require('./repos/runtime-auto-add');
 const { every } = require('../ops/timescale');
+const fs = require('node:fs');
+const path = require('node:path');
+const { privateDirectory } = require('../api/v3/chat-upload');
 
 const FLUSH_MS = 5000;
 const DAY = 86400000;
@@ -77,6 +80,8 @@ function openStore({ dir, instance, ownerName, renameOwner = false, seedOwner = 
   const office = createOfficeRepo(db, { now });
   const comments = createCommentsRepo(db, { now });   // architect-57
   const senderCaptures = createSenderCapturesRepo(db, { now, retentionDays: retention?.senderDays || 30 });
+  const chatV3 = require('./repos/chat-v3').createChatV3Repo(db, { now, onInvalid });
+  const projectKickoffs = require('./repos/project-kickoffs').createProjectKickoffsRepository(db);
   if (seedOwner) withTx(db, () => persons.ensureOwner(ownerName, { rename: renameOwner }));
   const setup = require('./repos/setup').createSetupRepo(db, { persons, users, office, tx: fn => withTx(db, fn) });
   const timers = [];
@@ -110,15 +115,19 @@ function openStore({ dir, instance, ownerName, renameOwner = false, seedOwner = 
     t.unref(); timers.push(t);
   }
 
-  function maintenance() {
+  function maintenance({unlinkChatStorage}={}) {
     const t = now();
     // resolved issues after issueDays; muted ones after auditDays (both since their last occurrence); open ones stay
     if (engine) engine.quarantine.prune(t - keep.resolvedIssueMs, t - keep.auditMs);
     flushQuarantine();
+    const removeChatStorage=typeof unlinkChatStorage==='function'?unlinkChatStorage:name=>{
+      if(!/^[a-f0-9]{64}$/.test(String(name||'')))return false;
+      try{fs.unlinkSync(path.join(privateDirectory(handle.dir),name));return true;}catch(error){return error?.code==='ENOENT';}
+    };
     const pruned = withTx(db, () => ({ audit: audit.prune(t - keep.auditMs),
       issues: quarantine.pruneResolved(t - keep.resolvedIssueMs) + quarantine.pruneMuted(t - keep.auditMs),
-      revoked: sessions.prune(t), humanTokens:humanTokens.pruneExpired(t), seen: office.pruneSeen(t), senders: senderCaptures.prune() }));
-    log(`store: maintenance pruned audit=${pruned.audit}, issues=${pruned.issues}, revoked=${pruned.revoked}, seen=${pruned.seen}, senders=${pruned.senders}`);   // counts only
+      revoked: sessions.prune(t), humanTokens:humanTokens.pruneExpired(t), seen: office.pruneSeen(t), senders: senderCaptures.prune(), chat: chatV3.prune(t,50,removeChatStorage) }));
+    log(`store: maintenance pruned audit=${pruned.audit}, issues=${pruned.issues}, revoked=${pruned.revoked}, seen=${pruned.seen}, senders=${pruned.senders}, chat=${pruned.chat.idempotency + pruned.chat.attachments + pruned.chat.sessions}`);   // counts only
     const file = handle.backup('daily');
     return { backup: file, pruned };
   }
@@ -140,7 +149,7 @@ function openStore({ dir, instance, ownerName, renameOwner = false, seedOwner = 
   }
 
   return { db, dir: handle.dir, file: handle.file, version: handle.version, applied: handle.applied, get owner() { return closed ? closedOwner : persons.owner(); }, setup,
-    quarantine, caches, audit, persons, users, registry, rbac, policy, userManagement, selfAccount, authorizationEvents, sessions, humanTokens, tokens, office, comments, senderCaptures, runtimeReferences, runtimeAliases, runtimeAutoAdd, withTx: (fn) => withTx(db, fn),
+    quarantine, caches, audit, persons, users, registry, rbac, policy, userManagement, selfAccount, authorizationEvents, sessions, humanTokens, tokens, office, comments, senderCaptures, chatV3, projectKickoffs, runtimeReferences, runtimeAliases, runtimeAutoAdd, withTx: (fn) => withTx(db, fn),
     bindEngine, flushQuarantine, maintenance, startMaintenance, backup: handle.backup, close,
     ping: () => !!db.prepare('SELECT 1 AS ok').get(),   // G8: /readyz's store check
   };

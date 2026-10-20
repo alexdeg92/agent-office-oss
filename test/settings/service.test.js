@@ -70,28 +70,33 @@ test('instance and agents apply live, revisions persist, fields-only audit; hidd
 test('office presence timings validate, persist, stay live and are audited as fields only',async t=>{
  const h=await fixture(t);let r=await h.get(BASE);assert.equal(r.status,200,r.text);
  assert.deepEqual(Object.fromEntries(Object.entries(r.json.data.office).filter(([key])=>key!=='help').map(([key,value])=>[key,value.value])),
-  {finishedSessionWindowMinutes:15,agentPresenceWindowMinutes:60,idleRelocationMinutes:15});
- assert.ok(Object.values(r.json.data.office).every(field=>field.minimum===1&&field.maximum===1440));
- for(const [key,value] of [['finishedSessionWindowMinutes',0],['agentPresenceWindowMinutes',1441],['idleRelocationMinutes',0]]) {
+  {finishedSessionWindowMinutes:15,agentPresenceWindowMinutes:60,idleRelocationMinutes:15,idleTransitionDebounceMs:3000});
+ for(const key of ['finishedSessionWindowMinutes','agentPresenceWindowMinutes','idleRelocationMinutes']) {
+  assert.equal(r.json.data.office[key].minimum,1);assert.equal(r.json.data.office[key].maximum,1440);
+ }
+ assert.equal(r.json.data.office.idleTransitionDebounceMs.minimum,0);assert.equal(r.json.data.office.idleTransitionDebounceMs.maximum,15000);
+ assert.equal(r.json.data.office.idleTransitionDebounceMs.minimum,0);assert.equal(r.json.data.office.idleTransitionDebounceMs.maximum,15000);
+ for(const [key,value] of [['finishedSessionWindowMinutes',0],['agentPresenceWindowMinutes',1441],['idleRelocationMinutes',0],['idleTransitionDebounceMs',-1],['idleTransitionDebounceMs',15001]]) {
   const invalid=await h.put(BASE+'/instance',{expectedRevision:1,office:{[key]:value}});assert.equal(invalid.status,400,invalid.text);assert.equal(invalid.json.error.details[0].field,'office.'+key);
  }
- const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45}});
+ const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45,idleTransitionDebounceMs:15000}});
  assert.equal(saved.status,200,saved.text);assert.equal(saved.json.data.result.restartRequired,false);
  assert.deepEqual(Object.fromEntries(Object.entries(saved.json.data.vm.office).filter(([key])=>key!=='help').map(([key,value])=>[key,value.value])),
-  {finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45});
- assert.deepEqual(h.settings.officeTimings(),{finishedSessionWindowMs:60000,agentPresenceWindowMs:1440*60000,idleRelocationMinutes:45});
- assert.deepEqual(JSON.parse(fs.readFileSync(h.paths.file)).office.presence,{finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45});
+  {finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45,idleTransitionDebounceMs:15000});
+ assert.deepEqual(h.settings.officeTimings(),{finishedSessionWindowMs:60000,agentPresenceWindowMs:1440*60000,idleRelocationMinutes:45,idleTransitionDebounceMs:15000});
+ assert.deepEqual(JSON.parse(fs.readFileSync(h.paths.file)).office.presence,{finishedSessionWindowMinutes:1,agentPresenceWindowMinutes:1440,idleRelocationMinutes:45,idleTransitionDebounceMs:15000});
  assert.equal((await h.get(BASE)).json.data.office.finishedSessionWindowMinutes.value,1);
  const audit=h.store.audit.recent().find(row=>row.command==='settings.instance'&&row.outcome==='ok');
- assert.equal(audit.target,'office.finishedSessionWindowMinutes,office.agentPresenceWindowMinutes,office.idleRelocationMinutes');
+ assert.equal(audit.target,'office.finishedSessionWindowMinutes,office.agentPresenceWindowMinutes,office.idleRelocationMinutes,office.idleTransitionDebounceMs');
  assert.equal(audit.detail,null);assert.ok(!Object.hasOwn(audit,'value'));
 });
 test('office timing environment values are boot overrides and cannot be changed in Settings',async t=>{
- const h=await fixture(t,{env:{AGENT_OFFICE_SESSION_PRESENCE_WINDOW_MS:'1800000',AGENT_OFFICE_AGENT_PRESENCE_WINDOW_MS:'7200000',AGENT_OFFICE_IDLE_RELOCATION_MINUTES:'45'}});
+ const h=await fixture(t,{env:{AGENT_OFFICE_SESSION_PRESENCE_WINDOW_MS:'1800000',AGENT_OFFICE_AGENT_PRESENCE_WINDOW_MS:'7200000',AGENT_OFFICE_IDLE_RELOCATION_MINUTES:'45',AGENT_OFFICE_IDLE_TRANSITION_DEBOUNCE_MS:'4500'}});
  const vm=(await h.get(BASE)).json.data;
- assert.deepEqual([vm.office.finishedSessionWindowMinutes.value,vm.office.agentPresenceWindowMinutes.value,vm.office.idleRelocationMinutes.value],[30,120,45]);
- assert.ok([vm.office.finishedSessionWindowMinutes,vm.office.agentPresenceWindowMinutes,vm.office.idleRelocationMinutes].every(row=>row.source==='env'&&!row.editable&&row.reason.key==='settings.office.managed'&&!row.reason.params));
+ assert.deepEqual([vm.office.finishedSessionWindowMinutes.value,vm.office.agentPresenceWindowMinutes.value,vm.office.idleRelocationMinutes.value,vm.office.idleTransitionDebounceMs.value],[30,120,45,4500]);
+ assert.ok([vm.office.finishedSessionWindowMinutes,vm.office.agentPresenceWindowMinutes,vm.office.idleRelocationMinutes,vm.office.idleTransitionDebounceMs].every(row=>row.source==='env'&&!row.editable&&row.reason.key==='settings.office.managed'&&!row.reason.params));
  const refused=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:40}});assert.equal(refused.status,403);assert.equal(refused.json.error.details[0].issue,'env-override');
+ const refusedDebounce=await h.put(BASE+'/instance',{expectedRevision:1,office:{idleTransitionDebounceMs:6000}});assert.equal(refusedDebounce.status,403);assert.equal(refusedDebounce.json.error.details[0].issue,'env-override');
 });
 test('empty timing environment values are ignored consistently for display and writes',async t=>{
  const h=await fixture(t,{env:{AGENT_OFFICE_IDLE_RELOCATION_MINUTES:''}}),vm=(await h.get(BASE)).json.data;

@@ -20,12 +20,12 @@ function createSelfAccount(db,{users,audit,now=Date.now,changed=()=>{}}) {
       const title=displayName===undefined?person.name:displayName.trim();
       const fields=[...(title!==person.name?['profile.name']:[]),...(address!==user.email?['profile.email']:[]),...(password?['profile.password']:[])];
       if(!fields.length)throw fault('empty-change');
-      rotated=password||address!==user.email;
+      rotated=password||address!==user.email||ctx.recoveryOnly===true;
       db.prepare('UPDATE persons SET name=?,updated_at=? WHERE id=?').run(title,now(),user.person_id);
       db.prepare('UPDATE users SET email=?,password_hash=?,auth_generation=auth_generation+?,permission_revision=permission_revision+1,updated_at=? WHERE id=?')
         .run(address,password?passwordHash:user.password_hash,rotated?1:0,now(),user.id);
       db.prepare('UPDATE invitations SET revoked_at=? WHERE user_id=? AND consumed_at IS NULL AND revoked_at IS NULL').run(now(),user.id);
-      audit.append({at:now(),requestId:ctx.requestId,actor:{kind:'human',personId:user.person_id},command:password?'settings.password':'settings.owner',target:user.id,outcome:'ok',detail:password?'password-changed':'profile-changed'});
+      audit.append({at:now(),requestId:ctx.requestId,actor:{kind:'human',personId:user.person_id},command:password?'settings.password':'settings.owner',target:user.id,outcome:'ok',detail:ctx.recoveryOnly?'recovery-repair':password?'password-changed':'profile-changed'});
       result={id:user.id,personId:user.person_id,name:title,email:address,revision:expectedRevision+1};
     });
     changed({userId:ctx.userId});return {user:result,rotated};

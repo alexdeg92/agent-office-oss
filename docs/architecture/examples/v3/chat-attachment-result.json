@@ -1,0 +1,5 @@
+{
+  "request": { "headers": { "Idempotency-Key": "idem_9uW1bK4xR8mF2zA6pH0cD5vN3qT7yL9s", "Content-Digest": "sha-256=:iY3KEqiS8qMo9V4zH3mP1cSVZhlLD0dz1Xkag5aCVvA=:" }, "method": "POST multipart, one file" },
+  "data": { "ok": true, "result": { "attachmentId": "att_P4gN8xv2LmQ6cR0yK1zD5sW9hT3aB7uE", "name": "options.pdf", "mimeType": "application/pdf", "size": 84512 }, "revision": null, "vm": null },
+  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [] }
+}

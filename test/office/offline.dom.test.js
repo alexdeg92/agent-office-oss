@@ -31,7 +31,7 @@ describe('the Bureau when the stream is down (R27-02)', { skip, timeout: 120_000
       assert.equal(r.live, 0);
       assert.ok(r.frozen.length >= 1 && r.frozen.every(Boolean), JSON.stringify(r.frozen));
       assert.ok(r.dim);
-      assert.match(r.chip, /^Hors ligne depuis (une minute|1 minute|2 minutes)$/);
+      assert.match(r.chip.replace(/\s+/g, ' '), /^Hors ligne depuis (une minute|1 minute|2 minutes)$/);
       assert.match(r.label, /dernier état observé/);
       assert.equal(r.chipOnTop, true, 'the chip is painted above the stage');
       // back online: live again

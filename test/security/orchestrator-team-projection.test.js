@@ -3,9 +3,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const registry = require('../../src/security/orchestrator-team-resources');
-const { projectOfficeOccupant, projectOfficeTeamOccupants, projectOrchestrators, projectTeamBoard, projectionCacheKey, issueReportRef } = require('../../src/api/orchestrator-team-projection');
+const { projectOfficeOccupant, projectOfficeTeamOccupants: projectOfficeTeamOccupantsImpl, projectOrchestrators, projectTeamBoard, projectionCacheKey, issueReportRef } = require('../../src/api/orchestrator-team-projection');
+const { officeDefaults } = require('../../src/api/v2/vm/office');
 const { schemasFor } = require('../../src/api/v2/vm/schemas');
 const { validate } = require('../../src/schema');
+
+const projectOfficeTeamOccupants = (...args) => {
+  const options = args[3] || {};
+  args[3] = { index: officeDefaults().index, ...options };
+  return projectOfficeTeamOccupantsImpl(...args);
+};
 
 const admin = { id: 'admin-user', role: 'admin', permissionRevision: 4 };
 const editor = { id: 'editor-user', role: 'editor', permissionRevision: 2 };
@@ -261,7 +268,7 @@ test('added team occupants never inherit the primary summary and reject chat ide
   ], identityLinks: [] };
   const pmSession = { key: 'pm-session', class: { kind: 'conversation', agentId: 'pm-agent' }, run: { status: 'idle', evidenceLevel: 'verified' } };
   const cases = [primarySummary, `Task references ${primarySummary} for context`, 'Follow up with 123456789012345678',
-    'discord-user:123456789012345678', 'User id: 123456789012345678', 'lulu_mimoumou user id:1469123456789', 'Reply to <@123456789012345678>'];
+    'discord-user:123456789012345678', 'User id: 123456789012345678', 'sample_handle user id:9999999999999', 'Reply to <@123456789012345678>'];
   for (const summary of cases) {
     const session = { key, class: { kind: 'conversation', agentId: 'builder-agent' }, run: { status: 'running', evidenceLevel: 'verified' },
       usage: { total: 12 }, updatedAt: 19, summary };

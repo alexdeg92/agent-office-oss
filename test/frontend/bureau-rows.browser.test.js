@@ -15,7 +15,7 @@ async function fixture(page,origin) {
 const active=locator=>locator.evaluate(e=>e===document.activeElement);
 
 test('SettingRow and ListRow: label association, readable environment, zero/false values, independent actions', {skip,timeout:15000}, async()=>{
-  const b=await openLayoutBrowser();
+  const b=await openLayoutBrowser({testTimeoutMs:15000});
   try{
     await fixture(b.page,b.origin);
     const input=b.page.getByLabel('Port',{exact:true});assert.equal(await input.inputValue(),'18789');
@@ -35,7 +35,7 @@ test('SettingRow and ListRow: label association, readable environment, zero/fals
 });
 
 test('Menu: arrows, disabled reason, typeahead, Escape/outside dismissal and focus after row removal', {skip,timeout:20000},async()=>{
-  const b=await openLayoutBrowser();const p=b.page;
+  const b=await openLayoutBrowser({testTimeoutMs:20000});const p=b.page;
   try{
     await fixture(p,b.origin);const trigger=p.getByRole('button',{name:'Actions pour Atlas',exact:true});
     await trigger.focus();await p.keyboard.press('ArrowDown');
@@ -67,7 +67,7 @@ test('Menu: arrows, disabled reason, typeahead, Escape/outside dismissal and foc
 });
 
 test('KeyValue: real clipboard success, truthful failure, changed-value and unmount completion guards', {skip,timeout:20000},async()=>{
-  const b=await openLayoutBrowser();const p=b.page;
+  const b=await openLayoutBrowser({testTimeoutMs:20000});const p=b.page;
   try{
     await p.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:b.origin});await fixture(p,b.origin);
     const copy=p.getByRole('button',{name:'Copier Adresse',exact:true});await copy.click();
@@ -88,7 +88,7 @@ test('KeyValue: real clipboard success, truthful failure, changed-value and unmo
 });
 
 test('Menu: touch activation escapes paint containment at both mobile sizes', {skip,timeout:15000},async()=>{
-  const b=await openLayoutBrowser({touch:true}); const p=b.page;
+  const b=await openLayoutBrowser({touch:true,testTimeoutMs:15000}); const p=b.page;
   try{
     await fixture(p,b.origin);
     for(const [width,height]of[[390,844],[375,667]]){
@@ -107,7 +107,7 @@ test('Menu: touch activation escapes paint containment at both mobile sizes', {s
 });
 
 test('rows/Menu: current Bureau responsive surface and constrained popover evidence', {skip,timeout:30000},async()=>{
-  const b=await openLayoutBrowser({touch:true});const p=b.page,records=[];
+  const b=await openLayoutBrowser({touch:true,testTimeoutMs:30000});const p=b.page,records=[];
   const revision=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
   try{
     await fixture(p,b.origin);await p.emulateMedia({reducedMotion:'reduce'});

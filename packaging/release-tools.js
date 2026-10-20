@@ -11,10 +11,20 @@ function assertVersion(version) {
   return version;
 }
 
-function updateFormula(src, version, sha256) {
+function updateFormula(src, version, sha256, pkg, tarball) {
   assertVersion(version);
   if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error('sha256 must be 64 hex characters');
-  const url = `https://registry.npmjs.org/@alexdeg92/agent-office/-/agent-office-${version}.tgz`;
+  const repository = typeof pkg?.repository === 'string' ? pkg.repository : pkg?.repository?.url;
+  let repo;
+  try { repo = new URL(String(repository || '').replace(/^git\+/, '')); }
+  catch { throw new Error('GitHub HTTPS repository metadata is required'); }
+  const parts = /^\/([A-Za-z0-9-]+)\/([A-Za-z0-9_.-]+)\/?$/.exec(repo.pathname);
+  if (repo.protocol !== 'https:' || repo.hostname !== 'github.com' || repo.port || repo.username || repo.password || repo.search || repo.hash || !parts) {
+    throw new Error('GitHub HTTPS repository metadata is required');
+  }
+  const name = parts[2].replace(/\.git$/, '');
+  if (!name || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.tgz$/.test(tarball || '')) throw new Error('release tarball filename is required');
+  const url = `https://github.com/${parts[1]}/${name}/releases/download/v${version}/${tarball}`;
   let out = src;
   const replace = (re, line, label) => {
     if (!re.test(out)) throw new Error(`formula ${label} line not found`);

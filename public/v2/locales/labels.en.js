@@ -1,5 +1,6 @@
 // English fallback for backend LabelRefs when MetaVM uses another locale.
 export const LABELS_EN = {
+  'chat.target.team': 'Team',
   "settings.office.managed": "This duration is set by the server configuration.",
   "office.activity.idle": "On a break",
   "office.activity.gym": "At the gym",
@@ -78,6 +79,14 @@ export const LABELS_EN = {
   'priority.P0': 'P0 · critical', 'priority.P1': 'P1 · very high', 'priority.P2': 'P2 · high', 'priority.P3': 'P3 · fairly high',
   'priority.P4': 'P4 · medium', 'priority.P5': 'P5 · moderate', 'priority.P6': 'P6 · fairly low', 'priority.P7': 'P7 · low',
   'priority.P8': 'P8 · very low', 'priority.P9': 'P9 · minimal',
+  'project.source.manual': 'Created by hand',
+  'project.source.sessionGroup': 'Conversations',
+  'project.source.github': 'GitHub · {owner}',
+  'project.source.github.generic': 'GitHub',
+  'project.source.workspace': 'Folders',
+  'project.source.other': 'Other sources',
+  'project.source.label': '{label}',
+  'project.source.team': 'Team · {label}',
   'projectStatus.idea': 'Idea', 'projectStatus.in-progress': 'In progress', 'projectStatus.in-review': 'In review', 'projectStatus.shipped': 'Shipped',
   'projectStatus.todo': 'To do',
   'risk.blocked': 'Blocked', 'risk.ci-red': 'Automated check failing', 'risk.cron-failing': 'Scheduled task failing', 'risk.flow-failing': 'Workflow failing', 'risk.stale': 'Inactive for {n} d',

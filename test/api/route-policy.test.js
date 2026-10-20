@@ -88,6 +88,18 @@ test('live HTTP resource × none/read/write matrix uses policy before handlers o
     const path='/probe/'+index,handler=(req,res)=>{calls++;res.json({actor:req.user.id});};
     declareRoute(f.r,'get',path,permission(resource.key,'read'),f.deps,handler);
     declareRoute(f.r,'post',path,permission(resource.key,'write'),f.deps,handler);
+    if(resource.adminOnly) {
+      for(const level of ['none','read','write']) {
+        f.set(resource.key,level);
+        for(const version of [2,3])for(const method of ['GET','POST']) {
+          const before=calls,response=await f.request(method,'/api/v'+version+path);
+          assert.equal(response.status,403,resource.key+' admin-only '+level+' '+method);
+          assert.equal(calls,before,'admin-only request never reaches a non-admin handler');
+        }
+      }
+      assert.equal((await f.request('POST','/api/v3'+path,f.admin)).status,200);
+      continue;
+    }
     if(resource.parent)f.set(resource.parent,'read');
     for(const level of ['none','read','write']) {
       f.set(resource.key,level);

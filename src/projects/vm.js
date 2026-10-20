@@ -1,4 +1,5 @@
 'use strict';
+const {projectSourceDescriptors}=require('./source-descriptors');
 
 const { actorKey } = require('./actors');
 const {
@@ -311,13 +312,12 @@ function buildBoardVM(projects, options = {}) {
     if (agentFilter) return involvesTimmy(project, persons, options.timmyPersonId, options.primaryAgentId || undefined);
     return true;
   };
-  const descriptorsOf = (project) => {
-    if (Array.isArray(project.sourceDescriptors)) return project.sourceDescriptors;
-    if (project.teamProject?.sourceDescriptor) return [project.teamProject.sourceDescriptor];
-    return (project.sources || []).map(source => ({ id: source.id, kind: source.kind, runtime: null,
-      label: labelRef(`project.source.${source.kind}`, { label: sourceLabel(source) }), brand: null }));
-  };
-  const eligible = projects.filter(matchesBoardFilter);
+  const descriptorsOf = project => projectSourceDescriptors(project, options);
+  const search = typeof options.search === 'string' ? options.search.trim().slice(0, 120) : '';
+  const stage = typeof options.stage === 'string' && options.stage !== 'all' ? options.stage : null;
+  if (stage && !PROJECT_STATUSES.includes(stage)) throw validation('Étape invalide.', 'stage');
+  const matchesSearch = project => !search || String(project.name || '').toLocaleLowerCase().includes(search.toLocaleLowerCase());
+  const eligible = projects.filter(matchesBoardFilter).filter(matchesSearch);
   const sourceCounts = new Map();
   for (const project of eligible) for (const source of descriptorsOf(project)) {
     const previous = sourceCounts.get(source.id);
@@ -327,7 +327,19 @@ function buildBoardVM(projects, options = {}) {
   const sourceFilters = [...sourceCounts.values()].sort((a, b) => a.label.key.localeCompare(b.label.key) || a.id.localeCompare(b.id))
     .map(row => ({ id: row.id, label: row.label, count: row.count, selected: row.id === (options.sourceFilterId || null), source: row.source }));
   if (options.sourceFilterId && !sourceCounts.has(options.sourceFilterId) && !options.allowUnknownSourceFilter) throw validation('Filtre de source invalide.', 'source');
-  const selected = eligible.filter(project => !options.sourceFilterId || descriptorsOf(project).some(source => source.id === options.sourceFilterId));
+  const sourceSelected = eligible.filter(project => !options.sourceFilterId || descriptorsOf(project).some(source => source.id === options.sourceFilterId));
+  // Private projection metadata: security projection needs to subtract restricted
+  // cards from every stage count, including stages omitted by the selected-stage
+  // query. A global symbol/non-enumerable property keeps it out of the wire VM.
+  const accessRow = project => ({
+    status: project.status,
+    runtime: descriptorsOf(project).some(source => source.kind === 'runtime'),
+    team: project.origin === 'orchestrator-team' || project.teamProject != null,
+    sourceIds: descriptorsOf(project).map(source => source.id),
+  });
+  const boardAccess = { stageRows: sourceSelected.map(accessRow), sourceRows: eligible.map(accessRow) };
+  const selected = stage ? sourceSelected.filter(project => project.status === stage) : sourceSelected;
+  const v3 = options.apiVersion === 3;
   const columns = PROJECT_STATUSES.map((status) => {
     const cards = selected.filter((p) => p.status === status).sort(compareCards).map((project) => {
       const cover = (typeof options.coverOf === 'function' ? options.coverOf(project.id) : project.cover) || null;
@@ -351,10 +363,23 @@ function buildBoardVM(projects, options = {}) {
         counts: projectCounts(project, people), capabilities: projectCapabilities(project),
       };
     });
-    return { id: status, count: cards.length, cards };
+    return { id: status, ...(v3 ? { label: statusRef(status), taskCount: cards.length,
+      summaryLabel: labelRef('project.board.column.summary', { n: cards.length }) } : {}), count: cards.length, cards };
   });
-  return { columns, filter, sourceFilterId: options.sourceFilterId || null, sourceFilters,
+  const vm = { columns, filter, sourceFilterId: options.sourceFilterId || null, sourceFilters,
     emptyStateLabel: selected.length ? null : { key: options.sourceFilterId ? 'project.empty.source' : 'project.empty.board' } };
+  if (v3) {
+    const stageCounts = PROJECT_STATUSES.map(id => ({ id, count: sourceSelected.filter(project => project.status === id).length }));
+    vm.controls = {
+      search: { options: [{ id: 'project-name', label: labelRef('project.control.search.name') }],
+        counts: [{ id: 'matches', count: sourceSelected.length }], selected: search || null },
+      stage: { options: [{ id: 'all', label: labelRef('project.control.stage.all') },
+        ...PROJECT_STATUSES.map(id => ({ id, label: statusRef(id) }))],
+      counts: [{ id: 'all', count: sourceSelected.length }, ...stageCounts], selected: stage || 'all' },
+    };
+    Object.defineProperty(vm, Symbol.for('agent-office.projects.boardAccess'), { value: boardAccess });
+  }
+  return vm;
 }
 
 function projectCounts(project, cardPeople = []) {
@@ -369,6 +394,14 @@ function projectCounts(project, cardPeople = []) {
 function projectCapabilities(project) {
   return { read: true, write: project.readOnly !== true, comments: project.commentCapability || 'read-write',
     history: project.historyCapability || 'read-write', repository: project.repo ? 'read-only' : 'unsupported' };
+}
+
+// Ordered display projection; consumers never turn capability scalars into labels.
+function projectCapabilityRows(capabilities) {
+  return ['read', 'write', 'comments', 'history', 'repository'].map(id => ({
+    id, label: { key: 'project.team.capability.' + id },
+    valueLabel: { key: 'project.team.availability.' + String(capabilities[id]) },
+  }));
 }
 
 function sourceLabel(source) {
@@ -425,6 +458,7 @@ function repoVm(project, locale) {
 function buildCandidatesVM(candidates, { scannedAt, generatedAt } = {}) {
   return {
     scannedAt: scannedAt ?? generatedAt ?? null,
+    statusOptions: PROJECT_STATUSES.map(id => ({ id, label: statusRef(id) })),
     candidates: (candidates || []).map((candidate) => ({
       id: candidate.key,
       key: candidate.key,
@@ -477,10 +511,7 @@ function buildProjectVM(project, historyEvents, options = {}) {
     author: actorVm(project.summaryMeta.author, persons, liveStates, options.portability),
     at: project.summaryMeta.at,
   } : null;
-  const sourceDescriptors = project.teamProject?.sourceDescriptor ? [project.teamProject.sourceDescriptor]
-    : Array.isArray(project.sourceDescriptors) ? structuredClone(project.sourceDescriptors)
-      : (project.sources || []).map(source => source.sourceDescriptor || ({ id: source.id, kind: source.kind,
-        runtime: null, label: labelRef(`project.source.${source.kind}`, { label: sourceLabel(source) }), brand: null }));
+  const sourceDescriptors = projectSourceDescriptors(project, options);
   const sessionCount = Object.values(stats).reduce((sum, value) => sum + (Number.isSafeInteger(value?.sessionCount) ? value.sessionCount : 0), 0);
   return {
     id: project.id,
@@ -504,10 +535,12 @@ function buildProjectVM(project, historyEvents, options = {}) {
     })),
     sourceDescriptors,
     statusLabel: statusRef(project.status),
+    statusTransitions: projectCapabilities(project).write ? PROJECT_STATUSES.filter(id => id !== project.status).map(id => ({ id, label: statusRef(id) })) : [],
     counts: { sessions: Object.keys(stats).length ? sessionCount : null,
       agents: people.filter(person => person.kind === 'agent').length,
       activity: Number.isSafeInteger(project.activityCount) ? project.activityCount : null },
     capabilities: projectCapabilities(project),
+    capabilityRows: projectCapabilityRows(projectCapabilities(project)),
     repo: repoVm(project, options.locale),
     people,
     recentHistory: presentHistory(historyEvents || [], options),
@@ -519,6 +552,6 @@ function buildProjectVM(project, historyEvents, options = {}) {
 }
 
 module.exports = {
-  buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, presentHistory, compareCards, projectCapabilities, sourceLabel, initials, monogramAccent, thumbOf,
+  buildBoardVM, buildProjectVM, buildCandidatesVM, buildHistoryPage, presentHistory, compareCards, projectCapabilities, projectCapabilityRows, sourceLabel, initials, monogramAccent, thumbOf,
   atRisk, involvesTimmy,
 };

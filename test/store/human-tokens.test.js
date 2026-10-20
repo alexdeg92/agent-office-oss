@@ -29,6 +29,18 @@ test('opaque human records persist only digests, bind canonical origin/audience/
   const other=openStore({dir:f.dir,instance:'test',ownerName:'Synthetic admin',now:()=>f.clock.now,log:()=>{}});t.after(()=>other.close());
   assert.deepEqual(other.humanTokens.resolveAccess(issued.accessToken,{audience:f.audience,origin:'https://office.example.invalid'}),claims);
 });
+test('recovery-only identities cannot create bearer families through the token repository',t=>{
+  const f=fixture(t);
+  assert.throws(()=>f.store.humanTokens.createFamily({userId:f.admin.id,expectedGeneration:f.admin.auth_generation,
+    origin:'https://office.example.invalid',audience:f.audience,recoveryOnly:true}),/recovery-only/);
+  const challenge=f.store.humanTokens.createChallenge({purpose:'login',origin:'https://office.example.invalid',audience:f.audience});
+  assert.equal(challenge.ok,true);
+  assert.throws(()=>f.store.humanTokens.loginFamily({userId:f.admin.id,expectedGeneration:f.admin.auth_generation,
+    origin:'https://office.example.invalid',audience:f.audience,csrfToken:challenge.csrfToken,recoveryOnly:true}),/recovery-only/);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM auth_families').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM human_access_tokens').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens').get().n,0);
+});
 test('live permission/role/registry claims fail stale while generations/status/family/expiry/audience fail unauthorized',t=>{
   for(const change of ['permissions','roleRevision','roleId','registry','generation','disabled','deleted','accessExpiry','idleExpiry','absoluteExpiry','sid']) {
     const f=fixture(t),issued=f.issue();

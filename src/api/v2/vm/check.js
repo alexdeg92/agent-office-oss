@@ -11,6 +11,7 @@ const s = require('../../../schema');
 const { schemasFor } = require('./schemas');
 const { classesFor } = require('./classes');
 const { undefinedPath } = require('../../../model/entity');
+const boardAccess = require('../../../projects/board-access');
 
 class VmError extends Error {
   constructor(name, issues) {
@@ -40,7 +41,11 @@ function createVmCheck({ mode, report = () => {}, resolve = () => {}, version = 
   // → the VM to send: an instance of its section's class (frozen), or the last good one in fallback mode; throws in throw mode
   function check(name, vm, key = name) {
     const issues = issuesOf(name, vm);
-    if (!issues.length) { const typed = new VM_CLASSES[name](vm); lastGood.set(key, typed); try { resolve(channelOf(name), name); } catch {} return typed; }
+    if (!issues.length) {
+      const typed = new VM_CLASSES[name](vm);
+      if (name === 'projects') boardAccess.attach(typed, boardAccess.forBoard(vm));
+      lastGood.set(key, typed); try { resolve(channelOf(name), name); } catch {} return typed;
+    }
     if (mode === 'throw') throw new VmError(name, issues);
     for (const i of issues.slice(0, 5)) report({ code: 'vm.invalid', severity: 'error', channel: channelOf(name), path: i.path });
     if (lastGood.has(key)) return lastGood.get(key);

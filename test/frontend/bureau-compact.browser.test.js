@@ -15,7 +15,7 @@ async function fixture(page,origin){
 const active=locator=>locator.evaluate(e=>document.activeElement===e);
 
 test('compact Diagnostics: severity shapes and localized names, independent text action, native link', {skip,timeout:15000},async()=>{
-  const b=await openLayoutBrowser();const p=b.page;
+  const b=await openLayoutBrowser({testTimeoutMs:15000});const p=b.page;
   try{
     await fixture(p,b.origin);
     for(const name of ['Erreur','À vérifier','Information','Non vérifié'])assert.equal(await p.getByRole('img',{name,exact:true}).count(),1);
@@ -38,7 +38,7 @@ test('compact Diagnostics: severity shapes and localized names, independent text
 });
 
 test('TextAction: stable name and focus during pending, repeat suppression, linked error and disabled state', {skip,timeout:15000},async()=>{
-  const b=await openLayoutBrowser();const p=b.page;
+  const b=await openLayoutBrowser({testTimeoutMs:15000});const p=b.page;
   try{
     await fixture(p,b.origin);const action=p.getByRole('button',{name:'Configurer : Claude Code',exact:true});
     await action.focus();await p.evaluate(()=>{window.bureauCompact.state.busy=true;window.bureauCompact.draw();});
@@ -58,7 +58,7 @@ test('TextAction: stable name and focus during pending, repeat suppression, link
 });
 
 test('CollapsedGroup: closed evidence, native keyboard/touch disclosure, focus and count updates', {skip,timeout:15000},async()=>{
-  const b=await openLayoutBrowser({touch:true});const p=b.page;
+  const b=await openLayoutBrowser({touch:true,testTimeoutMs:15000});const p=b.page;
   try{
     await fixture(p,b.origin);const summary=p.locator('#healthy-group>summary');
     assert.equal(await p.locator('#empty-group').count(),0);
@@ -80,7 +80,7 @@ test('CollapsedGroup: closed evidence, native keyboard/touch disclosure, focus a
 });
 
 test('compact shared rows: native light/dark viewport matrix, focus and pending/error/long-label evidence', {skip,timeout:45000},async()=>{
-  const b=await openLayoutBrowser();const p=b.page,records=[];
+  const b=await openLayoutBrowser({testTimeoutMs:45000});const p=b.page,records=[];
   const revision=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
   try{
     await fixture(p,b.origin);await p.emulateMedia({reducedMotion:'reduce'});

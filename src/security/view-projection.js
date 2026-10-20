@@ -6,7 +6,12 @@ const {schemasFor}=require('../api/v2/vm/schemas');
 const {validate}=require('../schema');
 const {PROJECT_CONTEXT_READS,mayRead:mayReadComment}=require('./comment-provenance');
 const {labelsFor}=require('../i18n');
+const {projectCapabilityRows}=require('../projects/vm');
 const {redactChatIdentity}=require('./redact-text');
+const {scopeForAccount,portalChatIdentity,visibleToAccount}=require('../api/chat-identity');
+const {executionState}=require('../engine/execution-state');
+const boardAccessMetadata=require('../projects/board-access');
+const boardAccessFor=boardAccessMetadata.forBoard;
 const REQUIREMENTS=new Map([...TOPICS].map(([name,spec])=>[name,spec.resource]));
 REQUIREMENTS.set('history','projects');REQUIREMENTS.set('candidates','projects');
 REQUIREMENTS.set('layoutRevision','store');
@@ -14,14 +19,23 @@ REQUIREMENTS.set('orchestrators','orchestrators');REQUIREMENTS.set('teams','team
 REQUIREMENTS.set('officeCharacters','office');
 REQUIREMENTS.set('officePalette','office');
 REQUIREMENTS.set('officeStore','store');
+REQUIREMENTS.set('projectCreate','projects');REQUIREMENTS.set('projectKickoff','projects');
+for(const name of ['chatAgents','chatAgentSessions','chatSession'])REQUIREMENTS.set(name,'chat');
+for(const name of ['chat-agents-scope','chat-agent-sessions-scope','chat-session-scope'])REQUIREMENTS.set(name,'chat');
 const SELF=new Set(['meta','me','settings']);
 const SAFE_HISTORY=new Set(['project-created','renamed','status','priority','archived','restored','commit','agent-action']);
 const SUMMARY_ROLES=new Set(['main','primary','agent']);
+const CHAT_VIEW_SCHEMAS={'chat-agents':'chatAgents','chat-agent-sessions':'chatAgentSessions','chat-agent-sessions-archived':'chatAgentSessions','chat-session':'chatSession','chat-agents-scope':'chatAgents','chat-agent-sessions-scope':'chatAgentSessions','chat-session-scope':'chatSession',chatAgents:'chatAgents',chatAgentSessions:'chatAgentSessions',chatSession:'chatSession'};
 const countLabel=n=>({key:n===1?'office.characters.count.one':'office.characters.count.other',params:{n}});
 const denied=()=>new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
 
 // This module has no shared last-good cache. Both transports receive a fresh actor projection.
-function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
+function createViewProjection({store,cfg={},isTeamProject=()=>false,chatSessionForKey=()=>null,officeSessions=null,officeEvents=null}) {
+  // Stream snapshots are projected once when assembled and again at the frame
+  // boundary. Remember this projector's private provenance outside the wire
+  // object so the same principal's second pass is a no-op, while changed grants
+  // still re-project using the original pre-filter facets.
+  const projectedVmMetadata=new WeakMap();
   // A topic version is a deterministic fingerprint of the principal-visible VM.
   // It cannot reveal shared raw-topic churn and has no evictable counter state.
   function fingerprint(user,_topic,vm,_version=3) {
@@ -87,10 +101,89 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
   function project(user,name,raw,{version=3}={}) {
     if(version!==2&&version!==3)throw new TypeError('unsupported projection contract');
     name=name.split(/[?:]/,1)[0];user=authorize(user,name);
-    const schema=schemasFor(version)[name];
+    const schemaName=CHAT_VIEW_SCHEMAS[name]||name;
+    if(CHAT_VIEW_SCHEMAS[name]&&version!==3)throw new Error('unsupported chat projection version');
+    const schema=schemasFor(version)[schemaName];
     if(!schema||!validate(schema,raw).ok)throw new Error('invalid raw view projection '+name);
+    const permissions=store.rbac.fingerprint(user.id),content=createHash('sha256').update(JSON.stringify(raw)).digest('hex');
+    const prior=projectedVmMetadata.get(raw);
+    if(prior&&prior.userId===user.id&&prior.permissions===permissions&&prior.content===content)return structuredClone(raw);
+    const privateBoardAccess=boardAccessFor(raw);
+    const boardAccess=privateBoardAccess;
     const vm=structuredClone(raw),logs=can(user,'logs'),runtimes=can(user,'settings.runtimes');
     if(name==='office') {
+      // Portal-chat occupants are private even to administrators. The old
+      // unscoped session has ambiguous ownership and belongs only in Logs.
+      const callerScope=scopeForAccount(user.id,store),hiddenChatOccupants=[];
+      // Filter the canonical population independently from stage membership:
+      // explicit/dashboard sessions often feed a primary aggregate but have no
+      // standalone occupant of their own. All session-derived Office totals and
+      // journal rows must use this account-visible population.
+      const canonicalOfficeSessions=logs&&typeof officeSessions==='function'?(officeSessions()||[]):null;
+      const visibleOfficeSessions=canonicalOfficeSessions?.filter(session=>visibleToAccount(session,callerScope,{legacy:false}))||null;
+      const knownSessionKeys=canonicalOfficeSessions?new Set(canonicalOfficeSessions.map(session=>session.key).filter(Boolean)):null;
+      const hiddenSessionKeys=new Set(canonicalOfficeSessions&&visibleOfficeSessions
+        ?canonicalOfficeSessions.filter(session=>!visibleToAccount(session,callerScope,{legacy:false})).map(session=>session.key).filter(Boolean):[]);
+      // liveEvents is a bounded journal and may outlive its canonical session.
+      // An unknown source is not public provenance: fail closed until a current
+      // session proves that the event belongs to this account's visible set.
+      const sourceUnverifiableEvents=new Set(logs&&typeof officeEvents==='function'?(officeEvents()||[])
+        .filter(event=>event.sessionKey&&(!knownSessionKeys?.has(event.sessionKey)||hiddenSessionKeys.has(event.sessionKey)))
+        .map(event=>event.id):[]);
+      vm.occupants=vm.occupants.filter(occupant=>{
+        const session=occupant.sessionKey&&chatSessionForKey(occupant.sessionKey,version);
+        const identity=portalChatIdentity(session);
+        if(!identity)return true;
+        if(identity.kind==='legacy'||identity.scope!==callerScope){hiddenChatOccupants.push({occupant,session});if(session?.key)hiddenSessionKeys.add(session.key);return false;}
+        return true;
+      });
+      if(hiddenChatOccupants.length||hiddenSessionKeys.size||sourceUnverifiableEvents.size) {
+        const hiddenIds=new Set(hiddenChatOccupants.map(row=>row.occupant.id));
+        vm.journal=vm.journal.filter(event=>!hiddenIds.has(event.occupantId)&&!hiddenIds.has(event.agentId)&&!sourceUnverifiableEvents.has(event.id));
+        vm.conversationIds=(vm.conversationIds||[]).filter(id=>!hiddenIds.has(id)&&!hiddenSessionKeys.has(id));
+        vm.conversationCount=vm.conversationIds.length;
+        vm.conversationLabel={key:'office.mobile.conversations',params:{n:vm.conversationCount}};
+        for(const kpi of vm.kpis||[]) {
+          if(canonicalOfficeSessions&&visibleOfficeSessions&&kpi.id==='tokens'&&Number.isFinite(kpi.value))kpi.value=visibleOfficeSessions.reduce((sum,session)=>sum+(session.usage?.total||0),0);
+          else if(kpi.id==='tokens'&&Number.isFinite(kpi.value))kpi.value=Math.max(0,kpi.value-hiddenChatOccupants.reduce((sum,row)=>sum+(row.session?.usage?.total||0),0));
+          if(canonicalOfficeSessions&&visibleOfficeSessions&&kpi.id==='runs'&&Number.isFinite(kpi.value))kpi.value=visibleOfficeSessions.filter(session=>executionState(session.run).status==='running').length;
+          else if(kpi.id==='runs'&&Number.isFinite(kpi.value))kpi.value=Math.max(0,kpi.value-hiddenChatOccupants.filter(row=>row.session?.run?.status==='running').length);
+          if(kpi.id==='subagents')kpi.value=vm.occupants.filter(row=>row.role==='subagent').length;
+        }
+        delete vm.occupantOverflowCount;
+        const physicalFloors=Array.isArray(vm.rosterFloors)?vm.rosterFloors:[];
+        Object.assign(vm,require('../api/v2/vm/office-roster').projectOfficeRoster(vm));
+        const projectedFloors=new Map(vm.rosterFloors.map(floor=>[floor.id,floor]));
+        vm.rosterFloors=physicalFloors.map(physical=>{
+          const visible=projectedFloors.get(physical.id);
+          if(visible){projectedFloors.delete(physical.id);return {...physical,...visible,layout:physical.layout,capacity:physical.capacity};}
+          return {...physical,occupantIds:[],mobileLabelIds:[],items:[],count:0,activeCount:0,idleCount:0,
+            countLabel:{key:'office.floor.count',params:{n:0}},statusLabel:{key:'office.floor.status',params:{active:0,idle:0}}};
+        });
+        vm.rosterFloors.push(...projectedFloors.values());
+        const visibleIds=new Set(vm.occupants.map(row=>row.id));
+        vm.unseatedTeams=(Array.isArray(vm.unseatedTeams)?vm.unseatedTeams:[]).flatMap(team=>{
+          if(!visibleIds.has(team.parentId))return [];
+          const root=vm.occupants.find(row=>row.id===team.parentId);
+          const count=vm.occupants.filter(row=>row.parentId===team.parentId&&row.teamId===root?.teamId&&!row.stationUid).length;
+          return count?[{...team,count}]:[];
+        });
+        if(vm.visitIntent) {
+          if(!visibleIds.has(vm.visitIntent.hostId))delete vm.visitIntent;
+          else {
+            vm.visitIntent.desk=(vm.visitIntent.desk||[]).filter(id=>visibleIds.has(id));
+            vm.visitIntent.meeting=(vm.visitIntent.meeting||[]).filter(id=>visibleIds.has(id));
+            vm.visitIntent.visitors=(vm.visitIntent.visitors||[]).filter(row=>visibleIds.has(row.id));
+            if(!visibleIds.has(vm.visitIntent.speaker))vm.visitIntent.speaker=null;
+          }
+        }
+        const active=vm.kpis?.find(row=>row.id==='active');
+        if(active) {
+          const unknown=vm.occupants.some(row=>row.state==='unknown');
+          active.value=unknown?null:vm.occupants.filter(row=>!['unknown','idle','offline'].includes(row.state)).length;
+          active.sub=unknown?{key:'kpi.stateUnknown'}:active.value===0?{key:'kpi.idle',params:{agent:''}}:{key:'kpi.onStage',params:{n:vm.occupants.filter(row=>!['unknown','idle','offline'].includes(row.state)).length}};
+        }
+      }
       if(!logs) {
         vm.occupants=vm.occupants.filter(o=>SUMMARY_ROLES.has(o.role));
         for(const o of vm.occupants){
@@ -192,11 +285,17 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
       const selectedFilter=vm.sourceFilters.find(source=>source.id===vm.sourceFilterId);
       const selectedFilterHidden=selectedFilter?!sourceReadable(user,selectedFilter.source?.kind):false;
       const hiddenSourceCounts=new Map();
+      const hiddenSourceRows=Array.isArray(boardAccess?.sourceRows)?boardAccess.sourceRows.filter(row=>row.runtime&&!runtimeProjectsReadable||row.team&&!can(user,'teams')):null;
+      const hiddenBoardRows=Array.isArray(boardAccess?.stageRows)?boardAccess.stageRows.filter(row=>row.runtime&&!runtimeProjectsReadable||row.team&&!can(user,'teams')):null;
+      if(hiddenSourceRows)for(const row of hiddenSourceRows)for(const sourceId of row.sourceIds||[])
+        hiddenSourceCounts.set(sourceId,(hiddenSourceCounts.get(sourceId)||0)+1);
       for(const column of vm.columns){
-        for(const hidden of column.cards.filter(c=>!cardReadable(c)))for(const source of hidden.sourceDescriptors||[])
+        if(!hiddenSourceRows)for(const hidden of column.cards.filter(c=>!cardReadable(c)))for(const source of hidden.sourceDescriptors||[])
           hiddenSourceCounts.set(source.id,(hiddenSourceCounts.get(source.id)||0)+1);
         column.cards=column.cards.filter(cardReadable).map(c=>card(user,c));
         column.count=column.cards.length;
+        if(Number.isSafeInteger(column.taskCount)) column.taskCount=column.cards.length;
+        if(column.summaryLabel) column.summaryLabel={key:'project.board.column.summary',params:{n:column.cards.length}};
       }
       vm.sourceFilters=vm.sourceFilters.filter(source=>sourceReadable(user,source.source?.kind))
         .map(source=>({...source,count:Math.max(0,source.count-(hiddenSourceCounts.get(source.id)||0))}))
@@ -208,15 +307,65 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
       if(unresolvedFilter) {
         vm.sourceFilterId=null;
         vm.sourceFilters=[];
-        for(const column of vm.columns){column.cards=[];column.count=0;}
+        for(const column of vm.columns){
+          column.cards=[];column.count=0;
+          if(Number.isSafeInteger(column.taskCount)) column.taskCount=0;
+          if(column.summaryLabel) column.summaryLabel={key:'project.board.column.summary',params:{n:0}};
+        }
+        if(vm.controls?.search&&vm.controls?.stage){
+          vm.controls.search.counts=[{id:'matches',count:0}];
+          vm.controls.stage.counts=[{id:'all',count:0},...vm.columns.map(column=>({id:column.id,count:0}))];
+        }
       }
       const hasCards=vm.columns.some(column=>column.cards.length);
       vm.emptyStateLabel=hasCards?null:{key:vm.sourceFilterId?'project.empty.source':'project.empty.board'};
+      if(vm.controls?.search&&vm.controls?.stage){
+        const visibleCount=vm.columns.reduce((total,column)=>total+column.cards.length,0);
+        // Search counts describe the search/source-filter population before
+        // the selected stage is applied. stageRows is captured at that exact
+        // boundary, so subtract restricted rows there instead of recounting
+        // the already stage-filtered columns.
+        const searchCount=Array.isArray(boardAccess?.stageRows)
+          ? Math.max(0,(vm.controls.search.counts?.find(row=>row.id==='matches')?.count||0)
+            -(hiddenBoardRows || []).length)
+          : visibleCount;
+        vm.controls.search.counts=[{id:'matches',count:searchCount}];
+        if(Array.isArray(boardAccess?.stageRows)) {
+          const stageCounts=new Map(vm.controls.stage.counts.map(row=>[row.id,row.count]));
+          let hiddenTotal=0;
+          for(const row of hiddenBoardRows||[]) {
+            hiddenTotal++;
+            stageCounts.set(row.status,Math.max(0,(stageCounts.get(row.status)||0)-1));
+          }
+          stageCounts.set('all',Math.max(0,(stageCounts.get('all')||0)-hiddenTotal));
+          vm.controls.stage.counts=[{id:'all',count:stageCounts.get('all')||0},...vm.controls.stage.options.filter(row=>row.id!=='all').map(row=>({id:row.id,count:stageCounts.get(row.id)||0}))];
+        } else {
+          vm.controls.stage.counts=[{id:'all',count:visibleCount},...vm.columns.map(column=>({id:column.id,count:column.cards.length}))];
+        }
+      }
     }
     if(name==='project') {
+      if(vm.capabilities) {
+        const source=vm.capabilities;
+        const write=source.write&&can(user,'projects','write')&&!cfg.readonlyStore;
+        const readOnly=value=>value==='read-write'&&!write?'read-only':value;
+        vm.capabilities={...source,write,
+          comments:!can(user,'projects.comment')?'unsupported':source.comments==='read-write'&&(!can(user,'projects.comment','write')||cfg.readonlyStore)?'read-only':source.comments,
+          history:readOnly(source.history),repository:readOnly(source.repository)};
+        vm.capabilityRows=projectCapabilityRows(vm.capabilities);
+      }
+      if(!can(user,'projects','write')||cfg.readonlyStore||vm.capabilities?.write===false)vm.statusTransitions=[];
       const inaccessibleRuntime=(vm.sourceDescriptors||[]).some(source=>source.kind==='runtime'&&!sourceReadable(user,source.kind));
       if(inaccessibleRuntime)throw new ApiError('not_found');
       if(vm.teamProject&&!can(user,'teams'))throw new ApiError('not_found');
+      // Team projects require teams.read, but canonical Office appearances are
+      // separately protected by office.read. Cached project topics can contain
+      // a portrait joined from Office, so remove both image forms at the
+      // principal projection boundary (HTTP and SSE).
+      if(vm.teamProject&&!can(user,'office')) {
+        const roster=vm.teamProject.roster;
+        if(roster)vm.teamProject.roster={...roster,members:roster.members.map(member=>({...member,portrait:{look:null,avatarUrl:null}}))};
+      }
       cover(user,vm);
       const withheldSourceData=[...(vm.sourceDescriptors||[]),...(vm.sources||[])].some(source=>!sourceReadable(user,source.kind));
       vm.sources=vm.sources.filter(s=>sourceReadable(user,s.kind));
@@ -237,6 +386,7 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
     }
     if(name==='history'){vm.items=history(user,vm.items);if(!logs||!can(user,'flows')||!runtimes)vm.nextCursor=null;}
     if(name==='candidates') {
+      if(!can(user,'projects','write')||cfg.readonlyStore)vm.statusOptions=[];
       // Discovery combines transcript hints and local roots without per-field provenance.
       if(!logs||!runtimes||!can(user,'flows'))vm.candidates=[];
     }
@@ -288,6 +438,8 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false}) {
       vm.owner={revision:user.permission_revision,displayName:field(store.persons.list().find(p=>p.id===user.person_id)?.name||user.email,source,local),email:field(user.email,source,local),passwordChangeEnabled:local,reason:local?null:{key:'settings.externalAccount'}};
     }
     if(!validate(schema,vm).ok)throw new Error('invalid projected view '+name);
+    if(name==='projects'&&privateBoardAccess)boardAccessMetadata.attach(vm,privateBoardAccess);
+    projectedVmMetadata.set(vm,{userId:user.id,permissions,content:createHash('sha256').update(JSON.stringify(vm)).digest('hex')});
     return vm;
   }
   function frame(user,type,raw,options) {

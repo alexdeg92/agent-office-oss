@@ -16,7 +16,7 @@ const TOPIC_ORDER = [
   'projects?filter=with-timmy',
   'projects?filter=archived',
 ];
-const ACTIVITY_TYPES = new Set(['Session', 'CronRun', 'CronJob', 'Transcript', 'Activity', 'Agent', 'Repo']);
+const ACTIVITY_TYPES = new Set(['Session', 'CronRun', 'CronJob', 'Transcript', 'Activity', 'Agent', 'Repo', 'ProjectHint']);
 
 function createProjectService(deps = {}) {
   const repository = deps.repository;
@@ -84,12 +84,59 @@ function createProjectService(deps = {}) {
     return out;
   }
 
+  function sourceConnectorResolver(recordDecision = () => {}) {
+    const registry=deps.engineRegistry;
+    const groups=new Map((registry?.sessionGroups||[]).map(group=>[group.id,group.sessionKeys||[]]));
+    const sessions=registry?.sessions?[...registry.sessions.values()]:[];
+    const hints=registry?.projectHints||[];
+    const hintProducers=(registry?.connectors||[]).filter(connector=>connector.capabilities?.projectHints===true);
+    const {parseId}=require('../runtime-ids');
+    return source=>{
+      const ref=source.ref||{};
+      const keys=[...(ref.by==='keys'?ref.sessionKeys||[]:ref.by==='group'
+        ?groups.get(ref.groupId)||sessions.filter(row=>row.group===ref.groupId).map(row=>row.key)
+        :ref.by==='interlocutor'?sessions.filter(row=>row.class?.interlocutorId===ref.interlocutorId).map(row=>row.key):[])];
+      if(ref.by==='group'&&ref.groupId.startsWith('projet:'))keys.push(...hints.filter(hint=>'projet:'+hint.slug===ref.groupId).map(hint=>hint.sessionKey));
+      const connectors=new Map();
+      const add=connector=>{if(connector?.id)connectors.set(connector.id,connector);};
+      for(const id of source.connectorIds||[])add(registry?.connectorById?.(id));
+      const scopedGroup=ref.by==='group'&&parseId(ref.groupId,'session');
+      if(scopedGroup)add(registry?.connectorById?.(scopedGroup.runtime));
+      for(const key of keys){
+        const scope=parseId(key,'session');
+        add(scope?registry?.connectorById?.(scope.runtime):registry?.connectorOf?.(key));
+      }
+      if(!connectors.size&&!source.connectorIds?.length&&ref.by==='group'&&ref.groupId.startsWith('projet:')){
+        if(hintProducers.length===1){add(hintProducers[0]);recordDecision('assigned');}
+        else recordDecision('unresolved');
+      }
+      // Only a genuinely single-runtime engine may claim unresolved new links.
+      // A saved owner is never reassigned to another current/default connector.
+      const fallback=registry?.defaultConnector;
+      if(!connectors.size&&!source.connectorIds?.length&&fallback?.id&&!(ref.by==='group'&&ref.groupId.startsWith('projet:')))add(fallback);
+      return [...connectors.values()];
+    };
+  }
+  const provenanceLog=deps.log||(()=>{});
+  let captureResolver=null;
+  const logDecision=kind=>provenanceLog('projects: tag connector provenance '+kind+'=1');
+  repository.sourceConnectorIds=source=>(captureResolver||sourceConnectorResolver(logDecision))(source).map(connector=>connector.id);
+  function captureProvenance(){
+    if(!repository.captureSourceProvenance)return;
+    const counts={assigned:0,unresolved:0};
+    captureResolver=sourceConnectorResolver(kind=>counts[kind]++);
+    try{repository.captureSourceProvenance();}finally{captureResolver=null;}
+    if(counts.assigned||counts.unresolved)provenanceLog('projects: tag connector provenance assigned='+counts.assigned+' unresolved='+counts.unresolved);
+  }
+  captureProvenance();
+
   function viewContext(projectId, nextCursor) {
     const project = projectId ? repository.getProject(projectId) : null;
     const registry = readRegistry(deps.engineRegistry);
     const linked = project ? linkProjectActivity({ projects: [{ ...project, archivedAt: null }], sessions: registry.sessions,
       projectHints: registry.projectHints, workspaceRoots: repository.workspaceRoots || [] }).matches : [];
     return {
+      sourceConnectors: sourceConnectorResolver(),
       linkedSessionKeys: linked.filter((m) => m.kind === 'session').map((m) => m.ref),
       hiddenPeople: (repository.overrides?.get(projectId) || []).filter((o) => o.hidden).map((o) => o.personId),
       persons: persons(),
@@ -137,7 +184,7 @@ function createProjectService(deps = {}) {
       project.flags.map((flag) => [
         flag.kind, flag.key, flag.state || '', flag.clearedAt || '', flag.ack ? 1 : 0,
       ].join(':')).join(','),
-      project.sources.map((source) => source.id).join(','),
+      project.sources.map((source) => source.id+':'+(source.connectorIds||[]).join('|')).join(','),
       repo ? [repo.fetchedAt, repo.ci && repo.ci.state, repo.image && repo.image.kind, repo.image && repo.image.url].join(':') : '',
     ].join('\n');
   }
@@ -460,7 +507,8 @@ function createProjectService(deps = {}) {
   };
 
   const views = {
-    board({ filter = 'all', sourceFilterId = null, allowUnknownSourceFilter = false, includeRuntime = false } = {}) {
+    board({ filter = 'all', sourceFilterId = null, allowUnknownSourceFilter = false, includeRuntime = false,
+      search = '', stage = 'all', apiVersion = 2 } = {}) {
       const extras = typeof deps.additionalProjects === 'function' ? deps.additionalProjects({ includeRuntime }) : [];
       return buildBoardVM([...repository.listProjects({ archived: 'all' }), ...(Array.isArray(extras) ? extras : [])], {
         filter,
@@ -469,7 +517,9 @@ function createProjectService(deps = {}) {
         timmyPersonId: primaryPersonId(),
         primaryAgentId: currentPrimaryId(),
         sourceFilterId,
+        sourceConnectors: sourceConnectorResolver(),
         allowUnknownSourceFilter,
+        search, stage, apiVersion,
         portability: repository.portability === true,
         locale: repository.locale || undefined,
       });
@@ -552,6 +602,7 @@ function createProjectService(deps = {}) {
         }
       }
     }
+    captureProvenance();
     const registry = readRegistry(deps.engineRegistry);
     autoAddTagged(registry.projectHints, at);
     const projects = repository.listProjects({ archived: 'exclude' });

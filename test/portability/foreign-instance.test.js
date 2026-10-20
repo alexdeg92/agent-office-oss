@@ -35,6 +35,8 @@ const MAIN_ALIASES = [/^\$\.(layout|default)\.data\.agents\[\d+\]\.(agentId|matc
   // Floor item references are the same projected occupant ids as the floor's occupantIds list.
   /^\$\.rosterFloors\[\d+\]\.items\[\d+\]\.occupantId$/,
   /^\$\.visitIntent\.(hostId|speaker|desk\[\d+\]|meeting\[\d+\]|visitors\[\d+\]\.id)$/];
+// These are occupant-ID references in the same documented 2.x primary alias namespace.
+MAIN_ALIASES.push(/^\$\.visitIntent\.hosts\[\d+\]\.id$/, /^\$\.visitIntent\.visitors\[\d+\]\.hostId$/);
 function mainOutsideAliases(value, at = '$', out = []) {
   if (Array.isArray(value)) value.forEach((v, i) => mainOutsideAliases(v, `${at}[${i}]`, out));
   else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) mainOutsideAliases(v, `${at}.${k}`, out);
@@ -82,6 +84,8 @@ describe('portability · a foreign instance end to end (ADR-001 §12.8)', () => 
     for (const item of office.rosterFloors.flatMap(floor => floor.items).filter(item => item.kind === 'occupant')) {
       assert.ok(officeIds.has(item.occupantId), `floor item references the same projected OfficeVM id: ${item.occupantId}`);
     }
+    for (const host of office.visitIntent?.hosts || []) assert.ok(officeIds.has(host.id), 'visit host ID resolves to a projected occupant');
+    for (const visitor of office.visitIntent?.visitors || []) if (visitor.hostId) assert.ok(officeIds.has(visitor.hostId), 'visitor host ID resolves to a projected occupant');
     const keys = office.occupants.map((o) => o.sessionKey);
     assert.ok(keys.includes('agent:atlas:telegram:direct:foreign-user') && keys.includes('agent:scribe:slack:channel:C0ACME'), JSON.stringify(keys));
     const layout = await get('/api/v2/office/layout');

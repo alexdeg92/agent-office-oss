@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960" role="img" aria-label="Première page d'un rapport d'atelier">
+ <rect width="720" height="960" fill="#e9e7e1"/><rect x="48" y="34" width="624" height="892" rx="14" fill="#fffefa"/>
+ <rect x="48" y="34" width="624" height="176" rx="14" fill="#294b54"/><path d="M48 193h624v17H48z" fill="#294b54"/>
+ <rect x="88" y="73" width="38" height="38" rx="11" fill="#d8a875"/><path d="M98 94h18M107 84v20" stroke="#fffefa" stroke-width="4" stroke-linecap="round"/>
+ <text x="146" y="97" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="#eff4ef">BUREAU · COMPTE RENDU</text>
+ <text x="88" y="160" font-family="system-ui,sans-serif" font-size="32" font-weight="700" fill="#fffefa">Atelier de planification</text>
+ <text x="88" y="252" font-family="system-ui,sans-serif" font-size="15" font-weight="700" letter-spacing="2" fill="#778781">RÉSUMÉ · 16 OCTOBRE 2026</text>
+ <text x="88" y="302" font-family="system-ui,sans-serif" font-size="21" font-weight="700" fill="#263b3d">Décisions de la séance</text>
+ <path d="M88 331h536M88 354h490M88 377h514" stroke="#d9ded7" stroke-width="8" stroke-linecap="round"/>
+ <rect x="88" y="424" width="536" height="196" rx="14" fill="#eff4ef"/>
+ <text x="114" y="463" font-family="system-ui,sans-serif" font-size="16" font-weight="700" fill="#416c5c">POINTS À RETENIR</text>
+ <circle cx="120" cy="505" r="6" fill="#d0925c"/><path d="M140 505h390" stroke="#81938b" stroke-width="7" stroke-linecap="round"/>
+ <circle cx="120" cy="544" r="6" fill="#d0925c"/><path d="M140 544h336" stroke="#81938b" stroke-width="7" stroke-linecap="round"/>
+ <circle cx="120" cy="583" r="6" fill="#d0925c"/><path d="M140 583h354" stroke="#81938b" stroke-width="7" stroke-linecap="round"/>
+ <text x="88" y="677" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="#263b3d">Prochaines étapes</text>
+ <rect x="88" y="701" width="536" height="48" rx="8" fill="#faf8f2" stroke="#e2e0d7"/><text x="108" y="731" font-family="system-ui,sans-serif" font-size="15" fill="#52615a">01</text><path d="M146 725h294" stroke="#bbc4bd" stroke-width="7" stroke-linecap="round"/>
+ <rect x="88" y="763" width="536" height="48" rx="8" fill="#faf8f2" stroke="#e2e0d7"/><text x="108" y="793" font-family="system-ui,sans-serif" font-size="15" fill="#52615a">02</text><path d="M146 787h342" stroke="#bbc4bd" stroke-width="7" stroke-linecap="round"/>
+ <path d="M88 858h536" stroke="#e1e2db" stroke-width="2"/><text x="88" y="891" font-family="system-ui,sans-serif" font-size="13" fill="#829088">Agent Office · Équipe projet</text><text x="624" y="891" text-anchor="end" font-family="system-ui,sans-serif" font-size="13" fill="#829088">1 / 4</text>
+</svg>

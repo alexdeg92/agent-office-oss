@@ -7,6 +7,7 @@ import { openLayoutBrowser, visit, browserSkipReason } from './helpers/layout-br
 const skip=browserSkipReason();
 const groups=['forms','rows','actions','states'];
 const captureBase='design/reports/bureau-components-1-gallery';
+// Golden PNGs in baselineBase are captured in ao-test:24 (PC container, Playwright chromium build); see its README.
 const baselineBase='test/golden/bureau-gallery/synthetic-ui';
 const file=(group,width,theme)=>`${captureBase}/${group}-${width}-${theme}.png`;
 const baseline=(group,width,theme)=>`${baselineBase}/${group}-${width}-${theme}.png`;
@@ -14,9 +15,10 @@ const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 test('owner design-system gallery covers every group at desktop/mobile in both themes', {skip,timeout:120000}, async()=>{
   const capture=process.env.BUREAU_GALLERY_CAPTURE==='1';
+  const deadline=Date.now()+120000;
   if(capture)await mkdir(captureBase,{recursive:true});
   for(const theme of ['light','dark']) {
-    const h=await openLayoutBrowser({theme}),p=h.page;
+    const h=await openLayoutBrowser({theme,testTimeoutMs:Math.max(1000,deadline-Date.now())}),p=h.page;
     try {
       await p.emulateMedia({reducedMotion:'reduce'});
       for(const width of [1440,390,375]) {
@@ -48,7 +50,7 @@ test('owner design-system gallery covers every group at desktop/mobile in both t
 });
 
 test('gallery follows the interface language in English', {skip,timeout:30000},async()=>{
-  const h=await openLayoutBrowser(),p=h.page;
+  const h=await openLayoutBrowser({testTimeoutMs:30000}),p=h.page;
   try {
     await p.addInitScript(()=>localStorage.setItem('ao.locale','en'));
     await p.setViewportSize({width:390,height:844});
@@ -60,7 +62,7 @@ test('gallery follows the interface language in English', {skip,timeout:30000},a
 });
 
 test('gallery interactions exercise menu, inline edit and named confirmation', {skip,timeout:60000},async()=>{
-  const h=await openLayoutBrowser(),p=h.page;
+  const h=await openLayoutBrowser({testTimeoutMs:60000}),p=h.page;
   try {
     await p.setViewportSize({width:390,height:844});
     await visit(p,h.origin,'/design-system?mock=1','[data-design-system-gallery]');

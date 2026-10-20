@@ -32,7 +32,7 @@ function createHealthSeries({ engine, now = () => Date.now() }) {
   return { sample, get: () => ({ cpu: cpu.slice(), mem: mem.slice(), at0: at0 == null ? Math.floor(now() / STEP_MS) * STEP_MS : at0, stepMs: STEP_MS }) };
 }
 
-function buildHealthVM({ engine, series, P = P2 }) {
+function buildHealthVM({ engine, series, P = P2, includeEngineParity = false }) {
   const h = engine.health();
   const gw = h.gateway, host = h.host;
   const protocol = engine.runtime()?.protocol;   // G2: the runtime projection, never a raw channel
@@ -68,7 +68,8 @@ function buildHealthVM({ engine, series, P = P2 }) {
   const healthChecks = (engine.healthChecks?.() || []).map(c => ({ id: c.id, adapter: c.adapter, severity: c.severity, causeCode: c.causeCode, textKey: c.textKey,
     impactKey: c.impactKey, remedy: c.remedy, active: c.active, actionId: c.actionId, guidedPath: c.guidedPath, target: safeTarget(c.target), changedAt: c.changedAt, resolvedAt: c.resolvedAt || null }));
   const healthAudit = (engine.healthAudit?.() || []).map(a => ({ checkId: a.checkId, actionId: a.actionId, at: a.at, outcome: a.outcome, attempts: a.attempts }));
-  return { level: h.level, cards, channels, sources, healthChecks, healthAudit, dataQuality: { open: q.open, issues }, series: series ? series.get() : { cpu: [], mem: [], at0: 0, stepMs: STEP_MS } };
+  return { level: h.level, cards, channels, sources, healthChecks, healthAudit, dataQuality: { open: q.open, issues }, series: series ? series.get() : { cpu: [], mem: [], at0: 0, stepMs: STEP_MS },
+    ...(includeEngineParity ? { engineParity: require('../../../engine/parity-observability').healthRows(engine) } : {}) };
 }
 
 module.exports = { buildHealthVM, createHealthSeries };

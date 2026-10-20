@@ -30,7 +30,10 @@ function goldenFile(group, scenario, name) { return path.join(GOLDEN_DIR, isLoca
 // Absolute paths depend on where the checkout lives (worktree, staging snapshot, temp copy):
 // replace them with placeholders so goldens are portable.
 function normalisePaths(value) {
-  const fix = (s) => s.split(LOCAL_FIXTURES).join('{{FIXTURES_DIR}}').split(FIXTURES).join('{{FIXTURES_DIR}}').split(ROOT).join('{{ROOT}}');
+  const replacePathPrefix = (text, prefix, replacement) => text.replace(
+    new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[\\/])', 'g'), replacement,
+  );
+  const fix = (s) => replacePathPrefix(replacePathPrefix(replacePathPrefix(s, LOCAL_FIXTURES, '{{FIXTURES_DIR}}'), FIXTURES, '{{FIXTURES_DIR}}'), ROOT, '{{ROOT}}');
   if (typeof value === 'string') return fix(value);
   if (Array.isArray(value)) return value.map(normalisePaths);
   if (value && typeof value === 'object') { const o = {}; for (const [k, v] of Object.entries(value)) o[fix(k)] = normalisePaths(v); return o; }

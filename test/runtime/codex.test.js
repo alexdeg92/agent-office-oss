@@ -8,6 +8,7 @@ const {buildOfficeVM,createStateTracker}=require('../../src/api/v2/vm/office');c
 const {startServer}=require('../helpers/harness'),{loadScenario}=require('../helpers/scenario');
 const {runFromTranscript}=require('../../src/adapters/transcript-execution');
 const {executionState}=require('../../src/engine/execution-state');
+const {parse:parseRollout}=require('../../src/adapters/codex/profile');
 const NOW=1791600000000;
 function fixture(t){const home=fs.mkdtempSync(path.join(os.tmpdir(),'ao-codex-synthetic-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));const file=(date='2026/10/10',name='rollout-synthetic-1.jsonl',rows=[])=>{const target=path.join(home,'sessions',date,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,rows.map(x=>JSON.stringify(x)).join('\n')+'\n');return target;};return{home,file};}
 const meta=(cwd='/synthetic/private/agent-office',extra={})=>({type:'session_meta',payload:{id:'synthetic-session-id',timestamp:new Date(NOW-60000).toISOString(),cwd,originator:'codex-cli',cli_version:'0.synthetic',source:'cli',model_provider:'openai',...extra}});
@@ -15,6 +16,17 @@ const ctx=(model='gpt-synthetic-codex',cwd='/synthetic/private/agent-office')=>(
 const message=(role,text,id)=>({type:'response_item',timestamp:new Date(NOW-10000).toISOString(),payload:{type:'message',id,role,content:[{type:role==='user'?'input_text':'output_text',text}],status:'completed'}});
 const usage=total=>({type:'event_msg',timestamp:new Date(NOW-9000).toISOString(),payload:{type:'token_count',info:{total_token_usage:{input_tokens:10,output_tokens:5,total_tokens:total,cached_input_tokens:0,reasoning_output_tokens:0}}}});
 async function startAndWait(runtime,engine){await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Codex initial refresh timed out')),5000);runtime.start(engine,{refreshed:()=>{clearTimeout(timer);resolve();}});});}
+
+test('Codex rollout blocks sharing a source item id receive distinct stable transcript ids',()=>{
+ const row={type:'response_item',timestamp:new Date(NOW-1000).toISOString(),payload:{type:'message',id:'synthetic-shared-item',role:'assistant',status:'completed',content:[
+  {type:'output_text',text:'Synthetic first block'},{type:'output_text',text:'Synthetic second block'}]}};
+ const options={sessionKey:'codex:synthetic-session',agentId:'synthetic-agent',now:()=>NOW};
+ const first=parseRollout([meta(),ctx(),row],options),again=parseRollout([meta(),ctx(),row],options);
+ assert.equal(first.events.length,2);
+ assert.equal(new Set(first.events.map(event=>event.id)).size,2);
+ assert.deepEqual(first.events.map(event=>event.id),again.events.map(event=>event.id));
+ assert.ok(first.events.every(event=>/^msg:[a-f0-9]{64}:0$/.test(event.id)));
+});
 
 test('Codex-only synthetic instance reaches AO_READY and loads its first session',async t=>{
  const h=await startServer(loadScenario('synthetic-basic'),{demo:true,prepare:async(tmp,{env})=>{
@@ -491,6 +503,48 @@ test('truncated Codex traversal reports live and Settings capacity as limited',a
  const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home}}}),engine=createEngine({adapter:runtime.definition});t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
  const capacity=engine.sources().find(source=>source.id==='capacity');assert.deepEqual({state:capacity.state,reason:capacity.lastError},{state:'down',reason:'capacity-limited'});
  assert.equal(runtime.files.stats.truncated,true);assert.equal(engine.health().sources.find(source=>source.id==='capacity').state,'down');
+});
+
+test('unchanged complete Codex rollouts are not reread or republished on each poll',async t=>{
+ const h=fixture(t);h.file('2026/10/10','rollout-synthetic-stable.jsonl',[meta(),ctx(),message('user','Synthetic request','stable-user'),message('assistant','Synthetic answer','stable-assistant')]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home}}}),engine=createEngine({adapter:runtime.definition});t.after(()=>runtime.close());runtime.attach(engine);await startAndWait(runtime,engine);
+ let reads=0,publishes=0;const read=runtime.files.read,ingest=engine.ingestCanonical;runtime.files.read=(...args)=>{reads++;return read(...args);};
+ engine.ingestCanonical=(op,...args)=>{if(op==='agents'||op==='sessions.snapshot')publishes++;return ingest(op,...args);};
+ await runtime.cycle();assert.equal(reads,0,'stable file signature avoids reopening the rollout');assert.equal(publishes,0,'stable scan avoids revalidating the complete project/session snapshot');
+});
+
+test('Codex filesystem notifications update a changed rollout promptly and idle below five percent of one core',async t=>{
+ const h=fixture(t),file=h.file('2026/10/10','rollout-watched.jsonl',[meta(),ctx(),message('user','Synthetic watch prompt','watch-user'),message('assistant','Synthetic watch reply','watch-assistant')]);
+ h.file('2026/10/11','rollout-watched-two.jsonl',[meta(),ctx(),message('user','Synthetic second watch prompt','watch-user-two'),message('assistant','Synthetic second watch reply','watch-assistant-two')]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home}}}),engine=createEngine({adapter:runtime.definition});t.after(()=>runtime.close());runtime.attach(engine);
+ let initial;const started=new Promise(resolve=>{initial=resolve;});let resolveChanged;
+ runtime.start(engine,{refreshed:()=>{initial?.();resolveChanged?.();}});
+ await Promise.race([started,new Promise((_,reject)=>setTimeout(()=>reject(Error('initial Codex refresh timed out')),5000))]);initial=null;
+ const updated=new Promise(resolve=>{resolveChanged=resolve;});
+ const updateStarted=process.hrtime.bigint();
+ fs.appendFileSync(file,JSON.stringify({type:'event_msg',timestamp:new Date().toISOString(),payload:{type:'agent_reasoning'}})+'\n');
+ const secondFile=path.join(h.home,'sessions','2026','10','11','rollout-watched-two.jsonl');
+ fs.appendFileSync(secondFile,JSON.stringify({type:'event_msg',timestamp:new Date().toISOString(),payload:{type:'agent_reasoning'}})+'\n');
+ await Promise.race([updated,new Promise((_,reject)=>setTimeout(()=>reject(Error('Codex filesystem notification timed out')),1500))]);
+ const updateMs=Number(process.hrtime.bigint()-updateStarted)/1e6;t.diagnostic(`Codex rollout-to-engine update latency: ${updateMs.toFixed(0)}ms`);assert.ok(updateMs<1500);
+ assert.equal(engine.sessions().length,2);assert.ok(engine.sessions().every(session=>engine.activity(session.key)?.kind==='thinking'),'a burst of debounced rollout notifications updates each changed session');
+ const startedAt=process.hrtime.bigint(),cpu=process.cpuUsage();await new Promise(resolve=>setTimeout(resolve,2000));
+ const elapsed=Number(process.hrtime.bigint()-startedAt)/1000,used=process.cpuUsage(cpu),percent=(used.user+used.system)/elapsed*100;
+ t.diagnostic(`Codex filesystem-watched idle CPU: ${percent.toFixed(2)}% of one core over 2s`);
+ assert.ok(percent<5,`idle watcher CPU was ${percent.toFixed(2)}% of one core`);
+});
+
+test('Codex safety poll recovers rollout changes when filesystem notifications are unavailable',async t=>{
+ const h=fixture(t),file=h.file('2026/10/10','rollout-poll-recovery.jsonl',[meta(),ctx(),message('user','Synthetic poll prompt','poll-user'),message('assistant','Synthetic poll answer','poll-assistant')]);
+ const runtime=A.createRuntime({runtimeConfig:{codex:{home:h.home}}},{pollIntervalMs:80}),engine=createEngine({adapter:runtime.definition});t.after(()=>runtime.close());runtime.attach(engine);runtime.files.watch=()=>{};
+ await startAndWait(runtime,engine);
+ fs.appendFileSync(file,JSON.stringify({type:'event_msg',timestamp:new Date().toISOString(),payload:{type:'agent_reasoning'}})+'\n');
+ const started=process.hrtime.bigint(),deadline=Date.now()+1500;
+ while(engine.sessions().every(session=>engine.activity(session.key)?.kind!=='thinking')&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+ const recovered=engine.sessions().some(session=>engine.activity(session.key)?.kind==='thinking'),recoveryMs=Number(process.hrtime.bigint()-started)/1e6;
+ t.diagnostic(`Codex watcher-miss safety-poll recovery: ${recoveryMs.toFixed(0)}ms (80ms poll)`);
+ assert.ok(recovered,`the safety poll did not publish changed rollout activity within 1500ms (${recoveryMs.toFixed(0)}ms)`);
+ assert.ok(recoveryMs<500,`recovery should follow the injected poll cadence, measured ${recoveryMs.toFixed(0)}ms`);
 });
 
 test('Codex Settings probe and registry expose a real configurable connector with private reason codes',async t=>{

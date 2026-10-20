@@ -2,7 +2,7 @@
   "data": {
     "modelVersion": 1,
     "apiVersion": 3,
-    "contractVersion": "3.6",
+    "contractVersion": "3.13",
     "serverVersion": "1.0.0+dev",
     "env": "dev",
     "capabilities": {
@@ -79,7 +79,10 @@
       "provider.acme-llm": "acme-llm",
       "agent.atlas": "Atlas",
       "kpi.idle": "{agent} au repos",
-      "occupantRole.agent": "Agent"
+      "occupantRole.agent": "Agent",
+      "occupantRole.visitor": "En visite",
+      "office.visitingWith": "En conversation avec {name}",
+      "office.mobile.team": "Équipe · {name}"
     },
     "enums": {
       "sessionKind": [

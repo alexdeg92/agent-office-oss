@@ -1,0 +1,39 @@
+{
+  "data": {
+    "revision": 7,
+    "labels": { "title": { "key": "chat.agents.title" }, "empty": { "key": "chat.agents.empty" } },
+    "agents": [
+      {
+        "id": "ca_gW0egUVdHn8cQKv0uHKIcfD71U9vYixX",
+        "kind": "agent",
+        "name": "Atlas",
+        "context": "Assistant général",
+        "contextLabel": null,
+        "provider": { "id": "runtime-a", "label": { "key": "chat.provider.named", "params": { "name": "Runtime A" } }, "mark": { "monogram": "RA", "color": "#35685a", "providerName": "Runtime A" } },
+        "portrait": { "look": { "character": "fox", "variant": "sage", "accessories": [] }, "avatarUrl": null, "alt": "Atlas" },
+        "teamId": "ct_B2nXq8W3fV0kL7mR5dZa1YpJ9sH4cT6u",
+        "parentId": null,
+        "stateLabel": { "key": "chat.agent.idle" },
+        "unread": { "count": 2, "label": { "key": "chat.unread.count", "params": { "count": 2 } } },
+        "capabilities": { "sendNowWarning": null, "read": true, "startSession": true, "sendMessage": true, "markRead": true, "storyboard": {"available": true, "reason": null}, "retry": true, "attachments": { "allowed": true, "maxBytes": 20971520, "maxCountPerMessage": 5, "maxCountPerSession": 20, "mimeTypes": ["application/pdf", "text/plain", "image/png", "image/jpeg"], "reason": null } },
+        "defaultSessionId": "cs_Mk9qvR6vX2Z0JspN7xgTgD5Lz9WcB1yK"
+      },
+      {
+        "id": "ct_B2nXq8W3fV0kL7mR5dZa1YpJ9sH4cT6u",
+        "kind": "team",
+        "name": "Équipe Produit",
+        "context": null,
+        "contextLabel": { "key": "chat.target.team" },
+        "provider": null,
+        "portrait": { "look": null, "avatarUrl": null, "alt": "Équipe Produit" },
+        "teamId": "ct_B2nXq8W3fV0kL7mR5dZa1YpJ9sH4cT6u",
+        "parentId": null,
+        "stateLabel": { "key": "chat.agent.available" },
+        "unread": { "count": 0, "label": { "key": "chat.unread.none" } },
+        "capabilities": { "sendNowWarning": null, "read": true, "startSession": false, "sendMessage": false, "markRead": true, "storyboard": {"available": false, "reason": {"key":"chat.storyboard.unavailable"}}, "retry": false, "attachments": { "allowed": false, "maxBytes": 0, "maxCountPerMessage": 0, "maxCountPerSession": 0, "mimeTypes": [], "reason": { "key": "chat.attachments.unsupported" } } },
+        "defaultSessionId": "cs_U8pN4wY2xK6dL0vR5aH1sF9mB3qT7cZ9"
+      }
+    ]
+  },
+  "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [], "topic": { "id": "chat", "rev": 7 } }
+}

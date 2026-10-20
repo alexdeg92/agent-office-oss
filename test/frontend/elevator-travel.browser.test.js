@@ -11,7 +11,7 @@ const current=async(h,v)=>{const r=await h.get(`/api/v${v}/views/office`);assert
 const scene=()=>document.querySelector('.ao-bureau__stage')?.aoScene;
 async function ready(p,floor){
   await p.waitForFunction(id=>{const s=document.querySelector('.ao-bureau__stage')?.aoScene;return s?._floorId===id;},floor);
-  try {await p.waitForFunction(()=>{const s=document.querySelector('.ao-bureau__stage')?.aoScene;return s&&s.chars.size>0&&[...s.chars.values()].every(c=>!c.leaving&&!c.walking&&c.displayed?.classList.contains('is-in'));});}catch(error){console.log(await p.evaluate(()=>{const s=document.querySelector('.ao-bureau__stage')?.aoScene;return {hidden:s?.hidden,chars:[...s.chars.values()].map(c=>({id:c.id,walking:c.walking,leaving:c.leaving,pose:c.renderedPose,displayed:!!c.displayed,classes:c.displayed?.className,pos:c.pos,target:c.target}))};}));throw error;}
+  try {await p.waitForFunction(()=>{const s=document.querySelector('.ao-bureau__stage')?.aoScene;return s&&s.chars.size>0&&[...s.chars.values()].every(c=>!c.leaving&&!c.walking&&c.displayed?.classList.contains('is-in'));});}catch(error){console.log('elevator-wait-diagnostic',await p.evaluate(()=>{const s=document.querySelector('.ao-bureau__stage')?.aoScene;return JSON.stringify({hidden:s?.hidden,floor:s?._floorId,last:s?._last,raf:s?._raf,chars:[...s.chars.values()].map(c=>({id:c.id,state:c.occ?.state,floorId:c.occ?.floorId,stationUid:c.occ?.stationUid,walking:c.walking,leaving:c.leaving,phase:c.el?.dataset.travelPhase,pose:c.renderedPose,displayed:!!c.displayed,classes:c.displayed?.className,pos:c.pos,target:c.target,next:c.path?.[0],pathLength:c.path?.length}))});}));throw error;}
   await p.waitForFunction(()=>{const s=document.querySelector('.ao-bureau__stage')?.aoScene;return s&&[...s.stage.querySelectorAll('img[src]')].every(i=>i.complete&&i.naturalWidth);});
 }
 async function select(p,width,id){
@@ -43,6 +43,9 @@ test(`v${version} elevator travel renders backend floors and keeps working desks
     const p=b.page;await p.setViewportSize({width,height:width===390?844:900});
     const split=h.cookie.indexOf('=');await p.context().addCookies([{name:h.cookie.slice(0,split),value:h.cookie.slice(split+1),url:b.origin,httpOnly:true,sameSite:'Lax'}]);
     await p.clock.setFixedTime(new Date(h.clock.value));await p.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});
+    // The shared fixture starts idle occupants at activity spots immediately;
+    // this scenario needs a real desk baseline before advancing into a break.
+    h.advance(0,Array(count).fill('working'));
     const initial=await current(h,version);assert.equal(initial.occupants.length,count);
     const primary=initial.occupants.find(o=>o.role===(version===2?'main':'primary')),home=primary.floorId;
     await p.goto(b.origin+'/bureau?etage='+home,{waitUntil:'domcontentloaded'});await ready(p,home);
@@ -54,6 +57,7 @@ test(`v${version} elevator travel renders backend floors and keeps working desks
     const prefix=`design/reports/elevator-runtime/v${version}-${theme}-${width}${reduced?'-reduced':''}`;
     await capture(p,prefix+'-working-desks.png');
 
+    h.advance(0,active);await current(h,version); // start the idle interval after the working-desk baseline
     h.advance(18*60000,active);const away=await current(h,version);await refresh(p,h);
     const primaryAway=away.occupants.find(o=>o.id===primary.id);assert.notEqual(primaryAway.floorId,home);
     const destination=primaryAway.floorId;
@@ -90,9 +94,33 @@ test(`v${version} elevator travel renders backend floors and keeps working desks
     await capture(p,prefix+'-lobby-all-breaks.png');
 
     h.advance(1000,Array(count).fill('working'));const returned=await current(h,version);await refresh(p,h);
-    await select(p,width,home);await ready(p,home);await matches(p,returned,home);
+    await select(p,width,home);
+    await p.waitForFunction(count=>document.querySelector('.ao-bureau__stage')?.aoScene?.chars.size===count,returned.occupants.filter(o=>o.floorId===home).length);
+    await matches(p,returned,home);
     assert.ok(returned.occupants.every(o=>o.activity===null&&o.sceneTarget.floorId===home));
-    const final=await p.evaluate(()=>[...document.querySelector('.ao-bureau__stage').aoScene.chars.values()].map(c=>({id:c.id,pos:c.pos,uid:c.target.uid,mode:c.seatMode})));
-    for(const row of final){const expected=returned.occupants.find(o=>o.id===row.id);assert.deepEqual(row.pos,expected.sceneTarget.point);assert.equal(row.uid,expected.stationUid??`intent:${row.id}`);}
+    const homeTargets=returned.occupants.filter(o=>o.floorId===home).map(o=>({id:o.id,point:o.sceneTarget.point,stationUid:o.stationUid??`intent:${o.id}`,mode:o.sceneTarget.mode}));
+    const settled=rows=>{
+      const s=document.querySelector('.ao-bureau__stage')?.aoScene;if(!s)return false;
+      return rows.every(row=>{const c=s.chars.get(row.id);return c&&!c.leaving&&!c.walking&&c.path.length===0
+        &&Math.hypot(c.pos.x-row.point.x,c.pos.y-row.point.y)<.01
+        &&c.target.uid===row.stationUid&&c.target.mode===row.mode;});
+    };
+    // The fixed-time browser fixture can stall scheduled rAF callbacks after repeated
+    // VM refreshes. Bound the wait from the actual longest backend-return path length.
+    const frameBudget=await p.evaluate(()=>{
+      const s=document.querySelector('.ao-bureau__stage')?.aoScene,speed=s?.opts.walkTilesPerS??1.5;
+      const distance=c=>{let from=c.pos;return c.path.reduce((sum,to)=>{const d=Math.hypot(to.x-from.x,to.y-from.y);from=to;return sum+d;},0);};
+      const maxDistance=Math.max(0,...[...s.chars.values()].filter(c=>c.walking).map(distance));
+      return Math.min(600,Math.ceil((maxDistance/speed+3)*10));
+    });
+    await p.evaluate(async(maxFrames)=>{
+      const s=document.querySelector('.ao-bureau__stage')?.aoScene;let t=performance.now();
+      for(let i=0;i<maxFrames&&[...s.chars.values()].some(c=>c.walking&&c.path.length);i++){
+        if(s._raf)cancelAnimationFrame(s._raf);s._raf=0;t+=100;s._frame(t);await Promise.resolve();
+      }
+    },frameBudget);
+    await p.waitForFunction(settled,homeTargets,{timeout:1000});
+    const final=await p.evaluate(()=>[...document.querySelector('.ao-bureau__stage').aoScene.chars.values()].map(c=>({id:c.id,pos:c.pos,target:c.target,walking:c.walking,pathLength:c.path.length})));
+    for(const row of final){const expected=returned.occupants.find(o=>o.id===row.id),point=expected.sceneTarget.point;assert.equal(row.target.x,point.x);assert.equal(row.target.y,point.y);assert.equal(row.target.uid,expected.stationUid??`intent:${row.id}`);assert.equal(row.target.mode,expected.sceneTarget.mode);if(row.walking)assert.ok(row.pathLength>0);else assert.deepEqual(row.pos,point);}
   }finally{await b?.close();await h?.close();}
 });

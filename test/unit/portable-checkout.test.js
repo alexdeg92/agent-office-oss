@@ -6,6 +6,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { spawnSync } = require('child_process');
+const { normalisePaths } = require('../helpers/golden');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -14,8 +15,14 @@ describe('portable checkout', () => {
     const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
     for (const f of walk(path.join(ROOT, 'test', 'golden'))) {
       const t = fs.readFileSync(f, 'utf8');
-      assert.ok(!t.includes(ROOT) && !/\/home\/[a-z_][a-z0-9_-]*\//.test(t), path.relative(ROOT, f));
+      assert.ok(!normalisePaths(t).includes('{{ROOT}}') && !/\/home\/[a-z_][a-z0-9_-]*\//.test(t), path.relative(ROOT, f));
     }
+  });
+
+  it('golden root substitution respects path component boundaries', () => {
+    assert.equal(normalisePaths(ROOT), '{{ROOT}}');
+    assert.equal(normalisePaths(ROOT + path.sep + 'test' + path.sep + 'file'), '{{ROOT}}' + path.sep + 'test' + path.sep + 'file');
+    assert.equal(normalisePaths(ROOT + 'space-atlas'), ROOT + 'space-atlas');
   });
 
   it('the engine goldens and the real server (v3) pass from a copy in a temp dir', { skip: process.env.AO_IN_COPY === '1' && 'already inside the copy' }, () => {

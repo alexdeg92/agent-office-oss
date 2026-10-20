@@ -13,5 +13,6 @@ function detectSource({env,binaryPath=null}) {
   const found=files.binary('herdr',{...env,PATH:absolutePath});
   return found&&path.isAbsolute(found)?found:null;
 }
-module.exports={createSource:createHerdrReader,detectSource,setup:{name:'herdr',capabilities:{autoEnableDefault:true,
+module.exports={createSource:createHerdrReader,detectSource,setup:{name:'herdr',capabilities:{autoEnableDefault:true,orchestration:{hosts:true},
+  chatPaneMessaging:{sendText:true,exactPaneIdentity:true,readTranscript:true},
   brand:{mark:'H',color:'#4f6d9a',foreground:'#ffffff',providerName:'herdr',logo:'assets/connectors/herdr.svg'}}}};

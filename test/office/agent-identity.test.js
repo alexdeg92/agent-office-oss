@@ -87,12 +87,15 @@ test('an owner rename wins over the adapter display name (canonical engine rule)
 });
 
 test('durable automatic looks coexist with configured names without exposing summaries', () => {
-  const { DatabaseSync } = require('node:sqlite');
-  const { listMigrations } = require('../../src/store/db');
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { openDatabase } = require('../../src/store/db');
   const { createOfficeRepo } = require('../../src/store/repos/office');
-  const db = new DatabaseSync(':memory:');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'office-identity-'));
+  const store = openDatabase({ dir, instance: 'test' });
+  const db = store.db;
   try {
-    for (const migration of listMigrations()) db.exec(migration.sql);
     const repo = createOfficeRepo(db, { now: () => NOW });
     const { e } = makeEngine(2);
     const build = (P, canReadSessions) => buildOfficeVM({ engine: e, now: NOW, tracker: createStateTracker(),
@@ -115,5 +118,5 @@ test('durable automatic looks coexist with configured names without exposing sum
     }
     assert.equal(db.prepare('SELECT count(*) AS n FROM office_automatic_looks').get().n, 2);
     assert.ok(db.prepare('SELECT 1 FROM office_automatic_looks WHERE identity_id = ?').get('agent:agent-0'));
-  } finally { db.close(); }
+  } finally { store.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

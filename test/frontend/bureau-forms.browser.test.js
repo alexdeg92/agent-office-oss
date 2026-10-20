@@ -15,7 +15,7 @@ async function fixture(page, origin) {
 const patch = (page, value) => page.evaluate(value => window.bureauForms.patch(value), value);
 
 test('Field: preserved native id, stable association, linked error/environment and removed optional references', { skip, timeout:15000 }, async () => {
-  const b = await openLayoutBrowser(); const p = b.page;
+  const b = await openLayoutBrowser({ testTimeoutMs:15000 }); const p = b.page;
   try {
     await fixture(p, b.origin);
     const input = p.getByRole('textbox', { name:'Nom', exact:true });
@@ -36,7 +36,7 @@ test('Field: preserved native id, stable association, linked error/environment a
 });
 
 test('native text controls: event payload, controlled acceptance/decline/transform, textarea/select and attribute contracts', { skip, timeout:15000 }, async () => {
-  const b = await openLayoutBrowser(); const p = b.page;
+  const b = await openLayoutBrowser({ testTimeoutMs:15000 }); const p = b.page;
   try {
     await fixture(p, b.origin);
     const name = p.locator('#agent-name');
@@ -68,7 +68,7 @@ test('native text controls: event payload, controlled acceptance/decline/transfo
 });
 
 test('Checkbox and Radio: mixed semantics, native keyboard groups, accepted and declined edits preserve event payload', { skip, timeout:15000 }, async () => {
-  const b = await openLayoutBrowser({ touch:true }); const p = b.page;
+  const b = await openLayoutBrowser({ touch:true, testTimeoutMs:15000 }); const p = b.page;
   try {
     await fixture(p, b.origin);
     const check = p.getByRole('checkbox', { name:'Actif dans le bureau' });
@@ -92,7 +92,7 @@ test('Checkbox and Radio: mixed semantics, native keyboard groups, accepted and 
 });
 
 test('Button: native external form submission and constraint validation, pending retains focus/name and blocks activation', { skip, timeout:15000 }, async () => {
-  const b = await openLayoutBrowser(); const p = b.page;
+  const b = await openLayoutBrowser({ testTimeoutMs:15000 }); const p = b.page;
   try {
     await fixture(p, b.origin);
     const save = p.getByRole('button', { name:'Enregistrer', exact:true });
@@ -129,7 +129,7 @@ test('Button: native external form submission and constraint validation, pending
 });
 
 test('forms: native desktop/mobile light/dark state evidence and full labelled hit targets', { skip, timeout:45000 }, async () => {
-  const b = await openLayoutBrowser(); const p = b.page; const records = [];
+  const b = await openLayoutBrowser({ testTimeoutMs:45000 }); const p = b.page; const records = [];
   const revision = execFileSync('git', ['rev-parse','HEAD'], { encoding:'utf8' }).trim();
   try {
     await fixture(p, b.origin); await p.emulateMedia({ reducedMotion:'reduce' });

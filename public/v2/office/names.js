@@ -28,7 +28,13 @@ export function displayName(occ, { primaryName = null, title = null, titleSource
   // only when the VM name equals the title's server-language text is the localized title shown instead.
   // `title` / `titleSource`: the title in the UI language / in the server's language (the page renders both).
   const generated = occ.title && occ.title.key !== 'sessionTitle.named' && occ.title.key !== 'sessionTitle.main';
-  if (generated && title && !isRawId(title, occ) && (!occ.name || isRawId(occ.name, occ) || occ.name.trim() === (titleSource ?? '').trim())) return title.trim();
+  if (generated) {
+    if (title && !isRawId(title, occ) && (!occ.name || isRawId(occ.name, occ) || occ.name.trim() === (titleSource ?? '').trim())) return title.trim();
+    // A generic role LabelRef is the server's display contract. If the client
+    // cannot resolve it, do not silently recreate the label from the role;
+    // that would hide a missing locale entry or a renderer that dropped the ref.
+    if (occ.role === 'subagent' && occ.title?.key === 'occupantRole.subagent') return s('names.agent');
+  }
   for (const n of [occ.name, occ.sourceName]) if (!isRawId(n, occ)) return n.trim();
   if (isPrimary(occ) && !isRawId(primaryName, occ)) return primaryName.trim();
   const role = canonicalRole(occ.role);

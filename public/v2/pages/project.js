@@ -16,22 +16,25 @@ import { useOrder, OrderToggle } from '../components/order.js';
 import { get } from '../api.js';
 import { projectWrite } from '../project-api.js';
 import { toast } from '../toast.js';
-import { Icon, EmptyState, ErrorState, Ago, Skeleton } from '../components/ui.js';
-import { Thumb, Priority, priorityOptions, priorityText, PStatus, Flag, FlagList, Avatar, AvatarStack, StateBadge } from '../components/project.js';
-import { STATUSES, labelTone } from '../board.js';
+import { Frame, Icon, EmptyState, ErrorState, Ago, Skeleton } from '../components/ui.js';
+import { Thumb, Priority, priorityOptions, priorityText, Flag, FlagList, Avatar, AvatarStack, StateBadge } from '../components/project.js';
+import { labelTone } from '../board.js';
+
+import { loadModule } from '../build-update.js';
+import { useProjectTopic } from './project-live.js';
+import { buildQuery } from '../config.js';
 
 const enc = encodeURIComponent;
-const statusLabel = (s) => t('projectStatus.' + s);
 
 /** Every write goes through projectWrite (expectedRevision + one 409 path); this binds the page's project and topic. */
-const writer = (p, topic) => (method, path, body, success) =>
-  projectWrite({ method, id: p.id, path, body, expectedRevision: p.revision, topics: [topic], success });
+const writer = (p, topic, commandOptions) => (method, path, body, success) =>
+  projectWrite({ method, id: p.id, path, body, expectedRevision: p.revision, topics: [topic], success, ...commandOptions });
 
 export function ProjectPage({ match }) {
   const { router } = services;
   const id = match.params.projectId;
   const topic = 'project:' + id;
-  const vm = useTopic(topic, '/api/v2/views/projects/' + enc(id));
+  const vm = useProjectTopic(topic, '/api/v3/views/projects/' + enc(id));
   const back = services.lastBoardUrl || router.href('projets');
 
   useEffect(() => { if (vm.data) document.title = vm.data.name + ' · ' + msg('nav.projets') + ' · Agent Office'; }, [vm.data && vm.data.name]);
@@ -46,10 +49,10 @@ export function ProjectPage({ match }) {
   }
   if (vm.data === undefined) return html`<${DetailSkeleton} back=${back} />`;
   const p = vm.data;
-  const ctx = { p, topic, id, writes: useCapability('storeWrites') };
+  const ctx = { p, topic, id, writes: useCapability('storeWrites') && p.capabilities?.write !== false, commandOptions: {stream:vm.stream,apiVersion:3} };
+  if (p.teamProject || p.capabilities?.write === false) return html`<${TeamDetail} p=${p} back=${back} error=${vm.error} onRetry=${vm.retry} />`;
 
-  return html`<div class="bu-page ao-page ao-project" aria-busy=${vm.resyncing ? 'true' : undefined}>
-    <a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>
+  return html`<${Frame} class="bu-page ao-page ao-project" bodyLabel=${msg('project.details')} aria-busy=${vm.resyncing ? 'true' : undefined} head=${html`<a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>`}>
     ${vm.error ? html`<div class="bu-banner bu-banner--warning" role="status"><${Icon} name="warning" /><span class="bu-banner__text">${msg('common.updateFailed', { error: vm.error.message })}</span><button class="bu-btn bu-btn--sm" onClick=${vm.retry}>${msg('common.retry')}</button></div>` : null}
     ${!ctx.writes ? html`<p class="ao-ro bu-caption bu-text-secondary" id="projet-lecture"><${Icon} name="info" />${msg('project.readonly')}</p>` : null}
     ${p.archived ? html`<div class="bu-banner"><${Icon} name="info" /><span class="bu-banner__text">${msg('project.archived')}</span></div>` : null}
@@ -67,29 +70,49 @@ export function ProjectPage({ match }) {
         <${Flags} ...${ctx} />
       </aside>
     </div>
-  </div>`;
+  </${Frame}>`;
 }
 
-function Header({ p, topic, id, writes }) {
+// Team detail owns its portrait/style chunk; ordinary project arrival stays bounded.
+function TeamDetail(props) {
+  const [loaded,setLoaded] = useState(null), [failure,setFailure] = useState(null), [attempt,setAttempt] = useState(0);
+  useEffect(() => {
+    let live=true;
+    loadModule(() => import('./project-team.js' + buildQuery)).then(async module => {
+      await module.loadStyles();if(live){setLoaded(() => module);setFailure(null);}
+    }).catch(error => {if(live)setFailure(error);});
+    return () => {live=false;};
+  },[attempt]);
+  if(failure)return html`<${Frame} class="bu-page ao-project" bodyLabel=${msg('project.details')}><${ErrorState} error=${{message:msg('common.updateFailed',{error:failure.message})}} onRetry=${() => {setFailure(null);setAttempt(attempt+1);}} /></${Frame}>`;
+  const Component=loaded&&(props.p.teamProject?loaded.TeamProjectDetail:loaded.ConnectorProjectDetail);
+  return Component ? html`<${Component} ...${props} />` : html`<${DetailSkeleton} back=${props.back} />`;
+}
+
+function Header({ p, topic, id, writes, commandOptions }) {
   const [moving, setMoving] = useState(false);
   const [statusSheet,setStatusSheet] = useState(false);
   const small = useSmallProjects();
   // Status, priority and the risks lead; labels and features live in the flags section (explorer-qa-02 Q02-07).
   const flags = p.flags.filter((f) => f.kind === 'risk');
-  const stack = orderPeople(p.people);
-  const write = writer(p, topic);
+  const stack = p.people;
+  const write = writer(p, topic, commandOptions);
   async function moveTo(to) {
-    if (!to || to === p.status) return;
+    const target = p.statusTransitions?.find(option => option.id === to);
+    if (!target || moving) return;
     const from = p.status;
     setMoving(true);
-    await write('PUT', '/status', { status: to }, (data) => ({ level: 'success', message: msg('projects.toast.moved', { stage: statusLabel(to) }), action: { label: msg('common.undo'),
-      run: () => projectWrite({ method: 'PUT', id: p.id, path: '/status', body: { status: from }, expectedRevision: data.revision, topics: [topic], success: msg('project.moveUndone', { stage: statusLabel(from) }) }) } }));
+    await write('PUT', '/status', { status: target.id }, data => {
+      const undo = data.vm?.statusTransitions?.find(option => option.id === from);
+      return { level: 'success', message: msg('projects.toast.moved', { stage: label(data.vm?.statusLabel || target.label) }),
+        action: undo ? { label: msg('common.undo'), run: () => projectWrite({ method: 'PUT', id: p.id, path: '/status', body: { status: undo.id },
+          expectedRevision: data.revision, topics: [topic], ...commandOptions, success: msg('project.moveUndone', { stage: label(undo.label) }) }) } : null };
+    });
     setMoving(false);
   }
   return html`<${Fragment}><header class="bu-project-header">
     <${Thumb} thumb=${p.thumb} id=${p.id} size="lg" />
     <div class="bu-project-header__body">
-      <div class="ao-project__chips">${small ? html`<button type="button" class="bu-btn bu-btn--sm ao-project-status" disabled=${!writes || moving} aria-label=${statusLabel(p.status) + ' : ' + msg('project.mobile.status')} onClick=${() => setStatusSheet(true)}><${PStatus} status=${p.status} /><${Icon} name="arrow-down" /></button>` : html`<${PStatus} status=${p.status} />`}<${Priority} p=${p.priority} /><${FlagList} flags=${flags} /></div>
+      <div class="ao-project__chips">${small ? html`<button type="button" class="bu-btn bu-btn--sm ao-project-status" disabled=${!writes || moving || !p.statusTransitions?.length} aria-label=${label(p.statusLabel) + ' : ' + msg('project.mobile.status')} onClick=${() => setStatusSheet(true)}><span class="bu-pstatus" data-project-status=${p.status}>${label(p.statusLabel)}</span><${Icon} name="arrow-down" /></button>` : html`<span class="bu-pstatus" data-project-status=${p.status}>${label(p.statusLabel)}</span>`}<${Priority} p=${p.priority} /><${FlagList} flags=${flags} /></div>
       <h2 class="bu-project-header__title">${p.name}</h2>
       <div class="bu-project-header__meta">
         ${stack.length ? html`<${AvatarStack} people=${stack.slice(0, 4)} hiddenCount=${Math.max(0, stack.length - 4)} size=${null} hiddenNames=${stack.slice(4).map((x) => x.name).join(', ')} />` : null}
@@ -98,23 +121,23 @@ function Header({ p, topic, id, writes }) {
       </div>
       <div class="bu-btn-group ao-project__actions">
         <label class="bu-sr-only" for="move-to">${msg('project.moveTo')}</label>
-        <select class="bu-select ao-move" id="move-to" disabled=${moving || !writes} aria-busy=${moving ? 'true' : undefined}
+        <select class="bu-select ao-move" id="move-to" disabled=${moving || !writes || !p.statusTransitions?.length} aria-busy=${moving ? 'true' : undefined}
           onChange=${(e) => { const v = e.currentTarget.value; e.currentTarget.value = ''; moveTo(v); }}>
           <option value="" selected>${msg('project.moveTo')}</option>
-          ${STATUSES.filter((s) => s !== p.status).map((s) => html`<option value=${s}>${statusLabel(s)}</option>`)}
+          ${(p.statusTransitions || []).map(option => html`<option value=${option.id}>${label(option.label)}</option>`)}
         </select>
         ${p.repo ? html`<a class="bu-btn" href=${p.repo.url} target="_blank" rel="noopener"><${Icon} name="external" />${msg('project.openRepo')}</a>` : null}
         <a class="bu-btn bu-btn--ghost" href="#drapeaux" onClick=${(e) => { e.preventDefault(); const el = document.getElementById('drapeaux'); el?.scrollIntoView({ block: 'start' }); el?.focus({ preventScroll: true }); }}><${Icon} name="drapeau" />${msg('project.manageFlags')}</a>
       </div>
     </div>
-  </header>${statusSheet ? html`<${Modal} title=${msg('project.moveTo')} onClose=${() => setStatusSheet(false)}><div class="ao-projects-mobile__destinations">${STATUSES.map((s) => html`<button class="bu-btn" type="button" disabled=${s===p.status || moving} onClick=${() => {setStatusSheet(false);moveTo(s);}}><${PStatus} status=${s} />${s===p.status ? html`<${Icon} name="check" />` : null}</button>`)}</div></${Modal}>` : null}</${Fragment}>`;
+  </header>${statusSheet ? html`<${Modal} title=${msg('project.moveTo')} onClose=${() => setStatusSheet(false)}><div class="ao-projects-mobile__destinations">${(p.statusTransitions || []).map(option => html`<button class="bu-btn" type="button" disabled=${moving} onClick=${() => {setStatusSheet(false);moveTo(option.id);}}>${label(option.label)}</button>`)}</div></${Modal}>` : null}</${Fragment}>`;
 }
 
-function CoverActions({ p, topic, writes }) {
+function CoverActions({ p, topic, writes, commandOptions }) {
   const [busy, setBusy] = useState(false);
   async function regenerate() {
     setBusy(true);
-    try { await writer(p, topic)('POST', '/cover/regenerate', {}, msg('project.cover.requested')); }
+    try { await writer(p, topic, commandOptions)('POST', '/cover/regenerate', {}, msg('project.cover.requested')); }
     finally { setBusy(false); }
   }
   async function upload(e) {
@@ -129,7 +152,7 @@ function CoverActions({ p, topic, writes }) {
       context.drawImage(bitmap, (480 - bitmap.width * ratio) / 2, (270 - bitmap.height * ratio) / 2, bitmap.width * ratio, bitmap.height * ratio); bitmap.close();
       const image = canvas.toDataURL('image/webp', 0.45).split(',')[1];
       if (image.length > 65536) throw new Error('image-size');
-      await writer(p, topic)('PUT', '/cover', { image }, msg('project.cover.saved'));
+      await writer(p, topic, commandOptions)('PUT', '/cover', { image }, msg('project.cover.saved'));
     } catch (_) { toast({ level: 'error', message: msg('project.cover.invalid') }); }
     finally { setBusy(false); }
   }
@@ -142,14 +165,8 @@ function CoverActions({ p, topic, writes }) {
   </div>`;
 }
 
-const KIND_ORDER = { human: 0, agent: 1, git: 2 };
-function orderPeople(people) {
-  // Grouped by kind; within a kind the server's order is kept (it puts the primary agent first).
-  return people.slice().sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
-}
-
 // ---- Résumé ----
-function Summary({ p, topic, id, writes }) {
+function Summary({ p, topic, id, writes, commandOptions }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -159,7 +176,7 @@ function Summary({ p, topic, id, writes }) {
   const waiting = asking || pendingSummary(thread.data?.items || []);
   async function ask() {
     setAsking(true);
-    await writer(p, topic)('POST', '/summary/regenerate', {}, msg('project.summary.requested'));
+    await writer(p, topic, commandOptions)('POST', '/summary/regenerate', {}, msg('project.summary.requested'));
     setAsking(false);
   }
   const askButton = html`<button type="button" class="bu-btn bu-btn--ghost bu-btn--sm" disabled=${!askAllowed || waiting} aria-busy=${waiting ? 'true' : undefined} onClick=${ask}><${Icon} name="agent" />${msg(waiting ? 'project.summary.pending' : 'project.summary.ask')}</button>`;
@@ -169,7 +186,7 @@ function Summary({ p, topic, id, writes }) {
     e.preventDefault();
     const value = String(new FormData(e.currentTarget).get('summary') || '');
     setBusy(true);
-    const res = await writer(p, topic)('PATCH', '', { summary: value }, msg('project.summary.saved'));
+    const res = await writer(p, topic, commandOptions)('PATCH', '', { summary: value }, msg('project.summary.saved'));
     setBusy(false);
     if (res.ok) setEditing(false);
   }
@@ -267,7 +284,7 @@ const CI = { passing: ['success', 'success', 'project.ci.passing'], running: ['i
 const SOURCE_ICON = { github: 'branche', workspace: 'folder', sessionGroup: 'journaux', manual: 'pencil' };
 const sourceText = (s) => (s.kind === 'manual' ? msg('project.source.manual') : s.label);
 
-function Repo({ p, topic, id, writes }) {
+function Repo({ p, topic, id, writes, commandOptions }) {
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState(null);
   const r = p.repo;
@@ -277,7 +294,7 @@ function Repo({ p, topic, id, writes }) {
     const m = /^([\w.-]+)\/([\w.-]+)$/.exec(v);
     if (!m) { setError(msg('project.repo.format')); return; }
     setError(null);
-    const res = await writer(p, topic)('POST', '/sources', { source: { kind: 'github', ref: { owner: m[1], repo: m[2] } } }, msg('project.repo.linked'));
+    const res = await writer(p, topic, commandOptions)('POST', '/sources', { source: { kind: 'github', ref: { owner: m[1], repo: m[2] } } }, msg('project.repo.linked'));
     if (res.ok) setLinking(false);
   }
   // A just-linked repo may not be fetched yet (review-03): branch, CI and commits can be missing.
@@ -319,33 +336,22 @@ function Repo({ p, topic, id, writes }) {
 
 // ---- Personnes impliquées ----
 function People({ people }) {
-  const groups = [
-    ['human', msg('project.people.humans'), people.filter((x) => x.kind === 'human')],
-    ['agent', msg('project.people.agents'), orderPeople(people.filter((x) => x.kind === 'agent'))],
-    ['git', msg('project.people.git'), people.filter((x) => x.kind === 'git')],
-  ].filter(([, , list]) => list.length);
   return html`<section class="bu-card ao-section ao-section--people" aria-labelledby="personnes">
-    <div class="ao-section__head"><h3 class="bu-card__title" id="personnes">${msg('project.people')}</h3><span class="bu-count">${people.length}</span></div>
-    ${groups.length ? groups.map(([kind, title, list]) => html`<div key=${kind} class="bu-people__group">
-      <h4 class="bu-eyebrow">${title}</h4>
-      <ul class="bu-people">${list.map((x) => html`<li key=${x.id} class="bu-person">
-        <${Avatar} person=${x} />
-        <span class="ao-person__text"><span class="bu-person__name">${x.name}</span>${x.role ? html`<span class="bu-person__role">${x.role}</span>` : null}</span>
-        ${kind === 'agent' && x.state ? html`<${StateBadge} state=${x.state} />`
-          : kind === 'git' && x.commitCount != null ? html`<span class="bu-mono-sm bu-text-tertiary">${msg('project.people.commits', { n: x.commitCount })}</span>` : null}
-      </li>`)}</ul>
-    </div>`) : html`<p class="bu-text-secondary">${msg('project.people.none')}</p>`}
+    <div class="ao-section__head"><h3 class="bu-card__title" id="personnes">${msg('project.people')}</h3></div>
+    <ul class="bu-people">${people.map(x => html`<li key=${x.id} class="bu-person"><${Avatar} person=${x} />
+      <span class="ao-person__text"><span class="bu-person__name">${x.name}</span>${x.role ? html`<span class="bu-person__role">${x.role}</span>` : null}</span>
+      ${x.state ? html`<${StateBadge} state=${x.state} />` : null}</li>`)}</ul>
   </section>`;
 }
 
 // ---- Drapeaux ----
-function Flags({ p, topic, id, writes }) {
+function Flags({ p, topic, id, writes, commandOptions }) {
   const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(null);
   const by = (k) => p.flags.filter((f) => f.kind === k);
   const risks = by('risk'), features = by('feature'), labels = by('label');
   const blocked = risks.some((f) => f.key === 'blocked');
-  const write = writer(p, topic);
+  const write = writer(p, topic, commandOptions);
   const run = async (key, method, path, body, success) => { setBusy(key); const res = await write(method, path, body, success); setBusy(null); return res; };
 
   return html`<section class="bu-card ao-section ao-section--flags" id="drapeaux" tabindex="-1" aria-labelledby="drapeaux-titre">
@@ -396,9 +402,9 @@ function Flags({ p, topic, id, writes }) {
 }
 
 function DetailSkeleton({ back }) {
-  return html`<div class="bu-page ao-page ao-project" aria-busy="true" aria-label=${msg('project.loading')}>
+  return html`<${Frame} class="bu-page ao-page ao-project" aria-busy="true" bodyLabel=${msg('project.loading')}>
     <a class="bu-backlink" href=${back}><${Icon} name="arrow-left" />${msg('nav.projets')}</a>
     <div class="bu-project-header"><${Skeleton} kind="block" w="cover" /><div class="bu-project-header__body"><${Skeleton} w="30" /><${Skeleton} kind="title" /><${Skeleton} w="50" /></div></div>
     <div class="ao-project__grid"><div class="ao-project__col"><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div><div class="ao-project__col"><${Skeleton} kind="block" /><${Skeleton} kind="block" /></div></div>
-  </div>`;
+  </${Frame}>`;
 }

@@ -2,17 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { browserSkipReason, openLayoutBrowser } from './helpers/layout-browser.js';
+import { browserSkipReason, openLayoutBrowser, chooseChatConversation } from './helpers/layout-browser.js';
 const skip = browserSkipReason();
 
 async function open(page, origin, path, ready) {
   // Journaux uses agent as a canonical filter, not the helper's mock display name.
-  await page.goto(`${origin}${path}${path.includes('?') ? '&' : '?'}mock=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${origin}${path}${path.includes('?') ? '&' : '?'}mock=1${path==='/discuter'?'&chat-plein=1':''}`, { waitUntil: 'domcontentloaded' });
+  if(path==='/discuter')await chooseChatConversation(page);
   await page.locator(ready).first().waitFor();
   await page.evaluate(() => document.fonts.ready);
 }
 
 async function crowded(page, topic) {
+  if(topic==='chat')return; // The v3 mock owns its dense history; do not mutate the shell's legacy topic.
   await page.evaluate(async topic => {
     const build = document.querySelector('meta[name=ao-build]').content;
     const { services } = await import(new URL('services.js?v=' + build, document.baseURI).href);
@@ -173,10 +175,10 @@ test('Workspace styles: failed stylesheet shows retry; successful retry renders 
     for (const [path, ready] of [['/discuter', '#chat-texte'], ['/journaux', '.ao-logs'], ['/flux', '.ao-flows']]) {
       const pattern = '**/pages/workspace-mobile.css*';
       await p.route(pattern, route => route.fulfill({ status: 503, contentType: 'text/css', body: '' }));
-      await p.goto(`${h.origin}${path}?mock=1`, { waitUntil: 'networkidle' });
+      await p.goto(`${h.origin}${path}?mock=1`, { waitUntil: 'domcontentloaded' });
       const retry = p.getByRole('button', { name: 'Réessayer', exact: true });
       await retry.waitFor(); assert.equal(await p.locator(ready).count(), 0, 'unstyled page is never rendered');
-      await p.unroute(pattern); await retry.click(); await p.locator(ready).waitFor();
+      await p.unroute(pattern); await retry.click(); if(path==='/discuter')await chooseChatConversation(p); await p.locator(ready).waitFor();
       assert.equal(await p.locator('link[href*="workspace-mobile.css"]').count(), 1);
       assert.equal(await p.locator('link[data-bureau-controls-css]').count(), 1);
       assert.ok(await p.locator('link[href*="workspace-mobile.css"]').evaluate(e => !!e.sheet && e.href.includes('?v=')));

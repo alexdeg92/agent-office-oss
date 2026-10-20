@@ -2,8 +2,9 @@
 /*
  * R15-01 (P1, go-live gate): CSRF protection for EVERY non-GET request (v1, v2, login, logout, commands), before
  * any body is parsed or any handler (or adapter) runs.
- *   1. Media type: a request with a body must be application/json → else 415 (forms are urlencoded, multipart or
- *      text/plain; a browser can't send JSON cross-origin without a CORS preflight, which is never granted).
+ *   1. Media type: a request with a body must be application/json → else 415, except the streaming Chat attachment
+ *      route, which accepts multipart only (forms are urlencoded or text/plain; a browser can't send JSON cross-origin
+ *      without a CORS preflight, which is never granted).
  *      A body-less request needs X-AO-Request: 1 (or a bearer token).
  *   2. Origin: a request that carries the session cookie (and no bearer) must come from an allowed origin: its
  *      Origin, else its Referer's origin, is the configured public origin (AO_PUBLIC_URL), the server's own
@@ -17,6 +18,9 @@ const { ApiError, sendError } = require('./v2/errors');
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 const LOGIN_MAX_BYTES = 4096;   // an e-mail and a password
 const COOKIE = 'taco_sess';
+// The streaming Chat attachment endpoint is the sole form-data write. Keep the
+// exception path- and method-scoped: all other v2/v3 writes remain JSON-only.
+const CHAT_ATTACHMENT_UPLOAD = /^\/api\/v3\/chat\/sessions\/cs_[A-Za-z0-9_-]{32,}\/attachments\/?$/;
 
 // R17-04: every origin is compared in its normalised form (WHATWG URL): lower-cased scheme and host, IPv6 bracketed
 // and compressed ([0:0::1] → [::1]), the scheme's default port dropped. Both sides go through here.
@@ -70,7 +74,8 @@ function createCsrfGuard({ publicUrl = null, onLoginRefused = null } = {}) {
     if (charset && charset[1].toLowerCase() !== 'utf-8') return refuse(req, res, 415, 'charset');
     if (LOGIN.test(req.path) && Number(req.headers['content-length'] || 0) > LOGIN_MAX_BYTES) return refuse(req, res, 413, 'too-large');
     if (hasBody || type) {
-      if (type !== 'application/json') return refuse(req, res, 415, 'content-type');
+      const chatUpload = req.method === 'POST' && CHAT_ATTACHMENT_UPLOAD.test(req.path) && type === 'multipart/form-data';
+      if (type !== 'application/json' && !chatUpload) return refuse(req, res, 415, 'content-type');
     } else if (!marked && !bearer) {
       return refuse(req, res, 415, 'content-type');
     }

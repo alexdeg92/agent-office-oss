@@ -21,7 +21,7 @@ export const ROUTES = [
   { name: 'flux-detail', path: '/flux/:jobId', framed: true, parent: 'flux', tab: 'plus' },
   { name: 'projets', path: '/projets', framed: true, label: true, icon: 'projets', question: true, tab: 'projets' },
   { name: 'importer', path: '/projets/importer', titleKey: 'projects.import', subtitleKey: 'import.lede', framed: true, parent: 'projets', tab: 'projets' },
-  { name: 'projet', path: '/projets/:projectId', parent: 'projets', tab: 'projets' },
+  { name: 'projet', path: '/projets/:projectId', framed: true, parent: 'projets', tab: 'projets' },
   { name: 'habilitations', path: '/habilitations', label: true, icon: 'habilitations', question: true, tab: 'plus' },
   { name: 'interlocuteur', path: '/habilitations/:interlocutorId', parent: 'habilitations', tab: 'plus' },
   { name: 'journaux', path: '/journaux', framed: true, label: true, icon: 'journaux', question: true, tab: 'journaux', needs: 'sessions' },

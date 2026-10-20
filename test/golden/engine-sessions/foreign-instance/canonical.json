@@ -57,7 +57,8 @@
     "interactive": false,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:atlas:telegram:direct:foreign-user",
@@ -117,7 +118,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:scribe:slack:channel:C0ACME",
@@ -177,7 +179,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:atlas:matrix:group:!ops:example.org",
@@ -237,7 +240,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:atlas:cron:ffffffff-f101-4000-8000-000000000101",
@@ -294,7 +298,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:atlas:subagent:ffffffff-f201-4000-8000-000000000201",
@@ -359,7 +364,8 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   },
   {
     "key": "agent:reviewer:explicit:review-desk",
@@ -419,6 +425,7 @@
     "interactive": true,
     "group": null,
     "channelName": null,
-    "label": null
+    "label": null,
+    "projectRef": null
   }
 ]

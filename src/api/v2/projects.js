@@ -84,6 +84,11 @@ function sessionInfoOf(engine, { enrichment = null, runtime = null, locale = 'fr
 function engineRegistry(engine, opts = {}) {
   return {
     sessionInfo: sessionInfoOf(engine, opts),
+    connectorOf: key => engine.session?.(key) ? engine.connectorOf?.(key) || null : null,
+    connectorById: id => engine.connectorById?.(id) || (!Array.isArray(engine.instances) && engine.connectorOf?.()?.id===id ? engine.connectorOf() : null),
+    get defaultConnector() { return Array.isArray(engine.instances) ? null : engine.connectorOf?.() || null; },
+    get connectors() { return Array.isArray(engine.instances) ? engine.instances.map(row=>engine.connectorById?.(row.id)).filter(Boolean) : [engine.connectorOf?.()].filter(Boolean); },
+    get sessionGroups() { return engine.sessionGroups?.() || []; },
     get sessions() { return new Map(engine.sessions().map((s) => [s.key, s])); },
     get cronJobs() { return new Map(engine.cronJobs().map((j) => [j.id, j])); },
     get agents() { return new Map(engine.agents().map((a) => [a.id, a])); },
@@ -119,18 +124,39 @@ function liveSources(cfg, engine, log = () => {}) {
     resolve: (host) => dns.promises.lookup(host, { all: true }).then((r) => r.map((x) => x.address)) };
 }
 
-function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false, orchestratorTeams = null }) {
+function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false, orchestratorTeams = null, chatBackend = null, officeTopicFor = null }) {
   const owner = store.owner;
   const primaryAgentId = () => { const agent = engine.primaryAgent(); return agent ? agent.id : null; };
   const teamProjectModule = require('../../projects/orchestrator-teams');
   const runtimeProjectModule = require('../../projects/runtime-sources');
   const teamSnapshot = () => orchestratorTeams?.getSnapshot?.() || null;
+  // Team-project avatars reuse the exact OfficeVM appearance selected for the
+  // linked runtime session/Herdr pane. These lookups stay private to this
+  // server-side join; only the canonical portrait descriptor enters ProjectVM.
+  const teamPortraitForMember = (member, snapshot) => {
+    const office = topics.current('office', 3)?.vm || null;
+    const { officeDefaults } = require('./vm/office');
+    const index = officeDefaults().index;
+    const assignMemberAppearances = store?.office?.memberAppearances
+      ? (ids, portraitIndex, options) => store.office.memberAppearances(ids, portraitIndex, options) : null;
+    return teamProjectModule.officePortraitForMember(member, snapshot, office, { index, assignMemberAppearances });
+  };
+  const teamRuntimeOf = adapterId => {
+    const rows = engine.runtimes?.() || [];
+    const row = rows.find(value => value?.adapter === adapterId || value?.id === adapterId) || null;
+    let definition = null;
+    try { definition = require('../../adapters').adapterById(adapterId)?.definition || null; } catch (_) { /* unknown adapter */ }
+    const name = row?.name || definition?.name || null;
+    const mark = row?.mark || definition?.mark || null;
+    return name || mark ? { providerName: mark?.providerName || name || null, brand: mark } : null;
+  };
+  const teamProjectOptions = { portraitForMember: teamPortraitForMember, runtimeOf: teamRuntimeOf };
   const runtimeProjects = () => runtimeProjectModule.collectRuntimeProjects({ sessions: engine.sessions(), agents: engine.agents(),
     connectorOf: key => engine.connectorOf?.(key) || engine.connectorOf?.() || null, idKey: cfg.sessionSecret });
   const repository = createProjectsRepository(store.db, { persons: [], ownerPersonId: owner.id, timmyPersonId: null, primaryAgentId,
     githubOwners: cfg.projectsOwners, onInvalid: () => engine.quarantine.record({ channel: 'store.projects', code: 'store.invalid', severity: 'warn', path: null }) });
   let covers = null;
-  const service = createProjectService({
+  const service = createProjectService({ log,
     additionalProjects: ({ includeRuntime = false } = {}) => [
       ...teamProjectModule.teamProjects(teamSnapshot(), orchestratorTeams?.teamCapabilities),
       ...(includeRuntime ? runtimeProjects().projects : []),
@@ -175,11 +201,14 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   const offTeamSource = orchestratorTeams?.onChange?.(() => { topics.invalidate('projects'); topics.invalidate('project'); }) || null;
 
   // G5 (api-v3.md D8): 3.0 says 'with-agent' (+ agent, default the primary) and has no 'with-timmy'; 2.x is unchanged
-  topics.define('projects', { params: ['filter', 'agent', 'source'], build: (p, P) => {
+  topics.define('projects', { params: ['filter', 'agent', 'source', 'search', 'stage'], queryValueLimits: {
+    filter: 32, agent: 256, source: 256, search: 120, stage: 32,
+  }, build: (p, P) => {
     const sourceFilterId = p.source || null;
     const filter = p.filter || 'all';
     if (P.version !== 3) {
       if (p.agent !== undefined) throw invalid('agent', 'unexpected-field');
+      if (p.search !== undefined || p.stage !== undefined) throw invalid(p.search !== undefined ? 'search' : 'stage', 'unexpected-field');
       return service.views.board({ filter, sourceFilterId, allowUnknownSourceFilter: true, includeRuntime: false });
     }
     if (filter === 'with-timmy' || !['all', 'at-risk', 'with-agent', 'archived'].includes(filter)) throw invalid('filter', 'invalid');
@@ -187,11 +216,19 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     if (p.agent !== undefined && filter !== 'with-agent') throw invalid('agent', 'unexpected-field');
     // projects' board selects by the PRIMARY agent today; another agent needs their builder to take it (relayed)
     if (p.agent !== undefined && p.agent !== primary) throw invalid('agent', 'unsupported');
-    const vm = service.views.board({ filter: filter === 'with-agent' ? 'with-timmy' : filter, sourceFilterId, allowUnknownSourceFilter: true, includeRuntime: true });
-    return Object.assign({}, vm, { filter, agent: filter === 'with-agent' ? primary : null });
+    if (p.search !== undefined && (typeof p.search !== 'string' || p.search.length > 120)) throw invalid('search', 'invalid');
+    if (p.stage !== undefined && p.stage !== 'all' && !require('../../projects/constants').PROJECT_STATUSES.includes(p.stage)) throw invalid('stage', 'invalid');
+    const vm = service.views.board({ filter: filter === 'with-agent' ? 'with-timmy' : filter, sourceFilterId, allowUnknownSourceFilter: true,
+      includeRuntime: true, search: p.search, stage: p.stage, apiVersion: 3 });
+    // Keep the non-enumerable boardAccess metadata attached by buildBoardVM.
+    // It is consumed by the authorization projection to subtract restricted
+    // rows from pre-stage counts, and intentionally stays off the wire.
+    vm.filter = filter;
+    vm.agent = filter === 'with-agent' ? primary : null;
+    return vm;
   } });
-  topics.define('project', { params: 'path', build: (p, P) => teamProjectModule.buildTeamProjectVM(teamSnapshot(), p.key, orchestratorTeams?.teamCapabilities)
-    || service.views.project({ id: p.key, includeRuntime: P.version === 3 }) });
+  topics.define('project', { params: 'path', build: (p, P) => teamProjectModule.buildTeamProjectVM(teamSnapshot(), p.key,
+    orchestratorTeams?.teamCapabilities, teamProjectOptions) || service.views.project({ id: p.key, includeRuntime: P.version === 3 }) });
 
   const body = (req, allowed) => {
     const b = req.body || {};
@@ -204,6 +241,8 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   const actorOf = (req) => {
     return require('../../security/request-actor').requestActor(req,store);
   };
+  const kickoffRepo=store.projectKickoffs||null;
+  const kickoffHash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
   const coverAuthority=req=>({write:req.authorize,generate:req.authorize?()=>{
     req.authorize();
     if(!require('../../security/comment-provenance').PROJECT_CONTEXT_READS.every(r=>store.policy.can(req.user,r.resource,r.level)))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
@@ -217,12 +256,23 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   const id = (req) => ({ id: req.params.id });
 
   // ---- views ----
+  r.get('/views/project-create', authed, wrap((req,res)=>{
+    if(req.apiVersion!==3||!chatBackend?.projectCreateVM)throw new ApiError('not_found');
+    const vm=chatBackend.projectCreateVM(req);ok(res,vm,null,'projectCreate');
+  }));
   r.get('/views/projects', authed, wrap((req, res) => {
     const filter = typeof req.query.filter === 'string' ? req.query.filter : 'all';
+    if (req.apiVersion !== 3 && (req.query.search !== undefined || req.query.stage !== undefined)) {
+      throw invalid(req.query.search !== undefined ? 'search' : 'stage', 'unexpected-field');
+    }
+    if (req.apiVersion === 3 && req.query.search !== undefined && (typeof req.query.search !== 'string' || req.query.search.length > 120)) throw invalid('search', 'invalid');
+    if (req.apiVersion === 3 && req.query.stage !== undefined && typeof req.query.stage !== 'string') throw invalid('stage', 'invalid');
     const q = [];
     if (typeof req.query.agent === 'string') q.push('agent=' + encodeURIComponent(req.query.agent));
     if (filter !== 'all') q.push('filter=' + encodeURIComponent(filter));
     if (typeof req.query.source === 'string') q.push('source=' + encodeURIComponent(req.query.source));
+    if (req.apiVersion === 3 && typeof req.query.search === 'string') q.push('search=' + encodeURIComponent(req.query.search));
+    if (req.apiVersion === 3 && typeof req.query.stage === 'string') q.push('stage=' + encodeURIComponent(req.query.stage));
     const t = topics.current(q.length ? 'projects?' + q.join('&') : 'projects', req.apiVersion);
     if (!t) throw invalid('filter', 'invalid');
     ok(res, t.vm, { id: t.id, rev: t.rev });
@@ -232,7 +282,40 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) throw invalid('limit', 'invalid');
     ok(res, service.views.history({ id: req.params.id, cursor: req.query.cursor || undefined, limit }), null, 'history');
   }));
-  r.get('/views/projects/:id', authed, wrap((req, res) => { const t = topics.current('project:' + req.params.id, req.apiVersion); ok(res, t.vm, { id: t.id, rev: t.rev }); }));
+  r.get('/views/projects/:id', authed, wrap((req, res) => {
+    const t = topics.current('project:' + req.params.id, req.apiVersion);
+    let vm = t.vm;
+    // A team project is shared across viewers, but the OfficeVM join is
+    // principal-scoped. Resolve its portraits against the same scoped Office
+    // projection the Bureau serves when this principal can obtain it. A team
+    // reader may lack Office access; keep the already projected/persisted
+    // portrait in that case rather than failing the project detail read.
+    const officeReadable = !enforceAuthorization || !!req.user && store?.policy?.can(req.user, 'office', 'read');
+    if (vm?.teamProject && officeReadable && typeof officeTopicFor === 'function') {
+      let office = null;
+      try {
+        const officeTopic = officeTopicFor(req);
+        office = officeTopic ? topics.current(officeTopic, req.apiVersion)?.vm : null;
+      } catch (error) {
+        if (error?.code !== 'forbidden') throw error;
+      }
+      if (office) {
+        const snapshot = teamSnapshot();
+        const members = new Map((snapshot?.members || []).map(member => [member.id, member]));
+        const roster = vm.teamProject.roster;
+        vm = { ...vm, teamProject: { ...vm.teamProject, roster: { ...roster, members: roster.members.map(row => {
+          const member = members.get(row.id);
+          if (!member) return row;
+          return { ...row, portrait: teamProjectModule.officePortraitForMember(member, snapshot, office, {
+            index: require('./vm/office').officeDefaults().index,
+            assignMemberAppearances: store?.office?.memberAppearances
+              ? (ids, portraitIndex, options) => store.office.memberAppearances(ids, portraitIndex, options) : null,
+          }) || row.portrait };
+        }) } } };
+      }
+    }
+    ok(res, vm, { id: t.id, rev: t.rev });
+  }));
   r.get('/views/project-candidates', authed, wrap(async (req, res) => {
     req.authorize?.();
     const requirements=require('../../security/comment-provenance').PROJECT_CONTEXT_READS;
@@ -251,7 +334,74 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
 
   // ---- commands (store class) ----
   const store_ = guard('store');
-  r.post('/projects', authed, store_, run('create', ['name', 'status', 'priority', 'summary', 'sources']));
+  r.post('/projects', authed, store_, wrap(async(req,res)=>{
+    const allowed=req.apiVersion===3?['name','status','priority','summary','sources','targetAgentId']:['name','status','priority','summary','sources'];
+    const b=body(req,allowed);
+    if(b.targetAgentId===undefined){
+      const result=await covers.withAuthority(coverAuthority(req),()=>service.commands.create(Object.assign({},b,{actor:actorOf(req),requestId:req.requestId})));
+      return ok(res,result);
+    }
+    if(req.apiVersion!==3||typeof b.targetAgentId!=='string'||!kickoffRepo||!chatBackend?.createProjectKickoff)throw invalid('targetAgentId','invalid');
+    chatBackend.authorizeProjectKickoff(req);
+    const key=req.get('Idempotency-Key');
+    if(typeof key!=='string'||!/^[A-Za-z0-9._~-]{16,128}$/.test(key))throw invalid('Idempotency-Key','invalid');
+    const scope=chatBackend.scopeOf(req);
+    const normalized={name:b.name,status:b.status??null,priority:b.priority??null,summary:b.summary??null,sources:b.sources??[],targetAgentId:b.targetAgentId};
+    const requestHash=kickoffHash(normalized),previous=kickoffRepo.byKey(scope,key);
+    if(previous){
+      if(previous.requestHash!==requestHash)throw new ApiError('conflict',{details:[{issue:'idempotency-conflict'}]});
+      const vm=service.views.project({id:previous.projectId,includeRuntime:true});
+      const {projectId:_projectId,...kickoff}=chatBackend.projectKickoffVM(req,previous);
+      return ok(res,{ok:true,result:{projectId:previous.projectId,sessionId:previous.sessionId,turnId:previous.turnId},revision:vm.revision,vm:{...vm,kickoff}});
+    }
+    const selected=chatBackend.resolveProjectTarget(req,b.targetAgentId);
+    const generatedGroup='kickoff_'+crypto.randomBytes(18).toString('base64url');
+    let accepted,record,dispatch;
+    store.withTx(()=>{
+      const created=service.commands.create({name:b.name,status:b.status,priority:b.priority,summary:b.summary,
+        sources:[...(b.sources||[]),{kind:'sessionGroup',ref:{by:'group',groupId:generatedGroup,name:String(b.name||'').trim().slice(0,200)||'Project'}}],
+        actor:actorOf(req),requestId:req.requestId});
+      const projectId=created.vm.id;
+      // The engine's canonical agent person is already seeded in the shared
+      // persons table. Reuse that identity instead of inserting another row
+      // with the same unique agent_id (the runtime-specific fallback is only
+      // for adapters whose agents have not been seeded into the owner store).
+      const existingAgentPerson=repository.listPersons().find(person=>person.kind==='agent'
+        &&person.links?.agentId===selected.agent.id&&!person.links?.subagentId);
+      const personId=existingAgentPerson?.id||runtimeProjectModule.personId(selected.connectorId||('runtime:'+selected.target.runtime_id),selected.agent.id);
+      if(!existingAgentPerson)repository.upsertPerson({id:personId,kind:'agent',name:String(selected.agent.name||'Agent').trim().slice(0,80)||'Agent',avatarUrl:null,
+        links:{agentId:selected.agent.id}});
+      accepted=service.commands.setPersonOverride({id:projectId,expectedRevision:created.revision,personId,role:'owner',added:true,
+        actor:actorOf(req),requestId:req.requestId});
+      if(selected.connectorId){
+        const sources=repository.sources.get(projectId)||[];
+        repository.sources.set(projectId,sources.map(source=>source.kind==='sessionGroup'&&source.ref?.groupId===generatedGroup
+          ? {...source,connectorIds:[selected.connectorId]}:source));
+      }
+      const kickoff=chatBackend.createProjectKickoff({req,targetId:b.targetAgentId,project:{id:projectId,name:accepted.vm.name,
+        summary:accepted.vm.summary,status:accepted.vm.status,priority:accepted.vm.priority,
+        url:'/projets/'+encodeURIComponent(projectId)},idempotencyKey:key,requestHash});
+      record=kickoffRepo.create({projectId,principalScope:scope,idempotencyKey:key,requestHash,targetId:b.targetAgentId,
+        sessionId:kickoff.sessionId,turnId:kickoff.turnId,connectorId:kickoff.connectorId,createdAt:Date.now()});
+      dispatch=kickoff.dispatch;
+    });
+    dispatch();
+    const {projectId:_projectId,...kickoff}=chatBackend.projectKickoffVM(req,record);
+    ok(res,{...accepted,vm:{...accepted.vm,kickoff}});
+  }));
+  r.get('/projects/:id/kickoff',authed,wrap((req,res)=>{
+    if(req.apiVersion!==3||!kickoffRepo||!chatBackend?.projectKickoffVM)throw new ApiError('not_found');
+    const record=kickoffRepo.byProject(chatBackend.scopeOf(req),req.params.id);
+    if(!record)throw new ApiError('not_found');
+    ok(res,chatBackend.projectKickoffVM(req,record),null,'projectKickoff');
+  }));
+  r.post('/projects/:id/kickoff/retry',authed,store_,wrap((req,res)=>{
+    if(req.apiVersion!==3||!kickoffRepo||!chatBackend?.retryProjectKickoff)throw new ApiError('not_found');
+    if(Object.keys(req.body||{}).length)throw invalid(null,'unexpected-field');
+    const record=kickoffRepo.byProject(chatBackend.scopeOf(req),req.params.id);
+    if(!record)throw new ApiError('not_found');
+    const result=chatBackend.retryProjectKickoff(req,record);res.status(202);ok(res,{ok:true,result,revision:null,vm:null});
+  }));
   const coverProject = (req, b) => {
     const project = repository.getProject(req.params.id);
     if (!project) throw new ApiError('not_found');

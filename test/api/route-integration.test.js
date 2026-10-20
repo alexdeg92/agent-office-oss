@@ -14,7 +14,7 @@ const {requestId}=require('../../src/api/v2/errors');
 const {auditMiddleware}=require('../../src/api/audit');
 const {openSse}=require('../helpers/sse-client');
 let hash;before(async()=>{hash=await hashPassword('synthetic-integration-password');});
-async function fixture(t,{settings=null,externalAccess=null,orchestratorTeams=null,readonly=false,fullApp=false,apiOnly=true}={}) {
+async function fixture(t,{settings=null,externalAccess=null,orchestratorTeams=null,readonly=false,fullApp=false,apiOnly=true,log=()=>{}}={}) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ao-router-integration-')),store=openStore({dir,instance:'test',ownerName:'Historical admin',log:()=>{}});
   const admin=store.users.createOwner({email:'admin@example.invalid',personId:store.owner.id,passwordHash:hash});
   const ctx={userId:admin.id,authGeneration:0,requestId:'req_integration',authorize:()=>{}};
@@ -33,13 +33,13 @@ async function fixture(t,{settings=null,externalAccess=null,orchestratorTeams=nu
       tokenGate:createAgentTokenGate({tokens:store.tokens,audit:row=>store.audit.append(row),allowedAgent:()=>engine.primaryAgent()?.id,personOf:id=>store.persons.list().find(p=>p.links.agentId===id)?.id}),
       mountRoutes:a=>{
         require('../../src/ops/health').mountHealth(a,()=>({mode:'app',store,engine}));auth.mountRoutes(a,{isGwConnected:()=>true});links.mount(a);
-        api=mountV2(a,{auth,store,engine,cfg,runtime:null,settings,setup,externalAccess,orchestratorTeams,enforceAuthorization:true});
+        api=mountV2(a,{auth,store,engine,cfg,runtime:null,settings,setup,externalAccess,orchestratorTeams,enforceAuthorization:true,log});
       }});
   } else {
     app=trackMounts(express());app.use(requestId,express.json());
     // Exercise real audit behavior; this legacy fixture checks core route registrations only.
     app.use((req,res,next)=>audit(req,res,next));
-    api=mountV2(app,{auth,store,engine,cfg,runtime:null,settings,externalAccess,orchestratorTeams,enforceAuthorization:true});
+    api=mountV2(app,{auth,store,engine,cfg,runtime:null,settings,externalAccess,orchestratorTeams,enforceAuthorization:true,log});
   }
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+server.address().port;
@@ -92,7 +92,7 @@ test('actual HTTP topics, actor-specific me, command VMs, conflicts and revision
     const deniedDelete=await f.request('DELETE','/api/v'+version+'/projects/'+vm.id+'/comments/'+comment.json.data.result.comment.id,{},f.admin);assert.equal(deniedDelete.status,403);
   }
 });
-test('session projection collapses repeated canonical event ids before v2 and v3 collection validation',async t=>{
+test('session projection preserves colliding canonical events with unique repaired ids in v2 and v3',async t=>{
   const f=await fixture(t),session=f.engine.sessions()[0],at=Date.now();
   const senderInfo={kind:'agent',id:'agent:main:main',name:null,runtime:'openclaw',channel:null,avatarHint:null};
   const trace={sessionKey:session.key,fetchedAt:at,messageCount:2,window:{from:0,to:2},events:[
@@ -107,9 +107,140 @@ test('session projection collapses repeated canonical event ids before v2 and v3
     const response=await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(session.key)}`);
     assert.equal(response.status,200,JSON.stringify(response.json));
     const vm=response.json.data;
-    assert.deepEqual(vm.events.map(event=>event.id),['ev:0:0']);
+    assert.equal(vm.events.length,2,'distinct events sharing a source id are both retained');
+    assert.equal(vm.events[0].id,'ev:0:0');
+    assert.match(vm.events[1].id,/^msg:[a-f0-9]{64}:0$/);
     assert.equal(vm.events[0].text,'First child completion');
+    assert.equal(vm.events[1].text,'Redelivered child completion');
+    assert.equal(new Set(vm.events.map(event=>event.id)).size,2);
     assert.equal(validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).session,vm).ok,true);
+  }
+});
+test('v2 session aliasing repairs historical and scoped participant ids that collapse to one legacy id',async t=>{
+  const repairLogs=[],f=await fixture(t,{log:entry=>repairLogs.push(entry)}),session=f.engine.sessions()[0],at=Date.now();
+  const {scopedId}=require('../../src/runtime-ids');
+  const shared='agent:shared';
+  const other='agent:'+scopedId('legacy','agent','shared');
+  f.engine.transcript=()=>({sessionKey:session.key,fetchedAt:at,messageCount:0,window:{from:0,to:0},events:[],participants:[
+    {kind:'agent',id:shared,name:'Builder',runtime:'codex',channel:null,avatarHint:null},
+    {kind:'agent',id:other,name:'Reviewer',runtime:'claude-code',channel:null,avatarHint:null},
+  ]});
+  f.engine.setReads({transcript:async()=>({ok:true})});
+  const {VM_SCHEMAS,VM_SCHEMAS_V3}=require('../../src/api/v2/vm/schemas'),validate=require('../../src/schema').validate;
+  for(const version of [2,3]) {
+    const response=await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(session.key)}`);
+    assert.equal(response.status,200,JSON.stringify(response.json));
+    const vm=response.json.data;
+    assert.equal(vm.participants.length,2,'both distinct source agents survive the v2 identity projection');
+    assert.equal(new Set(vm.participants.map(row=>row.id)).size,vm.participants.length);
+    assert.equal(validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).session,vm).ok,true);
+  }
+  assert.ok(repairLogs.some(row=>row.event==='api.vm.repaired'&&row.vm==='session'&&row.path==='participants'&&row.count===1));
+  assert.equal(JSON.stringify(repairLogs).includes('shared'),false,'repair logs contain no participant identity');
+});
+test('session read topic repairs colliding people and subagent ids and logs only the repair path/count',async t=>{
+  const repairLogs=[], f=await fixture(t,{log:entry=>repairLogs.push(entry)}),session=f.engine.sessions()[0],at=Date.now();
+  const sender=(runtime,channel,delegation=null)=>({kind:'agent',id:'agent:shared',name:null,runtime,channel,avatarHint:null,...(delegation?{delegation}:{})});
+  const participantCopies=[sender('codex',null),sender('claude-code','synthetic-channel')];
+  const {projectEvents,participantsOf}=require('../../src/engine/model/sender');
+  const {repairSessionCollections}=require('../../src/api/v2/vm/logs');
+  const projectedParticipants=participantsOf(projectEvents(participantCopies.map(senderInfo=>({senderInfo}))));
+  const generatedParticipantId=repairSessionCollections({key:session.key,participants:projectedParticipants}).participants[1].id;
+  participantCopies.push({...sender('cursor','later-channel'),id:generatedParticipantId});
+  const childCopies=[sender('codex',null,{sessionKey:'child-session-a',label:'Builder A'}),sender('claude-code',null,{sessionKey:'child-session-b',label:'Builder B'})];
+  const {normalizeTranscriptEvents}=require('../../src/engine/model/transcript');
+  const firstEvent={id:'ev:0:0',kind:'system',at,text:'first row',truncated:false};
+  const collidingEvent={id:'ev:0:0',kind:'system',at:at+1,text:'distinct collision',truncated:false};
+  const generatedId=normalizeTranscriptEvents({sessionKey:session.key,events:[firstEvent,collidingEvent]},session.key).transcript.events[1].id;
+  const laterOriginal={id:generatedId,kind:'system',at:at+2,text:'later original event',truncated:false};
+  f.engine.transcript=()=>({sessionKey:session.key,fetchedAt:at,messageCount:1,window:{from:0,to:1},participants:[...participantCopies,...childCopies],
+    events:[firstEvent,collidingEvent,laterOriginal]});
+  f.engine.setReads({transcript:async()=>({ok:true})});
+  const {VM_SCHEMAS,VM_SCHEMAS_V3}=require('../../src/api/v2/vm/schemas'),validate=require('../../src/schema').validate;
+  for(const version of [2,3]) {
+    const response=await f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(session.key)}`);
+    assert.equal(response.status,200,JSON.stringify(response.json));
+    const vm=response.json.data;
+    assert.equal(new Set(vm.participants.map(row=>row.id)).size,vm.participants.length);
+    assert.equal(new Set(vm.subagents.map(row=>row.id)).size,vm.subagents.length);
+    assert.ok(vm.participants.some(row=>row.runtime==='codex'&&row.channel===null));
+    assert.ok(vm.participants.some(row=>row.runtime==='claude-code'&&row.channel==='synthetic-channel'),
+      'distinct participants with a colliding source id remain visible');
+    assert.ok(vm.participants.some(row=>row.runtime==='cursor'&&row.channel==='later-channel'),
+      'a repaired participant never consumes a later valid participant ID');
+    assert.equal(vm.events.length,3,'the read-time VM repairs collisions without consuming later original IDs');
+    assert.ok(vm.events.some(row=>row.text==='distinct collision'));
+    assert.ok(vm.events.some(row=>row.text==='later original event'));
+    assert.ok(vm.subagents.some(row=>row.delegation?.sessionKey==='child-session-a'));
+    assert.ok(vm.subagents.some(row=>row.delegation?.sessionKey==='child-session-b'));
+    assert.equal(new Set(vm.subagents.map(row=>row.delegation?.sessionKey)).size,vm.subagents.length,
+      'the fixture and engine-projected child sessions remain distinct');
+    assert.equal(validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).session,vm).ok,true);
+    const stream=openSse(f.base,`/api/v${version}/stream?topics=${encodeURIComponent('session:'+session.key)}`,{cookie:f.cookie(f.user)});
+    f.cleanup.push(()=>stream.close());
+    const snapshot=await stream.next(frame=>frame.event==='snapshot'&&frame.data.topic==='session:'+encodeURIComponent(session.key));
+    assert.ok(snapshot,`v${version} SSE uses the repaired session topic`);
+    assert.equal(validate((version===3?VM_SCHEMAS_V3:VM_SCHEMAS).session,snapshot.data.data).ok,true);
+  }
+  assert.ok(repairLogs.length>=2);
+  assert.ok(repairLogs.every(row=>row.event==='api.vm.repaired'&&row.vm==='session'&&Number.isInteger(row.count)&&row.count>0
+    &&['participants','subagents','events'].includes(row.path)));
+  assert.equal(JSON.stringify(repairLogs).includes('distinct collision'),false,'repair logs never include transcript content');
+});
+test('session collection repair IDs ignore unrelated colliding participants',()=>{
+  const {repairSessionCollections}=require('../../src/api/v2/vm/logs');
+  const row=(id,runtime,channel)=>({id,kind:'agent',runtime,channel,name:runtime});
+  const pair=(id,a,b)=>[row(id,...a),row(id,...b)];
+  const collision=pair('agent:collision',['codex',null],['claude-code','collision-channel']);
+  const generated=repairSessionCollections({key:'stable-session',participants:collision}).participants[1].id;
+  const laterOriginal={id:generated,kind:'agent',runtime:'cursor',channel:'later-channel',name:'cursor'};
+  const reserved=repairSessionCollections({key:'stable-session',participants:[...collision,laterOriginal]}).participants;
+  assert.equal(reserved.length,3);
+  assert.equal(new Set(reserved.map(item=>item.id)).size,3,'repair IDs cannot consume a later participant ID');
+  assert.ok(reserved.some(item=>item.runtime==='cursor'&&item.channel==='later-channel'));
+
+  const target=pair('agent:target',['codex',null],['claude-code','target-channel']);
+  const unrelated=pair('agent:unrelated',['codex',null],['claude-code','unrelated-channel']);
+  const before=repairSessionCollections({key:'stable-session',participants:target}).participants;
+  const after=repairSessionCollections({key:'stable-session',participants:[...unrelated,...target]}).participants;
+  const repairedBefore=before.find(item=>item.runtime==='claude-code').id;
+  const repairedAfter=after.find(item=>item.runtime==='claude-code'&&item.channel==='target-channel').id;
+  assert.equal(repairedAfter,repairedBefore,'an earlier unrelated collision cannot rename this participant');
+
+  const sameSourceId=(runtime,channel)=>row('agent:shared',runtime,channel);
+  const sharedA=sameSourceId('codex',null), sharedC=sameSourceId('claude-code','shared-c');
+  const insertedB=sameSourceId('cursor','inserted-b');
+  const cBefore=repairSessionCollections({key:'stable-session',participants:[sharedA,sharedC]}).participants
+    .find(item=>item.runtime==='claude-code').id;
+  const cAfter=repairSessionCollections({key:'stable-session',participants:[sharedA,insertedB,sharedC]}).participants
+    .find(item=>item.runtime==='claude-code'&&item.channel==='shared-c').id;
+  assert.equal(cAfter,cBefore,'a newly inserted row with the same source id but another runtime does not rename the existing participant');
+});
+test('mounted session HTTP and SSE keep same-source participant repair IDs stable across runtime insertion',async t=>{
+  const f=await fixture(t),session=f.engine.sessions()[0],at=Date.now();
+  const participant=(runtime,channel)=>({kind:'agent',id:'agent:shared',name:null,runtime,channel,avatarHint:null});
+  const a=participant('codex',null),c=participant('claude-code','runtime-c');
+  const b=participant('cursor','runtime-b');
+  let rows=[a,c];
+  f.engine.transcript=()=>({sessionKey:session.key,fetchedAt:at,messageCount:0,window:{from:0,to:0},participants:rows,events:[]});
+  f.engine.setReads({transcript:async()=>({ok:true})});
+  for(const version of [2,3]) {
+    rows=[a,c];
+    const request=()=>f.request('GET',`/api/v${version}/views/sessions/${encodeURIComponent(session.key)}`);
+    const before=await request();
+    assert.equal(before.status,200,JSON.stringify(before.json));
+    const priorId=before.json.data.participants.find(row=>row.runtime==='claude-code').id;
+    rows=[a,b,c];
+    const after=await request();
+    assert.equal(after.status,200,JSON.stringify(after.json));
+    assert.equal(after.json.data.participants.find(row=>row.runtime==='claude-code').id,priorId,
+      `v${version} HTTP keeps C stable when B has the same source ID but another runtime`);
+    assert.equal(after.json.data.participants.length,3);
+    const stream=openSse(f.base,`/api/v${version}/stream?topics=${encodeURIComponent('session:'+session.key)}`,{cookie:f.cookie(f.user)});
+    f.cleanup.push(()=>stream.close());
+    const snapshot=await stream.next(frame=>frame.event==='snapshot'&&frame.data.topic==='session:'+encodeURIComponent(session.key));
+    assert.ok(snapshot,`v${version} SSE sends the repaired session snapshot`);
+    assert.equal(snapshot.data.data.participants.find(row=>row.runtime==='claude-code').id,priorId);
   }
 });
 test('actual RBAC Office responses withhold session overflow from readers without logs in v2 and v3',async t=>{

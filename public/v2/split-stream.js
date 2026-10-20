@@ -2,7 +2,7 @@
 import * as api from './api.js';
 import { config } from './config.js';
 
-export function openSource(url) {
+export function openSource(url,{apiVersion=config.apiVersion}={}) {
   const listeners = new Map();
   let source = null, closed = false, state = 0;
   const proxy = {
@@ -15,7 +15,7 @@ export function openSource(url) {
   };
   const parsed = new URL(url, location.href);
   const topics = (parsed.searchParams.get('topics') || '').split(',').filter(Boolean);
-  api.post(`/api/v${config.apiVersion}/stream/ticket`,{topics:topics.length?topics:['system']},{apiVersion:config.apiVersion,quiet:true}).then(({data:ticket}) => {
+  api.post(`/api/v${apiVersion}/stream/ticket`,{topics:topics.length?topics:['system']},{apiVersion,quiet:true}).then(({data:ticket}) => {
     if (closed) return;
     source = new EventSource(ticket.streamUrl, {withCredentials:false}); state = 0;
     for (const [type, fns] of listeners) for (const fn of fns) source.addEventListener(type,fn);

@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { openLayoutBrowser, visit, browserSkipReason } from './helpers/layout-browser.js';
+import { cleanupAfterTest } from './helpers/test-cleanup.js';
+const require = createRequire(import.meta.url), { officeSceneFixture } = require('../helpers/office-scene-fixture.cjs');
 const skip = browserSkipReason();
 const root = process.env.AO_FREEZE_ROOT || resolve('public/v2');
 const captureDir = 'design/reports/ui-freeze-01';
@@ -19,33 +22,67 @@ async function capture(p, name) {
 }
 
 for (const width of [1440,390]) test(`dirty Bureau draft survives a failed accessory chunk and canceled recovery (${width}px)`, {skip,timeout:45000}, async()=>{
-  const h=await openLayoutBrowser({root,theme:width===390?'dark':'light'}),p=h.page;
-  let documents=0,failed=0,release;const held=new Promise(resolve=>{release=resolve;});
-  p.on('request',r=>{if(r.resourceType()==='document')documents++;});
-  await p.route('**/office/accessory-pack-loader.js*',async route=>{
-    if(route.request().resourceType()==='script'&&failed===0){await held;failed++;return route.abort('internetdisconnected');}
-    return route.continue();
-  });
+  let fixture,h,p,pendingHeldRoute=Promise.resolve();
+  let activeTestError;
+  let documents=0,failed=0,release,requestIntercepted;
+  const held=new Promise(resolve=>{release=resolve;}),intercepted=new Promise(resolve=>{requestIntercepted=resolve;});
   try{
-    await p.setViewportSize({width:1440,height:900});
-    await visit(p,h.origin,'/bureau?mock=1','.ao-bureau__stage');
-    await p.getByRole('button',{name:'Personnaliser',exact:true}).first().click();
-    await p.locator('.ao-editbar button').filter({hasText:'Personnages'}).click();
-    if(width===390)await p.setViewportSize({width,height:844});
-    const name=p.locator('.ao-agentcard input').first(),hat=p.locator('.ao-sc__acc').filter({hasText:'Bonnet'}).first();
-    await name.fill('Unsaved synthetic name');await name.dispatchEvent('change');await hat.click();
+    h=await openLayoutBrowser({root,theme:width===390?'dark':'light',touch:width===390,apiVersion:width===390?2:3,apiProxy:async publicUrl=>{
+      fixture=await officeSceneFixture({publicUrl,occupantCount:12,namedAgents:true,primaryName:'Atlas'});
+      fixture.viewEngine.runtimes=()=>[{id:'fixture',adapter:'openclaw',name:'OpenClaw',enabled:true,connection:'connected',capabilities:{}}];
+      fixture.api.topics.invalidate();return fixture.base;
+    }});p=h.page;
+    p.on('request',r=>{if(r.resourceType()==='document')documents++;});
+    await p.route('**/office/accessory-pack-loader.js*',async route=>{
+      if(route.request().resourceType()==='script'&&failed===0){
+        failed++;requestIntercepted();
+        pendingHeldRoute=(async()=>{await held;await route.abort('internetdisconnected');})();
+        return pendingHeldRoute;
+      }
+      return route.continue();
+    });
+    await p.setViewportSize({width,height:width===390?844:900});
+    const split=fixture.cookie.indexOf('=');await p.context().addCookies([{name:fixture.cookie.slice(0,split),value:fixture.cookie.slice(split+1),url:h.origin,httpOnly:true,sameSite:'Lax'}]);
+    await p.goto(h.origin+'/bureau',{waitUntil:'domcontentloaded'});await p.locator('.ao-controls [data-page-control]').waitFor({state:'attached'});
+    if(width===390){await p.locator('.ao-mobile-options').click();await p.getByRole('dialog').getByRole('button',{name:'Personnaliser',exact:true}).click();}
+    else await p.locator('.ao-controls [data-page-control]').click();
+    await p.locator('.ao-editbar').waitFor();
+    const themeMode=p.locator('.ao-editbar .bu-segmented__opt').filter({hasText:'Thème'});
+    if(width===390)await p.locator('.ao-editbar__modepick select').selectOption('theme');else await themeMode.click();
+    await p.locator('.ao-editpanel[data-mode="theme"]').waitFor();
+    if(width===390)await p.locator('.ao-editpanel[data-mode="theme"] select').first().selectOption('night');
+    else await p.locator('.ao-themecard').filter({hasText:'Nuit'}).click();
+    const night=width===390?p.locator('.ao-editpanel[data-mode="theme"] select').first():p.locator('.ao-themecard[aria-pressed="true"]');await night.waitFor();
+    assert.equal(await p.getByRole('button',{name:'Enregistrer',exact:true}).isEnabled(),true,'the Bureau draft is dirty before the accessory module can be requested');
+    const characterMode=p.locator('.ao-editbar .bu-segmented__opt').filter({hasText:'Personnages'});
+    if(width===390)await p.locator('.ao-editbar__modepick select').selectOption('characters');else await characterMode.click();
+    await p.locator('.ao-editpanel[data-mode="characters"]').waitFor();
+    const panel=p.locator('.ao-editpanel[data-mode="characters"]');
+    await panel.locator('.ao-character-row').first().waitFor({timeout:8000});
+    await panel.locator('.ao-character-row').first().click();await panel.locator('.ao-agentcard .ao-sc--external').waitFor();
+    await panel.locator('.ao-sc__cards input[value="cosmo"]').check({force:true});
+    await panel.getByRole('button',{name:'Enregistrer',exact:true}).waitFor({state:'visible'});
+    assert.equal(await panel.getByRole('button',{name:'Enregistrer',exact:true}).isEnabled(),true,'appearance edits make the Bureau draft dirty before the chunk fails');
+    const labels=await panel.locator('.ao-sc__acc').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')));
+    const hat=panel.getByRole('button',{name:'Bonnet',exact:true});
+    if(!(await hat.count()))throw new Error(`appearance editor has no Bonnet control; accessories=${JSON.stringify(labels)}; panel=${(await panel.innerText()).slice(0,1600)}`);
+    await hat.scrollIntoViewIfNeeded();await hat.click();
+    await intercepted;
     release();
     const reload=p.locator('.bu-toasts').getByRole('button',{name:'Recharger',exact:true});
     await reload.waitFor();
-    assert.equal(documents,1);assert.equal(await name.inputValue(),'Unsaved synthetic name');assert.equal(await hat.getAttribute('aria-pressed'),'true');
+    assert.equal(documents,1);assert.ok(await p.locator('.ao-editbar').getAttribute('data-mode')==='characters');
     assert.equal(await p.evaluate(()=>sessionStorage.getItem('ao.chunk-reload')),null,'blocked recovery consumes no reload guard');
     await reload.click();const dialog=p.getByRole('dialog',{name:'Quitter sans enregistrer ?'});await dialog.waitFor();
     await dialog.getByRole('button',{name:'Rester',exact:true}).click();
-    await reload.waitFor();assert.equal(documents,1);assert.equal(await name.inputValue(),'Unsaved synthetic name');
-    assert.equal(await hat.getAttribute('aria-pressed'),'true');
+    await reload.waitFor();assert.equal(documents,1);
     assert.equal(await p.evaluate(()=>sessionStorage.getItem('ao.chunk-reload')),null);
     await p.evaluate(async()=>{const {loadModule}=await import('/build-update.js');await loadModule(()=>Promise.reject(Error('concurrent failed chunk'))).catch(()=>{});});
     assert.equal(documents,1,'another failed import cannot bypass a canceled discard');
+    if(width===390)await p.locator('.ao-editbar__modepick select').selectOption('theme');else await themeMode.click();
+    await p.locator('.ao-editpanel[data-mode="theme"]').waitFor();
+    if(width===390)assert.equal(await p.locator('.ao-editpanel[data-mode="theme"] select').first().inputValue(),'night','the unsaved appearance draft survives canceled recovery');
+    else assert.equal(await p.locator('.ao-themecard[aria-pressed="true"]').filter({hasText:'Nuit'}).count(),1,'the unsaved appearance draft survives canceled recovery');
     await capture(p,`dirty-draft-${width}`);
     await reload.click();await dialog.waitFor();
     await dialog.getByRole('button',{name:'Quitter',exact:true}).click();
@@ -53,13 +90,19 @@ for (const width of [1440,390]) test(`dirty Bureau draft survives a failed acces
     await p.waitForFunction(()=>!!document.querySelector('.ao-bureau__stage')?.aoScene);
     assert.equal(documents,2,'only explicit discard consent reloads');assert.equal(failed,1);
     assert.equal(await p.locator('.ao-editbar').count(),0);
-  }finally{release();await h.close();}
+  }catch(error){activeTestError={error};process.stderr.write(`T0240 ${width} draft recovery failed: ${error.stack}\n`);throw error;}
+  finally{
+    // Unblock the held Playwright route and wait for its callback before
+    // closing the browser/server. Otherwise node:test can retain the route task.
+    await cleanupAfterTest(activeTestError,[async()=>{release?.();await pendingHeldRoute;},()=>h?.close(),()=>fixture?.close()],`T0240 ${width} draft recovery`);
+  }
 });
 
 test('Store dirty draft blocks automatic recovery and confirms explicit discard', {skip,timeout:30000},async()=>{
   const h=await openLayoutBrowser({root,theme:'light',touch:true}),p=h.page;let documents=0;
-  p.on('request',r=>{if(r.resourceType()==='document')documents++;});
+  let activeTestError;
   try{
+    p.on('request',r=>{if(r.resourceType()==='document')documents++;});
     await p.setViewportSize({width:390,height:844});
     await visit(p,h.origin,'/boutique?mock=1&onglet=personnages','.ao-shop__grid--looks');
     await p.locator('.ao-shop__grid--looks button[aria-pressed]').filter({hasText:'Cosmo'}).first().click();
@@ -73,13 +116,15 @@ test('Store dirty draft blocks automatic recovery and confirms explicit discard'
     p.once('dialog',d=>d.accept());await reload.click();
     await p.waitForFunction(()=>performance.getEntriesByType('navigation')[0]?.type==='reload');
     await p.locator('.ao-shop__savebar:not(.is-dirty)').waitFor();assert.equal(documents,2);
-  }finally{await h.close();}
+  }catch(error){activeTestError={error};throw error;}
+  finally{await cleanupAfterTest(activeTestError,[()=>h.close()],'T0240 Store draft recovery');}
 });
 
 test('Settings dirty draft uses its existing discard dialog for chunk recovery', {skip,timeout:30000},async()=>{
   const h=await openLayoutBrowser({root,theme:'dark',touch:true}),p=h.page;let documents=0;
-  p.on('request',r=>{if(r.resourceType()==='document')documents++;});
+  let activeTestError;
   try{
+    p.on('request',r=>{if(r.resourceType()==='document')documents++;});
     await p.setViewportSize({width:390,height:844});
     await visit(p,h.origin,'/parametres?mock=1&onglet=compte','#settings-owner-displayName');
     const name=p.locator('#settings-owner-displayName');await name.fill('Unsaved synthetic account');
@@ -91,45 +136,47 @@ test('Settings dirty draft uses its existing discard dialog for chunk recovery',
     await reload.click();await dialog.waitFor();await dialog.getByRole('button',{name:'Quitter',exact:true}).click();
     await p.waitForFunction(()=>performance.getEntriesByType('navigation')[0]?.type==='reload');
     await p.locator('#settings-owner-displayName').waitFor();assert.equal(documents,2);
-  }finally{await h.close();}
+  }catch(error){activeTestError={error};throw error;}
+  finally{await cleanupAfterTest(activeTestError,[()=>h.close()],'T0240 Settings draft recovery');}
 });
 
 for (const width of [1440, 390]) for (const scenario of ['B', 'C', 'D', 'E'])
 test(`chunk recovery ${scenario} restores navigation (${width}px)`, { skip, timeout: 45000 }, async () => {
   const h = await openLayoutBrowser({ root, theme: width === 390 ? 'dark' : 'light', touch: width === 390 }), p = h.page;
+  let activeTestError;
   let documents = 0, failed = 0, deployed = false, slowReads = 0, oldScriptsDuringCheck = 0;
   const types = [], errors = [];
-  p.on('request', r => { if (r.resourceType() === 'document') documents++; });
-  p.on('pageerror', e => errors.push(e.message));
-  const html = await readFile(resolve(root, 'index.html'), 'utf8');
-  const original = /name="ao-build" content="([^"]+)"/.exec(html)[1], updated = 'syntheticnextbuild';
-  const target = scenario === 'E' ? '/board.js' : '/pages/health.js';
-  await p.route('**/*', async route => {
-    const r = route.request(), u = new URL(r.url());
-    if (scenario === 'C' && deployed) {
-      if (u.pathname === '/build.json') {
-        slowReads++;
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ buildId: updated }) });
-      }
-      if (r.resourceType() === 'document') return route.fulfill({ contentType: 'text/html', body: html.replaceAll(original, updated) });
-      if (u.searchParams.get('v') === original) {
-        if (r.resourceType() === 'script' && u.pathname === target) oldScriptsDuringCheck++;
-        return route.fulfill({ status: 410, headers: { 'cache-control': 'no-store' }, body: 'release replaced' });
-      }
-      if (u.searchParams.get('v') === updated) {
-        u.searchParams.delete('v');
-        return route.fulfill({ response: await route.fetch({ url: u.href }) });
-      }
-    }
-    if (deployed && u.pathname === target) {
-      types.push(r.resourceType());
-      const shouldFail = scenario === 'D' ? r.resourceType() === 'fetch' : r.resourceType() === 'script';
-      if (shouldFail && failed === 0) { failed++; return route.abort('internetdisconnected'); }
-    }
-    return route.continue();
-  });
   try {
+    p.on('request', r => { if (r.resourceType() === 'document') documents++; });
+    p.on('pageerror', e => errors.push(e.message));
+    const html = await readFile(resolve(root, 'index.html'), 'utf8');
+    const original = /name="ao-build" content="([^"]+)"/.exec(html)[1], updated = 'syntheticnextbuild';
+    const target = scenario === 'E' ? '/pages/chat-content.js' : '/pages/health.js';
+    await p.route('**/*', async route => {
+      const r = route.request(), u = new URL(r.url());
+      if (scenario === 'C' && deployed) {
+        if (u.pathname === '/build.json') {
+          slowReads++;
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ buildId: updated }) });
+        }
+        if (r.resourceType() === 'document') return route.fulfill({ contentType: 'text/html', body: html.replaceAll(original, updated) });
+        if (u.searchParams.get('v') === original) {
+          if (r.resourceType() === 'script' && u.pathname === target) oldScriptsDuringCheck++;
+          return route.fulfill({ status: 410, headers: { 'cache-control': 'no-store' }, body: 'release replaced' });
+        }
+        if (u.searchParams.get('v') === updated) {
+          u.searchParams.delete('v');
+          return route.fulfill({ response: await route.fetch({ url: u.href }) });
+        }
+      }
+      if (deployed && u.pathname === target) {
+        types.push(r.resourceType());
+        const shouldFail = scenario === 'D' ? r.resourceType() === 'fetch' : r.resourceType() === 'script';
+        if (shouldFail && failed === 0) { failed++; return route.abort('internetdisconnected'); }
+      }
+      return route.continue();
+    });
     await p.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await visit(p, h.origin, scenario === 'E' ? '/sante?mock=1' : '/bureau?mock=1', scenario === 'E' ? '.ao-health__cards' : '.ao-bureau__stage');
     deployed = true;
@@ -148,7 +195,7 @@ test(`chunk recovery ${scenario} restores navigation (${width}px)`, { skip, time
       const {loadModule}=await import('/build-update.js');
       void loadModule(()=>Promise.reject(Error('synthetic concurrent chunk failure'))).catch(()=>{});
     });
-    await p.locator(scenario === 'E' ? '#chat-texte' : '.ao-health__cards').waitFor({ timeout: 20000 });
+    await p.locator(scenario === 'E' ? '.ao-messenger__workspace' : '.ao-health__cards').waitFor({ timeout: 20000 });
     if (scenario === 'C') {
       assert.ok(slowReads > 0); assert.equal(oldScriptsDuringCheck, 0, 'slow stale-build check completes before old chunks are imported');
       assert.equal(await p.locator('meta[name=ao-build]').getAttribute('content'), updated);
@@ -157,17 +204,19 @@ test(`chunk recovery ${scenario} restores navigation (${width}px)`, { skip, time
     if (scenario === 'D') assert.equal(types[0], 'fetch');
     await frame(p); await capture(p, `${scenario}-${width}`);
     // Shared dependencies must also work on a second route after recovery.
-    await navigate(p, '/projets'); await p.locator('[data-card]').first().waitFor();
+    await navigate(p, scenario === 'E' ? '/journaux' : '/projets'); await p.locator(scenario === 'E' ? '.ao-logs' : '[data-card]').first().waitFor();
     assert.deepEqual(errors, []);
-  } finally { await h.close(); }
+  } catch (error) { activeTestError={error}; throw error; }
+  finally { await cleanupAfterTest(activeTestError,[()=>h.close()],`T0240 chunk recovery ${scenario} ${width}px`); }
 });
 
 test('permanent chunk failure stops after one reload; manual retry waits offline then recovers', { skip, timeout: 45000 }, async () => {
   const h = await openLayoutBrowser({ root, theme: 'dark', touch: true }), p = h.page;
+  let activeTestError;
   let documents = 0, fail = false;
-  p.on('request', r => { if (r.resourceType() === 'document') documents++; });
-  await p.route('**/pages/health.js*', route => fail && route.request().resourceType() === 'script' ? route.abort('internetdisconnected') : route.continue());
   try {
+    p.on('request', r => { if (r.resourceType() === 'document') documents++; });
+    await p.route('**/pages/health.js*', route => fail && route.request().resourceType() === 'script' ? route.abort('internetdisconnected') : route.continue());
     await p.setViewportSize({ width: 390, height: 844 });
     await visit(p, h.origin, '/bureau?mock=1', '.ao-bureau__stage'); fail = true;
     await navigate(p, '/sante');
@@ -178,34 +227,38 @@ test('permanent chunk failure stops after one reload; manual retry waits offline
     fail = false; await p.context().setOffline(false);
     await p.locator('.ao-health__cards').waitFor(); assert.equal(documents, 3);
     await frame(p);
-  } finally { await h.close(); }
+  } catch (error) { activeTestError={error}; throw error; }
+  finally { await cleanupAfterTest(activeTestError,[()=>h.close()],'T0240 permanent chunk failure'); }
 });
 
 test('a lazy route stylesheet failure reloads once and recovers the route', { skip, timeout: 30000 }, async () => {
   const h = await openLayoutBrowser({ root }), p = h.page;
+  let activeTestError;
   let failed = 0, documents = 0;
-  p.on('request', r => { if (r.resourceType() === 'document') documents++; });
-  await p.route('**/workspace-mobile.css*', route => {
-    if (failed++ === 0) return route.abort('internetdisconnected');
-    return route.continue();
-  });
   try {
+    p.on('request', r => { if (r.resourceType() === 'document') documents++; });
+    await p.route('**/workspace-mobile.css*', route => {
+      if (failed++ === 0) return route.abort('internetdisconnected');
+      return route.continue();
+    });
     await visit(p, h.origin, '/bureau?mock=1', '.ao-bureau__stage');
-    await navigate(p, '/discuter'); await p.locator('#chat-texte').waitFor();
+    await navigate(p, '/discuter'); await p.locator('.ao-messenger__workspace').waitFor();
     assert.equal(documents, 2); assert.ok(failed >= 2);
     await frame(p);
-  } finally { await h.close(); }
+  } catch (error) { activeTestError={error}; throw error; }
+  finally { await cleanupAfterTest(activeTestError,[()=>h.close()],'T0240 route stylesheet failure'); }
 });
 
 test('late editor import recovers through the same helper and the control works again', { skip, timeout: 30000 }, async () => {
   const h = await openLayoutBrowser({ root }), p = h.page;
+  let activeTestError;
   let failed = 0, documents = 0;
-  p.on('request', r => { if (r.resourceType() === 'document') documents++; });
-  await p.route('**/office/editor.js*', route => {
-    if (route.request().resourceType() === 'script' && failed++ === 0) return route.abort('internetdisconnected');
-    return route.continue();
-  });
   try {
+    p.on('request', r => { if (r.resourceType() === 'document') documents++; });
+    await p.route('**/office/editor.js*', route => {
+      if (route.request().resourceType() === 'script' && failed++ === 0) return route.abort('internetdisconnected');
+      return route.continue();
+    });
     await p.setViewportSize({ width: 1280, height: 720 });
     await visit(p, h.origin, '/bureau?mock=1', '.ao-bureau__stage');
     await p.getByRole('button', { name: 'Personnaliser', exact: true }).first().click();
@@ -214,18 +267,20 @@ test('late editor import recovers through the same helper and the control works 
     assert.equal(documents, 2);
     await p.getByRole('button', { name: 'Personnaliser', exact: true }).first().click();
     await p.locator('.ao-bureau--editing').waitFor();
-  } finally { await h.close(); }
+  } catch (error) { activeTestError={error}; throw error; }
+  finally { await cleanupAfterTest(activeTestError,[()=>h.close()],'T0240 late editor import'); }
 });
 
 for (const [width,height] of [[1440,900],[1280,720],[390,844]]) for (const theme of ['light','dark'])
 test(`page render boundary keeps shell navigation responsive (${width}px ${theme})`, { skip, timeout: 30000 }, async () => {
   const h = await openLayoutBrowser({ root,theme,touch:width===390 }), p = h.page;
+  let activeTestError;
   const errors = []; p.on('pageerror', e => errors.push(e.message));
-  await p.route('**/pages/health.js*', route => route.fulfill({ contentType: 'text/javascript', body: `
-    import {html,useState} from '/lib.js';
-    export function HealthPage(){const [n,set]=useState(0);window.failSyntheticPage=()=>set(1);
-      if(n)throw Error('synthetic render failure');return html\`<p id="healthy-page">Ready</p>\`;}` }));
   try {
+    await p.route('**/pages/health.js*', route => route.fulfill({ contentType: 'text/javascript', body: `
+      import {html,useState} from '/lib.js';
+      export function HealthPage(){const [n,set]=useState(0);window.failSyntheticPage=()=>set(1);
+        if(n)throw Error('synthetic render failure');return html\`<p id="healthy-page">Ready</p>\`;}` }));
     await p.setViewportSize({ width, height });
     await visit(p, h.origin, '/sante?mock=1', '#healthy-page');
     await p.evaluate(() => window.failSyntheticPage());
@@ -234,19 +289,21 @@ test(`page render boundary keeps shell navigation responsive (${width}px ${theme
     await navigate(p, '/projets'); await p.locator('[data-card]').first().waitFor();
     await frame(p); await capture(p, `recovered-${width}-${theme}`);
     assert.deepEqual(errors, [], 'render error is contained before it can poison the render queue');
-  } finally { await h.close(); }
+  } catch (error) { activeTestError={error}; throw error; }
+  finally { await cleanupAfterTest(activeTestError,[()=>h.close()],`T0240 page render boundary ${width}px ${theme}`); }
 });
 
 test('Bureau skips trip initialization until the latest layout contains its manifest', { skip, timeout: 30000 }, async () => {
   const h = await openLayoutBrowser({ root, theme: 'dark', touch: true }), p = h.page;
+  let activeTestError;
   let trips = 0;
-  p.on('request', r => { if (new URL(r.url()).pathname === '/office/floor-trips.js') trips++; });
-  const source = await readFile(resolve(root, 'office/page.js'), 'utf8');
-  await p.route('**/office/page.js*', route => route.fulfill({ contentType: 'text/javascript', body: source.replace('const layout = useLayout();', `
-    const realLayout=useLayout();const [hold,setHold]=useState(true);
-    useEffect(()=>{window.releaseSyntheticLayout=()=>setHold(false);},[]);
-    const layout=hold?{...realLayout,data:undefined}:realLayout;`) }));
   try {
+    p.on('request', r => { if (new URL(r.url()).pathname === '/office/floor-trips.js') trips++; });
+    const source = await readFile(resolve(root, 'office/page.js'), 'utf8');
+    await p.route('**/office/page.js*', route => route.fulfill({ contentType: 'text/javascript', body: source.replace('const layout = useLayout();', `
+      const realLayout=useLayout();const [hold,setHold]=useState(true);
+      useEffect(()=>{window.releaseSyntheticLayout=()=>setHold(false);},[]);
+      const layout=hold?{...realLayout,data:undefined}:realLayout;`) }));
     await p.setViewportSize({ width: 390, height: 844 });
     await p.goto(h.origin + '/bureau?mock=foule');
     await p.waitForFunction(() => !!window.releaseSyntheticLayout);
@@ -269,5 +326,6 @@ test('Bureau skips trip initialization until the latest layout contains its mani
     await p.locator('.ao-bureau__stage.ao-office').waitFor();
     await p.waitForFunction(() => document.querySelector('.ao-bureau__stage').aoScene?.chars.size > 0);
     await frame(p);
-  } finally { await h.close(); }
+  } catch (error) { activeTestError={error}; throw error; }
+  finally { await cleanupAfterTest(activeTestError,[()=>h.close()],'T0240 Bureau trip initialization'); }
 });

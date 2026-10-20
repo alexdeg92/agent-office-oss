@@ -59,12 +59,12 @@ describe('R26-01 · one unit: code points, as SQLite counts them', () => {
         const office = createOfficeRepo(h.db, { now: () => 1 });
         assert.deepEqual(office.seen([
           { id: 'conversation:synthetic-peer', role: 'conversation', name: 'discord-user:123456789012345678' },
-          { id: 'conversation:synthetic-peer-2', role: 'conversation', name: 'raw-handle user id:14694' },
+          { id: 'conversation:synthetic-peer-2', role: 'conversation', name: 'raw-handle user id:99999' },
         ], 1), { stored: 2, rejected: 0 });
         const stored = h.db.prepare('SELECT name FROM office_agents_seen ORDER BY occupant_id').all().map(row => row.name);
         assert.deepEqual(stored, ['Conversation', 'Conversation']);
         assert.equal(JSON.stringify(stored).includes('123456789012345678'), false);
-        assert.equal(JSON.stringify(stored).includes('14694'), false);
+        assert.equal(JSON.stringify(stored).includes('99999'), false);
       } finally { h.close(); }
     } finally { fs.rmSync(d, { recursive: true, force: true }); }
   });

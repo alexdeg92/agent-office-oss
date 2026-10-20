@@ -1,12 +1,29 @@
 {
-  "$comment": "Shape sidecar for board-vm.json (api.md §3.9). 3.0: filter 'all' | 'at-risk' | 'with-agent' | 'archived'; agent is the agent of with-agent (default the primary), else null.",
+  "$comment": "Shape sidecar for board-vm.json (api-v3.md §D8). 3.0 filters use the open vocabulary; 3.8 adds server-selected name search and stage controls, and labelled/count-bearing columns.",
   "types": {
     "$.columns[].cards[].people.visible[].avatarUrl": "string",
     "$.agent": "string",
-    "$.emptyStateLabel": "LabelRef"
+    "$.emptyStateLabel": "LabelRef",
+    "$.controls.search.selected": "string",
+    "$.controls.stage.selected": "string",
+    "$.controls.search.options[].label": "LabelRef",
+    "$.controls.stage.options[].label": "LabelRef",
+    "$.columns[].label": "LabelRef",
+    "$.columns[].summaryLabel": "LabelRef",
+    "$.columns[].cards[].counts.sessions": "number"
+  },
+  "variants": {
+    "$.columns[].cards[].flags.visible[]": [
+      { "kind": "label", "key": "client", "label": "client", "removable": true }
+    ],
+    "$.columns[].cards[].people.visible[]": [
+      { "id": "per_guest", "kind": "human", "name": "Guest", "avatarUrl": null, "state": null }
+    ]
   },
   "nullable": [
+    "$.controls.search.selected",
     "$.agent",
+    "$.columns[].cards[].people.visible[].state",
     "$.columns[].cards[].cover",
     "$.columns[].cards[].counts.sessions",
     "$.columns[].cards[].counts.activity",

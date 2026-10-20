@@ -9,7 +9,7 @@ async function fixture(t,options={}) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ao-human-auth-')),store=openStore({dir,instance:'test',ownerName:'Synthetic admin',log:()=>{}}),cfg={readonly:!!options.readonly,readonlyStore:true};
   const admin=store.users.createOwner({email:'admin@example.invalid',personId:store.owner.id,passwordHash:hash}),ctx={userId:admin.id,authGeneration:admin.auth_generation,requestId:'req_fixture',authorize:()=>{}};
   const invite=store.userManagement.invite({email:'reader@example.invalid',name:'Reader',roleId:'rol_reader'},ctx);store.userManagement.accept({token:invite.token,purpose:'invite',passwordHash:hash},{requestId:'req_accept'});const reader=store.users.byId(invite.user.id);
-  const throttle=createLoginThrottle(),auth=createAuth({secret:'synthetic-cookie-secret',ttlMs:3600000,passwordHash:hash,identity:{users:store.users,state:store.rbac.state},revocations:store.sessions,allowMultiUser:true,throttle});
+  const throttle=createLoginThrottle(),auth=createAuth({secret:'synthetic-cookie-secret',ttlMs:3600000,passwordHash:options.recoveryHash||hash,email:admin.email,identity:{users:store.users,state:store.rbac.state},revocations:store.sessions,allowMultiUser:true,allowRecoveryLogin:!!options.recoveryHash,throttle});
   let policy=createAccessBoundary({installationId:store.rbac.state().installation_id,apiPublicUrl:'https://api.example.invalid/backend',origins:[ORIGIN]}),verifications=0;
   const projector=createViewProjection({store,cfg}),verify=async(...args)=>{verifications++;return options.verify?options.verify(auth,...args):auth.verifyAdmittedCredentials(...args);};
   const transport=createHumanAuthTransport({store,auth,boundary:()=>policy,partitioned:!!options.partitioned,timeoutMs:options.timeoutMs||15000,limits:options.limits||createRefreshLimits(),verify,me:session=>projector.project(session.userId,'me',buildMeVM({session,cfg,engine:{gateway:()=>({connected:false})},ownerName:()=>store.owner.name}))});
@@ -33,6 +33,20 @@ test('actual guarded refresh endpoint uses the prefix-scoped secure cookie, curr
   const rotated=await f.request({operation:'refresh'},{cookie:login.cookie,csrf:challenge.body.csrfToken});assert.equal(rotated.status,200);assert.notEqual(rotated.cookie,login.cookie);assert.notEqual(rotated.body.accessToken,login.body.accessToken);assert.equal(rotated.body.me.user.id,f.reader.id);
   assert.equal(f.store.humanTokens.resolveAccess(rotated.body.accessToken,{audience:f.policy().audience,origin:ORIGIN}).ok,true);
   const audit=f.store.audit.recent().find(e=>e.command==='auth.refresh'&&e.outcome==='ok');assert.equal(audit.actor.personId,f.reader.person_id);assert.equal(audit.origin,ORIGIN);const data=JSON.stringify(f.store.audit.recent());for(const raw of [login.body.accessToken,rotated.body.accessToken,login.cookie.split('=')[1],challenge.body.csrfToken,'synthetic-transport-password'])assert.ok(!data.includes(raw));
+});
+test('split-origin recovery credentials cannot mint bearer or refresh families',async t=>{
+  const recoveryPassword='synthetic-environment-recovery-password',recoveryHash=await hashPassword(recoveryPassword),f=await fixture(t,{recoveryHash});
+  const challenge=await f.challenge('login');assert.equal(challenge.status,200);
+  const login=await f.request({operation:'login',email:f.admin.email,password:recoveryPassword},{csrf:challenge.body.csrfToken});
+  assert.equal(login.status,401);assert.equal(login.body.error.code,'unauthorized');
+  assert.equal(login.body.accessToken,undefined);assert.equal(login.cookie,undefined);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM auth_families').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM human_access_tokens').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens').get().n,0);
+  const refreshChallenge=await f.challenge('refresh');assert.equal(refreshChallenge.status,401);
+  const refresh=await f.request({operation:'refresh'},{csrf:refreshChallenge.body.csrfToken});assert.equal(refresh.status,401);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM auth_families').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens').get().n,0);
 });
 test('split-origin auth refuses transport without HTTPS from a trusted proxy',async t=>{
   const f=await fixture(t);

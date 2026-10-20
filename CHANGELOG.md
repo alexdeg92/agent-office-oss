@@ -2,6 +2,40 @@
 
 All notable changes to Agent Office are documented in this file. The format is based on Keep a Changelog, and versions follow Semver. `packaging/release.sh` copies the matching section into `dist/RELEASE_NOTES.md`.
 
+## 1.3.0 - 2026-10-20
+
+This release lets you talk to every agent from Discuter, shows headless agent swarms by name in the office, and moves the owner account into the database so it can be edited from Settings.
+
+### Upgrade note
+
+- On first start, the owner account defined by `PORTAL_EMAIL` / `PORTAL_PASSWORD_HASH` is migrated into the database (migration 036, after an automatic pre-migration backup). Your email and password stay the same; you can then change your name, email and password in Settings › Account. The environment credentials remain as an emergency recovery login, limited to repairing the owner account for 10 minutes and recorded in the audit log.
+
+### Chat
+
+- **Every agent:** Discuter lists all your agents (OpenClaw, Claude Code, Codex, team members) by name, and shows only the conversations you started there; runtime sessions stay in Logs.
+- **Busy agents:** a message to an agent that is working waits (« En attente ») and is delivered as soon as it is free; « Envoyer maintenant » sends it right away after a warning. Queued messages can be cancelled and survive restarts.
+- **Conversations:** rename inline, delete with confirmation, swipe left/right on phones, a ⋯ menu on desktop.
+- **Attachments:** images and documents with previews; the text stays in its bubble and images line up beneath it, on the sender's side.
+- **Bubbles** size to their text up to 85 % of the width on phones and 70 % on desktop.
+- Long agent turns no longer time out, and replies from delegated runs are picked up when they finish.
+
+### Office
+
+- **Headless swarms:** agents launched without terminal panes (ACP, native sub-tasks) appear with their registered name, role, runtime and status; private session titles and summaries are never used as names.
+- **Team portraits:** each member keeps their own stable character, distinct within the team and never the main agent's; the role line no longer repeats the name.
+- **People involved** shows one compact line per member.
+- Visiting human contacts appear as visitors; conversations and channels keep their own role.
+- A temporarily absent teammate keeps their desk.
+
+### Fixes
+
+- Readers without session access can open the office again.
+- Session views no longer fail when a participant has two identities.
+- Older Claude Code history keeps loading after the first window and after new messages.
+- Generic sub-agents show a translated « Sous-agent » / « Sub-agent » label.
+- Missing French and English labels for visitors, « visiting with » and team groups were added.
+- Logging out always ends an account-recovery session.
+
 ## 1.2.3 - 2026-10-14
 
 This release makes customizing the office comfortable on a phone, shows sub-agent results properly in the chat, and fixes session history for Claude Code and Codex.

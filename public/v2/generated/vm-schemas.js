@@ -297,7 +297,8 @@ module.exports = function settingsSchema(s, LabelRef) {
   const source = s.enumOf(['env', 'file', 'default']);
   const value = s.union([str(), s.number(), bool()]).nullable();
   const field = obj({ value, source, editable: bool(), reason: label() });
-  const officeField = obj({ value, source, editable: bool(), reason: label(), label: LabelRef, help: LabelRef, minimum: s.int().min(1).max(1440), maximum: s.int().min(1).max(1440) });
+  const officeField = obj({ value, source, editable: bool(), reason: label(), label: LabelRef, help: LabelRef, minimum: s.int().min(0).max(1440), maximum: s.int().min(1).max(15000) });
+  const officeDebounceField = obj({ value, source, editable: bool(), reason: label(), label: LabelRef, help: LabelRef, minimum: s.literal(0), maximum: s.literal(15000) });
   const section = s.enumOf(['diagnostic', 'runtimes', 'connection', 'integrations', 'instance', 'office', 'account']);
   const definition = obj({ id: str(), label: LabelRef, type: s.enumOf(['text', 'textarea', 'url', 'secret', 'number', 'boolean', 'select']), control: s.enumOf(['chips']).optional(),
     required: bool(), writeOnly: bool(), options: s.array(obj({ value: str(), label: LabelRef })) });
@@ -309,7 +310,7 @@ module.exports = function settingsSchema(s, LabelRef) {
     reauth: obj({ expiresAt: nn().nullable(), windowMs: s.literal(300000) }),
     restart: obj({ supported: bool(), command: nstr(), reason: label() }).nullable(),
     instance: obj({ name: field, locale: field, timeZone: field }).nullable(),
-    office: obj({ finishedSessionWindowMinutes: officeField, agentPresenceWindowMinutes: officeField, idleRelocationMinutes: officeField }).nullable(),
+    office: obj({ finishedSessionWindowMinutes: officeField, agentPresenceWindowMinutes: officeField, idleRelocationMinutes: officeField, idleTransitionDebounceMs: officeDebounceField }).nullable(),
     owner: obj({ revision: nn().optional(), displayName: field, email: field, passwordChangeEnabled: bool(), reason: label() }),
     network: obj({ mode: field, host: field, port: field, publicUrl: field, cookieSecure: field,
       active: obj({ mode: str(), host: str(), port: s.int().min(1).max(65535), publicUrl: nstr(), cookieSecure: bool() }), restartRequired: bool() }).nullable(),
@@ -415,27 +416,27 @@ const ScreenId = oneOf('message-sent', 'message-received', 'coding', 'terminal',
 const Communication = obj({ id: str().max(80), mode: oneOf('desk', 'meeting'), peerIds: arr(str()).max(63), expiresAt: ms(), screen: oneOf('message-sent', 'message-received'), surface: oneOf('monitor', 'bubble'), label: LabelRef });
 const ScreenIntent = obj({ screen: ScreenId.nullable(), surface: oneOf('monitor', 'bubble', 'none'), label: LabelRefN() });
 const OccupantVM = obj({
-  id: str(), role: ROLE, name: str(), title: LabelRef /* 2.4, Q03-A01 */, roleLabel: LabelRef, state: s.enumOf(AGENT_STATE), stateSince: ms(),
+  id: str(), role: ROLE, name: str(), title: LabelRef /* 2.4, Q03-A01 */, roleLabel: LabelRefN(), state: s.enumOf(AGENT_STATE), stateSince: ms(), memberId: str().optional(),
   stationUid: strN(), look: AppearanceLook, automaticLook: AppearanceLook.optional(), ruleId: strN(),
   destination: obj({ kind: oneOf('server', 'meeting'), stationUid: str() }).nullable(),
   sessionKey: strN(), tokens: nn().nullable(), lastSeenAt: msN(), summary: str().max(320).optional(), model: str().optional(), project: str().optional(), runtime: str().optional(),
   startedAt: ms().optional(), lastActivityAt: ms().optional(), tokensKnown: bool().optional(), execution: ExecutionVM,
   isNew: bool().optional(),
-  parentId: strN() /* T-0062; authoritative roster tree */, parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef,
+  parentId: strN() /* T-0062; authoritative roster tree */, parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), teamIds: arr(str()).max(32).optional(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef,
   communication: Communication.nullable().optional(), screenIntent: ScreenIntent.optional(),
     homeTarget: OfficeTarget.nullable().optional(), sceneTarget: OfficeTarget.nullable().optional(), activity: OfficeActivity.nullable().optional(), sceneTravel: SceneTravel.nullable().optional(),
-  visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(),
+  visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(), visitLabel: LabelRef.optional(), stateKind: s.enumOf(['agent', 'visitor']).optional(),
   standingPoint: obj({ x: nn(), y: nn() }).nullable(),
   exchanges: Exchanges,   // architect-55 (office-dev-22 §3): conversation occupants with a known transcript
 });
 const RosterGroup = obj({ id: str(), rootId: str(), teamId: strN(), occupantIds: arr(str()), childIds: arr(str()), order: nn(), count: nn(), activeCount: nn().nullable(), label: LabelRef });
-const RosterItem = obj({ id: str(), kind: oneOf('group', 'occupant'), isGroup: bool(), rootId: str(), occupantIds: arr(str()), childIds: arr(str()), previewOccupantIds: arr(str()), overflowCount: nn(), openLabel: LabelRef, delegatesLabel: LabelRef, overflowLabel: LabelRefN(), order: nn(), count: nn(), label: LabelRef });
+const RosterItem = obj({ id: str(), kind: oneOf('group', 'occupant'), isGroup: bool(), rootId: str(), occupantIds: arr(str()), childIds: arr(str()), previewOccupantIds: arr(str()), overflowCount: nn(), openLabel: LabelRef, teamLabel: LabelRef.optional(), delegatesLabel: LabelRef, overflowLabel: LabelRefN(), order: nn(), count: nn(), label: LabelRef });
 const RosterFloorItem = s.union([obj({ kind: s.literal('occupant'), id: str(), occupantId: str() }),
   obj({ kind: s.literal('team-header'), id: str(), label: LabelRef })]);
 const RosterFloor = obj({ id: str(), order: nn(), label: LabelRef, countLabel: LabelRef, statusLabel: LabelRef, kind: oneOf('office', 'lobby', 'gym'), occupantIds: arr(str()), mobileLabelIds: arr(str()).max(3), items: arr(RosterFloorItem), count: nn(), activeCount: nn().nullable(), idleCount: nn(), layout: s.unknown().nullable(), capacity: nn().nullable() });
 const UnseatedTeam = obj({ parentId: str(), floorId: str(), count: nn(), capacity: nn() });
 const RosterSummary = obj({ count: nn(), activeCount: nn().nullable() });
-const VisitIntent = obj({ hostId: strN(), desk: arr(str()), meeting: arr(str()), talking: bool(), speaker: strN(), until: msN(), visitors: arr(obj({ id: str(), phase: oneOf('person', 'agent', 'linger'), stateLabel: LabelRef, onStage: bool() })) });
+const VisitIntent = obj({ hostId: strN(), hosts: arr(obj({ id: str(), visitorIds: arr(str()) })).optional(), desk: arr(str()), meeting: arr(str()), talking: bool(), speaker: strN(), until: msN(), visitors: arr(obj({ id: str(), hostId: str().optional(), phase: oneOf('person', 'agent', 'linger'), stateLabel: LabelRef, onStage: bool() })) });
 const LIVE_KIND = ['gateway.connected', 'gateway.disconnected', 'activity', 'run.started', 'run.succeeded', 'run.failed', 'cron.fired',
   'occupant.joined', 'occupant.left', 'agent.removed', 'agent.primary-changed', 'project.status', 'project.risk'];
 const OfficeVM = obj({
@@ -456,6 +457,48 @@ const ChatVM = obj({
     avatar: AppearanceLook.nullable(), senderInfo: Sender.optional(),
     meta: obj({ model: strN(), tokens: nn().nullable(), durationMs: nn().nullable() }).nullable() })),
 });
+
+// Chat 3.13. These are viewer-scoped public projections; adapter ids,
+// native session refs, account ids and upload paths never cross this boundary.
+const ChatPortrait = obj({ look: AppearanceLook.nullable(), avatarUrl: externalUrlN(), alt: str() });
+const ChatProvider = obj({ id: str(), label: LabelRef, mark: obj({ monogram: str().max(3), color: str(), logo: str().optional(), logoDark: str().optional(), providerName: str().optional() }) });
+const ChatCapabilities = obj({ read: bool(), startSession: bool(), sendMessage: bool(), markRead: bool(),
+  storyboard: obj({ available: bool(), reason: LabelRefN() }),
+  sendNowWarning: LabelRefN(),
+  retry: bool(), attachments: obj({ allowed: bool(), maxBytes: nn(), maxCountPerMessage: nn(), maxCountPerSession: nn(), mimeTypes: arr(str()), reason: LabelRefN(),
+    maxImageBytes: nn().optional(), limitsLabel: LabelRef.optional() }) });
+const ChatUnread = obj({ count: nn(), label: LabelRef });
+const ChatAgentRow = obj({ id: str(), kind: oneOf('agent', 'team'), name: str(), context: strN(), contextLabel: LabelRef.nullable(), provider: ChatProvider.nullable(),
+  portrait: ChatPortrait, teamId: strN(), parentId: strN(), stateLabel: LabelRef, unread: ChatUnread, capabilities: ChatCapabilities, defaultSessionId: strN() });
+const ChatAgentsVM3 = obj({ revision: nn(), labels: obj({ title: LabelRef, empty: LabelRef }), agents: collection(ChatAgentRow) });
+const ChatTitle = s.union([str(), LabelRef]);
+const ChatSessionRow = obj({ id: str(), title: ChatTitle, preview: s.string().max(180).nullable(), updatedAt: msN(), unread: ChatUnread, stateLabel: LabelRef, turnPending: bool(),
+  archived: bool(), actions: obj({ rename: bool(), archive: bool(), restore: bool(), delete: bool() }), runtimeTranscriptDeleteLabel: LabelRef });
+const ChatAgentSessionsVM3 = obj({ revision: nn(), agentId: str(), filter: oneOf('active','archived'),
+  labels: obj({ active: LabelRef, archived: LabelRef, archivedCount: LabelRef, empty: LabelRef }), archivedCount: nn(),
+  sessions: collection(ChatSessionRow), defaultSessionId: strN(), capabilities: ChatCapabilities });
+const ChatBodyBlock3 = s.discriminated('type', {
+  text: obj({ type: s.literal('text'), text: s.string().max(8000) }),
+  table: obj({ type: s.literal('table'), headers: arr(s.string().max(256)).max(16), rows: arr(arr(s.string().max(256)).max(16)).max(100) }),
+  'team-result': obj({ type: s.literal('team-result'), teamId: str(), label: s.string().max(120), summary: s.string().max(2000).nullable(), members: arr(obj({ id: str(), name: s.string().max(120), stateLabel: LabelRef, portrait: ChatPortrait })).max(64) }),
+});
+const ChatBody3 = obj({ text: s.string().max(8000), blocks: arr(ChatBodyBlock3).max(32) })
+  .refine(body => new TextEncoder().encode(JSON.stringify(body)).byteLength <= 65536, 'bounded chat body bytes');
+const sameOriginPathN = s.string().max(2048).refine(value => value.startsWith('/') && !value.startsWith('//') &&
+  !value.includes('\\') && !/[\u0000-\u001f\u007f]/.test(value) &&
+  !value.split(/[?#]/, 1)[0].split('/').some(part => part === '.' || part === '..')).nullable();
+const ChatAttachmentPreview3 = obj({ kind: oneOf('image', 'pdf', 'file'), thumbnailUrl: sameOriginPathN,
+  openUrl: sameOriginPathN, icon: oneOf('image', 'file-text', 'file'), label: LabelRefN(), alt: strN() });
+const ChatMessage3 = obj({ id: str(), kind: oneOf('message', 'subagent-result'), role: oneOf('user', 'assistant', 'error'), at: ms(),
+  text: s.string().max(8000), body: ChatBody3, title: strN(), status: oneOf('completed', 'failed', 'running', 'unknown', 'queued', 'cancelled', 'sent').nullable(),
+  statusLabel: LabelRefN(), collapsedByDefault: bool(), avatar: AppearanceLook.nullable(), senderInfo: Sender.optional(),
+  queueActions: obj({ turnId: str(), cancelLabel: LabelRef, sendNowLabel: LabelRef, titleLabel: LabelRef, warningLabel: LabelRef, keepQueuedLabel: LabelRef }).nullable().optional(),
+  meta: obj({ model: strN(), tokens: nn().nullable(), durationMs: nn().nullable() }).nullable(),
+  attachments: arr(obj({ id: str(), name: s.string().max(120), mimeType: s.string().max(100), size: nn(), url: strN(),
+    preview: ChatAttachmentPreview3.optional() })).max(5) });
+const ChatSessionVM3 = obj({ id: str(), agentId: str(), title: ChatTitle, messages: collection(ChatMessage3).max(50),
+  turnPending: obj({ turnId: str(), since: ms() }).nullable(), pagination: obj({ olderCursor: strN(), hasOlder: bool() }),
+  capabilities: ChatCapabilities, retryEligible: bool(), retryEligibleTurnId: strN() });
 
 // ---- §3.4 Flows ----
 const ScheduleVM = s.discriminated('kind', {
@@ -565,6 +608,8 @@ const HealthVM = obj({
     issues: collection(obj({ id: str(), code: str(), severity: oneOf('error', 'warn', 'info'), channel: str(), path: strN(), count: nn(), firstSeenAt: ms(), lastSeenAt: ms(),
     state: oneOf('open', 'resolved', 'muted'), mutable: bool() })) }).nullable(),
   series: obj({ cpu: arr(num()), mem: arr(num()), at0: ms(), stepMs: nn() }),
+  engineParity: arr(obj({ surface: LabelRef, labels: obj({ comparisons: LabelRef, mismatches: LabelRef, changedRows: LabelRef,
+    overflowKeys: LabelRef, overflowSurfaces: LabelRef }), comparisons: nn(), mismatches: nn(), changedRows: nn(), overflowKeys: nn(), overflowSurfaces: nn() })).optional(),
 });
 
 // ---- §3.9 Projects ----
@@ -613,6 +658,7 @@ const TeamProjectTaskVM = obj({ id: str(), title: str(), state: oneOf('open', 'c
   reviewers: collection(TeamProjectReviewerVM), createdAt: msN(), updatedAt: msN(), lastActivityAt: msN() });
 const TeamProjectColumnVM = obj({ id: STATUS, label: LabelRef, count: nn(), tasks: collection(TeamProjectTaskVM) });
 const TeamProjectVM = obj({ teamId: str(), label: str(), readOnly: bool(), taskCount: nn(), summaryLabel: LabelRef,
+  defaultColumnId: STATUS.optional(), mobilePeopleLabel: LabelRef.optional(),
   capabilities: obj({ comments: oneOf('read-only', 'unsupported'), history: oneOf('read-only', 'unsupported'),
     repository: oneOf('read-only', 'unsupported') }), roster: TeamRosterVM, columns: collection(TeamProjectColumnVM) });
 const SourceFilterVM = obj({ id: str(), label: LabelRef, count: nn(), selected: bool(), source: ProjectSourceDescriptorVM });
@@ -623,8 +669,11 @@ const ProjectVM = obj({
   id: str(), revision: nn(), name: str(), status: STATUS, priority: PRIORITY, archived: bool(),
   summary: strN(), summaryMeta: obj({ author: ActorVM, at: ms() }).nullable(), thumb: ThumbVM, cover: CoverVM, flags: arr(FlagVM),
   teamProject: TeamProjectVM.nullable().optional(),
+  kickoff: obj({ status: oneOf('queued', 'sent', 'failed', 'unknown'), sessionId: strN(), turnId: strN(), canRetry: bool(), label: LabelRef }).optional(),
   sourceDescriptors: collection(ProjectSourceDescriptorVM).optional(), statusLabel: LabelRef.optional(),
+  statusTransitions: collection(obj({ id: STATUS, label: LabelRef })).optional(),
   counts: ProjectCountsVM.optional(), capabilities: ProjectCapabilitiesVM.optional(),
+  capabilityRows: collection(obj({ id: str(), label: LabelRef, valueLabel: LabelRef })).optional(),
   sources: collection(obj({ id: str(), kind: SOURCE_KIND, label: str(), ref: SourceRef.nullable(), addedAt: ms(), sessionCount: nn().nullable() })),
   repo: obj({ state: oneOf('pending', 'ok', 'error'), url: str(), owner: str(), name: str(), image: obj(ImageShape), defaultBranch: strN(), branch: strN(),
     ci: obj({ state: oneOf('passing', 'failing', 'running', 'none', 'unrecognized'), at: msN(), url: strN() }).nullable(),
@@ -633,6 +682,10 @@ const ProjectVM = obj({
     role: strN(), origin: oneOf('derived', 'manual'), commitCount: nn().nullable() })),
   recentHistory: collection(HistoryItemVM), historyNextCursor: strN(), lastActivityAt: msN(), createdAt: ms(),
 });
+const ProjectCreateTargetVM = obj({ id: str(), name: str(), portrait: ChatPortrait, provider: ChatProvider,
+  stateLabel: LabelRef, helpLabel: LabelRef, capabilities: obj({ sendMessage: bool() }) });
+const ProjectCreateVM = obj({ targets: collection(ProjectCreateTargetVM), defaultTargetId: strN(), emptyLabel: LabelRef });
+const ProjectKickoffVM = obj({ projectId: str(), status: oneOf('queued', 'sent', 'failed', 'unknown'), sessionId: strN(), turnId: strN(), canRetry: bool(), label: LabelRef });
 const HistoryPage = obj({ items: collection(HistoryItemVM), nextCursor: strN() });
 // architect-57 (B): a project's comment thread. kind: a comment, an event line (text: « X a demandé un résumé »), or a
 // system line (the agent's status/priority change, from the history). Oldest first; nextCursor loads older items.
@@ -643,7 +696,7 @@ const CommentItemVM = obj({ id: str(), kind: oneOf('comment', 'event', 'system')
 const CommentThreadVM = obj({ projectId: str(), items: collection(CommentItemVM), nextCursor: strN(),
   mentionable: collection(obj({ id: str(), name: str(), avatarUrl: strN(), primary: bool() })), canComment: bool(), canMention: bool(),
   session: obj({ key: str(), route: str() }).nullable() });
-const CandidatesVM = obj({ scannedAt: ms(), candidates: collection(obj({
+const CandidatesVM = obj({ scannedAt: ms(), statusOptions: collection(obj({ id: STATUS, label: LabelRef })).optional(), candidates: collection(obj({
   id: str(), key: str(), name: str(), summary: str(), suggestedStatus: STATUS, confidence: oneOf('high', 'medium', 'low'), reason: str(),
   labels: arr(str()), sources: arr(obj({ kind: SOURCE_KIND, label: str(), ref: SourceRef.nullable() })), lastActivityAt: msN() })) });
 
@@ -663,7 +716,7 @@ const LayoutVM = obj({
   agentsSeen: collection(obj({ id: str(), role: ROLE, name: str(), lastSeenAt: msN(), automaticLook: AppearanceLook.optional() })),
 });
 const OfficeCharacterRowVM = role => obj({ id: str(), role, name: str(), primary: bool(), runtime: strN(), runtimeBrand: Mark().nullable(), state: oneOf(...AGENT_STATE).nullable(),
-  stateLabel: LabelRef, roleLabel: LabelRef, look: AppearanceLook, automaticLook: AppearanceLook.optional(), groupId: strN(), order: nn(), inOffice: bool(), lastSeenAt: msN() });
+  stateLabel: LabelRef, roleLabel: LabelRefN(), look: AppearanceLook, automaticLook: AppearanceLook.optional(), groupId: strN(), order: nn(), inOffice: bool(), lastSeenAt: msN() });
 const OfficeCharactersVM = role => obj({ scope: oneOf('office', 'all'), search: str(), count: nn(), countLabel: LabelRef,
   groups: collection(obj({ id: strN(), label: LabelRef, count: nn(), countLabel: LabelRef, rows: collection(OfficeCharacterRowVM(role)) })), emptyLabel: LabelRef });
 const OfficeCharactersVM2 = OfficeCharactersVM(ROLE);
@@ -709,11 +762,11 @@ const OfficeVM3 = obj({
   connection: obj({ gateway: oneOf('up', 'down'), since: msN() }),
   orchestratorActivationAvailable: bool().optional(),
   kpis: collection(Kpi), occupants: collection(obj(Object.assign({}, {
-    id: str(), role: ROLE3, name: str(), title: LabelRef, roleLabel: LabelRef, state: s.enumOf(AGENT_STATE), stateSince: ms(),
+    id: str(), role: ROLE3, name: str(), title: LabelRef, roleLabel: LabelRefN(), state: s.enumOf(AGENT_STATE), stateSince: ms(), memberId: str().optional(),
     stationUid: strN(), look: AppearanceLook, automaticLook: AppearanceLook.optional(), ruleId: strN(), isNew: bool().optional(),
     destination: obj({ kind: oneOf('server', 'meeting'), stationUid: str() }).nullable(), sessionKey: strN(), tokens: nn().nullable(), lastSeenAt: msN(), exchanges: Exchanges,
     summary: str().max(320).optional(), model: str().optional(), project: str().optional(), runtime: str().optional(), startedAt: ms().optional(), lastActivityAt: ms().optional(), tokensKnown: bool().optional(), execution: ExecutionVM, parentId: strN() /* T-0062 */,
-    parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef, visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(), standingPoint: obj({ x: nn(), y: nn() }).nullable(),
+    parentAmbiguous: bool(), parentName: strN(), rosterDepth: nn(), teamId: strN(), teamIds: arr(str()).max(32).optional(), groupId: str(), rosterOrder: nn(), floorId: str(), stateActive: bool(), stateLabel: LabelRef, stateDetailLabel: LabelRef, stateLastLabel: LabelRef, visitPhase: oneOf('person', 'agent', 'linger').optional(), visitOnStage: bool().optional(), visitStateLabel: LabelRef.optional(), visitLabel: LabelRef.optional(), stateKind: s.enumOf(['agent', 'visitor']).optional(), standingPoint: obj({ x: nn(), y: nn() }).nullable(),
     communication: Communication.nullable().optional(), screenIntent: ScreenIntent.optional(),
     homeTarget: OfficeTarget.nullable().optional(), sceneTarget: OfficeTarget.nullable().optional(), activity: OfficeActivity.nullable().optional(), sceneTravel: SceneTravel.nullable().optional(),
     hostAgentId: str().optional(), hostRole: oneOf('primary', 'delegate', 'unknown').optional(), hostStatus: oneOf('working', 'blocked', 'done', 'idle', 'waiting', 'unknown').optional() }))).max(MAX_OFFICE_OCCUPANTS),
@@ -734,7 +787,7 @@ const OrchestratorsVM3 = obj({
 });
 const TeamsVM3 = obj({
   team: obj({ id: str(), label: str(), status: oneOf('active', 'stale') }),
-  members: collection(obj({ id: str(), name: str(), roleKind: oneOf('lead', 'member', 'unknown'), roleLabel: str().max(80).nullable(), status: oneOf('active', 'inactive', 'unknown'), runtimeKind: strN().optional(), brand: ConnectorBrandVM3.nullable().optional(), hostAgentId: strN(), parentMemberId: strN().optional(), sessionStatus: s.enumOf(['known', 'unknown']).optional(), spawnedBy: obj({ agentId: strN(), sessionKey: strN(), via: str(), label: strN() }).nullable().optional() })),
+  members: collection(obj({ id: str(), name: str(), roleKind: oneOf('lead', 'member', 'unknown'), roleLabel: str().max(80).nullable(), status: oneOf('active', 'inactive', 'unknown'), statusLabel: LabelRef, runtimeKind: strN().optional(), runtimeLabel: LabelRef, runtimeQualifierLabel: LabelRefN(), brand: ConnectorBrandVM3.nullable().optional(), hostAgentId: strN(), parentMemberId: strN().optional(), sessionStatus: s.enumOf(['known', 'unknown']).optional(), spawnedBy: obj({ agentId: strN(), sessionKey: strN(), via: str(), label: strN() }).nullable().optional() })),
   tasks: collection(obj({ id: str(), title: str(), state: oneOf('open', 'claimed', 'working', 'review', 'done', 'blocked'), priority: s.int().min(0).max(3).nullable(), ownerMemberId: strN(), reviewerMemberIds: arr(str()), createdAt: msN(), updatedAt: msN(), reportPresent: bool(), briefPresent: bool(), messageCount: nn(), reviews: collection(obj({ id: str(), reviewerMemberId: strN(), verdict: oneOf('go', 'no-go', 'pending', 'unknown'), createdAt: msN(), reportPresent: bool(), reportRef: obj({ id: str(), displayName: LabelRef }).optional() })) })),
   diagnostics: obj({ skippedTaskCount: nn(), skippedMemberCount: nn(), skippedCount: nn(), partialLabel: LabelRef.nullable(), quality: oneOf('complete', 'partial') }), revision: nn(),
 });
@@ -772,9 +825,14 @@ const FlowDetailVM3 = obj({
     tokens: obj({ total: nn(), input: nn(), output: nn() }).nullable(),
     delivery: obj({ status: strN(), delivered: bool().nullable(), channel: CHANNEL_REF.nullable() }), summary: str(), error: strN() })),
 });
+const BoardControlOptionVM3 = obj({ id: str(), label: LabelRef });
+const BoardControlCountVM3 = obj({ id: str(), count: nn() });
+const BoardControlVM3 = obj({ options: collection(BoardControlOptionVM3), counts: collection(BoardControlCountVM3), selected: strN() });
 const BoardVM3 = obj({ filter: oneOf('all', 'at-risk', 'with-agent', 'archived'), agent: strN(), sourceFilterId: strN().optional(),
   sourceFilters: collection(SourceFilterVM).optional(), emptyStateLabel: LabelRef.nullable().optional(),
-  columns: collection(obj({ id: STATUS, count: nn(), cards: collection(ProjectCardVM) })) });
+  controls: obj({ search: BoardControlVM3, stage: BoardControlVM3 }),
+  columns: collection(obj({ id: STATUS, label: LabelRef, count: nn(), taskCount: nn(), summaryLabel: LabelRef,
+    cards: collection(ProjectCardVM) })) });
 // O8: a 3.0 layout may carry presence { seenMinutes: 0–1440 } (2.x never shows it)
 const LayoutData3 = s.object({ version: s.literal(1), manifestVersion: nn(), room: str(), theme: s.unknown(), items: arr(s.unknown()), agents: arr(s.unknown()),
   presence: obj({ seenMinutes: s.int().min(0).max(1440) }).optional(), communicationMeetingPercent: s.int().min(0).max(100).optional(), idleRelocationMinutes: s.int().min(1).max(1440).optional(), floors: arr(FloorData).optional() }, R);
@@ -791,11 +849,12 @@ const LayoutVM3 = obj({
 const SettingsVM = __require("settings-schema")(s, LabelRef);
 const { Request: SettingsFixAllRequest, Result: SettingsFixAllResult } = __require("settings-schema").fixAllSchemas(s, LabelRef);
 const VM_SCHEMAS_V3 = Object.assign({}, VM_SCHEMAS, { settings: SettingsVM, meta: MetaVM3, office: OfficeVM3, officeCharacters: OfficeCharactersVM(ROLE3), orchestrators: OrchestratorsVM3, teams: TeamsVM3, logs: obj({ items: collection(LogRowVM3), nextCursor: strN(), facets: LogsFacets.optional() }), session: SessionVM3,
-  access: AccessVM3, interlocutor: InterlocutorVM3, flow: FlowDetailVM3, projects: BoardVM3, layout: LayoutVM3, layoutRevision: LayoutRevisionVM3 });
+  chatAgents: ChatAgentsVM3, chatAgentSessions: ChatAgentSessionsVM3, chatSession: ChatSessionVM3,
+  access: AccessVM3, interlocutor: InterlocutorVM3, flow: FlowDetailVM3, projects: BoardVM3, projectCreate: ProjectCreateVM, projectKickoff: ProjectKickoffVM, layout: LayoutVM3, layoutRevision: LayoutRevisionVM3 });
 const schemasFor = (version) => (version === 3 ? VM_SCHEMAS_V3 : VM_SCHEMAS);
 
-module.exports = { SettingsVM, SettingsFixAllRequest, SettingsFixAllResult, SetupVM, VM_SCHEMAS, VM_SCHEMAS_V3, schemasFor, LabelRef, ActorVM, PersonChip, paramsOk, MetaVM, MeVM, OfficeVM, OrchestratorsVM3, TeamsVM3, ChatVM, FlowListVM, FlowDetailVM, AccessVM, InterlocutorVM, LogsPage,
-  SessionVM, SkillListVM, SkillDetailVM, HealthVM, BoardVM, ProjectVM, HistoryPage, CandidatesVM, LayoutVM, UiPrefs };
+module.exports = { SettingsVM, SettingsFixAllRequest, SettingsFixAllResult, SetupVM, VM_SCHEMAS, VM_SCHEMAS_V3, schemasFor, LabelRef, ActorVM, PersonChip, paramsOk, MetaVM, MeVM, OfficeVM, OrchestratorsVM3, TeamsVM3, ChatVM, ChatAgentsVM3, ChatAgentSessionsVM3, ChatSessionVM3, FlowListVM, FlowDetailVM, AccessVM, InterlocutorVM, LogsPage,
+  SessionVM, SkillListVM, SkillDetailVM, HealthVM, BoardVM, ProjectVM, ProjectCreateVM, ProjectKickoffVM, HistoryPage, CandidatesVM, LayoutVM, UiPrefs };
 
 };
 const __s = __require('schema');

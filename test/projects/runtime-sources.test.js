@@ -28,6 +28,8 @@ test('runtime adapters contribute private, read-only workspace projects with bac
   assert.equal(result.projects.length, 2);
   assert.deepEqual(result.projects.map(row => row.name), ['compiler', 'documentation']);
   const codexProject = result.projects.find(row => row.name === 'compiler');
+  assert.ok(result.persons.every(person => /^per_runtime_[a-f0-9]{24}$/.test(person.id)),
+    'runtime-derived people use the canonical project-person ID format');
   assert.equal(codexProject.sessionCount, 2);
   assert.equal(codexProject.agentCount, 1);
   assert.equal(codexProject.activityCount, 5);

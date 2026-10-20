@@ -31,7 +31,10 @@ if (fails.includes(sub) || fails.includes(argv[0])) { process.stderr.write('simu
 function main() {
   if (sub === 'gateway call' && argv[2] === 'sessions.patch') {
     const params = JSON.parse(argv.find(a => a.startsWith('--params=')).slice(9));
-    out(JSON.stringify({ ok: true, key: params.key, entry: { sendPolicy: params.sendPolicy } })); return 0;
+    out(JSON.stringify({ ok: true, path: '/scratch/agents/main/agent/openclaw-agent.sqlite', key: String(params.key).toLowerCase(),
+      entry: { sessionId: '8f0b3782-0fff-4a97-b161-824608a44ace', lifecycleRevision: '2a267349-1426-405f-823d-f29b8d01eddb', updatedAt: 1792031718511,
+        createdVia: 'operator', createdAt: 1792031718511, sendPolicy: params.sendPolicy },
+      resolved: { modelProvider: 'openai', model: 'gpt-6-astra', agentRuntime: { id: 'codex', source: 'implicit' }, runtimeSelectionLocked: false } })); return 0;
   }
   if (argv[0] === '--version') { out('OpenClaw ' + (sc.openclawVersion || '0.0.0') + '\n'); return 0; }
   if (sub === 'skills list' || sub === 'skills info') {

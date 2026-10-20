@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const COMMANDS = new Set(['start', 'setup', 'web', 'check-config', 'hash-password', 'version', 'help', 'backup', 'restore', 'doctor', 'integrations']);
+const COMMANDS = new Set(['start', 'setup', 'web', 'check-config', 'hash-password', 'version', 'help', 'backup', 'restore', 'doctor', 'integrations', 'owner']);
 const REQUIRED_ENV = ['OC_GATEWAY_TOKEN', 'PORTAL_EMAIL', 'PORTAL_SECRET'];
 
 const HELP = `agent-office <command>
@@ -39,6 +39,8 @@ const HELP = `agent-office <command>
   integrations [status|install|uninstall] [--agent id]… [--all] [--dry-run] [--force] [--json] [--lang fr|en]
       What Agent Office adds to the runtime's agents (OpenClaw: the project tag, a skill and an AGENTS.md block).
       Default: the primary agent. Idempotent; AGENTS.md is backed up before every change; uninstall removes it all.
+  owner rollback-env (--dry-run | --apply) [--config file] [--data dir] [--env-file file]
+      In-place owner-only rollback for migration 036. --apply verifies the retained environment password privately.
   hash-password
       Read the login password from the terminal (no echo, asked twice) or from stdin.
       Print only the scrypt hash for PORTAL_PASSWORD_HASH.
@@ -199,6 +201,14 @@ function main(argv, env, io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const spawnChild = io.spawn || spawn;
+  if(argv[2]==='owner') {
+    if(argv[3]!=='rollback-env') {
+      stderr.write('agent-office owner: expected rollback-env\n');return 1;
+    }
+    return require(path.join(root,'src','ops','owner-rollback.js')).run(argv.slice(4),env,{
+      out:m=>stdout.write(m+'\n'),err:m=>stderr.write(m+'\n'),readPassword:io.readPassword,stdin:io.stdin,stderr,
+    });
+  }
   // architect-56 (docs/guide/project-tag.md): install / remove what Agent Office adds to the runtime's agents
   if (argv[2] === 'integrations') {
     return require(path.join(root, 'src', 'ops', 'integrations.js')).run(argv.slice(3), env, { out: (m) => stdout.write(m), err: (m) => stderr.write(m) }, { loadEnvFile });

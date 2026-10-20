@@ -2,6 +2,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const Claude=require('../../src/adapters/claude-code'),{createEngine}=require('../../src/engine');
+const {waitFor}=require('../helpers/harness');
 const {createFiles,MAX_READ}=require('../../src/adapters/codex/files');
 const NOW=1791600000000;
 const meta={type:'session_meta',payload:{id:'synthetic-session',cwd:'/synthetic/workspace',timestamp:new Date(NOW-10000).toISOString()}};
@@ -15,11 +16,41 @@ test('critic590 Claude unchanged cold history continues after the first bounded 
  const rows=[user];for(let n=0;n<80;n++)rows.push({type:'attachment',uuid:'meta-'+n,parentUuid:n?'meta-'+(n-1):'first',attachment:{synthetic:'x'.repeat(32768)}});
  rows.push({type:'assistant',sessionId:'synthetic-session',uuid:'last',parentUuid:'meta-79',timestamp:new Date(NOW-60000).toISOString(),message:{role:'assistant',content:[{type:'text',text:'SYNTHETIC_FINAL_ANSWER'}]}});
  fs.writeFileSync(file,rows.map(x=>JSON.stringify(x)).join('\n')+'\n');fs.utimesSync(file,new Date(NOW-60000),new Date(NOW-60000));
- const engine=createEngine({now:()=>NOW}),runtime=Claude.createRuntime({runtimeConfig:{claudeCode:{home,agentGrouping:'project'}}},{now:()=>NOW});runtime.attach(engine);t.after(()=>runtime.close());
- for(let n=0;n<5;n++)await runtime.cycle();
+ const started=Date.now(),clock=()=>NOW+Date.now()-started;
+ const engine=createEngine({now:clock}),runtime=Claude.createRuntime({runtimeConfig:{claudeCode:{home,agentGrouping:'project'}}},{now:clock});runtime.attach(engine);t.after(()=>runtime.close());
+ await runtime.cycle();
+ await waitFor(()=>runtime.files.rows()[0]?.coverageComplete,{timeoutMs:15000,intervalMs:50,what:'cold Claude transcript continuation'});
  const row=runtime.files.rows()[0];console.log('Claude continuation',JSON.stringify({offset:row.offset,size:row.size,bytes:runtime.files.stats.bytes,complete:row.coverageComplete}));
  assert.ok(row.offset>=row.size,'routine cycles must eventually continue a cold unchanged transcript');
  assert.ok(engine.transcript(engine.sessions()[0].key).events.some(e=>e.text==='SYNTHETIC_FINAL_ANSWER'));
+});
+
+test('Claude close during a pending transcript read never re-arms continuation timers',async t=>{
+ const home=dir(t,'critic590-claude-close-'),project=path.join(home,'projects','synthetic');fs.mkdirSync(project,{recursive:true});
+ const file=path.join(project,'synthetic-session.jsonl');
+ const user={type:'user',sessionId:'synthetic-session',uuid:'first',timestamp:new Date(NOW-65000).toISOString(),message:{role:'user',content:'Synthetic prompt'}};
+ const rows=[user];for(let n=0;n<80;n++)rows.push({type:'attachment',uuid:'meta-'+n,parentUuid:n?'meta-'+(n-1):'first',attachment:{synthetic:'x'.repeat(32768)}});
+ rows.push({type:'assistant',sessionId:'synthetic-session',uuid:'last',parentUuid:'meta-79',timestamp:new Date(NOW-60000).toISOString(),message:{role:'assistant',content:[{type:'text',text:'SYNTHETIC_FINAL_ANSWER'}]}});
+ fs.writeFileSync(file,rows.map(x=>JSON.stringify(x)).join('\n')+'\n');fs.utimesSync(file,new Date(NOW-60000),new Date(NOW-60000));
+ let clock=NOW,trackedTimers=new Set(),resolveTimerFired,closeOnTranscript=false,releaseRead;
+ const timerFired=new Promise(resolve=>{resolveTimerFired=resolve;}),readGate=new Promise(resolve=>{releaseRead=resolve;});
+ const realSetTimeout=global.setTimeout,realClearTimeout=global.clearTimeout;
+ global.setTimeout=(fn,delay,...args)=>{let handle;handle=realSetTimeout(()=>{trackedTimers.delete(handle);if(delay>=1000)resolveTimerFired();fn(...args);},delay,...args);if(delay>=1000)trackedTimers.add(handle);return handle;};
+ global.clearTimeout=handle=>{trackedTimers.delete(handle);return realClearTimeout(handle);};
+ const cleanTimers=()=>{for(const handle of trackedTimers)realClearTimeout(handle);trackedTimers.clear();};
+ const engine=createEngine({now:()=>clock}),runtime=Claude.createRuntime({runtimeConfig:{claudeCode:{home,agentGrouping:'project'}}},{now:()=>clock});runtime.attach(engine);
+ t.after(()=>{runtime.close();global.setTimeout=realSetTimeout;global.clearTimeout=realClearTimeout;cleanTimers();});
+ const originalIngest=engine.ingestCanonical.bind(engine);
+ engine.ingestCanonical=(type,...args)=>{const result=originalIngest(type,...args);if(type==='transcript'&&closeOnTranscript)runtime.close();return result;};
+ const originalRead=runtime.files.read.bind(runtime.files);let blockRead=false,enteredRead;
+ const readEntered=new Promise(resolve=>{enteredRead=resolve;});
+ runtime.files.read=async(...args)=>{if(blockRead){blockRead=false;enteredRead();await readGate;}return originalRead(...args);};
+ await runtime.cycle();
+ assert.equal(trackedTimers.size,1,'an open partial transcript schedules a continuation');
+ blockRead=true;closeOnTranscript=true;clock+=3000;
+ const pendingCycle=runtime.cycle();await readEntered;await timerFired;
+ releaseRead();await pendingCycle;
+ assert.equal(trackedTimers.size,0,'neither post-read scheduling nor finally may re-arm a timer after close');
 });
 test('critic590 Codex preserves UTF-8 bytes across a bounded read boundary',async t=>{
  const home=dir(t,'critic590-codex-utf8-'),first=JSON.stringify(meta)+'\n';

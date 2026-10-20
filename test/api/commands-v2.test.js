@@ -130,10 +130,10 @@ describe('S7c · async chat over the chat topic', () => {
     if (dup.status !== 202) { assert.equal(dup.status, 409); assert.deepEqual(dup.json.error.details, [{ issue: 'turn-pending' }]); }
     await waitFor(async () => (await h.get('/api/v2/views/chat')).json.data.turnPending === null, { what: 'the turn to finish' });
     const chat = (await h.get('/api/v2/views/chat')).json;
-    assert.equal(chat.data.sessionKey, 'agent:main:explicit:portal-chat');
+    assert.match(chat.data.sessionKey, /^agent:main:explicit:portal-chat:user:[a-f0-9]{64}$/);
     assert.equal(chat.meta.topic.id, 'chat');
     const turn = h.cliCalls().find((a) => a[0] === 'agent');
-    assert.deepEqual(turn, ['agent', '--message=Bonjour', '--agent=main', '--json', '--timeout=150', '--channel=webchat', '--reply-channel=webchat', '--session-key=agent:main:explicit:portal-chat']);
+    assert.deepEqual(turn, ['agent', '--message=Bonjour', '--agent=main', '--json', '--timeout=150', '--channel=webchat', '--reply-channel=webchat', '--session-key=' + chat.data.sessionKey]);
     const fence = h.cliCalls().find(a => a[0] === 'gateway' && a[2] === 'sessions.patch');
     assert.equal(JSON.parse(fence.find(a => a.startsWith('--params=')).slice(9)).key, chat.data.sessionKey);
     assert.ok(turn.includes('--session-key=' + chat.data.sessionKey), 'chat follows the exact fenced/dispatch session');
@@ -141,10 +141,10 @@ describe('S7c · async chat over the chat topic', () => {
   });
 
   it('the command-buffer reply is consumed when the transcript publishes the same primary reply', async () => {
-    const sessionKey = 'agent:main:explicit:portal-chat';
+    const sessionKeyPattern = /^agent:main:explicit:portal-chat:user:[a-f0-9]{64}$/;
     const answer = 'Réponse factice.';
     const h = await startServer(sc, { handlers: { 'sessions.get': params => {
-      assert.equal(params.key, sessionKey);
+      assert.match(params.key, sessionKeyPattern);
       return { messages: [
         { role: 'user', timestamp: sc.now + 1, content: 'Bonjour' },
         { role: 'assistant', timestamp: sc.now + 2, content: answer },

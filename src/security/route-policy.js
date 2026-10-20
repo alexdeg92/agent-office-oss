@@ -1,5 +1,6 @@
 'use strict';
 const {ApiError}=require('../api/v2/errors');
+const {recoveryRouteAllowed}=require('./recovery-policy');
 const DECLARATION=Symbol('route-policy'),MOUNT=Symbol('route-mount'),EXCEPTION=Symbol('middleware-exception');
 // The exported marker is diagnostic metadata, never proof that a handler enforces policy.
 const GUARDS=new WeakMap();
@@ -40,6 +41,7 @@ function createRouteGuard(spec,{auth,store}) {
     if(req.principal?.kind==='agent')return spec.agent ? next() : next(new ApiError('forbidden',{details:[{issue:'token-scope'}]}));
     const session=auth.sessionOf(req),user=session&&store.users.byId(session.userId);
     if(!session||!user||user.status!=='active'||(session.authGeneration??0)!==user.auth_generation)return next(new ApiError('unauthorized'));
+    if(session.recoveryOnly&&!recoveryRouteAllowed(req))return next(new ApiError('forbidden',{details:[{issue:'recovery-only'}]}));
     req.session=session;req.user=user;
     if(!spec.requirements.every(r=>store.policy.can(user,r.resource,r.level)))return next(new ApiError('forbidden',{details:[{issue:'permission-denied'}]}));
     auth.upgradeLegacySession?.(req,res,session);
@@ -47,7 +49,8 @@ function createRouteGuard(spec,{auth,store}) {
     req.authorize=()=>{
       const current=auth.sessionOf(req);
       const active=current&&store.users.byId(current.userId);
-      if(!current||current.userId!==user.id||active?.status!=='active'||(current.authGeneration??0)!==active.auth_generation||active.auth_generation!==user.auth_generation)throw new ApiError('unauthorized');
+      if(!current||current.userId!==user.id||current.recoveryOnly!==session.recoveryOnly||active?.status!=='active'||(current.authGeneration??0)!==active.auth_generation||active.auth_generation!==user.auth_generation)throw new ApiError('unauthorized');
+      if(current.recoveryOnly&&!recoveryRouteAllowed(req))throw new ApiError('forbidden',{details:[{issue:'recovery-only'}]});
       if(!spec.requirements.every(r=>store.policy.can(user,r.resource,r.level)))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
     };
     return next();

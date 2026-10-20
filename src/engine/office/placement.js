@@ -92,6 +92,61 @@ function transitionTarget(floor, index, fallback) {
   return endpoint ? target({ kind: 'destination', floorId: floor.id, point: center(endpoint), approachPoint: center(endpoint) }) : fallback;
 }
 
+function visitorPlacements(rows, placements, floors, index) {
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const placementById = new Map(placements.map(row => [row.id, row]));
+  const floorById = new Map(floors.map(row => [row.id, row]));
+  const reserved = new Map();
+  const reserve = (floorId, x, y) => {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+    const cells = reserved.get(floorId) || new Set(); cells.add(`${x},${y}`); reserved.set(floorId, cells);
+  };
+  for (const placement of placements) {
+    if (placement.stationUid) {
+      const floor = floorById.get(placement.floorId);
+      const item = floor?.layout.items.find(row => row.uid === placement.stationUid);
+      const asset = item && index.furniture.get(item.asset);
+      const cell = item && asset?.station ? seatTile(item, asset) : null;
+      if (cell) reserve(placement.floorId, cell.x, cell.y);
+    }
+    if (placement.standingPoint) reserve(placement.floorId, placement.standingPoint.x, placement.standingPoint.y);
+    if (placement.sceneTarget?.point) reserve(placement.floorId, Math.floor(placement.sceneTarget.point.x), Math.floor(placement.sceneTarget.point.y));
+  }
+  const output = new Map();
+  const visitors = rows.filter(row => row.visitPhase && row.parentId).sort((a, b) => a.id.localeCompare(b.id));
+  for (const visitor of visitors) {
+    const host = byId.get(visitor.parentId), home = host && placementById.get(host.id);
+    const floor = home && floorById.get(home.floorId), room = floor && index.rooms.get(floor.layout.room);
+    if (!host || !home || !floor || !room) continue;
+    const grid = buildGrid(room.cols, room.rows, floor.layout.items, index.furniture);
+    const station = home.stationUid && floor.layout.items.find(row => row.uid === home.stationUid);
+    const asset = station && index.furniture.get(station.asset);
+    const seat = station && asset?.station ? seatTile(station, asset) : null;
+    const base = seat || (home.standingPoint && { x: home.standingPoint.x, y: home.standingPoint.y });
+    if (!base) continue;
+    const start = elevatorAccess(floor.layout, index)?.cell || room.entrance || { x: 0, y: room.rows - 1 };
+    const taken = reserved.get(floor.id) || new Set();
+    const candidates = [];
+    for (let radius = 1; radius <= 2; radius++) for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+      const cell = { x: base.x + dx, y: base.y + dy }, key = `${cell.x},${cell.y}`;
+      if (cell.x < 0 || cell.y < 0 || cell.x >= room.cols || cell.y >= room.rows || taken.has(key)
+        || !isWalkable(grid, cell.x, cell.y) || !findPath(grid, start, cell)) continue;
+      candidates.push({ ...cell, distance: Math.abs(dx) + Math.abs(dy), dx, dy });
+    }
+    candidates.sort((a, b) => a.distance - b.distance || a.y - b.y || a.x - b.x);
+    const spot = candidates[0];
+    if (!spot) continue;
+    taken.add(`${spot.x},${spot.y}`); reserved.set(floor.id, taken);
+    const facing = spot.x < base.x ? 'sw' : spot.x > base.x ? 'se' : 'sw';
+    const point = center(spot);
+    output.set(visitor.id, { id: visitor.id, floorId: floor.id, stationUid: null,
+      standingPoint: { x: spot.x, y: spot.y }, sceneTarget: target({ kind: 'visit', floorId: floor.id, point,
+        approachPoint: point, mode: 'stand', facing }) });
+  }
+  return output;
+}
+
 function relocateIdle(placements, occupants, floors, index, layoutData, now, tracker, pressureIds = new Set()) {
   const configured = layoutData?.idleRelocationMinutes;
   const thresholdMs = (Number.isInteger(configured) && configured >= 1 && configured <= 1440 ? configured : DEFAULT_IDLE_RELOCATION_MINUTES) * 60_000;
@@ -186,7 +241,13 @@ function relocateIdle(placements, occupants, floors, index, layoutData, now, tra
  * @returns {{placements:{id:string,floorId:string,stationUid:string|null,standingPoint:{x:number,y:number}|null}[],floors:object[],unseatedTeams:object[]}}
  */
 function planOfficePlacement({ index, layout, occupants, now = Date.now(), tracker = null, homeAssignments = null }) {
-  const plan = planFloors(index, layout, occupants, homeAssignments);
+  // The scoped API persists these private hashes in the store. Unscoped OfficeVM
+  // projections still need stable homes between polls, so retain the same
+  // planner output in the server-side tracker when no durable store is present.
+  const savedHomes = homeAssignments && typeof homeAssignments === 'object'
+    ? homeAssignments : tracker?.homeAssignments;
+  const plan = planFloors(index, layout, occupants, savedHomes);
+  if (tracker && plan.homeAssignments) tracker.homeAssignments = plan.homeAssignments;
   const placements = new Map(plan.occupants.map(o => [o.id, {
     id: o.id, floorId: o.floorId, stationUid: o.stationUid ?? null,
     ...(Object.hasOwn(o, '_homeWant') ? { _homeWant: o._homeWant } : {}),
@@ -250,6 +311,11 @@ function planOfficePlacement({ index, layout, occupants, now = Date.now(), track
     seatedTargets.add(key);
     return normalized;
   });
+  const visitorById = visitorPlacements(occupants, finalPlacements, plan.floors, index);
+  for (let i = 0; i < finalPlacements.length; i++) {
+    const visitor = visitorById.get(finalPlacements[i].id);
+    if (visitor) finalPlacements[i] = { ...finalPlacements[i], ...visitor };
+  }
   return {
     // Input sequence stays intact; the VM owner retains rosterOrder and all parent/team/status fields.
     placements: finalPlacements.map(({ _homeWant, ...placement }) => placement),
@@ -260,4 +326,4 @@ function planOfficePlacement({ index, layout, occupants, now = Date.now(), track
   };
 }
 
-module.exports = { planOfficePlacement };
+module.exports = { planOfficePlacement, visitorPlacements };

@@ -307,10 +307,13 @@ test('Setup and Settings present the same translated network-mode options',{skip
   }finally{await h.close();}
 });
 
-test('unreachable gateway banners in chat and office link to connection settings',{skip,timeout:15000},async()=>{
+test('unreachable gateway preserves read-only Chat and links Office to connection settings',{skip,timeout:15000},async()=>{
   const h=await openLayoutBrowser();
   try{
-    for(const [path,ready,banner] of [['/discuter?mock=panne','#chat-texte','.ao-chat'],['/bureau?mock=panne','.ao-bureau__stage','.ao-bureau']]){
+    await visit(h.page,h.origin,'/discuter?mock=panne','#chat-texte');
+    assert.equal(await h.page.locator('#chat-texte').isDisabled(),true);
+    await h.page.getByText('Vous pouvez lire cette discussion. L’envoi est indisponible.',{exact:true}).waitFor();
+    for(const [path,ready,banner] of [['/bureau?mock=panne','.ao-bureau__stage','.ao-bureau']]){
       await visit(h.page,h.origin,path,ready);
       const link=h.page.locator(banner+' a[href*="/parametres"]').first();assert.ok((await link.getAttribute('href')).includes('onglet=connexion'));
       await link.click();await h.page.locator('#settings-tab-connexion[aria-selected=true]').waitFor();

@@ -1,7 +1,4 @@
-// The single path for every write to an existing project (api.md 2.0 §5.4). Each write carries `expectedRevision`.
-// - 200: Ok<CommandResult> = { ok, result, revision, vm }; `vm` is the fresh ProjectVM, shown at once on `project:<id>`.
-// - 409: error.current = { revision, vm: ProjectVM } is the authoritative state; it's shown at once, and the boards
-//   (which show the project as a card) resync. A 409 without `current` (e.g. source-in-use) changes nothing.
+// Project commands reconcile 200/409 VMs through the owning view's transport (api.md §5.4).
 import { request, toastError } from './api.js';
 import { toast } from './toast.js';
 import { services } from './services.js';
@@ -10,18 +7,11 @@ const enc = encodeURIComponent;
 export const projectPath = (id, rest = '') => `/api/v2/projects/${enc(id)}${rest}`;
 export const projectTopic = (id) => 'project:' + id;
 
-/**
- * projectWrite({ method, id, path, body, expectedRevision, topics, success })
- *   path: '' | '/status' | '/flags' | '/flags/label/<key>' | '/flags/risk/<key>/ack' | '/sources' | …
- *   topics: extra SSE topics showing this project (boards) to resync on 409
- *   success: toast text, or (data) => toast options
- * → { ok: true, revision, result, vm } | { ok: false, error, current }. Errors are toasted here (a conflict as a warning).
- */
-export async function projectWrite({ method, id, path = '', body = {}, expectedRevision, topics = [], success = null }) {
+// Legacy callers use services.stream and the app version. Each write requires a revision.
+export async function projectWrite({ method, id, path = '', body = {}, expectedRevision, topics = [], success = null, stream = services.stream, apiVersion }) {
   if (!Number.isInteger(expectedRevision)) throw new Error('projectWrite: expectedRevision is required');
-  const stream = services.stream;
   try {
-    const r = await request(method, projectPath(id, path), { ...body, expectedRevision }, { quiet: true });
+    const r = await request(method, projectPath(id, path), { ...body, expectedRevision }, { quiet: true, apiVersion });
     const data = (r && r.data) || {};
     if (data.vm && stream) stream.applyVM(projectTopic(id), data.vm);
     if (success) toast(typeof success === 'function' ? success(data) : { level: 'success', message: success });

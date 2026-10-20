@@ -210,9 +210,16 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
     return b;
   };
   const commit = (req, res, data, selected = null) => {
+    const before = active().data;
     const out = store.office.save({ expectedRevision: req.body.expectedRevision, data: withoutLegacyRelocation(data), actor: actorRefOf(req) });
     if (!out.ok) throw new ApiError('conflict', { current: { revision: out.current.revision, vm: vmOf(req.apiVersion, selected) } });
     topics.invalidate('layout'); topics.invalidate('office'); topics.invalidate('office-scope'); armTheme();
+    const appearanceRules = value => JSON.stringify((value?.agents || []).map(({ agentId, match, character, variant, accessories, appearance }) =>
+      ({ agentId, match: match || null, character, variant, accessories: accessories || [], appearance: appearance || null })));
+    if (appearanceRules(before) !== appearanceRules(out.layout.data)) {
+      topics.invalidate('projects');
+      topics.invalidate('project');
+    }
     ok(res, { ok: true, result: null, revision: out.layout.revision, vm: vmOf(req.apiVersion, selected) });
   };
 

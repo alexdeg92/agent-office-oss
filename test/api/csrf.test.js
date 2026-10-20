@@ -1,7 +1,7 @@
 'use strict';
 // R15-01 (P1, go-live gate): CSRF. A same-site page on another origin can submit forms with the owner's Lax cookie.
 // Every non-GET needs a JSON body (or no body + X-AO-Request) and, with a cookie, an allowed Origin/Referer or the
-// X-AO-Request header; forms (urlencoded, multipart, text/plain) never reach a handler.
+// X-AO-Request header; ordinary forms never reach a handler. Chat uploads have a separate mounted-app regression.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScenario } = require('../helpers/scenario');

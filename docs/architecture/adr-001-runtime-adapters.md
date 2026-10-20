@@ -86,7 +86,8 @@ interface Capabilities {
   flows: { read: boolean; write: boolean; schedules: ('cron' | 'every' | 'at')[] };
   skills: { read: boolean; toggle: boolean; detail: boolean };
   channels: boolean;  interlocutors: boolean;       // per-channel identities (e.g. Discord users)
-  chat: boolean;  restart: boolean;  costs: boolean;  subagents: boolean;
+  chat: boolean;  chatSessionScope?: 'principal'; // stable explicit refs can isolate the portal conversation per account
+  restart: boolean;  costs: boolean;  subagents: boolean;
 }
 interface AdapterContext {
   ingest(env: RawEnvelope): IngestResult;  instance: InstanceConfig['runtime'];  secrets: SecretReader;

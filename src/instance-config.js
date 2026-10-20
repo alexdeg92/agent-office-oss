@@ -32,6 +32,7 @@ const OfficePresence = s.object({
   finishedSessionWindowMinutes: s.int().min(1).max(1440).optional(),
   agentPresenceWindowMinutes: s.int().min(1).max(1440).optional(),
   idleRelocationMinutes: s.int().min(1).max(1440).optional(),
+  idleTransitionDebounceMs: s.int().min(0).max(15000).optional(),
 }, { extra: 'reject' });
 const OfficeConfig = s.object({ presence: OfficePresence }, { extra: 'reject' });
 const AccessConfig = s.object({

@@ -13,7 +13,10 @@ const COUNTS_KEYS = new Set(['total_token_usage','last_token_usage','model_conte
 const TOKEN_KEYS = new Set(['input_tokens','output_tokens','total_tokens','cached_input_tokens','reasoning_output_tokens']);
 const ts = value => { const n=typeof value==='number'?value:typeof value==='string'?Date.parse(value):NaN; return Number.isSafeInteger(n)&&n>=0?n:null; };
 const safeText = value => typeof value==='string'?value.slice(0,MAX_TEXT):'';
-const eventId = (id,index) => 'msg:'+createHash('sha256').update(String(id||index)).digest('hex')+':0';
+// One response item can carry several independently rendered text blocks.
+// Include the block position in the opaque hash; otherwise every block with
+// the same source item id collides in the SessionVM collection.
+const eventId = (id,index) => 'msg:'+createHash('sha256').update(`${String(id??'')}\0${index}`).digest('hex')+':0';
 function extras(record, known, counters) { if(record&&typeof record==='object'&&!Array.isArray(record)) for(const key of Object.keys(record)) if(!known.has(key)) counters.unknownKeys=(counters.unknownKeys||0)+1; }
 function projectName(cwd) {
   if(typeof cwd!=='string'||cwd.length>4096||/[\x00-\x1f\x7f]/.test(cwd))return null;
