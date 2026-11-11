@@ -261,7 +261,7 @@ export const META = {
     'agentState.researching': 'Recherche', 'agentState.writing': 'Rédige', 'agentState.executing': 'Exécute', 'agentState.calling': 'Appel d’outil',
     'agentState.waiting': 'En attente', 'agentState.blocked': 'Bloqué', 'agentState.error': 'Erreur', 'agentState.offline': 'Hors ligne',
     'office.floor.rdc': 'Rez-de-chaussée · Entrée', 'office.floor.first': 'Étage 1', 'office.floor.gym': 'Salle de sport',
-    'office.floor.number': 'Étage {n}', 'office.floor.count': '{n} agents', 'office.floor.status': '{active} actifs · {idle} au repos',
+    'office.floor.number': 'Étage {n}', 'office.floor.count': '{n} agents', 'office.floor.count.one': '1 agent', 'office.floor.count.other': '{n} agents', 'office.floor.agentGroups': 'Équipes et agents', 'office.floor.unassignedAgents': 'Agents sans équipe', 'office.floor.sharedAcrossTeams': 'Partagé entre {n} équipes', 'office.floor.status': '{active} actifs · {idle} au repos',
     'office.floor.activityUnknown': 'Activité inconnue', 'office.floor.team': 'Équipe de {name} ({floor})',
     'project.source.manual': 'Créé à la main',
     'project.source.sessionGroup': 'Conversations',

@@ -11,7 +11,7 @@ import {useChatTopic} from './chat-live.js';
 import {ChatV3Message,ChatAttachmentPreview} from './chat-content.js';
 
 // Drafts belong to this mounted session, never browser storage or another viewer.
-export function ChatConversation({client,id,sessionTitle,online,small,active,drafts,onBack}){
+export function ChatConversation({client,id,sessionTitle,online,small,active,creationPending=false,drafts,onBack}){
  const topic='chat-session:'+id,view=useChatTopic(client,topic,chatPath(id));
  const forbidden=[401,403,404].includes(view.error?.status),vm=forbidden?null:view.data;
  const titleText=label(vm?.title||sessionTitle)||msg('messenger.chooseSession');
@@ -44,7 +44,7 @@ export function ChatConversation({client,id,sessionTitle,online,small,active,dra
  }
  useEffect(()=>{acknowledge();document.addEventListener('visibilitychange',acknowledge);window.addEventListener('focus',acknowledge);return()=>{document.removeEventListener('visibilitychange',acknowledge);window.removeEventListener('focus',acknowledge);};},[last,caps?.markRead,online,active]);
  const changeDraft=value=>{draftRef.current=value;drafts.set(id,value);setDraft(value);setError(null);};
- const canSend=!!caps?.sendMessage&&online&&!busy&&!vm?.turnPending&&(draft.trim()||files.some(row=>row.status==='ready'))&&!files.some(row=>row.status!=='ready');
+ const canSend=!!caps?.sendMessage&&online&&!creationPending&&!busy&&!vm?.turnPending&&(draft.trim()||files.some(row=>row.status==='ready'))&&!files.some(row=>row.status!=='ready');
  async function send(event){
   event?.preventDefault();if(!canSend)return;
   const body={text:draftRef.current,attachmentIds:files.map(row=>row.attachment.attachmentId)},serialized=JSON.stringify(body);
@@ -83,7 +83,7 @@ export function ChatConversation({client,id,sessionTitle,online,small,active,dra
   finally{uploads.current.delete(row.localId);}
  }
  function addFiles(selected){
-  if(!policy?.allowed||!caps.sendMessage||!online||busy)return;setSheet(false);setError(null);
+  if(creationPending||!policy?.allowed||!caps.sendMessage||!online||busy)return;setSheet(false);setError(null);
   const accepted=[];
   for(const file of selected){
    if(files.length+accepted.length>=policy.maxCountPerMessage){setError(msg('messenger.tooMany'));break;}
@@ -99,23 +99,23 @@ export function ChatConversation({client,id,sessionTitle,online,small,active,dra
   if(row.attachment){try{await chatCommand(chatPath(id,'/attachments/'+encodeURIComponent(row.attachment.attachmentId)),undefined,{method:'DELETE'});}catch(e){if(alive.current)setError(e.message);return;}}
   if(alive.current){setFiles(old=>old.filter(item=>item.localId!==row.localId));releasePreview(row.localPreview?.thumbnailUrl);}
  }
- return html`<section class="ao-messenger__pane ao-messenger__conversation ao-chat__card" data-chat-pane="conversation" aria-label=${msg('messenger.sessions')} onDragOver=${e=>{if(policy?.allowed)e.preventDefault();}} onDrop=${e=>{if(policy?.allowed){e.preventDefault();addFiles(e.dataTransfer.files);}}}>
+ return html`<section class="ao-messenger__pane ao-messenger__conversation ao-chat__card" data-chat-pane="conversation" aria-label=${msg('messenger.sessions')} onDragOver=${e=>{if(!creationPending&&policy?.allowed)e.preventDefault();}} onDrop=${e=>{if(!creationPending&&policy?.allowed){e.preventDefault();addFiles(e.dataTransfer.files);}}}>
  <header class="ao-messenger__pane-head">${small?html`<${Button} icon=${html`<${Icon} name="arrow-left" />`} label=${msg('messenger.backSessions')} variant="ghost" size="sm" onPress=${onBack} />`:null}<h2 tabindex="-1">${forbidden?msg('messenger.denied'):titleText}</h2></header>
  ${forbidden?html`<${ErrorState} error=${view.error} onRetry=${view.retry} />`:!vm?view.error?html`<${ErrorState} error=${view.error} onRetry=${view.retry} />`:html`<div class="ao-messenger__loading" role="status"><${Skeleton} /><${Skeleton} w="70" /></div>`:html`
  ${!online?html`<p class="ao-messenger__notice" role="status">${msg('messenger.offline')}</p>`:null}
  ${view.error?html`<p role="alert" class="ao-messenger__notice">${view.error.message}<${Button} size="sm" label=${msg('common.retry')} onPress=${view.retry} /></p>`:null}
- <div ref=${thread} class="ao-messenger__thread bu-chat__thread" data-chat-thread tabindex="0" role="region" aria-label=${titleText} onScroll=${()=>{const el=thread.current;nearEnd.current=el.scrollHeight-el.scrollTop-el.clientHeight<64;if(nearEnd.current){setLatest(false);acknowledge();}}}>
+ <div ref=${thread} class="ao-messenger__thread bu-chat__thread" data-chat-thread data-scroll-body tabindex="0" role="region" aria-label=${titleText} onScroll=${()=>{const el=thread.current;nearEnd.current=el.scrollHeight-el.scrollTop-el.clientHeight<64;if(nearEnd.current){setLatest(false);acknowledge();}}}>
  ${(cursor===undefined?vm.pagination.hasOlder:!!cursor)?html`<${Button} label=${msg('messenger.older')} busy=${olderBusy} onPress=${loadOlder} />`:null}
  ${messages.length?html`<ol class="ao-chat__messages">${messages.map(message=>html`<li key=${message.id} data-chat-message=${message.id} class=${'ao-chat__msg ao-chat__msg--'+message.role}><${ChatV3Message} message=${message} now=${now} onSendNowQueued=${setQueuedSend} onCancelQueued=${cancelQueued} /></li>`)}</ol>`:html`<div class="bu-empty"><p class="bu-empty__title">${msg('messenger.emptyThread')}</p></div>`}
  ${vm.turnPending?html`<div class="ao-messenger__pending ao-chat__pending" role="status"><span class="bu-typing" aria-hidden="true"><span></span><span></span><span></span></span><span>${msg('messenger.pending')}</span></div>`:null}
  </div>
  ${latest?html`<${Button} class="ao-messenger__latest" size="sm" label=${msg('messenger.latest')} onPress=${toEnd} />`:null}
- <footer class="ao-messenger__compose" onPaste=${e=>{const pasted=[...e.clipboardData.files];if(pasted.length&&policy?.allowed){e.preventDefault();addFiles(pasted);}}}>
+ <footer class="ao-messenger__compose" onPaste=${e=>{const pasted=[...e.clipboardData.files];if(pasted.length&&policy?.allowed&&!creationPending){e.preventDefault();addFiles(pasted);}}}>
  ${error?html`<p role="alert" class="bu-field__error">${error}</p>`:null}
  ${caps.retry&&vm.retryEligible?html`<${Button} label=${msg('messenger.retryTurn')} disabled=${!online} busy=${busy} onPress=${retryTurn} />`:null}
  <form onSubmit=${send} onKeyDown=${e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}}} class="ao-messenger__form ao-chat__composer" aria-label=${msg('messenger.compose')}>
- ${caps.sendMessage&&policy.allowed?html`<${Button} iconOnly label=${msg('messenger.attach')} icon=${html`<${Icon} name="add" />`} disabled=${!online||busy} onPress=${()=>small?setSheet(true):picker.current.click()} />`:null}
- <div ref=${input} class="ao-messenger__input">${files.length?html`<ul class="ao-chat-attachment-strip ao-chat-attachment-strip--composer" aria-label=${msg('messenger.moreFiles')}>${files.map(row=>{const file=row.attachment?{...row.attachment,preview:row.attachment.preview||row.localPreview,url:row.attachment.url||row.localPreview?.openUrl||null}:{name:row.file.name,size:row.file.size,preview:row.localPreview,url:row.localPreview?.openUrl||null};const status=row.status==='uploading'?msg('messenger.uploading'):row.status==='failed'?row.error||msg('messenger.uploadFailed'):null;return html`<li key=${row.localId} data-upload-state=${row.status}><${ChatAttachmentPreview} file=${file} compact status=${status} onRemove=${busy?null:()=>remove(row)} />${row.status==='uploading'?html`<progress aria-label=${msg('messenger.uploading')} />`:null}${row.status==='failed'?html`<${Button} size="sm" iconOnly label=${msg('messenger.retryUpload',{name:row.file.name})} icon=${html`<${Icon} name="undo" />`} onPress=${()=>upload(row)} disabled=${!online} />`:null}</li>`})}</ul>`:null}<${TextArea} id="chat-texte" label=${msg('messenger.compose')} placeholder=${msg('messenger.placeholder')} rows=${1} maxLength=${8000} value=${draft} disabled=${!caps.sendMessage} onInput=${e=>changeDraft(e.currentTarget.value)} /></div>
+ ${caps.sendMessage&&policy.allowed?html`<${Button} iconOnly label=${msg('messenger.attach')} icon=${html`<${Icon} name="add" />`} disabled=${!online||creationPending||busy} onPress=${()=>small?setSheet(true):picker.current.click()} />`:null}
+ <div ref=${input} class="ao-messenger__input">${files.length?html`<ul class="ao-chat-attachment-strip ao-chat-attachment-strip--composer" aria-label=${msg('messenger.moreFiles')}>${files.map(row=>{const file=row.attachment?{...row.attachment,preview:row.attachment.preview||row.localPreview,url:row.attachment.url||row.localPreview?.openUrl||null}:{name:row.file.name,size:row.file.size,preview:row.localPreview,url:row.localPreview?.openUrl||null};const status=row.status==='uploading'?msg('messenger.uploading'):row.status==='failed'?row.error||msg('messenger.uploadFailed'):null;return html`<li key=${row.localId} data-upload-state=${row.status}><${ChatAttachmentPreview} file=${file} compact status=${status} onRemove=${busy||creationPending?null:()=>remove(row)} />${row.status==='uploading'?html`<progress aria-label=${msg('messenger.uploading')} />`:null}${row.status==='failed'?html`<${Button} size="sm" iconOnly label=${msg('messenger.retryUpload',{name:row.file.name})} icon=${html`<${Icon} name="undo" />`} onPress=${()=>upload(row)} disabled=${!online||creationPending} />`:null}</li>`})}</ul>`:null}<${TextArea} id="chat-texte" label=${msg('messenger.compose')} placeholder=${msg('messenger.placeholder')} rows=${1} maxLength=${8000} value=${draft} disabled=${!caps.sendMessage||creationPending} onInput=${e=>changeDraft(e.currentTarget.value)} /></div>
  <${Button} class="ao-chat__send" type="submit" variant="primary" label=${msg('chat.send')} iconOnly=${small} icon=${html`<${Icon} name="arrow-right" />`} disabled=${!canSend} busy=${busy} />
  </form>
  ${!caps.sendMessage?html`<p class="ao-messenger__hint">${caps.storyboard?.reason?label(caps.storyboard.reason):msg('messenger.readonly')}</p>`:!policy.allowed&&policy.reason?html`<p class="ao-messenger__hint">${label(policy.reason)}</p>`:null}

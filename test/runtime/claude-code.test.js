@@ -605,6 +605,15 @@ test('deleting an on-demand transcript clears the admitted engine cache even whe
   fs.unlinkSync(opened.file);await runtime.cycle();assert.equal(engine.transcript(opened.key),null);assert.equal(engine.session(opened.key),null);
 });
 
+test('Claude Code contributes bounded private project-directory hints from transcript cwd metadata', async t => {
+  const h = fixture(t);
+  h.file('synthetic-project', 'synthetic-session', [record('synthetic-session', 'Synthetic message', { cwd: '/synthetic/private/project' })]);
+  const runtime = A.createRuntime({ runtimeConfig: { claudeCode: { home: h.home } } }), engine = createEngine({ adapter: runtime.definition });
+  t.after(() => runtime.close()); runtime.attach(engine); await runtime.start(engine);
+  assert.deepEqual(runtime.projectDirectoryHints(), [{ cwd: '/synthetic/private/project' }]);
+  assert.equal(JSON.stringify(engine.sessions()).includes('/synthetic/private/project'), false, 'the workspace hint stays out of canonical sessions');
+});
+
 test('partial transcript history does not take a live source down', async t => {
   const h = fixture(t), file = h.file('partial-project', 'partial-session', [
     record('partial-session', 'Root', { uuid: 'root' }),

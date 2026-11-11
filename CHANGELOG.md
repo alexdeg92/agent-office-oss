@@ -2,7 +2,58 @@
 
 All notable changes to Agent Office are documented in this file. The format is based on Keep a Changelog, and versions follow Semver. `packaging/release.sh` copies the matching section into `dist/RELEASE_NOTES.md`.
 
+## 1.4.0 - 2026-11-11
+
+This release makes a fresh install reach the setup wizard and finish it without errors (also behind a reverse proxy), adds a Cursor connector, and shows agent teams and channel conversations correctly in the office.
+
+### Upgrade notes
+
+- **New installs: start with the wizard.** `.env.example` no longer ships an active login: its `PORTAL_*` lines are commented out, because any of them turns the setup wizard off for good. Keep an env file only for ports and `AO_PUBLIC_URL`. Existing installs that set the login in their env file keep working unchanged.
+- **Behind a reverse proxy**, set `AO_PUBLIC_URL` to the address your browser uses. When a write is refused because of the origin, the server log now says which value to set.
+- **Migration 038** runs on first start (after an automatic pre-migration backup). It only adds the optional "Finish setting up your office" state.
+- **Channel conversations:** a person talking to an agent over WeChat, WhatsApp, Discord or Telegram is no longer drawn as a second agent in the office; the agent's card says who it is talking with.
+
+### Setup
+
+- A fresh install always reaches the setup wizard, and blank login lines copied from `.env.example` no longer stop the server from starting; a half-filled login says what is missing and how to get the wizard instead.
+- Claude Code, Codex and Cursor check their connection on their own, and can finish with no agents yet (agents appear once you start a session in a project).
+- « Ouvrir le bureau » waits until the office is ready instead of showing an error right after setup.
+- A port already in use (for example by the OpenClaw gateway on 18789) is explained, with the `--port` option to use.
+- Writes work right after setup behind a proxy, without a restart.
+- Installs configured through an env file get an optional, dismissible « Finish setting up your office » card in Settings.
+
+### Connectors
+
+- **Cursor:** a new read-only connector for the Cursor CLI. Turn it on in Settings › Connection like Codex; it never writes to `~/.cursor`.
+- Saving Settings › Connection works on installs configured through an env file, without re-entering the OpenClaw token.
+- Connector folders default to the service's own home.
+
+### Office
+
+- **Teams:** an agent team registered by the agent-team-pm skill appears as one team, named after its repository, with each member on its live agent (Claude Code, Codex, Cursor or a herdr pane). Team stores under `~/Dev` are found by default.
+- Teams are grouped by floor, with their own accent colour, labels that stay inside the room, and a single inline roster on phones.
+- **Channel conversations** show on the agent's card: « In conversation with <person> · WeChat ». The WeChat channel name is recognised.
+- Codex agents use their thread names, so a single Codex agent is no longer numbered « · 2 ».
+- Claude Code runs that OpenClaw launched as its backend are shown as the OpenClaw agent's work, instead of a separate « workspace » agent (matched on the session ids OpenClaw records; a session you start yourself in that folder stays visible).
+- The Store catalogue and the office load for the owner while a team or herdr source is active.
+
+### Settings
+
+- A refused action says why (address not recognised, confirmation expired, permission missing) instead of « This action is not allowed ».
+- « Details » lists the pending changes (old → new; secrets only as « changed ») and jumps to each field.
+- Save stays available while Connection has unsaved changes; « Apply plan » says why it is disabled.
+- The owner is shown as Administrator, not Member.
+
+### Security
+
+- Internal office and chat projections can no longer be subscribed to directly, and session cues go only to viewers allowed to see the full office.
+- People with limited access no longer receive the setup-progress card or channel contact names.
+
 ## 1.3.0 - 2026-10-20
+
+### Account
+
+- Choose a Bureau character or upload a profile photo. Photos are decoded and re-encoded as private, metadata-free WebP images and served only to the authenticated account. The release pins `sharp` for bounded image decoding and normalization.
 
 This release lets you talk to every agent from Discuter, shows headless agent swarms by name in the office, and moves the owner account into the database so it can be edited from Settings.
 

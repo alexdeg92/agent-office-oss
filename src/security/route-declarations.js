@@ -54,11 +54,18 @@ for(const [method,path,resource,command,writeClass,agent] of [
 ])add(method,path,{resource,level:'write',command,writeClass,agent:!!agent,sensitive:resource==='gateway.restart',requirements:[{resource,level:'write'},...(['projects.regenerateSummary','projects.retryComment','projects.import','projects.regenerateCover'].includes(command)?PROJECT_CONTEXT_READS:[])]});
 add('GET','/meta',{kind:'public',reason:'redacted bootstrap or permission-projected human metadata'});
 add('GET','/me',{kind:'self',reason:'current authenticated identity'});
+add('GET','/me/avatar',{kind:'self',reason:'current account private avatar bytes'});
+add('GET','/profile-avatars/:token',{kind:'self',reason:'short-lived exact-person avatar URL'});
+add('GET','/me/avatar/staged/:stageId',{kind:'self',reason:'current account staged avatar preview'});
+add('PUT','/me/avatar/character',{kind:'self',reason:'current account avatar character selection',command:'account.avatar.character',writeClass:'store',sensitive:true,audit:'transaction'});
+add('POST','/me/avatar/photo',{kind:'self',reason:'current account private avatar upload',command:'account.avatar.photo',writeClass:'store',sensitive:true,audit:'transaction'});
+add('DELETE','/me/avatar',{kind:'self',reason:'current account avatar removal',command:'account.avatar.remove',writeClass:'store',sensitive:true,audit:'transaction'});
+add('DELETE','/me/avatar/staged/:stageId',{kind:'self',reason:'current account staged avatar cancellation',command:'account.avatar.stage.cancel',writeClass:'store'});
 add('GET','/design-system/access',{kind:'self',reason:'owner-only access decision for the design-system gallery'});
 add('GET','/settings',{kind:'self',reason:'independently projected settings groups'});
 add('GET','/settings/recovery',{kind:'self',reason:'recovery-only owner account repair projection'});
 for(const [method,path,resource,command,sensitive] of [
-  ['POST','restart','settings.restart','settings.restart',true],['POST','check','settings.runtimes','settings.check'],['POST','detect','settings.runtimes','settings.detect'],['POST','herdr/check','settings.runtimes','settings.herdrCheck'],
+  ['POST','restart','settings.restart','settings.restart',true],['POST','check','settings.runtimes','settings.check'],['POST','detect','settings.runtimes','settings.detect'],['POST','herdr/check','settings.runtimes','settings.herdrCheck'],['POST','finish-setup/hide','settings.instance','settings.finishSetupHide'],
   ['POST','fix-all','health','settings.fixAll',true],
   ['PUT','agents','settings.runtimes','settings.agents'],['PUT','auto-add','settings.runtimes','settings.autoAdd'],['PUT','runtime','settings.runtimes','settings.runtime'],['PUT','runtimes','settings.runtimes','settings.runtimes',true],
   ['PUT','instance','settings.instance','settings.instance'],['PUT','network','settings.network','settings.network',true],

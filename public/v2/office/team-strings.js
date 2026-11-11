@@ -5,6 +5,8 @@ export const locale = () => (String(fmt.LOCALE).toLowerCase().startsWith('en') ?
 const fr = {
   'team.office.label': 'Équipe et présences des orchestrateurs', 'team.office.eyebrow': 'L’équipe dans le bureau',
   'team.office.defaultName': 'Équipe Agent Office',
+  'team.groups.projects': 'Équipes projet',
+  'team.groups.lead': 'Responsable · {name}',
   'team.herdr.enableGrouping': 'Activez herdr pour regrouper les équipes',
   'team.source.team': 'Équipe', 'team.source.herdr': 'Présences Herdr',
   'team.current': 'À jour', 'team.stale': 'En retard', 'team.lastObserved': 'Dernier état', 'team.cached': 'La connexion est interrompue ; le dernier relevé reste affiché.',
@@ -17,7 +19,7 @@ const fr = {
   'team.host.empty': 'Aucune présence Herdr observée.', 'team.host.staleEmpty': 'Aucune présence récente à afficher.',
   'team.host.unnamedCount': 'Observation sans nom · {count}', 'team.host.anonymousStatus': '{status} · nom non fourni', 'team.host.unnamed': 'Observation sans nom',
   'team.host.working': 'En activité', 'team.host.blocked': 'Bloqué', 'team.host.done': 'Terminé', 'team.host.idle': 'Inactif', 'team.host.unknown': 'État inconnu',
-  'team.runtime.other': 'Runtime', 'team.runtime.unknown': 'Runtime inconnu', 'team.runtime.claudeCode': 'Claude Code', 'team.runtime.codex': 'Codex',
+  'team.runtime.other': 'Runtime', 'team.runtime.unknown': 'Runtime inconnu', 'team.runtime.openclaw': 'OpenClaw', 'team.runtime.claudeCode': 'Claude Code', 'team.runtime.codex': 'Codex', 'team.runtime.cursor': 'Cursor',
   'team.runtime.transport.acp': 'ACP', 'team.runtime.transport.nativeTask': 'Tâche native',
   'team.member.status.active': 'Actif', 'team.member.status.inactive': 'Inactif', 'team.member.status.unknown': 'État inconnu', 'team.member.unnamed': 'Membre sans nom',
   'team.board.heading': 'Tableau · {count} tâches', 'team.board.open': 'Voir le tableau · {count}', 'team.board.empty': 'Aucune tâche dans ce tableau.',
@@ -26,10 +28,12 @@ const fr = {
   'team.task.doneCount': 'Terminées · {count}', 'team.task.unassigned': 'Sans responsable', 'team.task.priority': 'P{priority}',
   'team.task.state': 'État : {state}', 'team.task.owner': 'Responsable : {owner}', 'team.task.reviewers': 'Relecteurs : {reviewers}', 'team.task.updated': 'Dernière mise à jour :',
   'team.review.go': 'Approuvé', 'team.review.noGo': 'À corriger', 'team.review.pending': 'En attente', 'team.review.unknown': 'Revue inconnue', 'team.review.none': 'Aucune revue', 'team.review.reviewerUnknown': 'Relecteur inconnu',
-  'team.loading': 'Chargement de {source}…', 'team.unavailable': 'Source indisponible · {source}', 'team.failed': 'Impossible de charger · {source}', 'team.retry': 'Réessayer',
+  'team.loading': 'Chargement de {source}…', 'team.unavailable': 'Source indisponible · {source}', 'team.failed': 'Impossible d’actualiser {source}', 'team.failed.team': 'Impossible d’actualiser l’équipe', 'team.retry': 'Réessayer',
 };
 const en = {
   'team.office.label': 'Team and orchestrator presence', 'team.office.eyebrow': 'The team in the office', 'team.office.defaultName': 'Agent Office team',
+  'team.groups.projects': 'Project teams',
+  'team.groups.lead': 'Lead · {name}',
   'team.herdr.enableGrouping': 'Enable herdr to group teams',
   'team.source.team': 'Team', 'team.source.herdr': 'Herdr presence',
   'team.current': 'Up to date', 'team.stale': 'Stale', 'team.lastObserved': 'Last observed', 'team.cached': 'The connection is interrupted; the last snapshot remains visible.',
@@ -42,7 +46,7 @@ const en = {
   'team.host.empty': 'No Herdr presence observed.', 'team.host.staleEmpty': 'No recent presence to show.',
   'team.host.unnamedCount': 'Unnamed observation · {count}', 'team.host.anonymousStatus': '{status} · no name provided', 'team.host.unnamed': 'Unnamed observation',
   'team.host.working': 'Working', 'team.host.blocked': 'Blocked', 'team.host.done': 'Done', 'team.host.idle': 'Idle', 'team.host.unknown': 'Unknown status',
-  'team.runtime.other': 'Runtime', 'team.runtime.unknown': 'Unknown runtime', 'team.runtime.claudeCode': 'Claude Code', 'team.runtime.codex': 'Codex',
+  'team.runtime.other': 'Runtime', 'team.runtime.unknown': 'Unknown runtime', 'team.runtime.openclaw': 'OpenClaw', 'team.runtime.claudeCode': 'Claude Code', 'team.runtime.codex': 'Codex', 'team.runtime.cursor': 'Cursor',
   'team.runtime.transport.acp': 'ACP', 'team.runtime.transport.nativeTask': 'Native task',
   'team.member.status.active': 'Active', 'team.member.status.inactive': 'Inactive', 'team.member.status.unknown': 'Unknown status', 'team.member.unnamed': 'Unnamed member',
   'team.board.heading': 'Board · {count} tasks', 'team.board.open': 'View board · {count}', 'team.board.empty': 'No tasks on this board.',
@@ -51,7 +55,7 @@ const en = {
   'team.task.doneCount': 'Done · {count}', 'team.task.unassigned': 'Unassigned', 'team.task.priority': 'P{priority}',
   'team.task.state': 'State: {state}', 'team.task.owner': 'Owner: {owner}', 'team.task.reviewers': 'Reviewers: {reviewers}', 'team.task.updated': 'Updated:',
   'team.review.go': 'Approved', 'team.review.noGo': 'Changes needed', 'team.review.pending': 'Pending', 'team.review.unknown': 'Unknown review', 'team.review.none': 'No review', 'team.review.reviewerUnknown': 'Unknown reviewer',
-  'team.loading': 'Loading {source}…', 'team.unavailable': 'Source unavailable · {source}', 'team.failed': 'Could not load · {source}', 'team.retry': 'Retry',
+  'team.loading': 'Loading {source}…', 'team.unavailable': 'Source unavailable · {source}', 'team.failed': 'Could not refresh {source}', 'team.failed.team': 'Could not refresh the team', 'team.retry': 'Retry',
 };
 
 export function s(key, params = {}, loc = locale()) {

@@ -8,6 +8,7 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScenario } = require('../helpers/scenario');
 const { startServer } = require('../helpers/harness');
+const { dedupeSeenRows } = require('../../src/api/v2/views');
 
 const stored = (h) => h.withStore((db) => JSON.parse(db.prepare('SELECT data_json FROM office_layouts WHERE active = 1').get().data_json));
 const ids = (data) => data.agents.map((a) => [a.agentId, a.match && a.match.kind]);
@@ -86,5 +87,44 @@ describe('G5 · layouts are stored in 3.0 names and served per version', () => {
     assert.equal(seen2.find(row => row.name === 'Builder').role, 'subagent');
     assert.equal(seen3.find(row => row.name === 'Project lead').role, 'agent');
     assert.equal(seen3.find(row => row.name === 'Builder').role, 'subagent');
+  });
+
+  it('deduplicates legacy aliases and canonical agent rows after version projection, keeping newest presence and look', async () => {
+    const at = Date.now();
+    const ref = 'rt:legacy:session:c2Vzc2lvbg';
+    h.withStore(db => {
+      db.exec('PRAGMA ignore_check_constraints=ON');
+      const put = db.prepare(`INSERT OR REPLACE INTO office_agents_seen (occupant_id, role, name, last_seen_at, automatic_look_json)
+        VALUES (?, ?, ?, ?, ?)`);
+      put.run(`group:${ref}`, 'group', 'Older alias', at - 243, JSON.stringify({ character: 'fen', variant: 'teal', accessories: [] }));
+      put.run(`conversation:${ref}`, 'conversation', 'Newer canonical', at, JSON.stringify({ character: 'orbit', variant: 'slate', accessories: [] }));
+    });
+    const cached = await h.get('/api/v2/office/layout');
+    const refreshed = await h.request('PUT', '/api/v2/office/layout', {
+      expectedRevision: cached.json.data.layout.revision, data: cached.json.data.layout.data,
+    });
+    assert.equal(refreshed.status, 200, refreshed.text);
+    const v2 = await h.get('/api/v2/office/layout');
+    const v3 = await h.get('/api/v3/office/layout');
+    assert.equal(v2.status, 200, v2.text);
+    assert.equal(v3.status, 200, v3.text);
+    const v2Rows = v2.json.data.agentsSeen.filter(row => row.id === `channel:${ref}`);
+    assert.equal(v2Rows.length, 1, JSON.stringify(v2.json.data.agentsSeen));
+    assert.equal(v2Rows[0].name, 'Newer canonical');
+    assert.equal(v2Rows[0].lastSeenAt, at);
+    assert.deepEqual(v2Rows[0].automaticLook, { character: 'orbit', variant: 'slate', accessories: [] });
+    const v3Rows = v3.json.data.agentsSeen.filter(row => row.id.endsWith(`:${ref}`));
+    assert.equal(v3Rows.length, 2, 'v3 keeps the distinct canonical group and conversation rows');
+  });
+
+  it('the seen writer stores one projected row for a legacy group/conversation alias pair', () => {
+    const ref = 'rt:legacy:session:c2Vzc2lvbg';
+    const rows = dedupeSeenRows([
+      { id: `group:${ref}`, role: 'group', name: 'Older alias', lastSeenAt: 100 },
+      { id: `conversation:${ref}`, role: 'conversation', name: 'Newer canonical', lastSeenAt: 343,
+        automaticLook: { character: 'orbit', variant: 'slate', accessories: [] } },
+    ]);
+    assert.deepEqual(rows, [{ id: `conversation:${ref}`, role: 'conversation', name: 'Newer canonical', lastSeenAt: 343,
+      automaticLook: { character: 'orbit', variant: 'slate', accessories: [] } }]);
   });
 });

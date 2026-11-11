@@ -1,5 +1,5 @@
 {
-  "$comment": "Shape sidecar for office-vm.json (api.md \u00a73.2). The stateLabels example enumerates the supported office activity labels, including executing and blocked. occupants[].exchanges (architect-55) is optional: conversation occupants with a known answered exchange. occupants[].summary/model/project/runtime/startedAt/lastActivityAt/tokensKnown (agent-identity-1) are optional: present only for callers with the sessions read grant, when the source knows them. occupants[].automaticLook is the durable assignment; its variant may be null. occupants[].parentId (T-0062/T-0092) is required and nullable: the authorized occupant id of the spawner/parent on stage, or null for roots and callers without lineage access. The optional $.occupantOverflowCount is the exact number omitted by bounded Office projection and is visible only with sessions.read.",
+  "$comment": "Shape sidecar for office-vm.json (api.md §3.2). The stateLabels example enumerates the supported office activity labels, including executing and blocked. occupants[].exchanges (architect-55) is optional: conversation occupants with a known answered exchange. occupants[].summary/model/project/runtime/startedAt/lastActivityAt/tokensKnown (agent-identity-1) are optional: present only for callers with the sessions read grant, when the source knows them. occupants[].automaticLook is the durable assignment; its variant may be null. occupants[].parentId (T-0062/T-0092) is required and nullable: the authorized occupant id of the spawner/parent on stage, or null for roots and callers without lineage access. The optional $.occupantOverflowCount is the exact number omitted by bounded Office projection and is visible only with sessions.read.",
   "nullable": [
     "$.connection.since",
     "$.kpis[].value",
@@ -17,6 +17,9 @@
     "$.occupants[].standingPoint",
     "$.occupants[].teamId",
     "$.rosterFloors[].activeCount",
+    "$.rosterFloors[].agentGroups[].teamId",
+    "$.rosterFloors[].agentGroups[].leadOccupantId",
+    "$.rosterFloors[].agentGroups[].sharedLabel",
     "$.rosterFloors[].layout",
     "$.rosterGroups[].teamId",
     "$.rosterItems[].overflowLabel",
@@ -40,10 +43,30 @@
     "$.occupants[].standingPoint": "any",
     "$.occupants[].parentName": "string",
     "$.rosterFloors[].capacity": "number",
+    "$.rosterFloors[].agentGroups[].teamId": "string",
     "$.visitIntent.until": "number",
     "$.occupantOverflowCount": "number"
   },
   "variants": {
+    "$.rosterFloors[].agentGroups[]": [
+      {
+        "id": "team:example",
+        "kind": "team",
+        "teamId": "team:example",
+        "label": { "key": "custom", "params": { "text": "Project team" } },
+        "accentToken": "teal",
+        "leadOccupantId": "agent:lead",
+        "occupantIds": ["agent:lead"],
+        "count": 1,
+        "countLabel": { "key": "office.floor.count.one" },
+        "previewOccupantId": "agent:lead",
+        "previewState": "working",
+        "previewStateKind": "working",
+        "previewStateLabel": { "key": "agentState.working" },
+        "previewStateActive": true,
+        "sharedLabel": { "key": "office.floor.sharedAcrossTeams", "params": { "n": 2 } }
+      }
+    ],
     "$.occupants[].destination": [
       {
         "kind": "server",
@@ -51,6 +74,29 @@
       }
     ],
     "$.rosterFloors[].items": [
+      {
+        "kind": "team-header",
+        "id": "team-header:member:lead:1",
+        "label": {
+          "key": "office.floor.team",
+          "params": {
+            "name": "Lead",
+            "floor": {
+              "key": "office.floor.number",
+              "params": {
+                "n": 2
+              }
+            }
+          }
+        }
+      }
+    ],
+    "$.rosterFloors[].otherItems": [
+      {
+        "kind": "occupant",
+        "id": "occupant:direct:example",
+        "occupantId": "direct:example"
+      },
       {
         "kind": "team-header",
         "id": "team-header:member:lead:1",
@@ -97,10 +143,121 @@
           "key": "office.screen.coding"
         }
       }
+    ],
+    "$.rosterItems[].childIds": [
+      [
+        "agent:codex:worker"
+      ]
+    ],
+    "$.rosterPreviewItems[].childIds": [
+      [
+        "agent:codex:worker"
+      ]
+    ],
+    "$.teamGroups": [
+      {
+        "id": "team:example",
+        "label": {
+          "key": "custom",
+          "params": {
+            "text": "Project team"
+          }
+        },
+        "accentToken": "teal",
+        "floorId": "1",
+        "leadOccupantId": "agent:lead",
+        "members": [
+          {
+            "occupantId": "agent:lead",
+            "roleLabel": {
+              "key": "occupantRole.agent"
+            },
+            "parentLabel": null,
+            "runtimeLabel": {
+              "key": "team.runtime.openclaw"
+            },
+            "runtimeMark": null,
+            "stateLabel": {
+              "key": "agentState.idle"
+            },
+            "stateTone": "idle"
+          }
+        ],
+        "memberCount": 1,
+        "memberCountLabel": {
+          "key": "office.team.memberCount",
+          "params": {
+            "n": 1
+          }
+        },
+        "pod": {
+          "floorId": "1",
+          "coordinateSpace": "floor-grid",
+          "zone": {
+            "bounds": {
+              "minX": 1,
+              "minY": 1,
+              "maxX": 3,
+              "maxY": 3
+            },
+            "polygon": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 3,
+                "y": 1
+              },
+              {
+                "x": 3,
+                "y": 3
+              },
+              {
+                "x": 1,
+                "y": 3
+              }
+            ]
+          },
+          "seats": [
+            {
+              "occupantId": "agent:lead",
+              "stationUid": null,
+              "standingPoint": null
+            }
+          ]
+        },
+        "sharedLeadLinks": []
+      }
+    ],
+    "$.teamLegend": [
+      {
+        "teamId": "team:example",
+        "label": {
+          "key": "custom",
+          "params": {
+            "text": "Project team"
+          }
+        },
+        "accentToken": "teal"
+      }
     ]
   },
   "additional": {
-    "$.occupants[].visitLabel": { "key": "office.visitingWith", "params": { "name": "Worker" } },
+    "$.rosterFloors[].agentGroups[].previewOccupantId": "agent:lead",
+    "$.rosterFloors[].agentGroups[].previewState": "working",
+    "$.rosterFloors[].agentGroups[].previewStateKind": "working",
+    "$.rosterFloors[].agentGroups[].previewStateLabel": { "key": "agentState.working" },
+    "$.rosterFloors[].agentGroups[].previewStateActive": true,
+    "$.rosterItems[].teamLabel": { "key": "office.mobile.team", "params": { "name": "Worker" } },
+    "$.rosterPreviewItems[].teamLabel": { "key": "office.mobile.team", "params": { "name": "Worker" } },
+    "$.occupants[].drawerRoleLabel": { "key": "occupantRole.agent" },
+    "$.occupants[].visitLabel": {
+      "key": "office.visitingWith",
+      "params": {
+        "name": "Worker"
+      }
+    },
     "$.occupants[].stateKind": "visitor",
     "$.occupants[].exchanges": {
       "recent": 2,
@@ -232,6 +389,7 @@
     "$.rosterFloors[].layout"
   ],
   "optional": [
+    "$.visitIntent",
     "$.occupantOverflowCount",
     "$.occupants[].communication",
     "$.occupants[].screenIntent"

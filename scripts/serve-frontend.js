@@ -190,7 +190,9 @@ function createFrontendServer({ root = path.join(__dirname, '..', 'public', 'v2'
   const cfg = normaliseConfig({ basePath, apiBase, apiVersion });
   const upstream = apiProxy ? parseUpstream(apiProxy) : null;
   root = fs.realpathSync(path.resolve(root));   // containment is checked on real paths (R13-13)
-  const readBuild = require('../src/api/ui-build').createBuildReader(root);
+  const { createBuildReader, warnIfUnbuilt } = require('../src/api/ui-build');
+  const readBuild = createBuildReader(root);
+  warnIfUnbuilt(root);
   let source, indexBuf, indexTag, csp, currentBuild = null;
   const refreshShell = () => {
     const deployed = readBuild();

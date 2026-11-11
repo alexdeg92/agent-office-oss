@@ -28,7 +28,8 @@ function newSetupCode() {
 const sameCode = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 const LOCALES = ['fr', 'en'];
 // G6: 'demo' needs no connection (no fields, no gateway): a synthesised team, read-only
-const ADAPTERS = ADAPTER_IDS.map(id => ({ id, ...Object.fromEntries(['name', 'fields', 'defaultGatewayUrl', 'connect'].map(k => [k, adapterById(id).setup[k]])) }));
+// agentsOptional: the runtime's agents come from its local sessions, so a fresh home has none yet; setup can finish without one
+const ADAPTERS = ADAPTER_IDS.map(id => ({ id, ...Object.fromEntries(['name', 'fields', 'defaultGatewayUrl', 'connect'].map(k => [k, adapterById(id).setup[k]])), agentsOptional: !!adapterById(id).setup.agentsOptional }));
 const PASSWORD_MIN = 12;
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
@@ -329,7 +330,7 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
         try { rt = runtimeOf(b); } catch (e) { if (e.details) issues.push(...e.details); else throw e; }
         if (rt && adapterById(rt.adapter).setup.fields.includes('token') && !rt.token) bad('runtime.token', 'required');
         const validAgent=id=>ownerAccount() ? typeof id==='string' && id.length>0 && Buffer.byteLength(id)<=4096 && !/[\x00-\x1f\x7f]/.test(id) : IC.AGENT_ID.test(id || '');
-        if (!validAgent(agents.primary)) bad('agents.primary', agents.primary == null ? 'required' : 'invalid');
+        if (!(agents.primary == null && rt && adapterById(rt.adapter).setup.agentsOptional) && !validAgent(agents.primary)) bad('agents.primary', agents.primary == null ? 'required' : 'invalid');
         const looks = agents.looks == null ? {} : agents.looks;
         const integ = b.integrations == null ? {} : b.integrations;
         if (!isObj(integ) || Object.keys(integ).some((k) => !['projet', 'reviewed'].includes(k)) || (integ.projet != null && typeof integ.projet !== 'boolean')) bad('integrations', 'invalid');
@@ -376,7 +377,11 @@ function createSetup({ env, files, probe, paths = {}, dataDir = null, log = () =
         const projetResult = !PT(rt.adapter) ? { status: 'skipped', reason: 'adapter' } : !projet ? { status: 'skipped', reason: 'opted-out' }
           : integ.reviewed ? { status: 'skipped', reason: 'reviewed' } : await installProjectTag(rt.adapter, agents.primary, inst.locale);
         res.on('finish', () => whenIdle(onConfigured));   // R21-04: after every in-flight setup request has answered
-        ok(res, { configured: true, integrations: { projet: projetResult } });
+        // The handoff keeps this session's listener and cookie flags (server.js); saved origins are accepted at once.
+        // Only a different listener or a different Secure flag waits for a restart.
+        const here = listener(env), secureNow = env.PORTAL_COOKIE_SECURE === '1' || String(env.AO_PUBLIC_URL || '').startsWith('https://');
+        const restartNeeded = !!netConfig && (netConfig.host !== here.host || netConfig.port !== here.port || netConfig.cookieSecure !== secureNow);
+        ok(res, { configured: true, restartNeeded, integrations: { projet: projetResult } });
       } catch (e) { next(e); }
     });
   }

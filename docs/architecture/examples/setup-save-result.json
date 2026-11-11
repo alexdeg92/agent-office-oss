@@ -2,7 +2,8 @@
   "data": {
     "ok": true,
     "result": {
-      "configured": true
+      "configured": true,
+      "restartNeeded": false
     },
     "revision": null,
     "vm": null

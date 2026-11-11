@@ -284,7 +284,9 @@ test('live multi-runtime: enable Claude, choose its primary, add another instanc
     assert.equal(office.occupants.filter(o=>o.id.startsWith('agent:rt:claude-code:')).length,12);
     assert.ok(office.occupants.some(o=>o.role==='primary' && o.name==='OpenClaw · Atlas'));
     assert.ok(office.occupants.some(o=>o.id=== 'agent:'+scopedId('legacy','agent','scribe')));
-    assert.equal(office.kpis.find(k=>k.id==='active').value,office.occupants.filter(o=>!['idle','offline'].includes(o.state)).length);
+    const officeAgents=office.occupants.filter(o=>!o.visitPhase);
+    assert.ok(office.occupants.some(o=>o.visitPhase),'the fixture includes visiting contacts, excluded from agent activity KPIs');
+    assert.equal(office.kpis.find(k=>k.id==='active').value,officeAgents.filter(o=>!['idle','offline'].includes(o.state)).length);
     assert.equal(office.occupants.filter(o=>o.id.startsWith('agent:rt:claude-code:') && o.state==='working').length,1);
     for(const [url,ready,prefix] of [['/bureau','.ao-bureau__stage','office-mixed'],['/journaux','.ao-logs:not([aria-busy=true])','logs-mixed']]) {
       await p.goto(b.origin+url,{waitUntil:'domcontentloaded'});await p.locator(ready).waitFor();
@@ -315,7 +317,7 @@ test('live multi-runtime: enable Claude, choose its primary, add another instanc
         assert.ok(stateEvidence.every(c=>c.state===c.serverState && c.state===c.rosterState && (c.group===undefined || c.group===(c.state==='idle'?'inactive':'active'))),JSON.stringify(stateEvidence));
         const idleSeated=stateEvidence.filter(c=>c.state==='idle' && c.seatMode==='desk');
         assert.ok(idleSeated.length>0,'idle agents can remain seated at their assigned desks');
-        assert.ok(idleSeated.every(c=>!c.typing && !/^type/.test(c.motion) && ['seated-ne','seated-turn-sw'].includes(c.wanted)),JSON.stringify(idleSeated));
+        assert.ok(idleSeated.every(c=>!c.typing && !/^type/.test(c.motion) && ['seated-ne','seated-turn-sw','life-sleep-ne'].includes(c.wanted)),JSON.stringify(idleSeated));
         assert.equal(await p.locator('.bu-kpi').filter({has:p.getByText('En activité',{exact:true})}).locator('.bu-kpi__value').innerText(),String(office.kpis.find(k=>k.id==='active').value));
         t.diagnostic(JSON.stringify({stateEvidence,activeKpi:office.kpis.find(k=>k.id==='active').value}));
       }
@@ -337,7 +339,7 @@ test('live multi-runtime: enable Claude, choose its primary, add another instanc
       assert.ok(shape.doc<=shape.viewport && shape.width<=shape.vw);assert.equal(shape.title,1);assert.equal(shape.overflow,'auto');assert.ok(shape.foot.bottom<=height && shape.foot.height>0);
       await shot('claude-fr-'+width);
       await switchConnector(p,'codex');
-      const codex=p.locator('[data-runtime-connection=codex]');await codex.scrollIntoViewIfNeeded();assert.equal(await p.locator('#settings-enabled-codex').isDisabled(),false);assert.equal(await p.locator('#settings-runtime-codex-home').count(),1,'detected Codex has a real setup form');await switchConnector(p,'cursor-cli');assert.ok((await p.locator('[data-runtime-connection=cursor-cli]').innerText()).includes('Non détecté · connecteur à venir'));await shot('presence-fr-'+width);
+      const codex=p.locator('[data-runtime-connection=codex]');await codex.scrollIntoViewIfNeeded();assert.equal(await p.locator('#settings-enabled-codex').isDisabled(),false);assert.equal(await p.locator('#settings-runtime-codex-home').count(),1,'detected Codex has a real setup form');await switchConnector(p,'cursor');assert.equal(await p.locator('#settings-runtime-cursor-home').count(),1,'detected Cursor has a real setup form');await shot('presence-fr-'+width);
       await switchConnector(p,'claude-code');
     }
     await p.setViewportSize({width:1440,height:900});await switchConnector(p,'codex');await p.evaluate(async()=>{const {chooseLang}=await import('/lang.js?v='+document.querySelector('meta[name=ao-build]').content);await chooseLang('en');});

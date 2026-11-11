@@ -19,6 +19,7 @@ const { ApiError, invalid } = require('./errors');
 const { labelsFor, resolveLocale } = require('../../i18n');
 const { projectEvents, participantsOf } = require('../../engine/model/sender');
 const { capabilitiesOf } = require('./vm/meta');
+const projectBoardAccess = require('../../projects/board-access');
 
 const REFRESH_EVERY_MS = 10 * 60 * 1000;
 const PROJECT_TYPES = new Set(['Session', 'CronRun', 'CronJob', 'Transcript', 'Activity', 'Agent', 'Repo', 'ProjectHint']);   // ProjectHint: architect-56
@@ -124,7 +125,7 @@ function liveSources(cfg, engine, log = () => {}) {
     resolve: (host) => dns.promises.lookup(host, { all: true }).then((r) => r.map((x) => x.address)) };
 }
 
-function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false, orchestratorTeams = null, chatBackend = null, officeTopicFor = null }) {
+function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, ok, capturer = null, enrichment = null, log = () => {}, thread = null, enforceAuthorization = false, orchestratorTeams = null, chatBackend = null, officeTopicFor = null, auth = null, profileAvatarForPerson = null }) {
   const owner = store.owner;
   const primaryAgentId = () => { const agent = engine.primaryAgent(); return agent ? agent.id : null; };
   const teamProjectModule = require('../../projects/orchestrator-teams');
@@ -151,6 +152,32 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     return name || mark ? { providerName: mark?.providerName || name || null, brand: mark } : null;
   };
   const teamProjectOptions = { portraitForMember: teamPortraitForMember, runtimeOf: teamRuntimeOf };
+  // Profile avatars are request-scoped: each visible human row receives that
+  // person's descriptor, while photo URLs are signed for this exact viewer.
+  const decorateVisibleProfileAvatars = (req, value) => {
+    const session = auth?.sessionOf?.(req);
+    if (!session?.userId || req.principal || typeof profileAvatarForPerson !== 'function') return value;
+    const user = store.users?.byId?.(session.userId);
+    if (!user || user.status !== 'active' || user.auth_generation !== session.authGeneration || !user.person_id) return value;
+    const visit = current => {
+      if (Array.isArray(current)) return current.map(visit);
+      if (!current || typeof current !== 'object') return current;
+      if (current.kind === 'human' && typeof current.id === 'string' && typeof current.name === 'string') {
+        const profileAvatar = profileAvatarForPerson(current.id, current.name, user.id);
+        return profileAvatar ? { ...current, profileAvatar } : current;
+      }
+      const decorated = Object.fromEntries(Object.entries(current).map(([key, child]) => [key, visit(child)]));
+      // The v3 projects VM carries private pre-filter rows in a WeakMap/symbol
+      // for authorization-aware facet counts. Preserve that metadata while
+      // adding request-scoped profile descriptors, or restricted rows vanish
+      // from the authorization projection's count calculation.
+      const access = projectBoardAccess.forBoard(current);
+      if (access) projectBoardAccess.attach(decorated, access);
+      return decorated;
+    };
+    return visit(value);
+  };
+  const projectOk = (req, res, value, topic, name) => ok(res, decorateVisibleProfileAvatars(req, value), topic, name);
   const runtimeProjects = () => runtimeProjectModule.collectRuntimeProjects({ sessions: engine.sessions(), agents: engine.agents(),
     connectorOf: key => engine.connectorOf?.(key) || engine.connectorOf?.() || null, idKey: cfg.sessionSecret });
   const repository = createProjectsRepository(store.db, { persons: [], ownerPersonId: owner.id, timmyPersonId: null, primaryAgentId,
@@ -251,14 +278,14 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     const b = body(req, fields);
     const input = Object.assign({}, b, map ? map(req) : {}, { actor: actorOf(req), requestId: req.requestId });
     const result = await covers.withAuthority(coverAuthority(req),()=>service.commands[name](input));
-    ok(res, result);
+    projectOk(req, res, result);
   });
   const id = (req) => ({ id: req.params.id });
 
   // ---- views ----
   r.get('/views/project-create', authed, wrap((req,res)=>{
     if(req.apiVersion!==3||!chatBackend?.projectCreateVM)throw new ApiError('not_found');
-    const vm=chatBackend.projectCreateVM(req);ok(res,vm,null,'projectCreate');
+    const vm=chatBackend.projectCreateVM(req);projectOk(req,res,vm,null,'projectCreate');
   }));
   r.get('/views/projects', authed, wrap((req, res) => {
     const filter = typeof req.query.filter === 'string' ? req.query.filter : 'all';
@@ -275,12 +302,12 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     if (req.apiVersion === 3 && typeof req.query.stage === 'string') q.push('stage=' + encodeURIComponent(req.query.stage));
     const t = topics.current(q.length ? 'projects?' + q.join('&') : 'projects', req.apiVersion);
     if (!t) throw invalid('filter', 'invalid');
-    ok(res, t.vm, { id: t.id, rev: t.rev });
+    projectOk(req, res, t.vm, { id: t.id, rev: t.rev });
   }));
   r.get('/views/projects/:id/history', authed, wrap((req, res) => {
     const limit = req.query.limit == null ? undefined : Number(req.query.limit);
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) throw invalid('limit', 'invalid');
-    ok(res, service.views.history({ id: req.params.id, cursor: req.query.cursor || undefined, limit }), null, 'history');
+    projectOk(req, res, service.views.history({ id: req.params.id, cursor: req.query.cursor || undefined, limit }), null, 'history');
   }));
   r.get('/views/projects/:id', authed, wrap((req, res) => {
     const t = topics.current('project:' + req.params.id, req.apiVersion);
@@ -314,17 +341,17 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
         }) } } };
       }
     }
-    ok(res, vm, { id: t.id, rev: t.rev });
+    projectOk(req, res, vm, { id: t.id, rev: t.rev });
   }));
   r.get('/views/project-candidates', authed, wrap(async (req, res) => {
     req.authorize?.();
     const requirements=require('../../security/comment-provenance').PROJECT_CONTEXT_READS;
-    if(req.authorize&&!requirements.every(r=>store.policy.can(req.user,r.resource,r.level)))return ok(res,{scannedAt:Date.now(),candidates:[]},null,'candidates');
+    if(req.authorize&&!requirements.every(r=>store.policy.can(req.user,r.resource,r.level)))return projectOk(req,res,{scannedAt:Date.now(),candidates:[]},null,'candidates');
     const authorize=req.authorize?()=>{
       req.authorize();
       if(!requirements.every(r=>store.policy.can(req.user,r.resource,r.level)))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});
     }:null;
-    ok(res,await require('../../security/dispatch-context').runAuthorized(authorize,()=>service.views.candidates({...(authorize?{authorize}:{})})),null,'candidates');
+    projectOk(req,res,await require('../../security/dispatch-context').runAuthorized(authorize,()=>service.views.candidates({...(authorize?{authorize}:{})})),null,'candidates');
   }));
 
   r.get('/project-covers/:file', authed, require('../../projects/covers/store').serveCover(covers.store,{authorize:req=>{
@@ -339,7 +366,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     const b=body(req,allowed);
     if(b.targetAgentId===undefined){
       const result=await covers.withAuthority(coverAuthority(req),()=>service.commands.create(Object.assign({},b,{actor:actorOf(req),requestId:req.requestId})));
-      return ok(res,result);
+      return projectOk(req,res,result);
     }
     if(req.apiVersion!==3||typeof b.targetAgentId!=='string'||!kickoffRepo||!chatBackend?.createProjectKickoff)throw invalid('targetAgentId','invalid');
     chatBackend.authorizeProjectKickoff(req);
@@ -352,7 +379,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
       if(previous.requestHash!==requestHash)throw new ApiError('conflict',{details:[{issue:'idempotency-conflict'}]});
       const vm=service.views.project({id:previous.projectId,includeRuntime:true});
       const {projectId:_projectId,...kickoff}=chatBackend.projectKickoffVM(req,previous);
-      return ok(res,{ok:true,result:{projectId:previous.projectId,sessionId:previous.sessionId,turnId:previous.turnId},revision:vm.revision,vm:{...vm,kickoff}});
+      return projectOk(req,res,{ok:true,result:{projectId:previous.projectId,sessionId:previous.sessionId,turnId:previous.turnId},revision:vm.revision,vm:{...vm,kickoff}});
     }
     const selected=chatBackend.resolveProjectTarget(req,b.targetAgentId);
     const generatedGroup='kickoff_'+crypto.randomBytes(18).toString('base64url');
@@ -387,20 +414,20 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     });
     dispatch();
     const {projectId:_projectId,...kickoff}=chatBackend.projectKickoffVM(req,record);
-    ok(res,{...accepted,vm:{...accepted.vm,kickoff}});
+    projectOk(req,res,{...accepted,vm:{...accepted.vm,kickoff}});
   }));
   r.get('/projects/:id/kickoff',authed,wrap((req,res)=>{
     if(req.apiVersion!==3||!kickoffRepo||!chatBackend?.projectKickoffVM)throw new ApiError('not_found');
     const record=kickoffRepo.byProject(chatBackend.scopeOf(req),req.params.id);
     if(!record)throw new ApiError('not_found');
-    ok(res,chatBackend.projectKickoffVM(req,record),null,'projectKickoff');
+    projectOk(req,res,chatBackend.projectKickoffVM(req,record),null,'projectKickoff');
   }));
   r.post('/projects/:id/kickoff/retry',authed,store_,wrap((req,res)=>{
     if(req.apiVersion!==3||!kickoffRepo||!chatBackend?.retryProjectKickoff)throw new ApiError('not_found');
     if(Object.keys(req.body||{}).length)throw invalid(null,'unexpected-field');
     const record=kickoffRepo.byProject(chatBackend.scopeOf(req),req.params.id);
     if(!record)throw new ApiError('not_found');
-    const result=chatBackend.retryProjectKickoff(req,record);res.status(202);ok(res,{ok:true,result,revision:null,vm:null});
+    const result=chatBackend.retryProjectKickoff(req,record);res.status(202);projectOk(req,res,{ok:true,result,revision:null,vm:null});
   }));
   const coverProject = (req, b) => {
     const project = repository.getProject(req.params.id);
@@ -412,7 +439,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   r.post('/projects/:id/cover/regenerate', authed, store_, wrap((req, res) => {
     const b = body(req, ['expectedRevision']); const project = coverProject(req, b);
     const queued = covers.withAuthority(coverAuthority(req),()=>covers.regenerate(project.id));
-    res.status(202); ok(res, { ok: true, result: { queued }, revision: project.revision, vm: service.views.project({ id: project.id }) });
+    res.status(202); projectOk(req, res, { ok: true, result: { queued }, revision: project.revision, vm: service.views.project({ id: project.id }) });
   }));
   r.put('/projects/:id/cover', authed, store_, wrap(async (req, res) => {
     const b = body(req, ['expectedRevision', 'image']); const project = coverProject(req, b);
@@ -420,7 +447,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     const bytes = Buffer.from(b.image, 'base64');
     if (!require('../../projects/covers/raster').rasterKind(bytes)) throw invalid('image', 'invalid');
     try { await covers.withAuthority(coverAuthority(req),()=>covers.upload(project.id, bytes)); } catch (e) { if(e instanceof ApiError)throw e;throw new ApiError('upstream_failed'); }
-    ok(res, { ok: true, result: null, revision: repository.getProject(project.id).revision, vm: service.views.project({ id: project.id }) });
+    projectOk(req, res, { ok: true, result: null, revision: repository.getProject(project.id).revision, vm: service.views.project({ id: project.id }) });
   }));
   r.post('/projects/import', authed, store_, run('importCandidates', ['keys', 'overrides']));
   r.patch('/projects/:id', authed, store_, run('edit', ['expectedRevision', 'name', 'summary', 'priority'], id));
@@ -435,7 +462,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
   r.post('/projects/:id/history', authed, store_, wrap(async (req, res) => {
     const b = body(req, Object.keys(req.body || {}).filter((k) => k !== 'actor'));   // payload fields are the kind's (validated by the module)
     if ((req.body || {}).actor !== undefined) throw invalid('actor', 'unexpected-field');
-    ok(res, await service.commands.appendHistory(Object.assign({}, b, { id: req.params.id, actor: actorOf(req), requestId: req.requestId })));
+    projectOk(req, res, await service.commands.appendHistory(Object.assign({}, b, { id: req.params.id, actor: actorOf(req), requestId: req.requestId })));
   }));
 
   // ---- « Régénérer le résumé »: an agent turn (OpenClaw class), 202 ----
@@ -446,7 +473,7 @@ function mountProjects(r, { store, engine, topics, cfg, runtime, authed, guard, 
     const useThread = thread && primary && capabilitiesOf(cfg).storeWrites;
     req.authorize?.();
     const accepted = useThread ? thread.startSummary(input, primary.id, actorOf(req),req) : service.commands.regenerateSummary(input);
-    res.status(202);ok(res,accepted);
+    res.status(202);projectOk(req,res,accepted);
     const vm = accepted.vm;
     // G3b: the turn asks in the INSTANCE language (AO_LOCALE), not a fixed French
     const L = labelsFor(resolveLocale({ instance: cfg && cfg.instanceLocale }), 'server');

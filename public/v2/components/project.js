@@ -4,6 +4,7 @@ import { html, useState } from '../lib.js';
 import { Icon } from './ui.js';
 import { t, has, enumOf } from '../i18n.js';
 import { labelTone, accentTone, sortFlags, safeImageUrl, priorityRank } from '../board.js';
+import { ProfileAvatar } from './profile-avatar.js';
 
 
 /**
@@ -66,6 +67,9 @@ function initials(name) {
 
 /** Avatar by person kind (Avatar README); agents keep their state ring. */
 export function Avatar({ person, size, title }) {
+  if (person.profileAvatar) return html`<span class=${'ao-project-avatar-frame' + (person.kind === 'agent' && person.state ? ' bu-avatar--state-' + person.state : '')} title=${title || person.name}>
+    <${ProfileAvatar} avatar=${person.profileAvatar} size=${size || 'md'} decorative=${false} />
+  </span>`;
   const cls = ['bu-avatar', 'bu-avatar--' + person.kind, size ? 'bu-avatar--' + size : ''].filter(Boolean).join(' ');
   const label = title || person.name;
   const content = person.avatarUrl ? html`<img src=${person.avatarUrl} alt="" />` : person.kind === 'agent' ? html`<${Icon} name="agent" />` : initials(person.name);

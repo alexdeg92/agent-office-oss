@@ -186,6 +186,13 @@ test('new HTTP onboarding: DB owner, hidden detected token, names/styles, networ
     const login = await h.post('/api/login', { email: owner.email, password: owner.password }); assert.equal(login.status, 200, login.text); h.cookie = login.headers.get('set-cookie').split(';')[0];
     assert.ok(h.cookie.startsWith('taco_sess='));
     assert.ok(!login.headers.get('set-cookie').includes('; Secure'), 'saved network cookie settings are deferred until restart');
+    assert.equal(save.json.data.result.restartNeeded, true, 'only the Secure cookie flag waits for a restart, and the Done page says so');
+    const fromSaved = await fetch(h.base + '/api/v2/prefs', { method: 'PATCH', body: '{"uiTheme":"dark"}',
+      headers: { 'content-type': 'application/json', cookie: h.cookie, origin: 'https://bureau.example.invalid' } });
+    assert.equal(fromSaved.status, 200, 'writes from the saved public origin work right after the handoff, before any restart');
+    const foreign = await fetch(h.base + '/api/v2/prefs', { method: 'PATCH', body: '{"uiTheme":"dark"}',
+      headers: { 'content-type': 'application/json', cookie: h.cookie, origin: 'https://other.example.invalid' } });
+    assert.equal(foreign.status, 403);
     await waitFor(async () => (await h.get('/api/v2/meta')).json.data.primaryAgent?.name === 'Orion');
     const layout = (await h.get('/api/v3/office/layout')).json.data;
     assert.equal(layout.layout.data.agents.find(a => a.agentId === 'primary').character, 'fen');

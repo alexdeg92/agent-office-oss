@@ -12,14 +12,16 @@
           "token"
         ],
         "defaultGatewayUrl": "ws://127.0.0.1:18789",
-        "connect": true
+        "connect": true,
+        "agentsOptional": false
       },
       {
         "id": "demo",
-        "name": "D\u00e9mo",
+        "name": "Démo",
         "fields": [],
         "defaultGatewayUrl": null,
-        "connect": true
+        "connect": true,
+        "agentsOptional": false
       }
     ],
     "draft": {

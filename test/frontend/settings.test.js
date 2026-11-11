@@ -24,6 +24,15 @@ test('integrations use provider routes and keep a distinct permission gate after
  assert.equal(R.settingsAccess('connexion',vm,integrationOnly,'write'),false);assert.equal(R.settingsAccess('integrations',vm,integrationOnly,'write'),true);
 });
 
+test('Apply plan blockers explain empty plan, missing authorization, and unsaved connector drafts',()=>{
+ assert.equal(R.integrationApplyBlocker(null),'settings.integrations.apply.emptyPlan');
+ assert.equal(R.integrationApplyBlocker({result:null,agentIds:[],confirmed:false}),'settings.integrations.apply.emptyPlan');
+ assert.equal(R.integrationApplyBlocker({result:{planId:'p'},agentIds:[],confirmed:false}),'settings.integrations.apply.emptyPlan');
+ assert.equal(R.integrationApplyBlocker({result:{planId:'p'},agentIds:['a'],confirmed:false}),'settings.integrations.apply.needConfirm');
+ assert.equal(R.integrationApplyBlocker({result:{planId:'p'},agentIds:['a'],confirmed:true}),null);
+ assert.equal(R.integrationApplyBlocker({result:{planId:'p'},agentIds:['a'],confirmed:true},{connectionDirty:true}),'settings.integrations.apply.needConnectorSave');
+});
+
 test('read-only banners state the restriction once and preserve specific reasons in French and English',()=>{
   registerMessages(settingsMessages);
   for(const lang of ['fr','en']){
@@ -193,6 +202,29 @@ test('pending sections include every draft and the reviewed plan while per-secti
   assert.deepEqual(R.pendingSections(drafts,vm,null),['agents','compte']);
   drafts.compte=R.initialDrafts(vm).compte;
   assert.deepEqual(R.pendingSections(drafts,vm,null),['agents']);
+});
+
+test('pending changes list field diffs per section and never echo secrets', () => {
+  const vm=fixture(),drafts=R.initialDrafts(vm),runtime=vm.runtimes.find(r=>r.selected);
+  drafts.agents.agents[0].name='Renamed agent';
+  drafts.connexion.names[runtime.id]='Renamed connector';
+  drafts.connexion.secrets[runtime.id]={token:'super-secret-token-value'};
+  drafts.instance.instance.name='Renamed office';
+  drafts.compte.owner.displayName='Renamed owner';
+  drafts.compte.password='brand-new-password-12';
+  const changes=R.pendingChanges(drafts,vm,{result:{planId:'plan'},action:'install',runtime:runtime.id});
+  assert.ok(changes.some(c=>c.id==='agents:name:'+drafts.agents.agents[0].id&&c.before!==c.after));
+  assert.ok(changes.some(c=>c.id==='connexion:name:'+runtime.id&&c.after==='Renamed connector'));
+  const secret=changes.find(c=>c.id==='connexion:secret:'+runtime.id+':token');
+  assert.ok(secret); assert.equal(secret.secret,true); assert.equal(secret.after,'settings.pending.changed');
+  assert.ok(!JSON.stringify(secret).includes('super-secret-token-value'));
+  assert.ok(changes.some(c=>c.id==='instance:name'&&c.after==='Renamed office'));
+  assert.ok(changes.some(c=>c.id==='owner:displayName'&&c.after==='Renamed owner'));
+  const password=changes.find(c=>c.id==='owner:password');
+  assert.ok(password); assert.equal(password.after,'settings.pending.changed');
+  assert.ok(!JSON.stringify(password).includes('brand-new-password-12'));
+  assert.ok(changes.some(c=>c.id==='connexion:integrations-plan'&&c.sectionIntegrations));
+  assert.equal(R.pendingChanges(R.initialDrafts(vm),vm,null).length,0);
 });
 
 test('review plans expire; read-only and environment-owned fields reject mutation', async () => {

@@ -74,4 +74,6 @@ Cookie writes on a one-port install must come from the origin the browser used.
 - Set `AO_PUBLIC_URL` to that origin when it is not loopback: a hostname, a LAN address, or HTTPS. The form is `scheme://host[:port]` with no path.
 - With no `AO_PUBLIC_URL`, open the app as `http://127.0.0.1:<port>/`, `http://localhost:<port>/`, or `http://[::1]:<port>/`, where `<port>` is the port Agent Office listens on (18789 unless `PORT` is set).
 
+- An HTTPS reverse proxy that keeps the Host works without it. One that rewrites the Host (nginx's default `proxy_set_header Host $proxy_host`) needs `AO_PUBLIC_URL`: the server log says `refused writes from <origin> … set AO_PUBLIC_URL=<origin>` once per origin.
+
 A foreign `Origin` stays 403, including when the request also sends `X-AO-Request: 1`. Login can succeed and later writes can still fail for this reason. The check is in [install.md](install.md) and [config.md](config.md).

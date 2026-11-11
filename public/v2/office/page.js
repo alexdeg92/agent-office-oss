@@ -147,16 +147,26 @@ const openShop = (query = {}) => {
 // with the Boutique (office-dev-21).
 export function BureauPage({ match }) {
   const styles = useStyles();
+  const [teamUI, setTeamUI] = useState(null);
+  const [teamUIFailed, setTeamUIFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadModule(() => import(new URL('./team-office.js' + buildQuery, import.meta.url).href))
+      .then(module => { if (alive) setTeamUI(module); }, () => { if (alive) setTeamUIFailed(true); });
+    return () => { alive = false; };
+  }, []);
   useLang();
   if (!styles.ready) return styles.error
     ? html`<${Frame} class="bu-page ao-bureau"><${ErrorState} compact error=${{message:tr('office.mapUnavailable')}} onRetry=${styles.retry} /></${Frame}>`
     : html`<${Frame} class="bu-page ao-bureau" aria-busy="true"><p role="status">${tr('office.mapLoading')}</p></${Frame}>`;
-  return html`<${BureauContent} match=${match} />`;
+  if (!teamUI) return teamUIFailed
+    ? html`<${Frame} class="bu-page ao-bureau"><${ErrorState} compact error=${{message:tr('office.rosterUnavailable')}} onRetry=${() => reloadChunks({ manual:true })} /></${Frame}>`
+    : html`<${Frame} class="bu-page ao-bureau" aria-busy="true"><p role="status">${tr('office.mapLoading')}</p></${Frame}>`;
+  return html`<${BureauContent} match=${match} teamUI=${teamUI} />`;
 }
 
-function BureauContent({ match }) {
-  const [teamUI, setTeamUI] = useState(null);
-  useEffect(() => { loadModule(() => import(new URL('./team-office.js' + buildQuery, import.meta.url).href)).then(setTeamUI, api.toastError); }, []);
+function BureauContent({ match, teamUI }) {
+  const Roster = teamUI.OfficeRoster;
   const lang = useLang();
   const mobile = usePhone();
   const [controlsReady,setControlsReady]=useState(!!Button);
@@ -177,6 +187,7 @@ function BureauContent({ match }) {
   }, [layout.data, match.query.etage]);
   const [editing, setEditing] = useState(false);
   const [mobileSheet,setMobileSheet]=useState(null);
+  const [teamSheet,setTeamSheet]=useState(null);
   const [detailTeam,setDetailTeam]=useState(null);
   const mobileIsolation=useRef(null);
   useEffect(() => {
@@ -271,28 +282,31 @@ function BureauContent({ match }) {
       <div class="ao-bureau__stagecol">
         <div class="ao-bureau__stagewrap">
           ${mobile ? html`<button type="button" class="bu-btn bu-btn--sm ao-floor-mobile-trigger" onClick=${() => setMobileSheet('floors')} aria-haspopup="dialog">${tr('office.floor.picker')}: ${floorLabel(currentFloor)}</button>` : null}
-          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : visiblePeople} lay=${floorLay} store=${currentStore} floor=${currentFloor} onSelectFloor=${selectFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} travelMemory=${travelMemory.current} minimalLabels=${mobile && !editing} />
+          <${Stage} key=${currentFloor.id + ':' + stageLang + (canWrite ? '' : ':ro')} vm=${vm} occupants=${editing ? present : visiblePeople} teamGroups=${!editing ? currentFloor.teamGroups || [] : []} teamOverlay=${teamUI?.officeTeamOverlay} lay=${floorLay} store=${currentStore} floor=${currentFloor} onSelectFloor=${selectFloor} selected=${selected} onSelect=${select} visits=${visits} editing=${editing} setEditing=${setEditing} unconfirmed=${unconfirmed} down=${down} downSince=${downSince} now=${now} canWrite=${canWrite} sceneHandle=${mainScene} travelMemory=${travelMemory.current} minimalLabels=${mobile && !editing} />
           ${editing ? null : html`<button type="button" class="bu-btn bu-btn--sm bu-btn--icon ao-mobile-options" disabled=${mobile&&!controlsReady} aria-label=${i18n.msg('office.mobile.options')} onClick=${() => setMobileSheet('options')}><${Icon} name="plus" /></button>`}
         </div>
+        ${!editing ? html`<${teamUI.OfficeTeamLegend} teamLegend=${vm.teamLegend || []} label=${L} />` : null}
         ${editing || !mobile ? null : html`<${MobileSummary} summary=${vm.rosterSummary} kpis=${vm.kpis || []} unconfirmed=${unconfirmed} />
-          ${controlsReady?html`<${MobileRoster} occupants=${roster} rosterItems=${vm.rosterItems} rosterPreviewItems=${vm.rosterPreviewItems} rosterOverflowCount=${vm.rosterOverflowCount} rosterOverflowLabel=${vm.rosterOverflowLabel} allLabel=${vm.rosterAllLabel} conversationIds=${vm.conversationIds} conversationCount=${vm.conversationCount} conversationLabel=${vm.conversationLabel} selected=${selected} onSelect=${select} onAll=${() => setMobileSheet('roster')} onTeam=${team=>setMobileSheet({team})} onConversations=${ids=>setMobileSheet({conversationIds:ids})} manifest=${lay.manifest} unconfirmed=${unconfirmed} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} roleLabel=${L} label=${L} emptyLabel=${tr('office.empty')} stateTitle=${o=>unconfirmed||o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`:null}`}
+          ${controlsReady && !(currentFloor.agentGroups || []).length ? html`<${MobileRoster} occupants=${roster} floorItems=${currentFloor.items || []} rosterItems=${vm.rosterItems} rosterPreviewItems=${vm.rosterPreviewItems} rosterOverflowCount=${vm.rosterOverflowCount} rosterOverflowLabel=${vm.rosterOverflowLabel} allLabel=${vm.rosterAllLabel} conversationIds=${vm.conversationIds} conversationCount=${vm.conversationCount} conversationLabel=${vm.conversationLabel} selected=${selected} onSelect=${select} onAll=${() => setMobileSheet('roster')} onTeam=${team=>setMobileSheet({team})} onConversations=${ids=>setMobileSheet({conversationIds:ids})} manifest=${lay.manifest} unconfirmed=${unconfirmed} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} roleLabel=${L} label=${L} emptyLabel=${tr('office.empty')} stateTitle=${o=>unconfirmed||o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`:null}
+          ${controlsReady ? html`<${teamUI.OfficeMobileTeamRoster} agentGroups=${currentFloor.agentGroups || []} otherItems=${currentFloor.otherItems || []} groupsLabel=${currentFloor.agentGroupsLabel} occupants=${currentFloor.occupants} onTeam=${team => setMobileSheet({team})} onSelect=${select} manifest=${lay.manifest} Avatar=${Avatar} StateChip=${StateChip} unconfirmed=${unconfirmed} stateTitle=${forState} label=${L} nameOf=${nameOf} />` : null}`}
+        ${!editing && mobile ? html`<${teamUI.TeamOffice} mobileOnly showFloorPanel=${currentFloor.showTeamPanel} sheet=${teamSheet} onSheetChange=${setTeamSheet} hint=${office.data.orchestratorActivationAvailable} office=${office.data} />` : null}
 
         ${editing || mobile ? null : html`<${FloorPicker} floors=${floorPlan.floors} current=${currentFloor.id} onSelect=${selectFloor} />`}
       </div>
       <div class="ao-bureau__editbar" id="ao-bureau-editbar"></div>
-      <aside class="ao-bureau__side" aria-label=${editing ? tr('office.customize') : tr('office.rosterLabel')}>
+      <aside class="ao-bureau__side" hidden=${mobile && !editing && (currentFloor.agentGroups || []).length > 0} aria-label=${editing ? tr('office.customize') : tr('office.rosterLabel')}>
         <div id="ao-bureau-editaside" hidden=${!editing}></div>
-        ${editing ? null : html`<${Roster} occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} groupedFloors onJumpFloor=${selectFloor} hostAnnotation=${teamUI?.hostAnnotation} />`}
-        ${!editing && teamUI && html`<${teamUI.TeamOffice} hint=${office.data.orchestratorActivationAvailable} office=${office.data} />`}
+        ${editing ? null : html`<${Roster} occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${L} stateTitle=${forState} groupedFloors onJumpFloor=${selectFloor} hostAnnotation=${teamUI?.hostAnnotation} />`}
+        ${!editing && !mobile ? html`<${teamUI.TeamOffice} showFloorPanel=${currentFloor.showTeamPanel} sheet=${teamSheet} onSheetChange=${setTeamSheet} hint=${office.data.orchestratorActivationAvailable} office=${office.data} />` : null}
       </aside>
     </div>
     ${editing ? null : html`<${Feed} vm=${vm} stale=${stale} tab=${feed} setTab=${setFeed} mobile=${mobile} />`}
     ${mobileSheet && !editing && !sel ? html`<${Modal} size="md" class=${'ao-office-sheet' + (mobileSheet === 'options' ? ' ao-office-options' : '')} title=${mobileSheet?.conversationIds ? i18n.msg('office.mobile.conversationsTitle') : mobileSheet?.team ? L(mobileSheet.team.label) : mobileSheet === 'floors' ? tr('office.floor.picker') : mobileSheet === 'roster' ? tr('office.rosterLabel') : i18n.msg('office.mobile.options')} onClose=${closeMobileSheet}
       footer=${mobileSheet === 'options' ? null : html`<button type="button" class="bu-btn" onClick=${closeMobileSheet}>${tr('office.close')}</button>`}>
-      ${mobileSheet?.conversationIds ? html`<${Roster} all occupants=${roster.filter(o=>mobileSheet.conversationIds.includes(o.id))} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} />`
+      ${mobileSheet?.conversationIds ? html`<${Roster} all occupants=${roster.filter(o=>mobileSheet.conversationIds.includes(o.id))} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${L} stateTitle=${forState} />`
         : mobileSheet === 'floors' ? html`<${FloorPicker} floors=${floorPlan.floors} current=${currentFloor.id} onSelect=${selectFloor} mobile />`
-        : mobileSheet?.team ? html`<${Roster} all occupants=${roster.filter(o=>mobileSheet.team.ids.includes(o.id))} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} />`
-        : mobileSheet === 'roster' ? html`<${Roster} all occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} groupedFloors onJumpFloor=${selectFloor} />`
+        : mobileSheet?.team ? html`<${Roster} all occupants=${mobileSheet.team.ids.map(id=>presentById.get(id)).filter(Boolean)} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${L} stateTitle=${forState} />`
+        : mobileSheet === 'roster' ? html`<${Roster} all occupants=${roster} rosterFloors=${vm.rosterFloors || []} selected=${selected} onSelect=${select} now=${now} unconfirmed=${unconfirmed} manifest=${lay.manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${L} stateTitle=${forState} groupedFloors onJumpFloor=${selectFloor} />`
         : html`
         <div class="ao-office-options__actions">
           <${Button} label=${i18n.msg('office.mobile.center')} icon=${html`<${ViewIcon} center />`} onPress=${() => { if(mainScene.current){mainScene.current.cam.user=false;mainScene.current.fit();} }} />
@@ -413,7 +427,7 @@ function ThemeToggle({ lay, store = officeApi(), labelId = 'ao-theme-label', vis
 }
 
 /** The scene: one OfficeScene per mount, fed from the VMs; cues from SSE `cue` frames. */
-function Stage({ vm, occupants, lay, store = officeApi(), floor, onSelectFloor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, travelMemory, minimalLabels }) {
+function Stage({ vm, occupants, teamGroups = [], teamOverlay, lay, store = officeApi(), floor, onSelectFloor, selected, onSelect, visits, editing, setEditing, unconfirmed, down, downSince, now, canWrite, sceneHandle, travelMemory, minimalLabels }) {
   const latestOcc = useRef(occupants);
   latestOcc.current = occupants;
   const host = useRef(null);
@@ -441,6 +455,7 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, onSelectFloor, 
         intents: sceneIntents,
         manifest: lay.manifest, layout: lay.layout.data, assetBase: assetBase(),
         theme: lay.theme.resolved, onSelect: (id) => onSelect(id), primaryName: () => primaryName(), timeZone: () => fmtTz.timeZone(),
+        teamGroups, teamOverlay, label: L,
       });
       sceneRef.current = scene;
       scene.setPrimaryLabels(minimalLabels, floor?.mobileLabelIds ?? []);
@@ -455,6 +470,9 @@ function Stage({ vm, occupants, lay, store = officeApi(), floor, onSelectFloor, 
     });
     return cleanup;
   }, [attempt]);
+
+  const teamGroupsKey = JSON.stringify(teamGroups);
+  useEffect(() => protect(() => { sceneRef.current?.setTeamGroups(teamGroups, teamOverlay); }), [teamGroupsKey, teamOverlay, attempt]);
 
   useEffect(() => protect(() => { sceneRef.current?.setPrimaryLabels(minimalLabels, floor?.mobileLabelIds ?? []); }), [minimalLabels, JSON.stringify(floor?.mobileLabelIds ?? []), attempt]);
 
@@ -548,37 +566,6 @@ function Avatar({ o, manifest }) {
   return html`<${CharacterAvatar} source=${source} state=${o.state} />`;
 }
 
-/** Accessible cards render the server-projected order, hierarchy and floor groups. */
-function Roster({ all = false, occupants, rosterFloors = [], selected, onSelect, now, unconfirmed, manifest, groupedFloors = false, onJumpFloor = () => {}, hostAnnotation }) {
-  const [eggs,setEggs]=useState({});
-  useEffect(()=>{const update=e=>setEggs(prev=>({...prev,[e.detail.id]:e.detail.kind}));document.addEventListener('office-surprise',update);return ()=>document.removeEventListener('office-surprise',update);},[]);
-  // Accessible names match visible text; seen and unconfirmed cards show their last observation.
-  const card = (o) => html`<li key=${o.id} class=${o.rosterDepth > 0 ? 'ao-roster__child' : undefined}>
-    <button type="button" class=${'bu-roster ao-roster ao-agentcard' + (o.presence ? ' is-seen' : '')} data-occupant=${o.id} data-presence=${o.presence || undefined} data-source-stale=${o.sourceStale || undefined}
-      aria-current=${selected === o.id ? 'true' : undefined} onClick=${() => onSelect(o.id)}>
-      <${Avatar} o=${o} manifest=${manifest} />
-      <span class="bu-cell-main" data-by=${o.parentName || undefined}><span class="ao-roster__name ao-agentcard__name" title=${nameOf(o)}>${nameOf(o)}</span>
-        <span class="bu-cell-sub ao-roster__summary" data-visit=${o.visitPhase || undefined} title=${o.summary || undefined}>${o.visitLabel ? L(o.visitLabel) : o.summary && o.summary !== o.name ? o.summary : o.project ? tr('office.inProject', { project: o.project }) : L(o.roleLabel)}${o.stationUid || o.visitPhase || o.summary || o.project ? '' : ` · ${tr('office.noStation')}`}</span>
-        ${hostAnnotation?.(o) ? html`<span class="bu-cell-sub ao-host-annotation" data-host-agent=${o.hostAgentId}>${hostAnnotation(o)}</span>` : null}
-        ${o.presence ? html`<span class="ao-agentcard__seen">${o.presenceLabel}</span>` : null}</span>
-      ${eggs[o.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[o.id]}>${tr('egg.'+eggs[o.id])}</span>` : html`<${StateChip} state=${o.state} stateKind=${o.stateKind} stateLabel=${o.stateLabel} stateActive=${o.stateActive} live=${!unconfirmed && !o.presence && !o.sourceStale} title=${unconfirmed || o.sourceStale ? L(o.stateLastLabel) : forState(o)} />`}
-    </button></li>`;
-  if (!occupants.length) return html`<p class="bu-text-secondary">${tr('office.empty')}</p>`;
-  if (groupedFloors && rosterFloors.length) {
-    const byId = new Map(occupants.map((o) => [o.id, o]));
-    return html`<div class="ao-floor-roster">${rosterFloors.map(floor => {
-      const floorItems = (floor.items || []).map(item => item.kind === 'team-header'
-        ? html`<li key=${item.id} class="ao-floor-roster__team" data-roster-team-header=${item.id}>${L(item.label)}</li>`
-        : byId.has(item.occupantId) ? card(byId.get(item.occupantId)) : null);
-      return html`<section key=${floor.id} class="ao-floor-roster__group" data-roster-floor=${floor.id}>
-      <button type="button" class="ao-floor-roster__jump" onClick=${() => onJumpFloor(floor.id)}><span>${L(floor.label)}</span><span>${floor.count}</span><${Icon} name="arrow-right" /></button>
-      <ul class="ao-bureau__roster">${floorItems}</ul>
-    </section>`;
-    })}</div>`;
-  }
-  return html`<ul class="ao-bureau__roster">${occupants.map(card)}</ul>`;
-}
-
 function FloorPicker({ floors, current, onSelect, mobile = false }) {
   return html`<nav class=${'ao-floor-picker' + (mobile ? ' ao-floor-picker--mobile' : '')} aria-label=${tr('office.floor.picker')}>
     ${floors.map(f => {
@@ -667,15 +654,15 @@ function Drawer({ o, lay, onClose, onCustomize, onBack, teamLabel, unconfirmed, 
   }, [o.id]);
   const sessionHref = o.sessionKey ? services.router.href('session', { sessionKey: o.sessionKey }) : null;
   return html`<div class="bu-scrim bu-scrim--drawer ao-bureau__scrim" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
-    <aside class="bu-drawer" role="dialog" aria-modal="true" aria-labelledby="ao-drawer-title" aria-describedby="ao-drawer-desc" ref=${dialogRef}>
+    <aside class="bu-drawer" role="dialog" aria-modal="true" aria-labelledby="ao-drawer-title" aria-describedby="ao-drawer-desc ao-drawer-state" ref=${dialogRef}>
       <div class="bu-modal__header">
         <${Avatar} o=${o} manifest=${manifest} />
-        <div style="flex:1"><h2 class="bu-modal__title" id="ao-drawer-title">${nameOf(o)}</h2><p class="bu-modal__desc" id="ao-drawer-desc">${tr('office.drawer.desc', { role: L(o.roleLabel), state: stateLabel(o).toLocaleLowerCase(locale() === 'en' ? 'en-CA' : 'fr-CA') })}</p></div>
+        <div style="flex:1"><h2 class="bu-modal__title" id="ao-drawer-title">${nameOf(o)}</h2><p class="bu-modal__desc" id="ao-drawer-desc">${L(o.drawerRoleLabel)}</p></div>
         <button type="button" class="bu-btn bu-btn--icon bu-btn--ghost" aria-label=${tr('office.close')} ref=${closeRef} onClick=${onClose}><${Icon} name="close" /></button>
       </div>
       <div class="bu-modal__body">
         ${onBack?html`<${Button} variant="ghost" label=${teamLabel} icon=${html`<${Icon} name="arrow-left" />`} onPress=${onBack} />`:null}
-        <p class="ao-drawer__state" data-agent-state=${o.state} data-source-stale=${sourceStale || undefined}>${unconfirmed || sourceStale ? L(o.stateLastLabel) : stateLabel(o)}</p>
+        <p class="ao-drawer__state" id="ao-drawer-state" data-agent-state=${o.state} data-source-stale=${sourceStale || undefined}>${unconfirmed || sourceStale ? L(o.stateLastLabel) : stateLabel(o)}</p>
         ${o.summary ? html`<section class="ao-drawer__activity"><h3>${tr('office.what')}</h3><p>${o.summary}</p></section>` : null}
         <dl class="bu-kv">
           ${o.lastSeenAt ? html`<div class="bu-kv__row"><dt>${tr('office.drawer.lastSeen')}</dt><dd><${Ago} at=${o.lastSeenAt} /></dd></div>` : null}

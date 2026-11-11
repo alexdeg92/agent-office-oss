@@ -4,7 +4,7 @@ const {createHash}=require('node:crypto');
 const {parse,PROFILE,projectName:projectBasename}=require('./profile');
 const MAX_SESSIONS=2000, MAX_DIRS=10000, MAX_ENTRIES=4096, MAX_READ=256*1024, MAX_LINE=1024*1024, MAX_EVENTS=256;
 const MAX_PROJECT_SAMPLE=64*1024, MAX_PROJECT_HEAD=8*1024, MAX_PROJECT_TAIL=MAX_PROJECT_SAMPLE-MAX_PROJECT_HEAD;
-const MAX_FILTER_BYTES=256*1024;
+const MAX_FILTER_BYTES=256*1024, MAX_INDEX_BYTES=1024*1024, MAX_THREAD_NAME=120;
 const invalid=()=>Object.assign(new Error('rollout path refused'),{code:'EUNSAFEPATH'});
 const same=(a,b)=>a.dev===b.dev&&a.ino===b.ino;
 async function chainOf(dir){const parts=[];for(let p=path.resolve(dir);;p=path.dirname(p)){parts.unshift(p);if(p===path.dirname(p))break;}const out=[];for(const p of parts){const s=await fsp.lstat(p);if(!s.isDirectory()||s.isSymbolicLink())throw invalid();out.push({path:p,dev:s.dev,ino:s.ino});}return out;}
@@ -24,6 +24,23 @@ const filenameSessionRef=name=>name.match(/-([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-
 function createFiles({home,include=[],exclude=[],now=Date.now,agentGrouping='project'}={}) {
  const root=path.resolve(home,'sessions'),index=new Map(),cache=new Map(),stats={entries:0,files:0,truncated:false,bytes:0,malformedLines:0,unknownLineTypes:0,unknownKeys:0}; let closed=false,scanning=null,filterCursorKey=null,changeHandler=null;const watchers=new Map();
  function ensureWatcher(dir){if(!changeHandler||closed||watchers.has(dir)||watchers.size>=4096)return;try{const w=fs.watch(dir,{persistent:false},(_event,name)=>changeHandler?.({path:name==null?null:path.resolve(dir,String(name))}));w.on('error',()=>{w.close();watchers.delete(dir);});watchers.set(dir,w);}catch{}}
+ // Codex names threads in $CODEX_HOME/session_index.jsonl ({id, thread_name}); rollouts carry no title.
+ // Bounded tail read through a verified directory chain, last entry per id wins, cached by file identity.
+ let threadIndex={key:null,names:new Map()};
+ async function threadNames(){
+  const file=path.join(path.resolve(home),'session_index.jsonl');let chain,before;
+  try{chain=await chainOf(path.dirname(file));before=await fsp.lstat(file);}catch{return threadIndex.names=new Map();}
+  if(!before.isFile()||before.isSymbolicLink())return threadIndex.names=new Map();
+  const key=[before.dev,before.ino,before.size,before.mtimeMs].join(':');if(threadIndex.key===key)return threadIndex.names;
+  const parent=await pin(chain);let fd;const names=new Map();
+  try{fd=await fsp.open(`/proc/self/fd/${parent.fd}/${path.basename(file)}`,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);const st=await fd.stat();if(!st.isFile()||!same(before,st))throw invalid();
+   const size=Math.min(st.size,MAX_INDEX_BYTES),lines=(await readAt(fd,size,st.size-size,stats)).toString('utf8').split('\n');if(size<st.size)lines.shift();
+   for(const line of lines){if(!line||line.length>MAX_LINE)continue;let value;try{value=JSON.parse(line);}catch{continue;}
+    const id=value?.id,name=typeof value?.thread_name==='string'?value.thread_name.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,MAX_THREAD_NAME):'';
+    if(typeof id==='string'&&id.length<=128&&name)names.set(id,name);}
+  }catch(error){if(error.code==='EUNSAFEPATH')throw error;return threadIndex.names=new Map();}finally{await fd?.close();await parent.close();}
+  threadIndex={key,names};return names;
+ }
  async function scan(){if(scanning)return scanning;scanning=(async()=>{
    stats.truncated=false;stats.entries=0;
    let rootChain=await chainOf(root);const rows=[];let dirs=0,entries=0,stop=false;
@@ -86,7 +103,7 @@ function createFiles({home,include=[],exclude=[],now=Date.now,agentGrouping='pro
    }finally{await fd?.close();await parent.close();}
  }
  async function refresh(key){const row=index.get(key);if(!row||closed)return null;await verify(row.chain);let st;try{st=await fsp.lstat(row.filename);}catch(error){if(error.code==='ENOENT')return null;throw error;}if(!st.isFile()||st.isSymbolicLink())return null;Object.assign(row,{dev:st.dev,ino:st.ino,size:st.size,mtime:st.mtimeMs,ctime:st.ctimeMs});return row;}
- return {scan,filterRows,read,refresh,keyForPath:file=>[...index.values()].find(row=>row.filename===path.resolve(file))?.key||null,
+ return {scan,filterRows,read,refresh,threadNames,keyForPath:file=>[...index.values()].find(row=>row.filename===path.resolve(file))?.key||null,
   watch(onChange){changeHandler=typeof onChange==='function'?onChange:null;ensureWatcher(root);for(const row of [...index.values()].sort((a,b)=>b.mtime-a.mtime)){ensureWatcher(path.dirname(row.filename));if(watchers.size>=4096)break;}},
   rows:()=>[...index.values()].filter(row=>row.agentId),cached:()=>[...cache.keys()],stats,bounds:{sessions:MAX_SESSIONS,readBytes:MAX_READ},close(){closed=true;changeHandler=null;for(const w of watchers.values())w.close();watchers.clear();cache.clear();},agentId:project=> 'project:'+createHash('sha256').update(project).digest('hex'),profile:PROFILE};
 }

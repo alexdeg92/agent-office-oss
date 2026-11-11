@@ -79,7 +79,8 @@ function OfficeBackdrop({ elementRef }) {
       const occupants = mock.officeVM().occupants.slice(0, previews.length).map((occupant, index) => ({
         ...occupant,
         name: manifest.characterPacks.packs.concat(manifest.characters).find(c => c.id === previews[index].character)?.names?.[getLang()] ?? agentName(),
-        state:'idle', destination:null, look:{ character:previews[index].character,
+        // The lounge is a decorative destination for this sign-in preview, never a home station.
+        state:'idle', destination:index === 0 ? { stationUid:'sofa' } : null, look:{ character:previews[index].character,
           variant:previews[index].variant, accessories:[...previews[index].accessories] },
       }));
       if (!alive) return;

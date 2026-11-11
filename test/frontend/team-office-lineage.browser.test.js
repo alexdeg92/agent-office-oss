@@ -32,6 +32,15 @@ test('Bureau shell renders the mixed-runtime team hierarchy with exact stable pa
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${browser.origin}/bureau?mock=1&agent=Atlas`, { waitUntil: 'domcontentloaded' });
       await page.evaluate(async value => { document.documentElement.dataset.theme = value; await document.fonts.ready; }, theme);
+      await page.waitForFunction(() => document.querySelector('.ao-bureau--ready'));
+      const seeded = await page.evaluate(async () => {
+        const { services } = await import('/services.js');
+        const snapshot = services.stream._topics.get('office')?.state?.data;
+        if (!snapshot?.rosterFloors) return false;
+        services.stream.applyVM('office', { ...snapshot, rosterFloors: snapshot.rosterFloors.map(floor => ({ ...floor, showTeamPanel: true })) });
+        return true;
+      });
+      assert.equal(seeded, true, 'the Office VM fixture supplies floor-level TeamOffice visibility');
       await page.getByTestId('team-office').waitFor({ state: 'visible' });
       const parent = page.locator('[data-testid="team-member"][data-member-id="member:pm-fixture"]');
       const builder = page.locator('[data-testid="team-member"][data-member-id="member:builder-fixture"]');
@@ -67,7 +76,8 @@ test('Bureau shell renders the mixed-runtime team hierarchy with exact stable pa
 
       await page.setViewportSize({ width: 390, height: 844 });
       await page.evaluate(async value => { document.documentElement.dataset.theme = value; await document.fonts.ready; }, theme);
-      const boardButton = page.getByTestId('team-open-board');
+      const boardButton = page.locator('.ao-team-office--mobile-only [data-testid="team-open-board"]');
+      await boardButton.waitFor({ state: 'visible' });
       assert.equal(await boardButton.evaluate(node => getComputedStyle(node).whiteSpace), 'nowrap', 'mobile board label and task count stay together');
       await page.getByTestId('team-open-members').click();
       const mobileParent = page.locator('[data-testid="team-member"][data-member-id="member:pm-fixture"]').last();

@@ -48,6 +48,17 @@ describe('API v2 · envelope, errors, meta, me', () => {
     assert.ok(Number.isInteger(r.json.data.sessionExpiresAt));
   });
 
+  it('me: env owner (no users row / RBAC off) presents as admin, not member', async () => {
+    assert.equal(h.withStore((db) => db.prepare('SELECT COUNT(*) AS n FROM users').get().n), 0, 'fixture stays env-only');
+    const fr = await h.get('/api/v2/me');
+    assert.equal(fr.status, 200);
+    assert.equal(fr.json.data.roleName, 'Administrateur');
+    const en = await fetch(h.base + '/api/v2/me', { headers: { cookie: h.cookie, 'accept-language': 'en' } });
+    const body = await en.json();
+    assert.equal(en.status, 200);
+    assert.equal(body.data.roleName, 'Administrator');
+  });
+
   it('design-system access is owner-authenticated and returns no instance data', async () => {
     const guest = await fetch(h.base + '/api/v2/design-system/access');
     assert.equal(guest.status, 401);
@@ -280,5 +291,48 @@ describe('API v2 · MeVM.displayName (S6.1)', () => {
   after(async () => { if (h) await h.stop(); });
   it('PORTAL_DISPLAY_NAME is the display name (and the owner Person\'s name)', async () => {
     assert.equal((await h.get('/api/v2/me')).json.data.displayName, 'Owner');
+  });
+});
+
+describe('API v2 · me roleName without privilege mislabel', () => {
+  it('a users row with no RBAC role is not labelled admin', async () => {
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), express = require('express');
+    const { openStore } = require('../../src/store');
+    const { createEngine } = require('../../src/engine');
+    const { feed } = require('../helpers/feed');
+    const { createAuth } = require('../../src/auth');
+    const { hashPassword } = require('../../src/security/password');
+    const { mountV2 } = require('../../src/api/v2/routes');
+    const { requestId } = require('../../src/api/v2/errors');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-me-role-'));
+    const store = openStore({ dir, instance: 'test', ownerName: 'Fixture owner', log: () => {} });
+    const hash = await hashPassword('synthetic-me-role-password');
+    const owner = store.users.createOwner({ email: 'owner@example.invalid', personId: store.owner.id, passwordHash: hash });
+    // User exists but RBAC cannot resolve a role — must not fall back to Administrator.
+    store.rbac.snapshot = () => null;
+    const engine = feed(createEngine(), sc);
+    const auth = createAuth({ secret: 'synthetic-me-role-secret', ttlMs: 60000, identity: { users: store.users, state: store.rbac.state }, allowMultiUser: true });
+    const cfg = { instance: 'test', dataDir: dir, capture: false, projectsDiscovery: false, projectsOwners: ['synthetic'], timeZone: 'UTC' };
+    const app = express();
+    app.use(requestId, express.json());
+    // enforceAuthorization off so /me uses the route's roleName path (not HTTP projection).
+    const api = mountV2(app, { auth, store, engine, cfg, runtime: null, log: () => {} });
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    try {
+      const cookie = 'taco_sess=' + auth.signSession({ email: owner.email, userId: owner.id, authGeneration: owner.auth_generation, sid: 'synthetic-me-role', exp: Date.now() + 60000 });
+      const res = await fetch('http://127.0.0.1:' + server.address().port + '/api/v2/me', { headers: { cookie } });
+      const body = await res.json();
+      assert.equal(res.status, 200);
+      assert.equal(body.data.roleName, undefined);
+      assert.notEqual(body.data.roleName, 'Administrator');
+      assert.notEqual(body.data.roleName, 'Administrateur');
+    } finally {
+      api.close();
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+      store.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -58,3 +58,20 @@ test('critic-05 P1: config without secrets listens with locked setup, no code or
     assert.deepEqual(fs.readFileSync(files.paths.file), before); assert.equal(fs.existsSync(files.paths.secrets), false);
   } finally { await h.stop(); }
 });
+test('fresh install from an env file copied from .env.example: blank login lines reach the setup wizard; a half-filled login names the fix', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-env-template-'));
+  try {
+    const files = IC.readInstanceConfig({ HOME: home });
+    const blank = { PORTAL_EMAIL: '', PORTAL_SECRET: '', PORTAL_PASSWORD_HASH: '', OC_GATEWAY_TOKEN: 'synthetic-gateway-token' };
+    const eff = IC.effectiveEnv(blank, files);
+    for (const key of ['PORTAL_EMAIL', 'PORTAL_SECRET', 'PORTAL_PASSWORD_HASH']) assert.equal(eff[key], undefined);
+    assert.equal(IC.setupState(blank, files), 'open');
+    const boot = spawnSync(process.execPath, [path.join(ROOT, 'server.js')], { cwd: ROOT, encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL',
+      env: { HOME: home, PATH: testServerPath(), AO_ENV: 'test', AO_DATA_DIR: path.join(home, 'data'), PORT: '0', HOST: '127.0.0.1', ...blank } });
+    assert.match(boot.stdout + boot.stderr, /One-time setup code: AO-/, 'blank login lines boot first-run setup, not a refusal');
+    const half = { PORTAL_EMAIL: 'placeholder@example.invalid', PORTAL_SECRET: '', PORTAL_PASSWORD_HASH: '' };
+    assert.throws(() => IC.effectiveEnv(half, files), e => e instanceof IC.ConfigError
+      && e.message.includes('incomplete environment login: PORTAL_EMAIL (missing or empty: PORTAL_SECRET, PORTAL_PASSWORD_HASH)')
+      && e.message.includes('setup wizard') && !e.message.includes('placeholder@example.invalid'));
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});

@@ -4,8 +4,8 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { exchangesOf, EXCHANGE_WINDOW_MS } = require('../../src/api/v2/vm/office');
-const { loadScenario, readFixture, gatewayHandlers } = require('../helpers/scenario');
-const { startServer, waitFor } = require('../helpers/harness');
+const { loadScenario, readFixture } = require('../helpers/scenario');
+const { startServer } = require('../helpers/harness');
 
 const M = 60e3;
 const ev = (kind, at) => ({ id: kind + at, kind, at, text: 'x' });
@@ -33,21 +33,20 @@ describe('exchanges · the office view (v2 and v3, validated)', () => {
     sc = loadScenario('synthetic-basic');
     const base = readFixture(sc.rpc['sessions.list']).body.value;
     const sessions = base.sessions.map((s) => (s.key === DM ? Object.assign({}, s, { updatedAt: sc.now - M, status: 'active' }) : s));
-    const turn = (u, a) => [{ role: 'user', timestamp: u, content: 'Salut' }, { role: 'assistant', timestamp: a, content: [{ type: 'text', text: 'Bonjour' }] }];
-    const get = gatewayHandlers(sc)['sessions.get'];
     h = await startServer(sc, { env: { AO_TIME_SCALE: '20' }, handlers: {
       'sessions.list': () => Object.assign({}, base, { sessions }),
-      'sessions.get': (p) => (p.key === DM ? { messages: turn(sc.now - 20 * M, sc.now - 19 * M).concat(turn(sc.now - 5 * M, sc.now - 4 * M), turn(sc.now - 2 * M, sc.now - M)) } : get(p)),
     } });
   });
   after(async () => { if (h) await h.stop(); });
-  it('the DM occupant carries its exchanges; occupants without a conversation transcript carry none', async () => {
+  it('human DMs annotate the agent and remain in Logs without a physical exchange visitor', async () => {
     for (const v of ['v2', 'v3']) {
-      const occ = await waitFor(async () => { const o = (await h.get(`/api/${v}/views/office`)).json.data.occupants; return o.find((x) => x.exchanges) ? o : null; },
-        { timeoutMs: 20000, what: v + ' exchanges' });
-      const dm = occ.find((x) => x.sessionKey === DM);
-      assert.deepEqual(dm.exchanges, { recent: 2, windowMs: 600000, lastAt: sc.now - M }, v);
-      assert.ok(occ.filter((x) => x.sessionKey !== DM).every((x) => !('exchanges' in x)), v + ': only conversation occupants with a transcript');
+      const occ = (await h.get(`/api/${v}/views/office`)).json.data.occupants;
+      assert.equal(occ.some(row => row.sessionKey === DM), false, 'no human DM occupant');
+      const owner = occ.find(row => ['main', 'primary'].includes(row.role));
+      assert.deepEqual(owner.visitLabel.params.channel, { key: 'channel.discord' });
+      assert.ok(occ.every(row => !('exchanges' in row)), 'no visitor animation metadata for the human');
+      const logs = (await h.get(`/api/${v}/views/logs?limit=200`)).json.data.items;
+      assert.ok(logs.some(row => row.id === DM), 'human conversation remains accessible in Logs');
     }
   });
 });

@@ -26,7 +26,7 @@ export function useProjectTopic(topic,url,{keepPrevious=false}={}) {
       const split=splitOrigin&&!mock?await loadModule(()=>import('../split-stream.js'+buildQuery)):null;
       if(!active||generation)return;
       client=createStream({
-        openSource:mock?path=>new mock.MockEventSource(versioned(path,3)):split?path=>split.openSource(path,{apiVersion:3}):path=>new EventSource(apiUrl(path,3),{withCredentials:true}),
+        openSource:mock?path=>new mock.MockEventSource(versioned(path,3)):split?path=>split.openSource(path,{apiVersion:3}):path=>new EventSource(apiUrl(path,3),{withCredentials:true}) /* transport-allow:EventSource:project-stream */,
         fetchVM:async path=>{const r=await api.get(path,{apiVersion:3,quiet:true});return {data:r.data,topic:r.meta?.topic,meta:r.meta};},
         postTopics:(id,body)=>api.post(`/api/v3/stream/${encodeURIComponent(id)}/topics`,body,{apiVersion:3,quiet:true}).then(r=>r.data?.topics??null),
         postResync:(id,name)=>api.post(`/api/v3/stream/${encodeURIComponent(id)}/resync`,{topic:name},{apiVersion:3,quiet:true}),

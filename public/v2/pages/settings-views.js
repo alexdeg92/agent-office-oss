@@ -8,6 +8,8 @@ import * as R from './settings-rules.js';
 import { networkOptions } from './network-options.js';
 import { ConnectorBrandMark, loadPreparedConnectorBrands } from './connector-brand.js';
 import {useSettingsPortraits,SettingsPortrait} from './settings-portraits.js';
+import { AccountAvatarEditor } from './settings-avatar.js';
+import { ProfileAvatar } from '../components/profile-avatar.js';
 import { ListRow, SettingRow, Menu, KeyValue, TextAction, CollapsedGroup, Field, TextInput, TextArea, Select, Checkbox, Button, Switch } from '../components/bureau/index.js';
 
 export { settingsLabel };
@@ -58,6 +60,17 @@ function SecretField({definition, field, value, replacing, onChange, disabled, i
     </div>`} />`;
 }
 
+/** Onboarding B-lite: the wizard's chapters for an env-login install, each opening the section that saves it. */
+export function FinishSetup({steps, onOpen, onHide, busy, readonly}) {
+  return html`<section class="ao-settings__group ao-settings__finish" data-testid="settings-finish-setup" aria-labelledby="settings-finish-title">
+    <div class="ao-settings__group-head"><h2 class="bu-heading-sm" id="settings-finish-title">${msg('settings.finish.title')}</h2>
+      <${Button} type="button" variant="ghost" size="sm" label=${msg('settings.finish.hide')} disabled=${busy||readonly} onClick=${onHide} /></div>
+    <p class="bu-text-secondary">${msg('settings.finish.text')}</p>
+    <ul class="ao-settings__list">${steps.map(step=>html`<${ListRow} key=${step.id} testId=${'finish-'+step.id} title=${msg('settings.finish.step.'+step.id)}
+      severity=${step.done===null?'info':step.done?'ok':'warn'} statusLabel=${msg(step.done===null?'settings.finish.optional':step.done?'settings.finish.done':'settings.finish.todo')}
+      actions=${html`<${TextAction} label=${msg('settings.finish.open')} targetName=${msg('settings.finish.step.'+step.id)} busy=${busy} onPress=${()=>onOpen(step.section)} />`} />`)}</ul>
+  </section>`;
+}
 export function Diagnostics({vm, onFix, onViewDetected, onViewOrchestrator, onFixAll, onRefresh, busy, restartAction}) {
   const issues=vm.diagnostics.filter(d=>['error','warning','warn'].includes(d.level));
   const information=vm.diagnostics.filter(d=>!['error','warning','warn','ok'].includes(d.level));
@@ -268,13 +281,23 @@ export function Instance({vm, draft, onChange, disabled}) {
     </div><p class="bu-caption bu-text-secondary">${msg('settings.instance.active')} : <code class="bu-mono-sm">${vm.network.active.host}:${vm.network.active.port}</code></p></section>` : null}`;
 }
 
-export function Account({vm, draft, onChange, disabled}) {
+export function Account({vm, draft, onChange, disabled, onAvatarStage, onAvatarRemove}) {
   const identity=(key,value) => onChange({...draft,owner:{...draft.owner,[key]:value}});
+  const avatar=draft.avatar || vm.profileAvatar;
   return html`<${Intro} tab="compte" />
-    <section class="ao-settings__group"><div class="ao-settings__fields">
+    <${AccountAvatarEditor} avatar=${avatar} name=${draft.owner.displayName} disabled=${disabled} onStage=${onAvatarStage} onRemove=${onAvatarRemove} />
+    <section class="ao-settings__group ao-account-owner-fields"><div class="ao-settings__fields">
       ${['displayName','email'].map(key => html`<${SettingsField} key=${key} id=${'settings-owner-' + key} name=${msg('settings.account.' + key)} field=${vm.owner[key]}
         value=${draft.owner[key]} disabled=${disabled} maxLength=${key === 'displayName' ? '80' : undefined} onChange=${value => identity(key,value)} />`)}
     </div>${vm.owner.reason ? html`<p class="bu-field__hint">${settingsLabel(vm.owner.reason)}</p>` : null}</section>
+    <section class="ao-settings__group ao-account-avatar-uses" aria-labelledby="settings-avatar-uses-title">
+      <div class="ao-account-avatar-uses__heading"><h2 class="bu-heading-sm" id="settings-avatar-uses-title">${msg('settings.avatar.usesTitle')}</h2><p class="bu-caption bu-text-secondary">${msg('settings.avatar.usesHint')}</p></div>
+      <div class="ao-account-avatar-uses__grid">
+        <article><h3>${msg('settings.avatar.useNavigation')}</h3><div class="ao-account-avatar-uses__surface"><${ProfileAvatar} avatar=${avatar} size="md" /><span><strong>${draft.owner.displayName}</strong><small>${msg('settings.avatar.profile')}</small></span></div></article>
+        <article><h3>${msg('settings.avatar.useChat')}</h3><div class="ao-account-avatar-uses__surface ao-account-avatar-uses__chat"><${ProfileAvatar} avatar=${avatar} size="md" /><p>${msg('settings.avatar.chatExample')}</p></div></article>
+        <article><h3>${msg('settings.avatar.useProjects')}</h3><div class="ao-account-avatar-uses__surface"><${ProfileAvatar} avatar=${avatar} size="md" /><span><strong>${draft.owner.displayName}</strong><small>${msg('settings.avatar.profile')}</small></span></div></article>
+      </div>
+    </section>
     <section class="ao-settings__group" aria-labelledby="settings-password-title"><h2 class="bu-heading-sm" id="settings-password-title">${msg('settings.account.password')}</h2>
       <p class="bu-caption bu-text-secondary" id="settings-password-hint">${msg('settings.account.passwordHint')}</p>
       <div class="ao-settings__fields">${[['password','newPassword'],['confirmation','confirmPassword']].map(([key,text])=>html`<${Field} key=${key} id=${'settings-'+key} label=${msg('settings.account.'+text)} control=${props=>html`<${TextInput} ...${props} type="password" autoComplete="new-password" maxLength=${1024} value=${draft[key]} describedBy="settings-password-hint" disabled=${disabled||!vm.owner.passwordChangeEnabled} onValueChange=${value=>onChange({...draft,[key]:value})} />`} />`)}</div>

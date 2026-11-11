@@ -165,7 +165,14 @@ function compareShape(example, actual, opts = {}) {
   // sidecar `variants`: extra example values merged at a path (union members a singleton example can't show)
   for (const [p, values] of Object.entries(opts.variants || {})) {
     if (delegated(p)) continue;
-    atPath(spec, p, (node) => { const merged = values.map((v) => build(v, p, o)).reduce(merge, Object.assign({}, node)); for (const k of Object.keys(node)) delete node[k]; Object.assign(node, merged); });
+    atPath(spec, p, (node) => {
+      if (node.k === 'arr' && !node.item) {
+        node.item = values.map((v) => Array.isArray(v) ? build(v, p, o).item : build(v, p + '[]', o)).reduce(merge);
+        return;
+      }
+      const merged = values.map((v) => build(v, p, o)).reduce(merge, Object.assign({}, node));
+      for (const k of Object.keys(node)) delete node[k]; Object.assign(node, merged);
+    });
   }
   // sidecar `additional` (architect-55): an OPTIONAL field the example doesn't show, declared by an example value; its
   // parent must be in the example (e.g. OccupantVM.exchanges, present only for conversation occupants)

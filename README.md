@@ -120,7 +120,7 @@ The image does not bundle OpenClaw. For a live connection, mount the required id
 <details>
 <summary>Existing configuration, environment files and project integration</summary>
 
-The wizard stores instance configuration separately from secrets, with restricted permissions. Environment variables override file configuration. For environment-managed installs, start with [.env.example](.env.example) and pass your private file:
+The wizard stores instance configuration separately from secrets, with restricted permissions. Environment variables override file configuration. Run the wizard first even for a service install; behind an HTTPS reverse proxy also set `AO_PUBLIC_URL`. Only automated or existing installs set the login in the environment: start with [.env.example](.env.example), uncomment its login block and pass your private file:
 
 ```sh
 agent-office start --env-file /path/to/agent-office.env

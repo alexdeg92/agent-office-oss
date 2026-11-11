@@ -124,7 +124,24 @@ test('headless ACP team members join the mounted Office by exact session ref and
 
     await page.setViewportSize({ width: 1440, height: 960 });
     assert.ok(leadOccupant.floorId, 'the backend supplies a floor for the headless team');
-    await page.goto(`${browser.origin}/bureau?etage=${encodeURIComponent(leadOccupant.floorId)}`, { waitUntil: 'domcontentloaded' });
+    let releaseTeamImport, teamImportStarted;
+    const teamImportRequested = new Promise(resolve => { teamImportStarted = resolve; });
+    await page.route('**/team-office.js*', async route => {
+      teamImportStarted();
+      await new Promise(resolve => { releaseTeamImport = resolve; });
+      await route.continue();
+    });
+    const officeNavigation = page.goto(`${browser.origin}/bureau?etage=${encodeURIComponent(leadOccupant.floorId)}`, { waitUntil: 'domcontentloaded' });
+    try {
+      await teamImportRequested;
+      await page.locator('.ao-bureau[aria-busy="true"]').waitFor({ state: 'visible' });
+      assert.equal(await page.locator('.ao-bureau--ready').count(), 0,
+        'the Bureau stays on its loading state while the roster chunk is deferred; no partial first paint');
+      assert.equal(await page.locator('.ao-bureau__stage').count(), 0,
+        'the visible Bureau stage is not mounted without its roster and legend');
+    } finally { releaseTeamImport?.(); }
+    await officeNavigation;
+    await page.unroute('**/team-office.js*');
     await page.locator('.ao-bureau__stage').waitFor({ state: 'visible' });
     await page.locator('[data-testid="team-office"]').waitFor({ state: 'visible' });
     await page.waitForFunction(() => {
@@ -134,6 +151,46 @@ test('headless ACP team members join the mounted Office by exact session ref and
     for (const name of names) await page.locator('.ao-team-list [data-testid="team-member"]').filter({ hasText: name }).first().waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId('team-office').getByText(/Présences Herdr · 0/).count(), 0,
       'the Herdr section is omitted when this ACP team has no Herdr presences');
+    const officeLabelChecks = await page.evaluate(async () => {
+      const build = document.querySelector('meta[name="ao-build"]').content;
+      const [{ OfficeRoster }, { html, render }, { setLang }] = await Promise.all([
+        import(`/office/team-office.js?v=${build}`), import(`/lib.js?v=${build}`), import(`/i18n.js?v=${build}`),
+      ]);
+      const host = document.createElement('div'); document.body.append(host);
+      const Avatar = () => html`<span aria-hidden="true"></span>`;
+      const StateChip = () => html`<span>Inactif</span>`;
+      const label = value => typeof value === 'string' ? value : value?.params?.text || value?.key || '';
+      const base = { id: 'labels-member', name: 'Member', roleLabel: 'Engineer', state: 'idle', stateKind: 'idle',
+        stateLabel: { key: 'agentState.idle' }, stateActive: false, stationUid: null, parentId: null, presence: null,
+        sourceStale: false, rosterDepth: 0 };
+      const show = occupants => render(html`<${OfficeRoster} occupants=${occupants} rosterFloors=${[]} teamGroups=${[]}
+        selected=${null} onSelect=${() => {}} unconfirmed=${false} manifest=${{}}
+        Avatar=${Avatar} StateChip=${StateChip} nameOf=${row => row.name} label=${label} stateTitle=${() => ''} />`, host);
+      const result = {};
+      for (const lang of ['fr', 'en']) {
+        setLang(lang);
+        show([]); result[`${lang}.empty`] = host.textContent.trim();
+        show([{ ...base, project: 'Domaine Kildare' }]); result[`${lang}.project`] = host.textContent;
+        show([base]); result[`${lang}.noStation`] = host.textContent;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        document.dispatchEvent(new CustomEvent('office-surprise', { detail: { id: base.id, kind: 'gym' } }));
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        result[`${lang}.egg`] = host.textContent;
+      }
+      setLang('fr');
+      render(null, host); host.remove();
+      return result;
+    });
+    assert.equal(officeLabelChecks['fr.empty'], 'Aucun agent n’est au bureau.');
+    assert.match(officeLabelChecks['fr.project'], /dans Domaine Kildare/);
+    assert.match(officeLabelChecks['fr.noStation'], /sans poste/);
+    assert.match(officeLabelChecks['fr.egg'], /Au gym/);
+    assert.equal(officeLabelChecks['en.empty'], 'No agent is in the office.');
+    assert.match(officeLabelChecks['en.project'], /in Domaine Kildare/);
+    assert.match(officeLabelChecks['en.noStation'], /no desk/);
+    assert.match(officeLabelChecks['en.egg'], /At the gym/);
+    assert.doesNotMatch(JSON.stringify(officeLabelChecks), /office\.(?:empty|inProject|noStation)|egg\.gym/,
+      'lazy roster branches resolve through the Office FR/EN catalog instead of exposing raw keys');
     const rosterStatuses = new Map();
     for (const id of memberIds) {
       const occupant = office.occupants.find(row => row.memberId === id);
@@ -183,6 +240,15 @@ test('headless ACP team members join the mounted Office by exact session ref and
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('.ao-bureau__side').isVisible(), false,
+      'phone layout hides the full desktop roster rather than duplicating the compact team cards');
+    const duplicateSidebarTeam = page.locator('.ao-bureau__side [data-team-group]').first();
+    assert.equal(await duplicateSidebarTeam.isVisible(), false,
+      'the full desktop team roster is not visible beside the compact phone groups');
+    await page.locator('.ao-bureau__stagecol .ao-mobile-roster--teams [data-floor-agent-group]').first()
+      .waitFor({ state: 'attached' });
+    assert.equal(await page.locator('.ao-bureau__stagecol .ao-mobile-roster--teams [data-floor-agent-group-kind="team"]').count(), 1,
+      'phone layout presents one compact team roster');
     const membersButton = page.getByTestId('team-open-members');
     await membersButton.waitFor({ state: 'visible' });
     assert.ok(await membersButton.evaluate(node => node.getBoundingClientRect().width <= 390));
@@ -284,6 +350,19 @@ test('headless ACP team members join the mounted Office by exact session ref and
     assert.ok(lastRowBounds.bodyClientHeight > 0 && lastRowBounds.bodyScrollHeight >= lastRowBounds.bodyClientHeight,
       `the member sheet body is laid out and reachable: ${JSON.stringify(lastRowBounds)}`);
     await page.screenshot({ path: 'design/reports/t0248-acp/office-mobile-390-bottom.png', fullPage: false, animations: 'disabled' });
+
+    const failurePage = await page.context().newPage();
+    try {
+      await failurePage.goto(`${browser.origin}/`, { waitUntil: 'domcontentloaded' });
+      const build = await failurePage.locator('meta[name="ao-build"]').getAttribute('content');
+      await failurePage.evaluate(value => sessionStorage.setItem('ao.chunk-reload', value), build);
+      await failurePage.route('**/team-office.js*', route => route.abort());
+      await failurePage.goto(`${browser.origin}/bureau`, { waitUntil: 'domcontentloaded' });
+      await failurePage.getByText('Le roster du bureau n’a pas pu être chargé. Rechargez la page pour réessayer.', { exact: true }).waitFor({ state: 'visible' });
+      assert.ok(await failurePage.locator('.bu-empty--error button').isVisible(), 'the failed roster chunk has a visible retry action');
+      assert.equal(await failurePage.locator('.ao-bureau__stage').count(), 0,
+        'a failed roster import shows an explicit recoverable error instead of a partially rendered Bureau');
+    } finally { await failurePage.close(); }
   } finally {
     await browser?.close();
     await h?.close();

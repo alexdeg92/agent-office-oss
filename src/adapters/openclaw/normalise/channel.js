@@ -3,7 +3,7 @@
 // S6.1 (PM): the canonical id of the WeChat channel is 'wechat' (raw 'openclaw-weixin' in channels.status, 'wechat' in keys).
 // G3b (ADR-001 §12.3): the family is OPEN. OpenClaw's own spellings are aliased; any other valid slug is its own ChannelRef.
 const { CHANNEL_REF } = require('../../../engine/model/kinds');
-const ALIASES = { 'openclaw-weixin': 'wechat', weixin: 'wechat' };
+const ALIASES = { 'openclaw-weixin': 'wechat', weixin: 'wechat', 'wechat-native-isolated': 'wechat' };
 // Known channels have fixed display labels (the gateway's label varies: 'Weixin', or the raw id); others keep the source label.
 const LABEL = { discord: 'Discord', whatsapp: 'WhatsApp', wechat: 'WeChat' };
 // Raw channel name → ChannelRef (own-property lookup, R2-03), or 'unrecognized' only for a raw value that is not a slug.

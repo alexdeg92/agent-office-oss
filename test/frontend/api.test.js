@@ -185,6 +185,32 @@ test('F9: server error messages stay French until G5, so in English the UI says 
   } finally { setLang('fr'); }
 });
 
+test('forbidden issues map to specific EN/FR messages; unknown issues keep the generic text', async () => {
+  const api = await fresh();
+  const { setLang, msg } = await import('../../public/v2/i18n.js');
+  const forbidden = (issue, message = 'Cette action n’est pas autorisée.') =>
+    api.toApiError(403, { error: { code: 'forbidden', message, requestId: 'r', details: issue ? [{ issue }] : [] } });
+  const cases = [
+    ['csrf', 'apiError.forbidden.csrf'],
+    ['reauth-required', 'apiError.forbidden.reauth-required'],
+    ['permission-denied', 'apiError.forbidden.permission-denied'],
+    ['recovery-only', 'apiError.forbidden.recovery-only'],
+  ];
+  for (const [issue, key] of cases) {
+    assert.equal(forbidden(issue).message, msg(key), 'fr ' + issue);
+  }
+  assert.equal(forbidden('token-scope').message, 'Cette action n’est pas autorisée.', 'fr: unknown issue keeps server/generic text');
+  assert.equal(forbidden(null).message, 'Cette action n’est pas autorisée.', 'fr: empty details keep generic text');
+  setLang('en');
+  try {
+    for (const [issue, key] of cases) {
+      assert.equal(forbidden(issue, 'ignored').message, msg(key), 'en ' + issue);
+    }
+    assert.equal(forbidden('token-scope', 'ignored').message, msg('apiError.forbidden'), 'en: unknown issue falls back to generic');
+    assert.equal(forbidden(null, 'ignored').message, msg('apiError.forbidden'), 'en: empty details fall back to generic');
+  } finally { setLang('fr'); }
+});
+
 test('shared requests preserve cancellation before dispatch and after a deferred response body',async()=>{
  const api=await fresh(),controller=new AbortController();let calls=0,finish;
  globalThis.fetch=async(_,options)=>{

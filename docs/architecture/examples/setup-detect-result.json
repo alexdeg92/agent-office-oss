@@ -22,8 +22,8 @@
           "agents": []
         },
         {
-          "runtime": "cursor-cli",
-          "name": "Cursor CLI",
+          "runtime": "cursor",
+          "name": "Cursor",
           "found": false,
           "confidence": "none",
           "supported": false,

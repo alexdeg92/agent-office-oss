@@ -10,6 +10,7 @@
 | 2.10 | 2026-10-13 | Source filters use canonical source identities (connector instance for conversations, owner for GitHub, declared root for folders, manual source), aggregate distinct project counts, and resolve every kind through FR/EN LabelRefs (2026-10-14). Projects import also supplies labelled statusOptions on CandidatesVM; Projects detail additionally supplies ordered statusTransitions with LabelRefs (2026-10-14); unavailable transitions are empty after source/caller/store policy. Projects add source descriptors/brands, backend-selected source filters, status/count/capability values and empty-state labels. TeamProject adds server-shaped roster groups/members/portraits, task/summary counts and column labels. For permission-scoped Projects reads, topic revisions are opaque payload-derived tokens and SSE sends snapshots only (§4.3). Same projection on v3; examples and shared schemas regenerated. |
 | 2.10 additive (T-0140) | 2026-10-14 | Office visits follow each conversation's canonical owning agent. VisitIntent groups visitors by host; visiting occupants carry a localized `visitLabel`, nest under that host, use its floor, and receive a backend-computed reachable visitor target without consuming a desk. The scene only animates these supplied targets. |
 | 2.10 additive (T-0237) | 2026-10-18 | Authorized team occupants may include `OccupantVM.memberId`, a stable team-member identity used to join the Bureau character to the Projects roster across runtime session changes. It is omitted without `teams.read`. Team portraits use this exact join or a stable member-derived non-primary look; a role label equal to the member name is omitted. |
+| 2.10 additive (T-0255) | 2026-10-28 | Office occupants may include `drawerRoleLabel`, a backend-authored profile role label distinct from `stateLabel`; visit drawers retain the contact role while showing the visitor state once. |
 | 2.9 | 2026-10-13 | Chat messages add `kind`, structured `body`, backend-resolved `avatar`, and nullable result metadata. Trusted adapter-projected delegated output is `subagent-result` on the assistant side with task title, canonical status and `statusLabel`; the original Markdown body is preserved. Same ChatVM shape on 3.6. Examples `chat-vm` and SessionVM event variant updated. |
 | T-0102 additive | 2026-10-12 | Backend floor-scoped LayoutVM/topic, commands and history via `floorId`; `allowNoDesk?: boolean` supplies editor validation policy. Floor saves preserve the other layouts and global appearance rules. Same addition on v3; §3.10. |
 | 2.8 | 2026-10-10 | Add canonical adapter-declared `HealthCheckVM` rows, bounded automatic/one-click/guided remedies and audit outcomes; `POST /health/checks/:id/fix` and `POST /health/fix-all`. Santé uses localized explanations instead of raw source/path names. Unknown session classifications remain generic and count once. **T-0053 additive:** `OccupantVM.isNew?: boolean` marks an auto-added agent during its first 24 hours; absent or false means no marker. |
@@ -156,8 +157,16 @@ interface MetaVM {
   enums: Record<string, string[]>;           // ordered members, e.g. projectStatus → [idea, todo, in-progress, in-review, shipped];
                                              // 2.1 adds sessionKind (the Journaux filter)
 }
+interface AccountAvatarVM { kind: 'character' | 'photo' | 'initials'; character: { id: string; variant: string | null; accessories: string[] } | null;
+  imageUrl: string | null; initials: string; altLabel: LabelRef;
+  capabilities: { chooseCharacter: boolean; uploadPhoto: boolean; remove: boolean };
+  uploadLimits: { acceptedTypes: ('image/png' | 'image/jpeg' | 'image/webp')[]; maxBytes: number; maxPixels: number };
+  characterChoices: { id: string; displayName: string; spriteRef: string; selected: boolean;
+    colours: { id: string; displayName: string; swatch: string | null; spriteRef: string; selected: boolean; default: boolean; defaultAccessories: string[] }[];
+    accessories: { id: string; displayName: string; slot: string; selected: boolean; default: boolean;
+      previewLayers: { variantId: string; backSpriteRef: string | null; frontSpriteRef: string | null }[] }[] }[] }
 interface MeVM { email: string; displayName: string /* 2.2: owner's name (PORTAL_DISPLAY_NAME), else the e-mail's local part */;
-               gateway: 'up' | 'down'; capabilities: MetaVM['capabilities']; sessionExpiresAt: Ms }
+               gateway: 'up' | 'down'; capabilities: MetaVM['capabilities']; sessionExpiresAt: Ms; avatar?: AccountAvatarVM | null }
 ```
 ```json
 { "data": { "bootId": "fixture-process-before-restart", "modelVersion": 1, "apiVersion": 2, "contractVersion": "2.10", "serverVersion": "2026.10.5-s6", "env": "staging",
@@ -174,6 +183,8 @@ interface OfficeVM {
   kpis: Collection<Kpi>;                     // ids: active, runs, subagents, flows, tokens, cpu
   occupants: Collection<OccupantVM>;         // roster order (main first); the scene and the roster read this one list
   occupantOverflowCount?: number;            // eligible rows omitted by the bounded office projection (limit 64); absent on older VMs
+  teamGroups?: OfficeTeamGroup[];             // ordered, backend-authored team pods; empty when no visible registered teams (including the mock)
+  teamLegend: { teamId: string; label: LabelRef; accentToken: 'violet'|'teal'|'amber'|'rose'|'sky'|'lime' }[]; // ordered legend rendered under the room, never over the art
   visitIntent?: VisitIntent;                   // visits are host-specific; placement and labels are backend-owned
   journal: Collection<JournalItemVM>;        // newest 14
   layoutRevision: number;                    // client refetches GET /office/layout when it changes (or follows the `layout` topic)
@@ -182,7 +193,8 @@ interface OfficeVM {
 interface OccupantVM {
   id: OccupantId; role: OccupantRole; name: string;
   title: LabelRef;                           // 2.4 (Q03-A01): the name as a LabelRef (sessionTitle.*; genuine names as raw params), shown in the UI's language
-  roleLabel: LabelRef | null;                // semantic role label; null when it would duplicate the rendered name; a custom layout role replaces it as { key: 'custom', params: { text } }
+  roleLabel: LabelRef | null;                // semantic roster role; null when it would duplicate the rendered name; a custom layout role replaces it as { key: 'custom', params: { text } }
+  drawerRoleLabel?: LabelRef;                // backend-authored profile role context, distinct from stateLabel (e.g. direct contact vs En visite)
   state: AgentState; stateSince: Ms;
   execution: { status: 'unknown' | 'idle' | 'running' | 'succeeded' | 'failed'; evidence: { level: 'verified' | 'observed' | 'unknown'; observedAt: Ms | null; expiresAt: Ms | null } };
   stationUid: string | null;                 // null = no free eligible station (overflow), see data-model §12
@@ -210,8 +222,22 @@ interface SceneTravel { id: string; fromFloorId: string; toFloorId: string; depa
 interface VisitIntent { hostId: OccupantId | null; hosts?: { id: OccupantId; visitorIds: OccupantId[] }[];
   desk: OccupantId[]; meeting: OccupantId[]; talking: boolean; speaker: OccupantId | null; until: Ms | null;
   visitors: { id: OccupantId; hostId?: OccupantId; phase: 'person' | 'agent' | 'linger'; stateLabel: LabelRef; onStage: boolean }[] }
+interface OfficeTeamGroup { id: string; label: LabelRef; accentToken: 'violet'|'teal'|'amber'|'rose'|'sky'|'lime'; // hash(team id), collision-probed in team-id order; distinct while palette has room, then evenly reused
+  leadOccupantId: OccupantId; members: { occupantId: OccupantId; roleLabel: LabelRef | null; parentLabel: LabelRef | null;
+    runtimeLabel: LabelRef; runtimeMark: { mark: string | null; color: string; foreground: string; providerName?: string; logo?: string; logoDark?: string } | null;
+    stateLabel: LabelRef; stateTone: 'working'|'idle'|'attention'|'unknown' }[];
+  memberCount: number; memberCountLabel: LabelRef;
+  pod: { floorId: string; coordinateSpace: 'floor-grid'; zone: { bounds: { minX:number; minY:number; maxX:number; maxY:number }; polygon: {x:number;y:number}[] } | null;
+    seats: { occupantId: OccupantId; stationUid: string | null; standingPoint: {x:number;y:number} | null }[] } | null;
+  sharedLeadLinks: { occupantId: OccupantId; teamId: string; label: LabelRef; fromPoint: {x:number;y:number} | null; toPoint: {x:number;y:number} | null }[] }
+interface RosterFloorItem { kind: 'occupant'; id: string; occupantId: OccupantId } | { kind: 'team-header'; id: string; label: LabelRef }
+  | { kind: 'team-group'; id: string; teamGroupId: string; occupantIds: OccupantId[] };
 interface JournalItemVM { id: string; at: Ms; count: number; actor: ActorVM; text: LabelRef /* liveEvent.<kind> */; kind: LiveEventKind }
 ```
+
+`rosterFloors[].items` is the backend-authored ordered union of occupant rows, cross-floor lineage headers, and team-group references. A team-group item replaces its member occupant rows at the first member position; clients render the supplied sequence and group reference without subtracting IDs or choosing where groups appear. Pod zones and shared-lead link endpoints use floor-grid coordinates generated from the assigned workstation/standing targets. `teamLegend` supplies labels, accent tokens, and order for the legend beneath the room; clients render it as supplied and never place team names over the room art. Team grouping and membership references require `teams.read`.
+
+`rosterFloors[].agentGroups` is the floor-scoped roster grouping contract. Each floor supplies ordered `{id,kind,teamId,label,occupantIds,count,countLabel}` groups for its seated agents: registered project teams appear as `team`, and agents with no visible team assignment appear as `unassigned`. `agentGroupsLabel`, `otherItems`, `teamGroups`, and `showTeamPanel` are supplied on each floor; the panel flag hides healthy team content on other floors while source failure/staleness remains visible. Mobile and desktop render the floor's groups and items as supplied; they do not filter the global `teamGroups` collection to infer floor membership.
 
 **Bounded roster (T-0118):** one OfficeVM contains at most 64 occupants. `occupantOverflowCount` counts eligible identities omitted after the backend prioritizes primary/agent/team rows, then other occupants, then conversations, preserving source order within each class and retaining available ancestors. The session registry accepts at most 6,000 sessions (20 pages of at most 300); oversized snapshots/pages are rejected before projection. A positive overflow count means the visible roster is intentionally partial.
 
@@ -230,6 +256,7 @@ Authoritative example: `docs/architecture/examples/office-vm.json`. On 2026.9.8,
     { "id": "agent:codex:worker", "role": "agent", "name": "Worker", "title": { "key": "sessionTitle.named", "params": { "name": "Worker" } }, "roleLabel": { "key": "occupantRole.agent" }, "state": "idle", "stateSince": 1791223100000,
       "stationUid": "st-2", "look": { "character": "timmy", "variant": null, "accessories": [] }, "ruleId": "*agent", "destination": null, "sessionKey": "agent:codex:worker", "tokens": 0, "lastSeenAt": null, "isNew": true } ],
   "journal": [ { "id": "le_42", "at": 1791223190000, "count": 3, "actor": { "kind": "system", "name": "Timmy" }, "text": { "key": "activity.calling" }, "kind": "activity" } ],
+  "teamGroups": [], "teamLegend": [],
   "layoutRevision": 4, "queue": [ { "id": "ffffffff-0c01-4000-8000-000000000001", "name": "Veille hebdomadaire", "schedule": { "key": "schedule.weekly", "params": { "day": { "key": "weekday.1" }, "time": "09:00" } } } ] },
   "meta": { "modelVersion": 1, "generatedAt": 1791223200000, "stale": [], "topic": { "id": "office", "rev": 118 } } }
 ```

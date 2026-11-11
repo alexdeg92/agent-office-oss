@@ -73,11 +73,12 @@ function openStore({ dir, instance, ownerName, renameOwner = false, seedOwner = 
   const userManagement = require('./repos/access-management').createAccessManagement(db, {
     users, rbac, policy, registry, audit, now, changed:notifyAuthorization,
   });
-  const selfAccount = require('./repos/self-account').createSelfAccount(db,{users,audit,now,changed:notifyAuthorization});
   const sessions = createSessionsRepo(db);
   const humanTokens=require('./repos/human-tokens').createHumanTokensRepo(db,{rbac,sessions,now,changed:notifyAuthorization});
   const tokens = createTokensRepo(db, { now });
   const office = createOfficeRepo(db, { now });
+  const avatars = require('./repos/avatars').createAvatarsRepo(db, { now });
+  const selfAccount = require('./repos/self-account').createSelfAccount(db,{users,audit,avatars,now,changed:notifyAuthorization});
   const comments = createCommentsRepo(db, { now });   // architect-57
   const senderCaptures = createSenderCapturesRepo(db, { now, retentionDays: retention?.senderDays || 30 });
   const chatV3 = require('./repos/chat-v3').createChatV3Repo(db, { now, onInvalid });
@@ -149,7 +150,7 @@ function openStore({ dir, instance, ownerName, renameOwner = false, seedOwner = 
   }
 
   return { db, dir: handle.dir, file: handle.file, version: handle.version, applied: handle.applied, get owner() { return closed ? closedOwner : persons.owner(); }, setup,
-    quarantine, caches, audit, persons, users, registry, rbac, policy, userManagement, selfAccount, authorizationEvents, sessions, humanTokens, tokens, office, comments, senderCaptures, chatV3, projectKickoffs, runtimeReferences, runtimeAliases, runtimeAutoAdd, withTx: (fn) => withTx(db, fn),
+    quarantine, caches, audit, persons, users, registry, rbac, policy, userManagement, selfAccount, authorizationEvents, sessions, humanTokens, tokens, office, avatars, comments, senderCaptures, chatV3, projectKickoffs, runtimeReferences, runtimeAliases, runtimeAutoAdd, withTx: (fn) => withTx(db, fn),
     bindEngine, flushQuarantine, maintenance, startMaintenance, backup: handle.backup, close,
     ping: () => !!db.prepare('SELECT 1 AS ok').get(),   // G8: /readyz's store check
   };

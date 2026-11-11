@@ -48,8 +48,8 @@
       "license": "No separate asset license found; Cursor/Anysphere retain trademark and copyright rights.",
       "brandGuidelines": { "use": "Nominative identification in a Cursor connector only; no implied endorsement.", "modification": "None. Original light/dark assets are served according to UI color scheme.", "minimumSize": "No numeric minimum found.", "clearSpace": "No numeric measurement found; retain the full source viewBox." },
       "fallback": { "monogram": "CU", "color": "#26251e" },
-      "registeredBy": null,
-      "status": "asset prepared; adapter registration awaits Cursor adapter"
+      "registeredBy": "src/adapters/cursor/index.js",
+      "status": "registered"
     },
     {
       "id": "herdr",

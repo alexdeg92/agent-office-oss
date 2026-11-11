@@ -19,7 +19,7 @@ export const overlaySourceRegistry=Object.freeze([
   'components/modal.js','components/bureau/confirm-dialog.js','components/bureau/primitives.js',
   'components/bureau/menu.js','components/bureau/popover.js','components/shortcuts.js','components/restart.js',
   'pages/project-comments.js','pages/settings-access.js','pages/projects.js','pages/project.js','pages/ds.js',
-  'pages/settings.js','pages/journaux.js','pages/project-team.js','pages/chat.js','pages/settings-fix-all.js',
+  'pages/settings.js','pages/settings-avatar.js','pages/journaux.js','pages/project-team.js','pages/chat.js','pages/settings-fix-all.js',
   'pages/chat-content.js','pages/chat-conversation.js','pages/flows.js','office/placement.js','office/boutique.js',
   'office/page.js','office/editor.js','office/team-office.js',
 ]);

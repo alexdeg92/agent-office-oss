@@ -70,8 +70,9 @@ function buildMetaVM3(cfg, { engine = null, locale = 'fr', authenticated = false
     locale, locales: ['fr', 'en'], labels: Object.assign({}, base, dynamicLabels(engine, base)), enums: ENUMS_V3 };
 }
 
-function buildMeVM({ session, cfg, engine, ownerName, roleName = null }) {
-  return { email: session.email, displayName: (ownerName && ownerName()) || cfg.displayName || session.email.split('@')[0], gateway: engine.gateway().connected ? 'up' : 'down', capabilities: capabilitiesOf(cfg), sessionExpiresAt: session.exp, ...(roleName ? { roleName } : {}) };
+function buildMeVM({ session, cfg, engine, ownerName, roleName = null, avatar = null }) {
+  return { email: session.email, displayName: (ownerName && ownerName()) || cfg.displayName || session.email.split('@')[0], gateway: engine.gateway().connected ? 'up' : 'down', capabilities: capabilitiesOf(cfg), sessionExpiresAt: session.exp,
+    ...(avatar ? { avatar } : {}), ...(roleName ? { roleName } : {}) };
 }
 
 module.exports = { buildMetaVM, buildMetaVM3, buildMeVM, capabilitiesOf, envOf, ENUMS_V3 };

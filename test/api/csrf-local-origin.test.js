@@ -98,4 +98,63 @@ describe('csrf one-port origin', () => {
     }, '172.30.0.2');
     assert.equal(foreign.status, 403);
   });
+
+  it('fresh install behind an untrusted TLS proxy that keeps the Host: the https Origin of that Host is its own', () => {
+    const warnings = [];
+    const guard = createCsrfGuard({ warn: (m) => warnings.push(m) });
+    const tls = invoke(guard, { ...cookie, host: 'office.example', origin: 'https://office.example' }, '198.51.100.7');
+    assert.equal(tls.nexted, true);
+    const otherHost = invoke(guard, { ...cookie, host: 'office.example', origin: 'https://evil.example', 'x-ao-request': '1' }, '198.51.100.7');
+    assert.equal(otherHost.status, 403);
+    assert.deepEqual(warnings.length, 1);
+  });
+
+  it('a proxy that rewrites the Host is refused once with the AO_PUBLIC_URL to set, then quietly', () => {
+    const warnings = [];
+    const guard = createCsrfGuard({ warn: (m) => warnings.push(m) });
+    const req = { ...cookie, host: '127.0.0.1:3300', origin: 'https://office.example' };
+    assert.equal(invoke(guard, req, '198.51.100.7').status, 403);
+    assert.equal(invoke(guard, req, '198.51.100.7').status, 403);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /AO_PUBLIC_URL=https:\/\/office\.example/);
+    assert.match(warnings[0], /http:\/\/127\.0\.0\.1:3300/);
+    const configured = [];
+    invoke(createCsrfGuard({ publicUrl: 'https://office.example', warn: (m) => configured.push(m) }), { ...req, origin: 'https://evil.example', 'x-ao-request': '1' }, '198.51.100.7');
+    assert.equal(configured.length, 0, 'an operator who set AO_PUBLIC_URL is not told to set it');
+  });
+});
+
+describe('csrf · origins saved by the setup wizard', () => {
+  it('accepts the saved public origins (network step, same-origin or tunnel access) and nothing else', () => {
+    const IC = require('../../src/instance-config');
+    assert.deepEqual(IC.savedOrigins({ network: { publicUrl: 'https://legacy.example' } }), ['https://legacy.example']);
+    assert.deepEqual(IC.savedOrigins({ access: { mode: 'public-same-origin', apiPublicUrl: 'https://office.example/backend' } }), ['https://office.example/backend']);
+    assert.deepEqual(IC.savedOrigins({ access: { mode: 'tunnel', apiPublicUrl: 'https://tunnel.example' } }), ['https://tunnel.example']);
+    assert.deepEqual(IC.savedOrigins({ access: { mode: 'public-split-origin', apiPublicUrl: 'https://api.example' } }), [], 'split origin authenticates with bearer tokens');
+    assert.deepEqual(IC.savedOrigins(null), []);
+    const guard = createCsrfGuard({ origins: IC.savedOrigins({ access: { mode: 'public-same-origin', apiPublicUrl: 'https://office.example/backend' } }) });
+    const req = { ...cookie, host: '127.0.0.1:40000' };
+    assert.equal(invoke(guard, { ...req, origin: 'https://office.example' }, '198.51.100.7').nexted, true);
+    assert.equal(invoke(guard, { ...req, origin: 'https://evil.example', 'x-ao-request': '1' }, '198.51.100.7').status, 403);
+  });
+});
+
+describe('csrf · the refusal hint never turns a request Origin into a copyable shell assignment (review LOW)', () => {
+  it('prints AO_PUBLIC_URL=<origin> only for a plain host; shell metacharacters get generic guidance and a quoted origin', () => {
+    const hostile = ['https://$(id).example.invalid', 'https://`id`.example.invalid', 'https://a;b.example.invalid', 'https://a"b.example.invalid', "https://a'b.example.invalid"];
+    const warnings = [];
+    const guard = createCsrfGuard({ warn: (m) => warnings.push(m) });
+    for (const origin of hostile) invoke(guard, { ...cookie, host: '127.0.0.1:3300', origin }, '198.51.100.7');
+    assert.equal(warnings.length, hostile.length);
+    for (const line of warnings) {
+      assert.doesNotMatch(line, /AO_PUBLIC_URL=\S/, line);
+      assert.match(line, /set AO_PUBLIC_URL to its public origin/);
+      assert.match(line, /refused writes from "/, 'the untrusted origin is shown quoted, as data');
+    }
+    const plain = [];
+    const ok = createCsrfGuard({ warn: (m) => plain.push(m) });
+    for (const origin of ['https://office.example.invalid:8443', 'http://192.0.2.10:3300']) invoke(ok, { ...cookie, host: '127.0.0.1:3300', origin }, '198.51.100.7');
+    assert.match(plain[0], /set AO_PUBLIC_URL=https:\/\/office\.example\.invalid:8443 and restart/);
+    assert.match(plain[1], /set AO_PUBLIC_URL=http:\/\/192\.0\.2\.10:3300 and restart/);
+  });
 });

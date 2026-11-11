@@ -36,7 +36,9 @@ const MAIN_ALIASES = [/^\$\.(layout|default)\.data\.agents\[\d+\]\.(agentId|matc
   /^\$\.rosterFloors\[\d+\]\.items\[\d+\]\.occupantId$/,
   /^\$\.visitIntent\.(hostId|speaker|desk\[\d+\]|meeting\[\d+\]|visitors\[\d+\]\.id)$/];
 // These are occupant-ID references in the same documented 2.x primary alias namespace.
-MAIN_ALIASES.push(/^\$\.visitIntent\.hosts\[\d+\]\.id$/, /^\$\.visitIntent\.visitors\[\d+\]\.hostId$/);
+MAIN_ALIASES.push(/^\$\.visitIntent\.hosts\[\d+\]\.id$/, /^\$\.visitIntent\.visitors\[\d+\]\.hostId$/,
+  /^\$\.rosterFloors\[\d+\]\.agentGroups\[\d+\]\.occupantIds\[\d+\]$/,
+  /^\$\.rosterFloors\[\d+\]\.agentGroups\[\d+\]\.previewOccupantId$/);
 function mainOutsideAliases(value, at = '$', out = []) {
   if (Array.isArray(value)) value.forEach((v, i) => mainOutsideAliases(v, `${at}[${i}]`, out));
   else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) mainOutsideAliases(v, `${at}.${k}`, out);
@@ -69,7 +71,7 @@ describe('portability · a foreign instance end to end (ADR-001 §12.8)', () => 
     assert.equal(meta.locale, 'en', 'no saved preference, no browser language → the instance locale');
   });
 
-  it('office: Atlas is the primary occupant; the Telegram and Slack conversations are present; Paris night theme', async () => {
+  it('office: Atlas is the primary occupant; the Telegram DM is on its card and the Slack conversation is present; Paris night theme', async () => {
     const office = await get('/api/v2/views/office');
     assert.equal(office.occupantOverflowCount, 0, 'the foreign Office projection reports its exact zero overflow');
     assert.deepEqual(
@@ -87,7 +89,9 @@ describe('portability · a foreign instance end to end (ADR-001 §12.8)', () => 
     for (const host of office.visitIntent?.hosts || []) assert.ok(officeIds.has(host.id), 'visit host ID resolves to a projected occupant');
     for (const visitor of office.visitIntent?.visitors || []) if (visitor.hostId) assert.ok(officeIds.has(visitor.hostId), 'visitor host ID resolves to a projected occupant');
     const keys = office.occupants.map((o) => o.sessionKey);
-    assert.ok(keys.includes('agent:atlas:telegram:direct:foreign-user') && keys.includes('agent:scribe:slack:channel:C0ACME'), JSON.stringify(keys));
+    // A person's DM annotates its agent's card; channel conversations stay physical occupants.
+    assert.ok(!keys.includes('agent:atlas:telegram:direct:foreign-user') && keys.includes('agent:scribe:slack:channel:C0ACME'), JSON.stringify(keys));
+    assert.deepEqual(primary.visitLabel?.params?.channel, { key: 'channel.telegram' }, 'the Telegram DM is shown on Atlas\'s card');
     const layout = await get('/api/v2/office/layout');
     assert.equal(layout.theme.resolved, 'night', 'NOW is 21:00 in Paris (15:00 in Toronto)');
   });

@@ -3,11 +3,19 @@
 // Independent compatibility implementation retained only for rollback and
 // engine-vs-legacy parity. The canonical implementation is engine/office/builder.
 const { projectionFor } = require('./project3x');
+const { allowsPrincipal } = require('../../security/orchestrator-team-resources');
 const Pof = request => projectionFor(request.apiVersion);
 
 function buildLegacyTeamOfficeProjection({ office, snapshot, principal, projection: P, planningOffice, tracker, sourceEnabled,
-  engine, now, activeLayout, officeDefaults, placementPopulationFor, sessionsReadable, currentOfficeTimings, store, persist = true }) {
-  if (!snapshot || !sourceEnabled) return office;
+  engine, now, activeLayout, officeDefaults, placementPopulationFor, sessionsReadable, currentOfficeTimings, store, persist = true,
+  homeAssignmentsOverride = undefined }) {
+  const canReadTeams = allowsPrincipal(principal, 'teams', 'read');
+  const withoutTeamMembership = require('../../engine/office/roster').withoutTeamMembership;
+  const { projectFloorAgentGroups } = require('../../engine/office/roster');
+  if (!snapshot || !sourceEnabled) {
+    const authorized = canReadTeams ? office : withoutTeamMembership(office);
+    return canReadTeams ? { ...authorized, rosterFloors: projectFloorAgentGroups(authorized.rosterFloors, authorized.occupants) } : authorized;
+  }
   const { projectOfficeOccupant, projectOfficeTeamOccupants } = require('../orchestrator-team-projection');
   const agents = engine.agents(), links = snapshot.identityLinks || [];
   const rows = new Map((snapshot.agents || []).map(row => [row.id, row]));
@@ -45,14 +53,23 @@ function buildLegacyTeamOfficeProjection({ office, snapshot, principal, projecti
   const { projectOfficeRoster, projectOfficePlacement } = require('./vm/office-roster');
   const roster = projectOfficeRoster(projected, { projectOccupantId: P.occupantId });
   const placementLayout = activeLayout();
-  return projectOfficePlacement(roster, { layout: placementLayout.layout, index: officeDefaults().index,
+  const placed = projectOfficePlacement(roster, { layout: placementLayout.layout, index: officeDefaults().index,
     projectOccupantId: P.occupantId, now: now(), tracker,
-    planningOccupants: placementPopulationFor(planningOffice, snapshot, P, sourceEnabled), engine,
+    planningOccupants: placementPopulationFor(planningOffice, snapshot, P, sourceEnabled, tracker), engine,
     canReadSessions: sessionsReadable({ session: null, principal }), idleTransitionDebounceMs: currentOfficeTimings().idleTransitionDebounceMs,
-    homeAssignments: store?.office?.teamHomeAssignments?.(placementLayout.revision) || null,
+    teamSnapshot: snapshot, canReadTeams,
+    homeAssignments: homeAssignmentsOverride === undefined
+      ? store?.office?.teamHomeAssignments?.(placementLayout.revision) || null : homeAssignmentsOverride,
     ...(persist && store?.office?.rememberTeamHomeAssignments ? {
       rememberHomeAssignments: assignments => store.office.rememberTeamHomeAssignments(placementLayout.revision, assignments),
     } : {}) });
+  const { projectTeamGroups } = require('../../engine/office/roster');
+  const teamGroups = canReadTeams ? projectTeamGroups(placed.occupants, snapshot,
+    kind => engine?.runtimePresentationFor?.(kind) || null, { floorLayouts: placed.rosterFloors, index: officeDefaults().index }) : [];
+  const authorized = canReadTeams ? placed : withoutTeamMembership(placed);
+  const rosterFloors = projectFloorAgentGroups(authorized.rosterFloors, authorized.occupants, canReadTeams ? teamGroups : []);
+  const teamLegend = teamGroups.map(group => ({ teamId: group.id, label: group.label, accentToken: group.accentToken }));
+  return { ...authorized, rosterFloors, teamGroups, teamLegend };
 }
 
 module.exports = { buildLegacyTeamOfficeProjection };

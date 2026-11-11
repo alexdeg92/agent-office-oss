@@ -13,7 +13,7 @@ function openclawPaths(env) {
   const home = path.resolve(env.OC_HOME || env.HOME || os.homedir());   // also the HOME the openclaw CLI runs with
   const dir = env.OPENCLAW_STATE_DIR ? path.resolve(env.OPENCLAW_STATE_DIR) : path.join(home, '.openclaw');
   return {
-    openclawHome: home,
+    openclawHome: home, stateDir: dir,
     identityPath: env.OC_IDENTITY || path.join(dir, 'identity', 'device.json'),
     stateDbPath: env.OC_STATE_DB || path.join(dir, 'state', 'openclaw.sqlite'),
     openclawConfigPath: env.OC_CONFIG || path.join(dir, 'openclaw.json'),

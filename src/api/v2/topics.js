@@ -10,6 +10,7 @@
  */
 const { EventEmitter } = require('events');
 const { diff } = require('./diff');
+const { VmError } = require('./vm/check');
 
 const COALESCE_MS = 250;
 
@@ -90,15 +91,17 @@ function createTopics(defs, { coalesceMs = COALESCE_MS, check = (name, vm) => vm
   function rebuild(id) {
     const s = state.get(id);
     s.dirty = false; s.lastAt = Date.now();
-    let vm;
-    try { vm = check(s.name, defs[s.name].build(s.params), id); }
-    catch (error) {
+    const reportBuildFailure = causeCategory => {
       // Schema paths can contain caller-controlled object keys, including
-      // credential-like names. Keep diagnostics to a fixed failure class and
-      // the registry-owned topic name only.
-      try { onError({ topic: s.name, code: 'build_or_check_failed' }); } catch (_) { /* diagnostics cannot break topic behavior */ }
-      throw error;
-    }
+      // credential-like names. Expose only a fixed cause class and topic name.
+      try { onError({ topic: s.name, code: 'build_or_check_failed', causeCategory }); } catch (_) { /* diagnostics cannot break topic behavior */ }
+    };
+    let built;
+    try { built = defs[s.name].build(s.params); }
+    catch (error) { reportBuildFailure('builder_exception'); throw error; }
+    let vm;
+    try { vm = check(s.name, built, id); }
+    catch (error) { reportBuildFailure(error instanceof VmError ? 'schema_check' : 'check_exception'); throw error; }
     if (s.rev === 0) { s.vm = vm; s.rev = 1; return null; }
     const ops = diff(s.vm, vm);
     if (ops && ops.length === 0) return null;

@@ -13,11 +13,9 @@ import { chooseLang } from '../lang.js';
 const LOGOS = assetUrl('bureau/assets/Logos/');
 
 export function watchReleaseBadgeFor(email, setBadge) {
-  let active = true, stop = () => {};
-  import('../release-badge.js' + buildQuery).then(({ watchReleaseBadge }) => {
-    if (active) stop = watchReleaseBadge(email, setBadge);
-  }).catch(() => { if (active) setBadge(true); });
-  return () => { active = false; stop(); };
+  let active=true,stop=()=>{};
+  import('../release-badge.js'+buildQuery).then(({watchReleaseBadge})=>active&&(stop=watchReleaseBadge(email,setBadge))).catch(()=>active&&setBadge(true));
+  return()=>{active=false;stop()};
 }
 
 /** Light/dark logo pair; app.css shows the one that fits the current theme. */
@@ -64,9 +62,10 @@ export function Shell({ match, me, status, onLogout, children }) {
   const question = override(match.route?.subtitleKey) || (route ? route.question : msg('shell.notFound.question'));
   // MeVM.displayName (2.2): the owner's name, else the e-mail's local part (v1 /api/me has no displayName).
   const who = (me && me.displayName) || (me && me.email ? me.email.split('@')[0] : '');
-  const email = me?.email || '';
   const [hasNewRelease, setHasNewRelease] = useState(false);
-  useEffect(() => watchReleaseBadgeFor(email, setHasNewRelease), [email]);
+  const [ProfileUserCard, setProfileUserCard] = useState(null);
+  useEffect(() => watchReleaseBadgeFor(me?.email || '', setHasNewRelease), [me?.email]);
+  useEffect(() => { import('./profile-avatar.js' + buildQuery).then(module => setProfileUserCard(() => module.ProfileUserCard)).catch(() => {}); }, []);
 
   return html`<div class="bu-shell">
     <a class="ao-skip" href="#contenu">${msg('shell.skip')}</a>
@@ -78,13 +77,8 @@ export function Shell({ match, me, status, onLogout, children }) {
       </ul>
       <div class="ao-sidebar-foot">
         <div class="ao-prefs"><${ThemeSwitch} /><${LangSwitch} /></div>
-        <div class="bu-usercard">
-          <span class="bu-avatar bu-avatar--human" aria-hidden="true">${initials(who)}</span>
-          <div class="bu-usercard__text"><span class="bu-usercard__name">${who}</span><span class="bu-usercard__role" title=${me?.roleName||msg('shell.role.member')}>${me?.roleName||msg('shell.role.member')}</span></div>
-          <a class=${'bu-btn bu-btn--ghost bu-btn--sm ao-about-entry' + (hasNewRelease ? ' ao-about-entry--new' : '')} href=${router.href('a-propos')} aria-label=${msg('nav.a-propos') + (hasNewRelease ? ', ' + msg('release.notes.new') : '')} title=${msg('nav.a-propos')}
-            aria-current=${match.name === 'a-propos' ? 'page' : undefined}><${Icon} name="info" />${hasNewRelease ? html`<span class="bu-tag ao-new-release">${msg('release.notes.new')}</span>` : null}</a>
-          <button class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${msg('shell.logout')} title=${msg('shell.logout')} onClick=${onLogout}><${Icon} name="logout" /></button>
-        </div>
+        ${ProfileUserCard ? html`<${ProfileUserCard} me=${me} hasNewRelease=${hasNewRelease} aboutHref=${router.href('a-propos')} isAbout=${match.name==='a-propos'} onLogout=${onLogout} />` : html`<div class="bu-usercard"><span class="bu-avatar bu-avatar--human" aria-hidden="true">${initials(who)}</span><span class="bu-usercard__name">${who}</span>
+          <button class="bu-btn bu-btn--icon bu-btn--ghost bu-btn--sm" aria-label=${msg('shell.logout')} title=${msg('shell.logout')} onClick=${onLogout}><${Icon} name="logout" /></button></div>`}
       </div>
     </nav>
     <div class="bu-shell__main">

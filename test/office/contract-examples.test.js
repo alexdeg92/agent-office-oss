@@ -35,6 +35,21 @@ describe('office mocks ↔ docs/architecture/examples (2.1)', () => {
     }
   });
 
+  it('strict OfficeVM shape accepts the full team floor-group variant in v2 and v3', () => {
+    for (const version of [2, 3]) {
+      const vm = structuredClone(loadExample('office-vm', version).data);
+      vm.rosterFloors[0].agentGroups = [{
+        id: 'team:example', kind: 'team', teamId: 'team:example',
+        label: { key: 'custom', params: { text: 'Project team' } }, accentToken: 'teal',
+        leadOccupantId: 'agent:lead', occupantIds: ['agent:lead'], count: 1,
+        countLabel: { key: 'office.floor.count.one' },
+        previewOccupantId: 'agent:lead', previewState: 'working', previewStateKind: 'working',
+        previewStateLabel: { key: 'agentState.working' }, previewStateActive: true, sharedLabel: null,
+      }];
+      assert.deepEqual(compareExample('office-vm', vm, { version }), [], `strict v${version} team group`);
+    }
+  });
+
   it('LayoutVM matches layout-vm.json, before and after saves (manifest opaque)', async () => {
     const om = createOfficeMock({ manifest, layout });
     // layout.data / default.data: the shared semantic validator (their shape contract is layout.schema.json).

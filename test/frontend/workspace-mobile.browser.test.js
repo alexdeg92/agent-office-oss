@@ -50,7 +50,7 @@ async function swipe(page, box) {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await cdp.detach();
 }
 
-for (const theme of ['light', 'dark']) for (const [width, height] of [[390, 844], [360, 640], [1280, 800], [1440, 900]]) {
+for (const theme of ['light', 'dark']) for (const [width, height] of [[390, 844], [360, 640], [600, 844], [1280, 800], [1440, 900]]) {
   test(`Workspace: bounded chat, logs and tasks ${theme} ${width}`, { skip, timeout: 90000 }, async () => {
     const mobile = width <= 820, h = await openLayoutBrowser({ theme, touch: mobile }), p = h.page, errors = [];
     p.on('pageerror', e => errors.push(e.message));
@@ -84,7 +84,12 @@ for (const theme of ['light', 'dark']) for (const [width, height] of [[390, 844]
           if (mobile) assert.ok((await input.boundingBox()).height > 60);
           assert.equal(await send.isEnabled(), true);
           const composer = await p.locator('.ao-chat__card').boundingBox();
-          if (mobile) assert.equal(Math.round(composer.y + composer.height), Math.round((await p.locator('.bu-bottombar').boundingBox()).y));
+          if (width <= 520) {
+            assert.equal(await p.locator('.bu-bottombar').evaluate(e => getComputedStyle(e).display), 'none', 'full-screen phone conversations hide the app tab bar');
+            assert.equal(Math.round(composer.y + composer.height), height, 'the phone composer stays pinned to the viewport bottom');
+          } else if (mobile) {
+            assert.equal(Math.round(composer.y + composer.height), Math.round((await p.locator('.bu-bottombar').boundingBox()).y));
+          }
         }
       }
       assert.deepEqual(errors, []);

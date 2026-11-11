@@ -188,7 +188,7 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
           || st.size <= (row.offset || 0) && row.readMtime !== st.mtimeMs
           || row.coverageComplete && !row.recognizable && row.readMtime !== st.mtimeMs || !cache.has(key);
         let offset = reset ? 0 : row.offset || 0;
-        if (reset) { row.summary = null; row.summarySource = null; row.displayName = null; row.spawns = []; row.execution = null; row.activity = null; row.backgroundPending = false; row.backgroundPendingIds = []; row.pendingBackgroundOverflow = false; row.awaitingReply = false; row.awaitingReplyAt = null; }
+        if (reset) { row.summary = null; row.summarySource = null; row.displayName = null; row.projectPath = null; row.spawns = []; row.execution = null; row.activity = null; row.backgroundPending = false; row.backgroundPendingIds = []; row.pendingBackgroundOverflow = false; row.awaitingReply = false; row.awaitingReplyAt = null; }
         const startedAtZero = reset ? offset === 0 : !!row.startedAtZero;
         let skip = reset ? offset > 0 : row.skip || false, pending = Buffer.alloc(0), events = reset ? [] : structuredClone(cache.get(key).events);
         let committed = offset, at = null, model = null, readTotal = 0, accepted = false, activityAt = null, activity = reset ? null : row.activity || null,
@@ -259,6 +259,7 @@ function createFiles({ home, include = [], exclude = [], agentGrouping = 'projec
             else if (record.backgroundCompleted) activity = null;
             else if (record.execution?.status === 'idle') activity = null;
             projectName ||= record.projectName;
+            if (record.cwd) row.projectPath = record.cwd;
             if (rowUuid && ancestry.has(rowUuid) && record.events.every(e => !e.id || events.some(old => old.id === e.id))) continue;
             if (record.at !== null && rowUuid !== previousTip && parentUuid && parentUuid !== previousTip) {
               const parent = ancestry.get(parentUuid);

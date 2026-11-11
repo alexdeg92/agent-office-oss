@@ -137,12 +137,11 @@ test('Settings is the only relocation-delay source for layout GET and live offic
 test('saving a longer finished-session window changes the next OfficeVM without restart',async t=>{
  const now=1791740000000,sessionFixture=JSON.parse(fs.readFileSync(require.resolve('../fixtures/gw/rpc/sessions.list/2026.9.8/foreign-instance.json'),'utf8')).body.value;
  const source=sessionFixture.sessions.find(row=>row.key==='agent:atlas:telegram:direct:foreign-user');
- const finished={...source,updatedAt:now-20*60000,status:'done',hasActiveRun:false};
+ const finished={...source,key:'agent:atlas:telegram:group:synthetic-room',updatedAt:now-20*60000,status:'done',hasActiveRun:false};
  const h=await fixture(t,{now:()=>now,handlers:{'sessions.list':()=>({...sessionFixture,totalCount:1,count:1,sessions:[finished]})}});
- const key=finished.key;
- let office=await h.get('/api/v3/views/office');assert.equal(office.status,200,office.text);assert.equal(office.json.data.occupants.some(row=>row.role==='direct'),false);
+ let office=await h.get('/api/v3/views/office');assert.equal(office.status,200,office.text);assert.equal(office.json.data.occupants.some(row=>row.role==='group'),false);
  const saved=await h.put(BASE+'/instance',{expectedRevision:1,office:{finishedSessionWindowMinutes:30}});assert.equal(saved.status,200,saved.text);assert.equal(saved.json.data.result.restartRequired,false);
- office=await h.get('/api/v3/views/office');assert.equal(office.status,200,office.text);assert.equal(office.json.data.occupants.some(row=>row.role==='direct'),true);
+ office=await h.get('/api/v3/views/office');assert.equal(office.status,200,office.text);assert.equal(office.json.data.occupants.some(row=>row.role==='group'),true);
 });
 test('cleared chosen names persist as null while detected names survive save and GET',async t=>{
  const h=await fixture(t);

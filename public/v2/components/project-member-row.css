@@ -24,5 +24,5 @@
  .ao-project-member--compact .ao-project-member__runtime { align-self:start; width:24px; height:24px; box-sizing:border-box; justify-content:center; padding:2px; }
  .ao-project-member--compact .ao-project-member__runtime-label { display:none; }
  .ao-project-member--compact .ao-project-member__runtime .ao-brand-mark { width:18px; height:18px; }
- .ao-project-member--compact .ao-project-member__status { justify-self:end; align-self:center; font-size:var(--bu-font-size-xs); padding-inline:var(--bu-space-2); }
+ .ao-project-member--compact .ao-project-member__status { justify-self:end; align-self:center; transform:translateY(-3px); font-size:var(--bu-font-size-xs); padding-inline:var(--bu-space-2); }
 }

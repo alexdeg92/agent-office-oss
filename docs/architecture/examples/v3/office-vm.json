@@ -812,7 +812,36 @@
             "id": "occupant:scheduled:ffffffff-0c01-4000-8000-000000000001",
             "occupantId": "scheduled:ffffffff-0c01-4000-8000-000000000001"
           }
-        ]
+        ],
+        "agentGroups": [
+          {
+            "id": "unassigned:1",
+            "kind": "unassigned",
+            "teamId": null,
+            "label": {
+              "key": "office.floor.unassignedAgents"
+            },
+            "occupantIds": [
+              "primary",
+              "agent:codex:worker",
+              "subagent:ffffffff-0001-4000-8000-000000000001",
+              "scheduled:ffffffff-0c01-4000-8000-000000000001"
+            ],
+            "count": 4,
+            "countLabel": {
+              "key": "office.floor.count.other",
+              "params": {
+                "n": 4
+              }
+            }
+          }
+        ],
+        "agentGroupsLabel": {
+          "key": "office.floor.agentGroups"
+        },
+        "teamGroups": [],
+        "otherItems": [],
+        "showTeamPanel": false
       }
     ],
     "unseatedTeams": [],
@@ -848,7 +877,9 @@
           "onStage": true
         }
       ]
-    }
+    },
+    "teamGroups": [],
+    "teamLegend": []
   },
   "meta": {
     "modelVersion": 1,

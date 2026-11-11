@@ -9,13 +9,14 @@ const AUTHORS = ['Mira', 'Noor'];
 const TITLES = ['Vérifier le parcours d’accueil', 'Tester la confirmation mobile'];
 const RESULT = '**Vérifications terminées**\n\n| Contrôle | Résultat détaillé |\n| --- | --- |\n| Accueil | Parcours accessible sur téléphone et ordinateur |\n| Formulaire | Confirmation vérifiée après envoi |';
 async function chatResultsFixture(publicUrl, {result=RESULT,completedChildren=false,durable=false}={}) {
+  let chatSessionKey=CHAT;
   const scenario = loadScenario('synthetic-basic');
   const now = Date.now(); scenario.now = now;
   const list = readFixture(scenario.rpc['sessions.list']).body.value;
   const template = list.sessions.find(row => row.key === 'agent:main:main');
   const row = key => ({ ...template, key, sessionId: key, classification: undefined, isMain: key === template.key,
     updatedAt: now - 1000, hasActiveRun: true, status: 'running' });
-  const sessions = [row(template.key), row(CHAT), ...CHILDREN.map((key, index) => ({ ...row(key), parentSessionKey: CHAT, label: AUTHORS[index],...(completedChildren?{updatedAt:now-3600000,hasActiveRun:false,status:'ok'}:{}) }))];
+  let sessions = [row(template.key), row(chatSessionKey), ...CHILDREN.map((key, index) => ({ ...row(key), parentSessionKey: chatSessionKey, label: AUTHORS[index],...(completedChildren?{updatedAt:now-3600000,hasActiveRun:false,status:'ok'}:{}) }))];
   const messages = [
     { role: 'user', timestamp: now - 60000, senderId: 'operator', senderName: 'Camille', content: 'Vérifie le parcours d’accueil et la confirmation sur téléphone.' },
     { role: 'assistant', timestamp: now - 55000, content: 'Deux sous-agents ont vérifié le parcours. Voici leurs résultats.' },
@@ -31,16 +32,30 @@ async function chatResultsFixture(publicUrl, {result=RESULT,completedChildren=fa
   const original = gatewayHandlers(scenario)['sessions.get'];
   const h = await startServer(scenario, { env: { ...(durable?{AO_RBAC_ENABLED:'1'}:{}), PORTAL_DISPLAY_NAME: 'Camille', AO_ENRICHERS: '', AO_PROJECTS_OWNERS: 'generic-org', ...(publicUrl ? { AO_PUBLIC_URL: publicUrl } : {}) }, handlers: {
     'sessions.list': () => ({ ...list, sessions, totalCount: sessions.length, count: sessions.length, hasMore: false, nextOffset: null }),
-    'sessions.get': params => params.key === CHAT ? { messages } : CHILDREN.includes(params.key) ? { messages: [{ role: 'assistant', timestamp: now - 1000, content: 'Vérification en cours.' }] } : original(params),
+    'sessions.get': params => params.key === chatSessionKey ? { messages } : CHILDREN.includes(params.key) ? { messages: [{ role: 'assistant', timestamp: now - 1000, content: 'Vérification en cours.' }] } : original(params),
   } });
-  const expectedLooks=[{character:'cosmo',variant:'sage',accessories:['scarf']},{character:'fen',variant:null,accessories:[]}];
-  if(completedChildren) {
+  try {
+    const owner=h.withStore(db=>db.prepare('SELECT id FROM users WHERE email=?').get(require('./harness').TEST_EMAIL));
+    const chatIdentity=require('../../src/api/chat-identity'),scope=chatIdentity.scopeForAccount(owner?.id||null);
+    chatSessionKey=require('../../src/adapters/openclaw').definition.sessionKeyFor('main',chatIdentity.sessionRefForScope(scope),{purpose:'chat'});
+    sessions=[row(template.key),row(chatSessionKey),...CHILDREN.map((key,index)=>({...row(key),parentSessionKey:chatSessionKey,label:AUTHORS[index],...(completedChildren?{updatedAt:now-3600000,hasActiveRun:false,status:'ok'}:{})}))];
+    h.gw.emit('sessions.changed',{sessionKey:chatSessionKey,reason:'created'});
+    await require('./harness').waitFor(async()=> (await h.get('/api/v3/views/sessions/'+encodeURIComponent(chatSessionKey))).status===200,
+      {timeoutMs:10000,what:'the account-scoped Chat session to enter the runtime index'});
+    const expectedLooks=[{character:'cosmo',variant:'sage',accessories:['scarf']},{character:'fen',variant:null,accessories:[]}];
     const current=await h.get('/api/v3/office/layout');assert.equal(current.status,200,current.text);
     const data=current.json.data.layout.data;
-    for(let i=0;i<CHILDREN.length;i++)data.agents.push({agentId:'subagent:'+CHILDREN[i].split(':').at(-1),station:'auto',...expectedLooks[i]});
+    for(let i=0;i<CHILDREN.length;i++) {
+      const agentId='subagent:'+CHILDREN[i].split(':').at(-1),appearance={agentId,station:'auto',...expectedLooks[i]};
+      const existing=data.agents.find(agent=>agent.agentId===agentId);
+      if(existing)Object.assign(existing,appearance);else data.agents.push(appearance);
+    }
     const saved=await h.request('PUT','/api/v3/office/layout',{expectedRevision:current.json.data.layout.revision,data});assert.equal(saved.status,200,saved.text);
+    return { ...h, expectedLooks, children: CHILDREN, authors: AUTHORS, titles: TITLES, result, chatSessionKey };
+  } catch(error) {
+    await h.stop();
+    throw error;
   }
-  return { ...h, expectedLooks, children: CHILDREN, authors: AUTHORS, titles: TITLES, result };
 }
 async function readChat(h, version) {
   const response = await h.get(`/api/v${version}/views/chat`);
@@ -53,14 +68,22 @@ async function readChat(h, version) {
 async function chatResultsV3Fixture(publicUrl, options={}) {
   const h=await chatResultsFixture(publicUrl,{...options,durable:true});
   try {
-    const transcript=await h.get('/api/v3/views/sessions/'+encodeURIComponent(CHAT));assert.equal(transcript.status,200,transcript.text);
-    const canonical=require('../../src/api/v2/vm/chat').buildChatVM({sessionKey:CHAT,transcript:{events:transcript.json.data.events}});
+    const transcript=await h.get('/api/v3/views/sessions/'+encodeURIComponent(h.chatSessionKey));assert.equal(transcript.status,200,transcript.text);
+    const canonical=require('../../src/api/v2/vm/chat').buildChatVM({sessionKey:h.chatSessionKey,transcript:{events:transcript.json.data.events}});
     const index=await h.get('/api/v3/chat/agents');assert.equal(index.status,200,index.text);
     const target=index.json.data.agents.find(row=>row.kind==='agent');assert.ok(target);
-    const response=await fetch(h.base+'/api/v3/chat/agents/'+target.id+'/sessions',{method:'POST',headers:{cookie:h.cookie,'content-type':'application/json','x-ao-request':'1','Idempotency-Key':require('node:crypto').randomUUID()},body:'{}'});
-    assert.equal(response.status,201);const sessionId=(await response.json()).data.result.sessionId;
+    // This scenario exercises transcript projection and rendering, not the
+    // runtime's session-creation capability. Seed the stored chat row through
+    // the repository because the synthetic gateway is intentionally read-only.
+    const sessionId='cs_'+require('node:crypto').randomBytes(24).toString('hex');
     h.withStore(db=>{
       const repo=require('../../src/store/repos/chat-v3').createChatV3Repo(db);
+      const user=db.prepare('SELECT id FROM users WHERE email=?').get(require('./harness').TEST_EMAIL);
+      assert.ok(user,'the fixture owner is present in the mounted store');
+      const scope=require('../../src/api/chat-identity').scopeForAccount(user.id);
+      const savedTarget=repo.target(scope,target.id);assert.ok(savedTarget,'the mounted agent index created the canonical target');
+      repo.createSession({sessionId,principalScope:scope,agentId:target.id,runtimeId:savedTarget.runtime_id,nativeAgentId:savedTarget.native_agent_id,
+        nativeSessionRef:`fixture:${scope}:${sessionId}`,title:'Résultats de vérification'});
       for(const message of canonical.messages)repo.addMessage(sessionId,{...message,id:'msg_'+require('node:crypto').randomBytes(24).toString('base64url'),body:{text:message.body?.text??message.text,blocks:message.body?.blocks||[]},meta:{...message.meta,senderInfo:message.senderInfo},attachments:[]});
     });
     return {...h,targetId:target.id,sessionId};

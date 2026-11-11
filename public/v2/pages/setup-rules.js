@@ -18,8 +18,8 @@ export function blocker(step, s) {
     case 'detection': return s.detections ? null : 'onboarding.detect.wait';
     case 'runtime': return !s.adapter ? 'setup.err.adapter' : !takes(s, 'gatewayUrl') || validUrl(s.gatewayUrl) ? null : 'setup.err.url';
     case 'gateway': return s.check && s.check.ok ? null : 'setup.err.check';
-    case 'agents': return !s.agents?.length ? 'setup.err.agents' : s.agents.some(a => !a.name?.trim()) ? 'onboarding.name.required' : null;
-    case 'identities': return !s.primary || !s.agents.some(a => a.id === s.primary) ? 'setup.err.primary' : s.ownerSaved && s.agents.some(a => !s.looks[a.id]?.character) ? 'onboarding.styles.wait' : null;
+    case 'agents': return !s.agents?.length ? (s.agents && s.agentsOptional ? null : 'setup.err.agents') : s.agents.some(a => !a.name?.trim()) ? 'onboarding.name.required' : null;
+    case 'identities': return s.agentsOptional && s.agents && !s.agents.length ? null : !s.primary || !s.agents.some(a => a.id === s.primary) ? 'setup.err.primary' : s.ownerSaved && s.agents.some(a => !s.looks[a.id]?.character) ? 'onboarding.styles.wait' : null;
     case 'office': return !s.name.trim() ? 'setup.err.name' : !validZone(s.timeZone) ? 'setup.err.zone' : null;
     case 'network': return s.accessStaged ? null : 'access.stageRequired';
     default: return null;
@@ -69,7 +69,7 @@ export function payload(s, vm) {
     instance: { name: s.name.trim(), locale: s.locale, timeZone: s.timeZone },
     owner: { displayName: s.owner.trim(), email: s.email.trim(), ...(s.password ? { password: s.password } : {}) },
     runtime: runtimeBody(s),
-    agents: { primary: s.primary, looks: s.looks, ...(s.ownerSaved ? { names: Object.fromEntries((s.agents || []).map(a => [a.id, a.name.trim()])) } : {}) },
+    agents: { primary: s.primary, looks: s.looks, ...(s.ownerSaved && s.agents?.length ? { names: Object.fromEntries((s.agents || []).map(a => [a.id, a.name.trim()])) } : {}) },
     ...(s.accessLegacyFallback ? { network: { mode: 'local', port: vm?.network?.port || 18789, publicUrl: '' } } : {}),
     ...(offersProjet(vm, s) ? { integrations: { projet: s.projet !== false, ...(s.ownerSaved ? { reviewed: true } : {}) } } : {}),
   };

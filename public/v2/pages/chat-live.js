@@ -21,7 +21,7 @@ export function useChatConnection(){
    if(mock)await mock.handle('GET','/api/v3/chat/agents');
    const split=splitOrigin&&!mock?await loadModule(()=>import('../split-stream.js'+buildQuery)):null;
    if(!live||controller.signal.aborted)return;
-   client=createStream({openSource:path=>mock?new mock.MockEventSource(versioned(path,3)):split?split.openSource(path,{apiVersion:3}):new EventSource(apiUrl(path,3),{withCredentials:true}),
+   client=createStream({openSource:path=>mock?new mock.MockEventSource(versioned(path,3)):split?split.openSource(path,{apiVersion:3}):new EventSource(apiUrl(path,3),{withCredentials:true}) /* transport-allow:EventSource:chat-stream */,
     fetchVM:async path=>{const r=await chatRead(path,{signal:controller.signal});return {data:r.data,topic:r.meta?.topic,meta:r.meta};},
     postTopics:(id,body)=>api.post('/api/v3/stream/'+encodeURIComponent(id)+'/topics',body,{apiVersion:3,quiet:true}).then(r=>r.data?.topics??null),
     postResync:(id,topic)=>api.post('/api/v3/stream/'+encodeURIComponent(id)+'/resync',{topic},{apiVersion:3,quiet:true}),

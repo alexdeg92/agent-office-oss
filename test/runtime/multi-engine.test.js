@@ -23,6 +23,56 @@ test('two instances with identical native identities merge independent partition
   assert.equal(engine.session(twoKeys[0]).class.agentId.startsWith('rt:two:agent:'), true);
   assert.equal(engine.session('unscoped-native-key'), null, 'native IDs never fan out to unrelated sources');
 });
+test('multi-runtime facade admits orchestration sources and exposes the engine Office builder', async t => {
+  const core = createEngine({ now: () => NOW });
+  const source = partition('one');
+  const engine = createMultiEngine({ instances: [source], primary: scopedId('one', 'agent', 'sage'), core });
+  t.after(() => { engine.close(); core.close(); });
+  const observedAt = NOW;
+  const hostRows = { hosts: [{ id: 'host_fixture', label: null, platform: 'linux', sourceStatus: 'available', observedAt }],
+    orchestrators: [{ id: 'orch_fixture', hostId: 'host_fixture', kind: 'herdr', label: null, sourceStatus: 'available', observedAt }],
+    hostAgents: [{ id: 'pane_fixture', hostId: 'host_fixture', orchestratorId: 'orch_fixture', name: 'Builder', runtimeKind: 'codex',
+      role: 'delegate', status: 'working', observedAt, staleAfter: observedAt + 60_000 }],
+    identityLinks: [{ hostAgentId: 'pane_fixture', agentId: scopedId('one', 'agent', 'nova'), evidence: 'shared-runtime-session-ref', confidence: 'exact' }],
+    teams: [], members: [], tasks: [], reviews: [], teamMessages: [] };
+  const teamRows = { hosts: [], orchestrators: [], hostAgents: [], identityLinks: [],
+    teams: [{ id: 'team_fixture', storeId: 'team_fixture', label: 'Synthetic team', status: 'active', observedAt }],
+    members: [{ id: 'member_fixture', teamId: 'team_fixture', name: 'Builder', roleKind: 'member', roleLabel: 'engineer', roleEvidence: 'explicit',
+      sourceAgentName: 'Builder', runtimeKind: 'codex', hostAgentId: 'pane_fixture', parentMemberId: null, sessionStatus: 'known', status: 'active', spawnedBy: null }],
+    tasks: [], reviews: [], teamMessages: [] };
+  assert.equal(engine.registerOrchestrationSource('herdr', { capabilities: {}, readSnapshot: async () => hostRows }), true);
+  assert.equal(engine.registerOrchestrationSource('agent-team-pm', { capabilities: {}, readSnapshot: async () => teamRows }), true);
+  assert.deepEqual(await engine.refreshOrchestrationSource('herdr'), { ok: true, invalidRows: 0 });
+  assert.deepEqual(await engine.refreshOrchestrationSource('agent-team-pm'), { ok: true, invalidRows: 0 });
+  const admitted = engine.orchestrationProjectionSnapshot();
+  assert.equal(admitted.sourcesReady, true,
+    'the runtime-neutral core registry is reachable through the production multi-runtime facade');
+  assert.deepEqual([admitted.hostAgents.length, admitted.teams.length, admitted.members.length], [1, 1, 1],
+    'read-only Herdr pane and team-store rows survive multi-runtime admission');
+  assert.equal(typeof engine.buildOfficeView, 'function', 'the production facade exposes the engine-owned Office builder');
+  assert.equal(typeof engine.compareOrchestrationProjection, 'function',
+    'the production facade must expose parity comparison instead of silently skipping it');
+  const comparison = engine.compareOrchestrationProjection('office.fixture', [{ id: 'same', state: 'working' }],
+    [{ id: 'same', state: 'working' }]);
+  assert.equal(comparison?.equal, true, 'the production facade delegates parity comparison to the canonical core');
+  assert.equal(engine.orchestrationParityCounters()['office.fixture']?.mismatches, 0,
+    'a successful facade comparison is visible in the core parity counters');
+  assert.equal(typeof engine.skipOrchestrationProjection, 'function',
+    'the production facade exposes the separate unsynced skip counter');
+  assert.equal(engine.skipOrchestrationProjection('office.fixture', 'unsynced'), true);
+  assert.equal(engine.orchestrationParityCounters()['office.fixture']?.skippedUnsynced, 1);
+
+  const office = { connection: { gateway: 'up', since: NOW }, kpis: [], occupants: [
+    { id: 'primary', role: 'primary', name: 'Primary', title: { key: 'sessionTitle.named', params: { name: 'Primary' } },
+      state: 'idle', stateSince: NOW, look: { character: 'main', variant: 'default', accessories: [] }, stationUid: null,
+      floorId: '1', sessionKey: null, tokens: 0, lastSeenAt: NOW },
+  ], journal: [], queue: [] };
+  const projected = engine.buildOfficeView({ office, snapshot: admitted, sourceEnabled: true,
+    principal: { role: 'admin' }, projection: { version: 3, occupantId: value => value }, canReadSessions: false,
+    now: NOW });
+  assert.ok(projected.occupants.some(row => row.name === 'Builder' && row.teamId === 'team_fixture'),
+    'enabled source rows are projected into a named, team-linked Office occupant through the multi-runtime facade');
+});
 test('read timeout leaves another partition updating and preserves failed source last good data', async t => {
   const one = partition('one'), two = partition('two'), engine = createMultiEngine({ instances: [one, two], timeoutMs: 20 }); t.after(() => engine.close());
   const native = one.engine.sessions()[0].key, key = scopedId('one', 'session', native);
@@ -123,6 +173,20 @@ test('a failed adapter constructor/start cannot prevent another start; close fen
   const after = taps.get('good').ingestCanonical('agents', []);
   assert.equal(after.category, 'source-replaced');
   assert.equal(controller.engine.agents().length, 3);
+});
+
+test('multi-runtime directory hints are adapter-neutral, bounded, and private to the runtime facade', t => {
+  const resolveAdapter = id => ({ definition, createRuntime() { return {
+    definition, commands: {}, attach() {}, close() {},
+    projectDirectoryHints: () => [{ cwd: `/workspace/${id}`, adapter: id }],
+  }; } });
+  const controller = createMultiRuntimeController({ cfg: { runtimeInstances: ['claude', 'codex'].map(id => ({ id, adapter: id, enabled: true, cfg: {} })) },
+    resolveAdapter, store: { owner: null, persons: { senderPeople: () => [] }, quarantine: { loadAll: () => [] }, flushQuarantine() {} } });
+  t.after(() => controller.close());
+  assert.deepEqual(controller.runtime.projectDirectoryHints(), [
+    { cwd: '/workspace/claude', adapter: 'claude' }, { cwd: '/workspace/codex', adapter: 'codex' },
+  ]);
+  assert.equal(JSON.stringify(controller.engine.agents()).includes('/workspace/'), false);
 });
 
 test('merged invalid primary emits the existing neutral issue and falls back without losing the healthy partition',t=>{

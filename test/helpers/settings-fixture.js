@@ -32,21 +32,21 @@ async function settingsFixture(options = {}) {
  try {
  const gw = await fake.start();
  const local = options.reuse ? JSON.parse(fs.readFileSync(path.join(tmp,'.openclaw','openclaw.json'),'utf8')).agents.list : (options.seed || seed)(tmp,{gateway:gw});
- const env = { HOME:tmp,PATH:testServerPath(),AO_ENV:'test',AO_DATA_DIR:path.join(tmp,'data'),AO_PROJECTS_DISCOVERY:'0',OC_IDENTITY:makeIdentity(tmp),OC_STATE_DB:path.join(tmp,'none.sqlite'),OC_CONFIG:path.join(tmp,'.openclaw','openclaw.json'),OC_BIN:path.join(__dirname,'../bin/openclaw'),FAKE_OC_SCENARIO:'foreign-instance',FAKE_OC_FIXTURES:path.join(__dirname,'../fixtures'),FAKE_OC_LOG:path.join(tmp,'cli.jsonl'),FAKE_OC_AGENTS:JSON.stringify(local), ...(typeof options.env === 'function' ? options.env(gw) : options.env || {}) };
+ const env = { HOME:tmp,PATH:testServerPath(),AO_ENV:'test',AO_DATA_DIR:path.join(tmp,'data'),AO_PROJECTS_DISCOVERY:'0',OC_IDENTITY:makeIdentity(tmp),OC_STATE_DB:path.join(tmp,'none.sqlite'),OC_CONFIG:path.join(tmp,'.openclaw','openclaw.json'),OC_BIN:path.join(__dirname,'../bin/openclaw'),FAKE_OC_SCENARIO:'foreign-instance',FAKE_OC_FIXTURES:path.join(__dirname,'../fixtures'),FAKE_OC_LOG:path.join(tmp,'cli.jsonl'),FAKE_OC_AGENTS:JSON.stringify(local), ...(options.envOnly ? {OC_GATEWAY_URL:gw.url,OC_GATEWAY_TOKEN:TOKEN,PORTAL_EMAIL:EMAIL,PORTAL_PASSWORD:PASSWORD,PORTAL_SECRET:crypto.randomBytes(32).toString('hex')} : {}), ...(typeof options.env === 'function' ? options.env(gw) : options.env || {}) };
  fs.writeFileSync(env.FAKE_OC_LOG,'');
  const config = {version:2,instance:{name:'Atelier',locale:'fr',timeZone:'Europe/Paris'},owner:{displayName:'Camille',email:EMAIL,authSource:'database'},runtime:{adapter:'openclaw',openclaw:{gatewayUrl:gw.url}},agents:{primary:'atlas',looks:{},names:{openclaw:{atlas:'Atlas'}}},network:{mode:'local',host:'127.0.0.1',port:18789,publicUrl:null,cookieSecure:false}};
  if (options.config && !options.reuse) options.config(config,{tmp,gw,env});
  const paths = IC.configPaths(env); const secrets = {version:2,sessionSecret:crypto.randomBytes(32).toString('hex'),runtimeToken:TOKEN};
- if(!options.reuse) IC.writeInstanceConfig(paths,config,secrets);
- const files = IC.readInstanceConfig(env), cfg = {...tryLoadConfig(IC.effectiveEnv(env,files)),instanceName:files.config.instance.name,configured:true,...(options.bootId ? {bootId:options.bootId} : {})};
+ if(!options.reuse&&!options.envOnly) IC.writeInstanceConfig(paths,config,secrets);
+ const files = IC.readInstanceConfig(env), cfg = {...tryLoadConfig(IC.effectiveEnv(env,files)),instanceName:files.config?.instance.name ?? null,configured:true,...(options.bootId ? {bootId:options.bootId} : {})};
  store = openStore({dir:cfg.dataDir,instance:'test',ownerName:'Camille',log:()=>{},deferRegistrySync:!!options.enforceAuthorization});
- if(!options.reuse) { const layout=require('../../src/ops/setup-layout').setupLayout({primary:'atlas',looks:{}});
+ if(!options.reuse&&!options.envOnly) { const layout=require('../../src/ops/setup-layout').setupLayout({primary:'atlas',looks:{}});
   if(Number.isInteger(options.legacyIdleRelocationMinutes))layout.idleRelocationMinutes=options.legacyIdleRelocationMinutes;
   store.setup.amendOwner({displayName:'Camille',email:EMAIL,passwordHash:await hashPassword(PASSWORD),layout});store.setup.prepare(config);store.setup.configured(); }
  if(options.emptyOfficeLayout) store.withTx(()=>{
   store.db.prepare('DELETE FROM office_layout_revisions').run();store.db.prepare('DELETE FROM office_layouts').run();
  });
- if (options.effectiveV3 || files.config.version === 3) {
+ if (options.effectiveV3 || files.config?.version === 3) {
   const effective = {...files,...IC.upgradeV2(files.config,files.secrets)};
   store.runtimeReferences.migrate(require('../../src/ops/config-publisher').digest(files.config));
   store.runtimeReferences.bind(effective.config.runtimes);

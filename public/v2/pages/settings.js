@@ -1,4 +1,5 @@
 import { loadModule, chunkError } from '../build-update.js';
+import * as api from '../api.js';
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../lib.js';
 import { msg, getLang } from '../i18n.js';
 import { registerMessages } from '../messages.js';
@@ -11,12 +12,13 @@ import { ErrorState, Icon } from '../components/ui.js';
 import { Modal } from '../components/modal.js';
 import { SettingsFrame, SettingsFooter } from './settings-frame.js';
 import { Switch, SettingRow, loadStyles as loadBureauStyles, Button, Field, TextInput, Radio } from '../components/bureau/index.js';
-import { Diagnostics, Agents, Connection, Integrations, Instance, Account, SettingsNotice, RestartAction, settingsLabel } from './settings-views.js';
+import { Diagnostics, FinishSetup, Agents, Connection, Integrations, Instance, Account, SettingsNotice, RestartAction, settingsLabel } from './settings-views.js';
 import * as R from './settings-rules.js';
 import { readOnlyBanner } from './settings-labels.js';
 import { readBootId, pollRestart } from '../settings-api.js';
 import { surprisesEnabled, saveSurprises } from '../office/surprises.js';
 import { FixAllSheet } from './settings-fix-all.js';
+import { PendingDetailsSheet, revealPendingTarget } from './settings-pending.js';
 import { useStore } from '../hooks.js';
 import { identityRegistry, identityTheme, loadIdentityPreviewStyles, setIdentityTheme } from '../identity-theme.js';
 import { theme } from '../theme.js';
@@ -140,7 +142,10 @@ export function SettingsPage({match}) {
   const integrationRows=provider?.rows.filter(r=>r.supported&&vm.runtimes.some(saved=>saved.id===r.id)) || [];
   const integrationRuntime=integrationRows.find(r=>r.id===match.query.runtime)?.id || integrationRows.find(r=>r.id===plan?.runtime)?.id || integrationRows[0]?.id || '';
   const providerPlan=vm ? plan?.runtime===integrationRuntime ? plan : newPlan(vm,integrationRuntime) : null;
-  const reviewingIntegrations=tab==='connexion'&&match.query.section==='integrations'&&!!integrationRuntime;
+  const connectionDirty=!!vm && R.dirty('connexion',drafts,vm);
+  const integrationsSection=tab==='connexion'&&match.query.section==='integrations'&&!!integrationRuntime;
+  // One rule (main 42a55231): unsaved Connection edits keep Save — an integration plan only targets saved runtimes.
+  const reviewingIntegrations=integrationsSection&&!connectionDirty;
 
   const restartOperation=useRef(null);
   const vmRef=useRef(null), draftsRef=useRef({}), planRef=useRef(null), body=useRef(null), alive=useRef(true), busyRef=useRef(false), modalRef=useRef(null);
@@ -151,6 +156,7 @@ export function SettingsPage({match}) {
   const setPlanState=next => { planRef.current=next; setPlan(next); };
   function adopt(next, saved = []) {
     if (!alive.current || !next) return;
+    next = { ...next, profileAvatar: services.me?.avatar || next.profileAvatar || null };
     const previous=vmRef.current;
     const clean=R.initialDrafts(next);
     const requested=R.agentRuntimeSelection(next,connectorQuery);
@@ -329,11 +335,12 @@ export function SettingsPage({match}) {
   const select=id => id==='integrations' ? services.router.setQuery(R.integrationRoute(vmRef.current,planRef.current?.runtime)) : services.router.setQuery({onglet:id === 'diagnostic' ? null : id,section:null,runtime:null,...(tab === 'connexion' || id === 'connexion' ? {connecteur:null,orchestrateur:null} : {})});
   function fail(text) { setError(text); requestAnimationFrame(() => { if (body.current) body.current.scrollTop=0; }); }
   async function run(name, work, sensitive = false) {
-    if (!alive.current || busyRef.current || vmRef.current?.readonly) return;
+    if (!alive.current || busyRef.current || vmRef.current?.readonly) return false;
     busyRef.current=true; setBusy(name); setError(null); setNotice(null);
+    let succeeded=false;
     try {
-      if (sensitive && !await authentication()) return;
-      if (!alive.current) return;
+      if (sensitive && !await authentication()) return false;
+      if (!alive.current) return false;
       try { await work(); }
       catch (err) {
         if (!alive.current) return;
@@ -341,6 +348,7 @@ export function SettingsPage({match}) {
         if (!alive.current) return;
         await work();
       }
+      succeeded=true;
     } catch (err) { if (alive.current) fail(errorText(err)); }
     finally {
       busyRef.current=false;
@@ -350,6 +358,38 @@ export function SettingsPage({match}) {
         if (pendingRevision.current > vmRef.current?.revision && !isDirty()) void load();
       }
     }
+    return succeeded;
+  }
+  async function stageAvatar(kind, payload, onStaged) {
+    if (tab !== 'compte' || !vmRef.current || !R.settingsAccess('compte',vmRef.current,me,'write')) return false;
+    const ok=await run('avatar',async()=>{
+      const result=kind==='character'
+        ? await api.put('/api/v3/me/avatar/character',payload,{quiet:true,apiVersion:3})
+        : await api.request('POST','/api/v3/me/avatar/photo',payload,{quiet:true,apiVersion:3,live:true,raw:true});
+      const staged=result.data?.result;
+      if (!staged?.stageId || !staged.avatar) throw Error(msg('settings.avatar.stageFailed'));
+      const current=draftsRef.current.compte;
+      setDraftState({...draftsRef.current,compte:{...current,avatar:staged.avatar,avatarStageId:staged.stageId}});
+    });
+    if (ok) onStaged?.();
+    return ok;
+  }
+  async function stageAvatarRemoval() {
+    if (tab !== 'compte' || !vmRef.current || !R.settingsAccess('compte',vmRef.current,me,'write')) return;
+    await run('avatar',async()=>{
+      const result=await api.del('/api/v3/me/avatar',{quiet:true,apiVersion:3});
+      const staged=result.data?.result;
+      if (!staged?.stageId || !staged.avatar) throw Error(msg('settings.avatar.stageFailed'));
+      setDraftState({...draftsRef.current,compte:{...draftsRef.current.compte,avatar:staged.avatar,avatarStageId:staged.stageId}});
+    });
+  }
+  async function discardAccountDraft() {
+    const draft=draftsRef.current.compte;
+    if (draft?.avatarStageId) {
+      const ok=await run('avatar-cancel',async()=>{ await api.del('/api/v3/me/avatar/staged/'+encodeURIComponent(draft.avatarStageId),{quiet:true,apiVersion:3}); });
+      if (!ok) return;
+    }
+    update('compte',R.initialDrafts(vmRef.current).compte);
   }
   async function testConnection(id) {
     const draft={...draftsRef.current.connexion,adapter:id};
@@ -368,6 +408,15 @@ export function SettingsPage({match}) {
   }
   async function detect() {
     await run('detect',async () => { const result=await settingsCommand('detect'); if (result.vm) adopt(result.vm); else adopt(await readSettings()); });
+  }
+  // Onboarding B-lite: each step opens the section that saves it; the backend decides whether the card shows.
+  function openFinishStep(section) {
+    if (section === 'store') { services.router.navigate(services.router.href('boutique')); return; }
+    const onglet = { connection: 'connexion', runtimes: 'agents', integrations: 'connexion', instance: 'instance', access: 'access' }[section];
+    services.router.setQuery({ onglet, connecteur: onglet === 'connexion' ? 'all' : null, section: null, runtime: null, agent: null, orchestrateur: null });
+  }
+  async function hideFinish() {
+    await run('finishSetupHide', async () => { const result=await settingsCommand('finish-setup/hide'); adopt(result.vm || await readSettings()); });
   }
   async function testHerdr() {
     await run('herdrCheck', async () => { const result=await settingsCommand('herdr/check'); setHerdrTest(result.result); adopt(result.vm || await readSettings()); });
@@ -476,8 +525,11 @@ export function SettingsPage({match}) {
     },true);
   }
   function pendingDetails() {
-    if(planRef.current?.result&&!R.dirty('connexion',draftsRef.current,vmRef.current))services.router.setQuery(R.integrationRoute(vmRef.current,planRef.current.runtime));
-    else select(R.pendingSections(draftsRef.current,vmRef.current,planRef.current)[0]);
+    setDialog({ kind: 'pending' });
+  }
+  function revealPending(change) {
+    setDialog(null);
+    revealPendingTarget(change, query => services.router.setQuery(query));
   }
   async function save() {
     const current=vmRef.current;
@@ -491,7 +543,7 @@ export function SettingsPage({match}) {
     if (problem) { fail(problem.startsWith('settings.') ? msg(problem) : problem); return; }
     if (!R.dirty(tab,draftsRef.current,current)) return;
     const networkChanged=tab === 'instance' && draft.network && JSON.stringify(draft.network) !== JSON.stringify(R.initialDrafts(current).instance.network);
-    const accountChanged=tab === 'compte' && Object.keys(R.changedFields(draft.owner,current.owner)).length>0;
+    const accountChanged=tab === 'compte' && (Object.keys(R.changedFields(draft.owner,current.owner)).length>0 || !!draft.avatarStageId);
     const sensitive=tab === 'connexion' || networkChanged || tab === 'compte' && (accountChanged || draft.password);
     await run('save',async () => {
       let result;
@@ -509,10 +561,15 @@ export function SettingsPage({match}) {
       if (tab === 'compte') {
         const d=draftsRef.current.compte;
         const owner=R.changedFields(d.owner,vmRef.current.owner);
-        if (Object.keys(owner).length) {
-          result=await settingsCommand('owner',{expectedRevision:R.accountRevision(vmRef.current),...owner},'PUT');
+        if (Object.keys(owner).length || d.avatarStageId) {
+          result=await settingsCommand('owner',{expectedRevision:R.accountRevision(vmRef.current),...owner,...(d.avatarStageId?{avatarStageId:d.avatarStageId}:{})},'PUT');
           const password=d.password,confirmation=d.confirmation;
           const refreshed=result.vm || await readSettings();
+          const updatedMe=await api.me();
+          services.me=updatedMe;
+          setMe(updatedMe);
+          window.dispatchEvent(new CustomEvent('agent-office:me',{detail:updatedMe}));
+          refreshed.profileAvatar=updatedMe?.avatar || null;
           adopt(refreshed,['compte']);
           if(password)setDraftState({...draftsRef.current,compte:{...R.initialDrafts(refreshed).compte,password,confirmation}});
         }
@@ -536,13 +593,22 @@ export function SettingsPage({match}) {
   const canWrite=!!vm && R.settingsAccess(tab,vm,me,'write');
   const disabled=!!busy || !!vm?.readonly || !canWrite;
   const restartAction=(label) => vm ? html`<${RestartAction} capability=${vm.restart} state=${restartState} busy=${!!busy} readonly=${vm.readonly} label=${label} onRestart=${restart} onPoll=${retryPoll} />` : null;
-  const currentDirty=vm && (reviewingIntegrations ? !!providerPlan?.result : tab === 'agents' && connectorQuery === 'all' ? false : R.dirty(tab,drafts,vm));
+  // reviewingIntegrations already excludes Connection dirtiness (main hotfix); Apply explains empty/confirm blockers.
+  const showApply=reviewingIntegrations;
+  const applyBlocker=showApply ? R.integrationApplyBlocker(providerPlan) : null;
+  const currentDirty=vm && (showApply ? !!providerPlan?.result : tab === 'agents' && connectorQuery === 'all' ? false : R.dirty(tab,drafts,vm));
   const pendingSections=vm ? R.pendingSections(drafts,vm,plan) : [];
-  const footer=tab==='access'?accessFooter:vm && pendingSections.length && ['agents','connexion','instance','compte'].includes(tab) ? html`<${SettingsFooter} dirty=${!!currentDirty} pendingSections=${R.pendingSections(drafts,vm,plan)} busy=${!!busy} writable=${!vm.readonly&&(reviewingIntegrations?integrationWrite:canWrite)} onDetails=${pendingDetails} onCancel=${() => {
-    if (reviewingIntegrations) { setPlanState(newPlan(vm,integrationRuntime)); setResults(null); }
+  const footer=tab==='access'?accessFooter:vm && pendingSections.length && ['agents','connexion','instance','compte'].includes(tab) ? html`<${SettingsFooter} dirty=${!!currentDirty} pendingSections=${R.pendingSections(drafts,vm,plan)} busy=${!!busy} writable=${!vm.readonly&&(showApply?integrationWrite:canWrite)} onDetails=${pendingDetails} onCancel=${() => {
+    if (showApply) { setPlanState(newPlan(vm,integrationRuntime)); setResults(null); }
+    else if (tab === 'compte') void discardAccountDraft();
+    else if (tab === 'connexion' && integrationsSection) {
+      // Discard Connection drafts without leaving the integrations review URL.
+      setDraftState({...draftsRef.current,connexion:R.initialDrafts(vm).connexion}); setCheck(null); setError(null); setNotice(null);
+    }
     else update(tab,tab === 'agents' ? R.agentDraft(vm,drafts.agents.runtime) : R.initialDrafts(vm)[tab]);
-  }} form=${reviewingIntegrations?null:'settings-section-form'} onSave=${reviewingIntegrations?applyIntegrations:save} saveTestId=${reviewingIntegrations?'settings-integration-apply':undefined} saveLabel=${reviewingIntegrations ? msg('settings.integrations.apply') : null}
-    canSave=${reviewingIntegrations ? !!providerPlan?.confirmed && !!providerPlan?.agentIds.length : tab === 'connexion' ? !R.runtimesError(drafts.connexion,vm) && R.connectionsChecked(drafts.connexion,vm,check) : true} />` : null;
+  }} form=${showApply?null:'settings-section-form'} onSave=${showApply?applyIntegrations:save} saveTestId=${showApply?'settings-integration-apply':undefined} saveLabel=${showApply ? msg('settings.integrations.apply') : null}
+    canSave=${showApply ? !applyBlocker : tab === 'connexion' ? !R.runtimesError(drafts.connexion,vm) && R.connectionsChecked(drafts.connexion,vm,check) : true}
+    saveHint=${showApply && applyBlocker ? msg(applyBlocker) : integrationsSection && connectionDirty ? msg('settings.integrations.apply.needConnectorSave') : null} />` : null;
   const head=vm?.readonly && tab !== 'apparence' ? html`<div class="ao-settings__banner"><${SettingsNotice} warning text=${readOnlyBanner(vm.disabledReason)} /></div>` : canRead&&!(canWrite||tab==='connexion'&&integrationWrite)&&tab!=='apparence' ? html`<div class="ao-settings__banner"><${SettingsNotice} warning text=${msg('settings.permissionReadOnly')} /></div>` : null;
   let content;
   if (!vm) content=loadError ? html`<${ErrorState} error=${readError(loadError)} onRetry=${() => load()} />` : html`<p role="status">${msg('settings.loading')}</p>`;
@@ -555,23 +621,25 @@ export function SettingsPage({match}) {
     ${!canRead ? html`<div class="bu-banner bu-banner--warning" role="alert"><span class="bu-banner__text">${msg('settings.permissionDenied')}</span></div>` : null}
     ${pendingSections.length && !currentDirty ? html`<p class="bu-caption ao-settings__pending" role="status" title=${msg('settings.dirtySections',{sections:pendingSections.map(id => msg('settings.tab.' + id)).join(', ')})}>${msg('settings.dirtySections',{sections:pendingSections.map(id => msg('settings.tab.' + id)).join(', ')})}</p>` : null}
     <form id="settings-section-form" class="ao-settings__section" aria-busy=${busy ? 'true' : 'false'} novalidate onSubmit=${e => { e.preventDefault(); void save(); }}>
+      ${canRead && tab === 'diagnostic' && vm.finishSetup ? html`<${FinishSetup} steps=${vm.finishSetup.steps} onOpen=${openFinishStep} onHide=${hideFinish} busy=${!!busy} readonly=${vm.readonly||!canWrite} />` : null}
       ${canRead && tab === 'diagnostic' ? html`<${Diagnostics} vm=${vm} onFix=${fixOne} onViewDetected=${viewDetected} onViewOrchestrator=${viewOrchestrator} onFixAll=${() => openFixAll()} onRefresh=${refresh} busy=${!!busy||!canWrite} restartAction=${restartAction()} />` : null}
       ${canRead && tab === 'agents' ? html`<${Agents} vm=${vm} draft=${drafts.agents} selectedRuntime=${R.agentRuntimeSelection(vm,connectorQuery)} targetAgent=${match.query.agent || null} onChange=${v => update('agents',v)} onRuntime=${id => switchRuntime('agents',id)} onDetect=${detect} disabled=${disabled} busy=${busy === 'detect'} />` : null}
       ${canRead && tab === 'connexion' ? html`<${Connection} vm=${vm} providerQuery=${match.query.connecteur} target=${fixTarget} draft=${drafts.connexion} onChange=${v => update('connexion',v)} onRuntime=${id => switchRuntime('connexion',id)} onTest=${testConnection} onAutoAdd=${setAutoAdd} onTestHerdr=${testHerdr} herdrTest=${herdrTest} testResult=${check} disabled=${disabled} busy=${busy === 'check' || busy === 'herdrCheck'} highlightHerdr=${match.query.orchestrateur==='herdr'} integrationRuntime=${integrationRuntime} renderIntegrations=${()=>html`<${Integrations} vm=${vm} plan=${providerPlan} runtimes=${integrationRows} target=${fixTarget} onChange=${setIntegrationPlan} onPlan=${preparePlan} canRead=${integrationRead} disabled=${!!busy||vm.readonly||!integrationWrite} results=${results?.runtime===integrationRuntime?results:null} />`} />` : null}
       ${canRead && tab === 'instance' ? html`<${Instance} vm=${vm} draft=${drafts.instance} onChange=${v => update('instance',v)} disabled=${disabled} />` : null}
       ${tab === 'access' && canRead ? html`<${ExternalAccessFlow} context="settings" onFooterChange=${setAccessFooter} writable=${canWrite&&!vm.readonly} requestReauth=${()=>authentication()} />` : null}
       ${tab === 'apparence' ? html`<${Appearance} />` : null}
-      ${canRead && tab === 'compte' ? vm.owner ? html`<${Account} vm=${vm} draft=${drafts.compte} onChange=${v => update('compte',v)} disabled=${disabled} />` : html`<p class="bu-caption" role="status">${msg('settings.access.unavailable')}</p>` : null}
+      ${canRead && tab === 'compte' ? vm.owner ? html`<${Account} vm=${vm} draft=${drafts.compte} onChange=${v => update('compte',v)} onAvatarStage=${stageAvatar} onAvatarRemove=${stageAvatarRemoval} disabled=${disabled} />` : html`<p class="bu-caption" role="status">${msg('settings.access.unavailable')}</p>` : null}
       ${(tab === 'users' || tab === 'roles') && canRead ? html`<${LazySettingsAccess} tab=${tab} me=${me} />` : null}
     </form>`;
   return html`<${SettingsFrame} tab=${tab} onSelect=${select} head=${head} foot=${footer} busy=${!!busy} bodyRef=${body} me=${me}>${content}</${SettingsFrame}>
     ${batch && !dialog ? html`<${FixAllSheet} batch=${batch} busy=${!!busy} readonly=${vm?.readonly} readonlyReason=${vm?.disabledReason} stale=${batch.revision !== vm?.revision} error=${error}
       onClose=${() => { setBatch(null); setError(null); }} onToggle=${(id,on) => setBatch(previous => ({...previous,selected:on ? [...previous.selected,id] : previous.selected.filter(x => x !== id)}))}
       onApply=${applyFixAll} onInput=${fixInput} restartAction=${restartAction(msg('settings.restart.now'))} />` : null}
+    ${dialog?.kind === 'pending' ? html`<${PendingDetailsSheet} changes=${R.pendingChanges(drafts,vm,plan)} onClose=${() => setDialog(null)} onReveal=${revealPending} />` : null}
     ${dialog?.kind === 'reauth' ? html`<${ReauthDialog} onClose=${() => closeDialog(false)} onConfirmed=${expiresAt => {
       if (!alive.current) return;
       const next={...vmRef.current,reauth:{...vmRef.current.reauth,expiresAt}}; vmRef.current=next; setVm(next); closeDialog(true);
-    }} />` : dialog ? html`<${Modal} title=${msg(dialog.kind === 'restart' ? 'settings.restart.title' : dialog.kind === 'refresh' ? 'settings.refresh.title' : dialog.kind === 'switch' ? 'settings.switch.title' : 'settings.discard.title')}
+    }} />` : dialog && dialog.kind !== 'pending' ? html`<${Modal} title=${msg(dialog.kind === 'restart' ? 'settings.restart.title' : dialog.kind === 'refresh' ? 'settings.refresh.title' : dialog.kind === 'switch' ? 'settings.switch.title' : 'settings.discard.title')}
       desc=${dialog.kind === 'restart' ? msg('settings.restart.text') + (isDirty() ? ' ' + msg('settings.restart.drafts') : '') : msg(dialog.kind === 'refresh' ? 'settings.refresh.text' : dialog.kind === 'switch' ? 'settings.switch.text' : 'settings.discard.text')} onClose=${() => closeDialog(false)}
       footer=${html`<${Button} type="button"  onClick=${() => closeDialog(false)} variant="secondary" size="md" label=${msg('settings.discard.stay')} />
         <${Button} type="button"  onClick=${() => closeDialog(true)} variant="primary" size="md" label=${msg(dialog.kind === 'restart' ? 'settings.restart.confirm' : dialog.kind === 'refresh' ? 'settings.refresh.action' : dialog.kind === 'switch' ? 'settings.switch.confirm' : 'settings.discard.leave')} />`} />` : null}`;

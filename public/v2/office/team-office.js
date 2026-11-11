@@ -4,16 +4,193 @@ import * as api from '../api.js';
 import { Modal } from '../components/modal.js';
 import { Icon } from '../components/ui.js';
 import { ProjectMemberRow, loadProjectMemberRowStyles } from '../components/project-member-row.js';
+import { project } from './geometry.js';
 import { label as labelVM } from '../i18n.js';
 import { Button } from '../components/bureau/index.js';
+import { ConnectorBrandMark } from '../pages/connector-brand.js';
 import { CollapsedGroup } from '../components/bureau/collapsed-group.js';
 import { ListRow } from '../components/bureau/rows.js';
 import { loadStyles as loadBureauStyles } from '../components/bureau/styles.js';
 import { s as tr, locale } from './team-strings.js';
+import { s as officeTr } from './strings.js';
 import { anonymousPresenceGroups, dedupeHostRows, groupedTeamMembers, isResolvedPresenceName, unlinkedHostRows } from './team-office-model.js';
 
 export const hostAnnotation = occupant => occupant?.hostAgentId && occupant.hostStatus
   ? tr('team.host.observation', { role: tr('team.host.role.' + occupant.hostRole), status: tr('team.host.status.' + occupant.hostStatus) }) : null;
+
+const teamLabel = (label, ref) => ref?.key?.startsWith('team.role.')
+  ? (tr(ref.key, ref.params || {}) === ref.key ? label(ref) : tr(ref.key, ref.params || {}))
+  : label(ref);
+
+/** Render backend-owned team membership/order; OfficeVM remains the canonical occupant source. */
+export function OfficeTeamGroup({ group, occupants, selected, onSelect, unconfirmed, manifest, Avatar, StateChip, nameOf, label, stateTitle, mobileMode = false }) {
+  if (!group) return null;
+  const byId = new Map((group.members || []).map(member => [member.occupantId, member]));
+  const leadOccupant = occupants.get(group.leadOccupantId);
+  const accent = ['violet','teal','amber','rose','sky','lime'].includes(group.accentToken) ? group.accentToken : 'violet';
+  return html`<article class="bu-card ao-office-team" data-team-group=${group.id} data-team-accent=${accent}>
+    <header class="ao-office-team__header"><span class="ao-office-team__accent" aria-hidden="true"></span><div class="ao-office-team__heading"><h3>${label(group.label)}</h3>${leadOccupant ? html`<span class="ao-office-team__lead">${tr('team.groups.lead', { name: nameOf(leadOccupant) })}</span>` : null}</div><span class="bu-chip ao-office-team__count">${label(group.memberCountLabel)}</span></header>
+    <ul class="ao-office-team__members">${group.members.map(member => {
+      const id = member.occupantId, occupant = occupants.get(id);
+      const runtimeText = member.runtimeLabel?.key
+        ? (tr(member.runtimeLabel.key, member.runtimeLabel.params || {}) === member.runtimeLabel.key
+          ? tr('team.runtime.other') : tr(member.runtimeLabel.key, member.runtimeLabel.params || {}))
+        : label(member.runtimeLabel);
+      return !occupant || !member ? null : html`<li key=${id}><button type="button" class=${'ao-office-team__member'+(mobileMode?' ao-office-team__member--mobile':'')} data-team-member=${id}
+        aria-current=${selected === id ? 'true' : undefined} onClick=${() => onSelect(id)}>
+        <${Avatar} o=${occupant} manifest=${manifest} />
+        <span class="ao-office-team__copy"><span class="ao-office-team__name" title=${nameOf(occupant)}>${nameOf(occupant)}</span>
+          <span class="ao-office-team__meta">${mobileMode ? html`<span>${teamLabel(label, member.roleLabel)}${member.parentLabel ? ` · ${label(member.parentLabel)}` : ''} · ${runtimeText}</span>` : html`<span class="ao-office-team__meta-desktop"><span>${teamLabel(label, member.roleLabel)}</span>${member.parentLabel ? html`<span class="ao-office-team__parent">${label(member.parentLabel)}</span>` : null}</span>`}</span></span>
+        <span class=${'ao-office-team__runtime'+(mobileMode?' ao-office-team__runtime--mobile':'')} title=${runtimeText}>${member.runtimeMark ? html`<${ConnectorBrandMark} brand=${member.runtimeMark} className="ao-office-team__mark" label=${runtimeText} />` : null}${mobileMode ? null : html`<span>${runtimeText}</span>`}</span>
+        ${mobileMode ? html`<span class=${'ao-office-team__mobile-state ao-office-team__mobile-state--'+member.stateTone}>${label(member.stateLabel)}</span>` : html`<${StateChip} state=${occupant.state} stateKind=${occupant.stateKind} stateLabel=${member.stateLabel} stateActive=${occupant.stateActive} live=${!unconfirmed&&!occupant.presence&&!occupant.sourceStale} title=${unconfirmed||occupant.sourceStale ? label(occupant.stateLastLabel) : stateTitle(occupant)} />`}
+      </button></li>`;
+    })}</ul>
+  </article>`;
+}
+
+/** Team groups are a separate, server-ordered OfficeVM collection. */
+export function OfficeTeamRoster({ teamGroups = [], occupants = [], selected, onSelect, unconfirmed, manifest, Avatar, StateChip, nameOf, label, stateTitle }) {
+  if (!teamGroups.length) return null;
+  const byId = new Map(occupants.map(occupant => [occupant.id, occupant]));
+  return html`<section class="ao-floor-roster ao-floor-roster--teams" aria-label=${tr('team.groups.projects')}>
+    <h3 class="ao-floor-roster__team" data-team-roster-heading>${tr('team.groups.projects')}</h3>
+    ${teamGroups.map(group => html`<${OfficeTeamGroup} key=${group.id} group=${group} occupants=${byId} selected=${selected} onSelect=${onSelect} unconfirmed=${unconfirmed} manifest=${manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${label} stateTitle=${stateTitle} />`)}
+  </section>`;
+}
+
+/** Render the exact OfficeVM roster supplied by the server. */
+export function OfficeRoster({ all = false, occupants, rosterFloors = [], teamGroups = [], selected, onSelect, unconfirmed, manifest, Avatar, StateChip, nameOf, label, stateTitle, now, groupedFloors = false, onJumpFloor = () => {}, hostAnnotation }) {
+  const byId = new Map(occupants.map(occupant => [occupant.id, occupant]));
+  const [eggs, setEggs] = useState({});
+  useEffect(() => {
+    const update = event => setEggs(previous => ({ ...previous, [event.detail.id]: event.detail.kind }));
+    document.addEventListener('office-surprise', update);
+    return () => document.removeEventListener('office-surprise', update);
+  }, []);
+  const card = occupant => html`<li key=${occupant.id} class=${occupant.rosterDepth > 0 ? 'ao-roster__child' : undefined}>
+    <button type="button" class=${'bu-roster ao-roster ao-agentcard' + (occupant.presence ? ' is-seen' : '')} data-occupant=${occupant.id} data-presence=${occupant.presence || undefined} data-source-stale=${occupant.sourceStale || undefined}
+      aria-current=${selected === occupant.id ? 'true' : undefined} onClick=${() => onSelect(occupant.id)}>
+      <${Avatar} o=${occupant} manifest=${manifest} />
+      <span class="bu-cell-main" data-by=${occupant.parentName || undefined}><span class="ao-roster__name ao-agentcard__name" title=${nameOf(occupant)}>${nameOf(occupant)}</span>
+        <span class="bu-cell-sub ao-roster__summary" data-conversation=${occupant.visitLabel ? true : undefined} data-visit=${occupant.visitPhase || undefined} title=${occupant.summary || undefined}>${occupant.visitLabel ? label(occupant.visitLabel) : occupant.summary && occupant.summary !== occupant.name ? occupant.summary : occupant.project ? officeTr('office.inProject', { project: occupant.project }) : label(occupant.roleLabel)}${occupant.stationUid || occupant.visitPhase || occupant.summary || occupant.project ? '' : ` · ${officeTr('office.noStation')}`}</span>
+        ${hostAnnotation?.(occupant) ? html`<span class="bu-cell-sub ao-host-annotation" data-host-agent=${occupant.hostAgentId}>${hostAnnotation(occupant)}</span>` : null}
+        ${occupant.presence ? html`<span class="ao-agentcard__seen">${occupant.presenceLabel}</span>` : null}</span>
+      ${eggs[occupant.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[occupant.id]}>${officeTr('egg.'+eggs[occupant.id])}</span>` : html`<${StateChip} state=${occupant.state} stateKind=${occupant.stateKind} stateLabel=${occupant.stateLabel} stateActive=${occupant.stateActive} live=${!unconfirmed && !occupant.presence && !occupant.sourceStale} title=${unconfirmed || occupant.sourceStale ? label(occupant.stateLastLabel) : stateTitle(occupant)} />`}
+    </button></li>`;
+  if (!occupants.length && !teamGroups.length) return html`<p class="bu-text-secondary">${officeTr('office.empty')}</p>`;
+  const teamRoster = html`<${OfficeTeamRoster} teamGroups=${teamGroups} occupants=${occupants} selected=${selected} onSelect=${onSelect} unconfirmed=${unconfirmed} manifest=${manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${label} stateTitle=${stateTitle} />`;
+  if (groupedFloors && rosterFloors.length) return html`<div class="ao-floor-roster">${rosterFloors.map(floor => {
+    const floorItems = (floor.otherItems || []).map(item => item.kind === 'team-header'
+      ? html`<li key=${item.id} class="ao-floor-roster__team" data-roster-team-header=${item.id}>${label(item.label)}</li>`
+      : byId.has(item.occupantId) ? card(byId.get(item.occupantId)) : null);
+    return html`<section key=${floor.id} class="ao-floor-roster__group" data-roster-floor=${floor.id}>
+      <button type="button" class="ao-floor-roster__jump" onClick=${() => onJumpFloor(floor.id)}><span>${label(floor.label)}</span><span>${floor.count}</span><${Icon} name="arrow-right" /></button>
+      ${(floor.agentGroups || []).length ? html`<h3 class="ao-floor-roster__team" data-floor-groups-label=${floor.id}>${label(floor.agentGroupsLabel)}</h3>` : null}
+      ${(floor.agentGroups || []).map(group => html`<section key=${group.id} class="ao-floor-roster__agent-group" data-floor-agent-group=${group.id} data-floor-agent-group-kind=${group.kind} data-team-accent=${group.accentToken || undefined}>
+        <h4 class="ao-floor-roster__team" data-floor-agent-group-label>${label(group.label)} <span>${label(group.countLabel)}</span>${group.sharedLabel ? html`<small data-floor-agent-group-shared>${label(group.sharedLabel)}</small>` : null}</h4>
+        <ul class="ao-bureau__roster">${group.occupantIds.map(id => byId.has(id) ? card(byId.get(id)) : null)}</ul>
+      </section>`)}
+      ${floorItems.length ? html`<ul class="ao-bureau__roster">${floorItems}</ul>` : null}
+    </section>`;
+  })}</div>`;
+  return html`<div><ul class="ao-bureau__roster">${occupants.map(card)}</ul>${teamGroups.length ? teamRoster : null}</div>`;
+}
+
+/** The compact legend is rendered in VM order, outside the room artwork. */
+export function OfficeTeamLegend({ teamLegend = [], label }) {
+  if (!teamLegend.length) return null;
+  return html`<div class="ao-team-legend" role="list" aria-label=${tr('team.groups.projects')}>
+    ${teamLegend.map(team => html`<span key=${team.teamId} class="bu-chip ao-team-legend__chip" data-team-legend=${team.teamId} data-team-accent=${team.accentToken} role="listitem">
+      <span class="ao-team-legend__dot" aria-hidden="true"></span><span>${label(team.label)}</span>
+    </span>`)}
+  </div>`;
+}
+
+/** Compact phone cards use the same backend-owned membership and ordering as the desktop roster. */
+export function OfficeMobileTeamRoster({ agentGroups = [], otherItems = [], groupsLabel, occupants = [], onTeam, onSelect, manifest, Avatar, StateChip, unconfirmed, stateTitle, label, nameOf }) {
+  if (!agentGroups.length) return null;
+  const byId = new Map(occupants.map(occupant => [occupant.id, occupant]));
+  return html`<section class="ao-mobile-roster ao-mobile-roster--teams" aria-label=${label(groupsLabel)}>
+    <h3 class="ao-mobile-team-header">${label(groupsLabel)}</h3>
+    ${agentGroups.map(group => {
+      const ids = group.occupantIds;
+      return html`<button type="button" key=${group.id} class="bu-card ao-mobile-team-preview" data-floor-agent-group=${group.id} data-floor-agent-group-kind=${group.kind} data-floor-agent-group-state=${group.previewState || undefined} data-team-accent=${group.accentToken || undefined} onClick=${() => onTeam({ groupId: group.id, ids, label: group.label })}>
+        <span class="ao-mobile-team-preview__avatars">${ids.slice(0, 2).map(id => byId.has(id) ? html`<span data-floor-agent-occupant=${id}><${Avatar} o=${byId.get(id)} manifest=${manifest} /></span>` : null)}</span>
+        <span class="ao-mobile-team-preview__copy"><strong>${label(group.label)}</strong><span>${label(group.countLabel)}</span>${group.sharedLabel ? html`<small data-floor-agent-group-shared>${label(group.sharedLabel)}</small>` : null}</span>
+        ${group.previewStateLabel ? html`<${StateChip} state=${group.previewState} stateKind=${group.previewStateKind} stateLabel=${group.previewStateLabel} stateActive=${group.previewStateActive} live=${!unconfirmed} title=${label(group.previewStateLabel)} />` : null}
+        <span class="ao-mobile-team-preview__arrow" aria-hidden="true">›</span>
+      </button>`;
+    })}
+    ${otherItems.map(item => item.kind === 'team-header'
+      ? html`<h3 key=${item.id} class="ao-mobile-team-header" data-roster-team-header=${item.id}>${label(item.label)}</h3>`
+      : byId.has(item.occupantId) ? (() => { const occupant = byId.get(item.occupantId); return html`<button type="button" key=${item.id} class="bu-roster ao-agentcard ao-mobile-other" data-mobile-agent=${occupant.id} onClick=${() => onSelect(occupant.id)}>
+          <${Avatar} o=${occupant} manifest=${manifest} /><span class="bu-cell-main"><span class="ao-agentcard__name">${nameOf(occupant)}</span><span class="bu-cell-sub">${occupant.visitLabel ? label(occupant.visitLabel) : label(occupant.roleLabel)}</span></span>
+          <${StateChip} state=${occupant.state} stateKind=${occupant.stateKind} stateLabel=${occupant.stateLabel} stateActive=${occupant.stateActive} live=${!unconfirmed && !occupant.presence && !occupant.sourceStale} title=${stateTitle(occupant)} />
+        </button>`; })() : null)}
+  </section>`;
+}
+
+export const officeTeamOverlay = {
+  renderZones(scene, groups) {
+    if (!scene.layers?.decal || !scene.proj || !scene.room) return;
+    scene.layers.decal.querySelectorAll('[data-team-pod-zone]').forEach(node => node.remove());
+    const rows = groups.filter(group => group.pod?.coordinateSpace === 'floor-grid' && group.pod.floorId === group.floorId
+      && Array.isArray(group.pod.zone?.polygon) && group.pod.zone.polygon.length >= 3);
+    const minX = -scene.room.rows * scene.proj.tileWidth / 2, maxX = scene.room.cols * scene.proj.tileWidth / 2;
+    const maxY = (scene.room.cols + scene.room.rows) * scene.proj.tileHeight / 2;
+    for (const group of rows) {
+      const polygon = group.pod.zone.polygon.filter(point => Number.isFinite(point?.x) && Number.isFinite(point?.y));
+      if (polygon.length < 3) continue;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.classList.add('ao-team-pod-zone'); svg.dataset.teamPodZone = group.id; svg.dataset.teamAccent = accentOf(group);
+      svg.setAttribute('viewBox', `${minX} 0 ${maxX - minX} ${maxY}`); svg.setAttribute('width', String(maxX - minX)); svg.setAttribute('height', String(maxY));
+      const shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      shape.setAttribute('points', polygon.map(point => { const p = project(point.x, point.y, scene.proj); return `${p.sx},${p.sy}`; }).join(' '));
+      svg.append(shape); Object.assign(svg.style, { left: `${minX}px`, top: '0px' }); scene.layers.decal.append(svg);
+    }
+  },
+  renderLinks(scene) {
+    if (!scene.teamConnectorSvg || scene.teamConnectorSvg.parentElement !== scene.labelsLayer) {
+      scene.teamConnectorSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      scene.teamConnectorSvg.classList.add('ao-team-links');
+      scene.teamConnectorSvg.setAttribute('aria-hidden', 'true');
+      scene.labelsLayer.prepend(scene.teamConnectorSvg);
+    }
+    scene.teamConnectorSvg.replaceChildren();
+  },
+  positionLinks(scene, groups) {
+    if (!scene.teamConnectorSvg || !scene.viewport || !scene.cam || !scene.origin) return;
+    const { zoom, x, y } = scene.cam, width = scene.viewport.clientWidth, height = scene.viewport.clientHeight;
+    const projectPoint = point => {
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+      const p = project(point.x, point.y, scene.proj);
+      return { x: (p.sx + scene.origin.x) * zoom + x, y: (p.sy + scene.origin.y) * zoom + y };
+    };
+    const svg = scene.teamConnectorSvg;
+    if (!svg) return;
+    svg.setAttribute('width', String(width)); svg.setAttribute('height', String(height)); svg.setAttribute('viewBox', `0 0 ${width} ${height}`); svg.replaceChildren();
+    for (const group of groups) for (const link of group.sharedLeadLinks || []) {
+      const a = projectPoint(link.fromPoint), b = projectPoint(link.toPoint);
+      if (!a || !b) continue;
+      // Connector ownership and geometry come from the OfficeVM. The target
+      // accent is rendered from its VM row, keyed by the backend link id.
+      const target = groups.find(row => row.id === link.teamId) || group;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line'); line.dataset.sharedLead = `${group.id}:${link.teamId}`; line.dataset.teamGroup = group.id;
+      line.dataset.teamAccent = accentOf(group);
+      line.setAttribute('x1', String(a.x)); line.setAttribute('y1', String(a.y)); line.setAttribute('x2', String(b.x)); line.setAttribute('y2', String(b.y)); svg.append(line);
+      for (const [endpoint, point] of [['from', a], ['to', b]]) {
+        const endpointGroup = endpoint === 'from' ? group : target;
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        marker.dataset.sharedLeadEndpoint = `${group.id}:${link.teamId}:${endpoint}`;
+        marker.dataset.teamGroup = endpointGroup.id; marker.dataset.teamAccent = accentOf(endpointGroup);
+        marker.setAttribute('cx', String(point.x)); marker.setAttribute('cy', String(point.y)); marker.setAttribute('r', '4.5');
+        svg.append(marker);
+      }
+    }
+  },
+};
+
+const accentOf = group => ['violet','teal','amber','rose','sky','lime','blue','green','indigo','cyan'].includes(group.accentToken) ? group.accentToken : 'violet';
 
 const PATH = Object.freeze({ teams: '/api/v3/teams', orchestrators: '/api/v3/orchestrators' });
 const emptySource = () => ({ data: null, topicId: null, loading: true, error: null, denied: false, unavailable: false });
@@ -120,12 +297,20 @@ const hostSeverity = (status) => ({ working: 'info', blocked: 'warn', done: 'ok'
 const taskCounts = (tasks) => tasks.reduce((counts, task) => ({ ...counts, [task.state]: (counts[task.state] || 0) + 1 }), {});
 const countLabel = (key, count, loaded) => tr(key, { count: loaded ? count : '…' });
 
-function SourceNote({ state, label, retry }) {
+function SourceNote({ state, label, retry, failureText }) {
   if (state.denied) return null;
   if (state.loading && !state.data) return html`<div class="bu-card bu-card--sunken ao-team-state" aria-busy="true"><span class="bu-compact-progress" aria-hidden="true"></span><span role="status">${tr('team.loading', { source: label })}</span></div>`;
   if (state.error || state.unavailable || !state.data) return html`<div class="bu-card bu-card--sunken ao-team-state" role="status">
-    <span>${tr(state.unavailable ? 'team.unavailable' : 'team.failed', { source: label })}</span>
+    <span>${state.unavailable ? tr('team.unavailable', { source: label }) : (failureText || tr('team.failed', { source: label }))}</span>
     <${Button} variant="ghost" size="sm" label=${tr('team.retry')} onPress=${retry} /></div>`;
+  return null;
+}
+
+function SourceWarning({ state, label, retry, stale = false, failureText }) {
+  if (state.denied || state.loading && !state.data) return null;
+  if (state.error && state.data) return html`<p class="bu-banner bu-banner--warning ao-team-cached" role="status">${tr('team.cached')}</p>`;
+  if (state.error) return html`<${SourceNote} state=${state} label=${label} retry=${retry} failureText=${failureText} />`;
+  if (stale) return html`<p class="bu-banner bu-banner--warning ao-team-stale" role="status">${label} · ${tr('team.stale')}</p>`;
   return null;
 }
 
@@ -221,21 +406,36 @@ function SourceCard({ title, state, retry, children, class: cls = '' }) {
   </section>`;
 }
 
-export function TeamOffice({hint=false, office=null}={}) {
+export function TeamOffice({hint=false, office=null, mobileOnly=false, showFloorPanel=true, sheet:sharedSheet=null, onSheetChange=null}={}) {
   useEffect(() => { void Promise.all([loadBureauStyles(), loadProjectMemberRowStyles()]).catch(api.toastError); }, []);
   const sources = useTeamSources();
-  const [sheet, setSheet] = useState(null);
+  const [localSheet, setLocalSheet] = useState(null);
+  const sheet = typeof onSheetChange === 'function' ? sharedSheet : localSheet;
+  const setSheet = typeof onSheetChange === 'function' ? onSheetChange : setLocalSheet;
   if (config.apiVersion !== 3) return hint ? html`<aside class="bu-card ao-team-herdr-hint" data-testid="team-herdr-opt-in-hint">${tr('team.herdr.enableGrouping')}</aside>` : null;
   const team = sources.teams.data;
   const hosts = sources.orchestrators.data;
   const members = team?.members || [];
   const tasks = team?.tasks || [];
+  const teamSnapshotStale = team?.team?.status === 'stale';
+  const teamSnapshotUnhealthy = !!sources.teams.error || teamSnapshotStale;
+  const hostSnapshotStale = (hosts?.orchestrators || []).some(row => row.sourceStatus === 'stale');
   // Exact-linked host observations annotate existing occupants and do not count as additional people.
   const hostRows = unlinkedHostRows(hosts?.agents || []);
   const hasHostPresences = (hosts?.agents || []).length > 0;
   const hidden = sources.teams.denied && sources.orchestrators.denied;
+  if (!showFloorPanel && !hint) {
+    if (hidden) return null;
+    const hasSourceWarning = (!sources.teams.denied && (sources.teams.error || teamSnapshotStale))
+      || (!sources.orchestrators.denied && (sources.orchestrators.error || hostSnapshotStale));
+    if (!hasSourceWarning) return null;
+    return html`<section class=${'ao-team-office ao-team-office--warnings-only'+(mobileOnly?' ao-team-office--mobile-only':'')} aria-label=${tr('team.office.label')} data-testid="team-office">
+      <${SourceWarning} state=${sources.teams} label=${tr('team.source.team')} retry=${sources.retry} stale=${teamSnapshotStale} failureText=${tr('team.failed.team')} />
+      <${SourceWarning} state=${sources.orchestrators} label=${tr('team.source.herdr')} retry=${sources.retry} stale=${hostSnapshotStale} />
+    </section>`;
+  }
   if (hidden && !hint) return null;
-  return html`<section class="ao-team-office" aria-label=${tr('team.office.label')} data-testid="team-office">
+  return html`<section class=${'ao-team-office'+(mobileOnly?' ao-team-office--mobile-only':'')} aria-label=${tr('team.office.label')} data-testid="team-office">
     ${team || hosts ? html`<header class="ao-team-office__header">
       <div><p class="bu-eyebrow">${team ? tr('team.office.eyebrow') : tr('team.source.herdr')}</p><h2>${team?.team?.label || tr('team.host.label')}</h2></div>
       <div class="ao-team-office__freshness">
@@ -243,7 +443,7 @@ export function TeamOffice({hint=false, office=null}={}) {
         ${!sources.orchestrators.denied && hasHostPresences ? html`<${Freshness} label=${tr('team.source.herdr')} sourceState="herdr" observedAt=${hosts.orchestrators?.[0]?.observedAt || hosts.observedAt} status=${hosts.orchestrators?.[0]?.sourceStatus} live=${sources.live} />` : null}
       </div>
     </header>` : null}
-    <div class="ao-team-office__desktop">
+    ${mobileOnly ? null : html`<div class="ao-team-office__desktop">
       <${SourceCard} title=${countLabel('team.members.heading', members.length, !!team)} state=${sources.teams} retry=${sources.retry} class="members">
         ${hint ? html`<p class="bu-caption ao-team-herdr-hint" data-testid="team-herdr-opt-in-hint">${tr('team.herdr.enableGrouping')}</p>` : null}
         <${Members} data=${team} office=${office} />
@@ -255,12 +455,14 @@ export function TeamOffice({hint=false, office=null}={}) {
         ${hosts?.orchestrators?.length ? html`<p class="ao-team-host-label">${runtimeName(hosts.orchestrators[0].kind)} · ${tr('team.host.readOnly')}</p>` : null}
         <${HostPresence} data=${hosts} />
       </${SourceCard}>` : null}
-    </div>
+    </div>`}
     <div class="ao-team-office__mobile">
       ${sources.teams.denied ? null : html`<${Button} variant="secondary" testId="team-open-members" label=${countLabel('team.members.heading', members.length, !!team)} onPress=${() => setSheet('members')} />`}
       ${sources.orchestrators.denied || !hasHostPresences ? null : html`<span class="bu-chip bu-chip--sm ao-team-mobile-host" data-testid="team-mobile-host">${countLabel('team.host.heading', hostRows.length, !!hosts)}</span>`}
       ${sources.teams.denied ? null : html`<${Button} variant="primary" testId="team-open-board" label=${countLabel('team.board.open', tasks.length, !!team)} onPress=${() => setSheet('board')} />`}
-      ${!sources.teams.denied && !team ? html`<${SourceNote} state=${sources.teams} label=${tr('team.source.team')} retry=${sources.retry} />` : null}
+      ${!sources.teams.denied && team && teamSnapshotUnhealthy ? html`<p class="bu-banner bu-banner--warning ao-team-cached" role="status">${tr(sources.teams.error ? 'team.cached' : 'team.stale')}</p>` : null}
+      ${!sources.teams.denied && team && !teamSnapshotUnhealthy && !members.length ? html`<p class="bu-text-secondary ao-team-empty" role="status">${tr('team.members.empty')}</p>` : null}
+      ${!sources.teams.denied && !team ? html`<${SourceNote} state=${sources.teams} label=${tr('team.source.team')} retry=${sources.retry} failureText=${tr('team.failed.team')} />` : null}
       ${!sources.orchestrators.denied && !hosts ? html`<${SourceNote} state=${sources.orchestrators} label=${tr('team.source.herdr')} retry=${sources.retry} />` : null}
     </div>
     ${sheet ? html`<${Modal} size="md" class="ao-team-members-sheet" title=${sheet === 'board' ? countLabel('team.board.heading', tasks.length, !!team) : countLabel('team.members.heading', members.length, !!team)} onClose=${() => setSheet(null)}>

@@ -1,6 +1,6 @@
 'use strict';
 // T-0062 P0 slice: OccupantVM.parentId for every occupant whose canonical session has a parent — sub-agents through
-// parentKey or the parent's childKeys, and the main agent's DMs, groups and conversations under the main agent.
+// parentKey or the parent's childKeys. Groups keep parent links; human DMs annotate their owning agent's card.
 // Generic (canonical sessions only), gated like the other session fields, valid in 2.x and 3.0. Synthetic data only.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -46,9 +46,10 @@ test('3.0: sub-agents and the main agent\'s conversations name their parent occu
   const vm = office()(true);
   const byKey = Object.fromEntries(vm.occupants.map(o => [o.sessionKey, o]));
   assert.equal(byKey['agent:main:subagent:aaa'].parentId, 'primary', 'childKeys of the main session');
-  assert.equal(byKey['agent:main:discord:direct:100000000000000001'].parentId, 'primary', 'a DM sits under its agent');
+  assert.equal(byKey['agent:main:discord:direct:100000000000000001'], undefined, 'a human DM is not a physical office occupant');
+  assert.deepEqual(byKey['agent:main:main'].visitLabel.params.channel, {key:'channel.discord'});
   assert.equal(byKey['agent:main:discord:channel:100000000000000002'].parentId, 'primary', 'a group sits under its agent');
-  assert.equal(byKey['agent:main:subagent:bbb'].parentId, byKey['agent:main:discord:direct:100000000000000001'].id, 'parentKey wins: the DM it was launched from');
+  assert.equal(byKey['agent:main:subagent:bbb'].parentId, 'primary', 'a child launched from a human DM resolves to its owning agent');
   assert.equal(byKey['agent:main:main'].parentId, null, 'the main agent has an explicit empty parent');
   assert.ok(byKey['agent:main:cron:job-1'], 'the scheduled task is on stage'); assert.equal(byKey['agent:main:cron:job-1'].parentId, null, 'no owning-agent fallback for a scheduled task');
   const ids = new Set(vm.occupants.map(o => o.id));
@@ -110,6 +111,8 @@ test('without the sessions read grant the backend emits explicit empty parents',
 test('OfficeVM supplies the ordered roster tree and floor aggregates to every client', () => {
   for (const P of [project2x, project3x]) {
     const vm = office()(true, P);
+    assert.ok(Array.isArray(vm.teamGroups));
+    assert.ok(Array.isArray(vm.teamLegend));
     assert.deepEqual(vm.occupants.map(row => row.rosterOrder), vm.occupants.map((_row, index) => index));
     for (const row of vm.occupants) {
       assert.ok(Object.hasOwn(row, 'parentId'));
@@ -163,6 +166,14 @@ test('activity targets and travel intents validate in both OfficeVM contracts', 
     const checked = validate(schemasFor(P.version).office, placed);
     assert.equal(checked.ok, true, `v${P.version} OfficeVM: ${JSON.stringify(checked.issues)}`);
   }
+});
+
+test('legacy roster projection supplies empty team collections for non-team offices', () => {
+  const projected = projectOfficeRoster({ occupants: [
+    { id: 'primary', role: 'primary', state: 'idle', name: 'Assistant', floorId: '1' },
+  ] });
+  assert.deepEqual(projected.teamGroups, []);
+  assert.deepEqual(projected.teamLegend, []);
 });
 
 test('roster preview and activity uncertainty are backend-projected without client counting', () => {
@@ -262,6 +273,7 @@ test('office roster nests a visiting contact under the exact addressed agent wit
   assert.equal(visitor.rosterDepth, 2, 'the visitor stays below its exact host in the full parent tree');
   assert.equal(visitor.parentName, null, 'a visit parent is not described as a launcher');
   assert.deepEqual(visitor.roleLabel, { key: 'occupantRole.visitor' });
+  assert.deepEqual(visitor.drawerRoleLabel, { key: 'occupantRole.direct' });
   assert.deepEqual(visitor.stateLabel, { key: 'occupantRole.visitor' });
   assert.equal(visitor.stateKind, 'visitor');
   assert.equal(visitor.stateActive, false, 'visiting people use their own badge rather than agent activity styling');
@@ -282,6 +294,19 @@ test('office roster nests a visiting contact under the exact addressed agent wit
   assert.deepEqual(visitor.visitLabel, { key: 'office.visitingWith', params: { name: 'Worker' } });
 });
 
+test('drawer role LabelRefs stay distinct from visitor state labels', () => {
+  const projected = projectOfficeRoster({ occupants: [
+    { id: 'primary', role: 'primary', state: 'idle', name: 'Atlas', floorId: '1' },
+    { id: 'subagent', role: 'subagent', state: 'idle', name: 'Scout', parentId: 'primary', floorId: '1' },
+    { id: 'contact', role: 'direct', state: 'idle', name: 'Riley', parentId: 'primary', floorId: '1', visitPhase: 'person' },
+  ] });
+  const rows = new Map(projected.occupants.map(row => [row.id, row]));
+  assert.deepEqual(rows.get('primary').drawerRoleLabel, { key: 'occupantRole.primary' });
+  assert.deepEqual(rows.get('subagent').drawerRoleLabel, { key: 'occupantRole.subagent' });
+  assert.deepEqual(rows.get('contact').drawerRoleLabel, { key: 'occupantRole.direct' });
+  assert.deepEqual(rows.get('contact').stateLabel, { key: 'occupantRole.visitor' });
+});
+
 test('visitor role labels override only human direct contacts, preserving coding and channel labels', () => {
   const occupants = [
     { id: 'primary', role: 'primary', state: 'working', name: 'Atlas', floorId: '1' },
@@ -297,6 +322,7 @@ test('visitor role labels override only human direct contacts, preserving coding
   for (const project of [projectOfficeRoster, projectEngineOfficeRoster]) {
     const rows = new Map(project({ occupants }).occupants.map(row => [row.id, row]));
     assert.deepEqual(rows.get('human').roleLabel, { key: 'occupantRole.visitor' });
+    assert.deepEqual(rows.get('human').drawerRoleLabel, { key: 'occupantRole.direct' });
     assert.deepEqual(rows.get('coding').roleLabel, { key: 'occupantRole.session', params: { provider: 'Claude Code' } });
     assert.deepEqual(rows.get('group').roleLabel, { key: 'occupantRole.group' });
     assert.deepEqual(rows.get('channel').roleLabel, { key: 'occupantRole.channel' });
@@ -376,8 +402,8 @@ test('retained visits expire observed execution leases without ending the presen
     const engine = createEngine({ adapter, now: () => now, primary: 'main' });
     engine.ingestCanonical('agents', [{ id: 'main', name: 'Main', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: 'main-session' }]);
     const primary = session('main-session', 'primary');
-    const visitorKey = 'agent:main:discord:direct:person-1';
-    const visitor = session(visitorKey, 'conversation-direct', { interlocutorId: 'discord-user:person-1', channel: 'discord' }, {
+    const visitorKey = 'agent:main:discord:channel:room-1';
+    const visitor = session(visitorKey, 'conversation-group', { interlocutorId: 'discord-channel:room-1', channel: 'discord' }, {
       run: { ...running, evidence: 'live-activity', evidenceLevel: 'observed', observedAt: NOW, expiresAt: NOW + 10_000 },
     });
     engine.ingestCanonical('sessions.snapshot', [primary, visitor]);
@@ -405,7 +431,7 @@ test('retained visits expire observed execution leases without ending the presen
   }
 });
 
-test('a Discord contact is placed and nested under the configured agent that owns its session (v2 and v3)', () => {
+test('a Discord contact annotates the exact configured owner without a separate occupant (v2 and v3)', () => {
   for (const P of [project2x, project3x]) {
     const engine = createEngine({ adapter, now: () => NOW, primary: 'main' });
     engine.ingestCanonical('agents', [
@@ -428,20 +454,11 @@ test('a Discord contact is placed and nested under the configured agent that own
       configuredAgents: { worker: 'Worker' }, names: { interlocutorName: () => 'Camille' }, layout,
       actorOf: () => ({ kind: 'system', name: 'System' }), P });
     const lead = vm.occupants.find(row => row.sessionKey === 'worker-session');
-    const visitor = vm.occupants.find(row => row.sessionKey === visitorKey);
-    assert.ok(lead && visitor);
-    assert.equal(visitor.parentId, lead.id);
+    assert.ok(lead);
+    assert.equal(vm.occupants.some(row => row.sessionKey === visitorKey), false, 'person is not a teammate or visitor');
+    assert.deepEqual(lead.visitLabel, {key:'office.visitingWithChannel',params:{name:'Camille',channel:{key:'channel.discord'}}});
+    assert.notEqual(lead.visitLabel.params.name,lead.name);
     assert.equal(lead.parentId, P.occupantId('primary'));
-    assert.equal(vm.visitIntent.hostId, lead.id);
-    assert.deepEqual(vm.visitIntent.hosts, [{ id: lead.id, visitorIds: [visitor.id] }]);
-    assert.equal(visitor.floorId, lead.floorId);
-    assert.equal(visitor.stationUid, null);
-    assert.equal(visitor.sceneTarget.kind, 'visit');
-    assert.equal(visitor.visitLabel.key, 'office.visitingWith');
-    assert.equal(visitor.rosterDepth, 2, 'same-floor visit depth follows the backend parent tree');
-    assert.equal(visitor.parentName, null, 'a visit parent is not described as a launcher');
-    assert.equal(visitor.groupId, P.occupantId('primary'), 'nested visitor remains in the owning team group');
-    assert.ok(visitor.rosterOrder > lead.rosterOrder);
     assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
   }
 });
@@ -467,11 +484,10 @@ test('conversation owner wins over a conversation-shaped parent bridge in both c
     const worker = vm.occupants.find(row => row.sessionKey === 'worker-session');
     const bridge = vm.occupants.find(row => row.sessionKey === bridgeKey);
     const contact = vm.occupants.find(row => row.sessionKey === contactKey);
-    assert.ok(worker && bridge && contact);
-    assert.equal(contact.parentId, worker.id, 'the owning agent wins over the conversation-shaped parent bridge');
-    assert.equal(contact.parentId === bridge.id, false);
-    assert.equal(vm.visitIntent.hosts.find(group => group.visitorIds.includes(contact.id)).id, worker.id);
-    assert.equal(contact.visitLabel.params.name, worker.name);
+    assert.ok(worker);assert.equal(bridge,undefined);assert.equal(contact,undefined);
+    assert.equal(worker.visitLabel.params.name,'Contact');
+    assert.deepEqual(worker.visitLabel.params.channel,{key:'channel.discord'});
+    assert.notEqual(worker.visitLabel.params.name,worker.name);
     assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
   }
 });
@@ -491,10 +507,9 @@ test('a conversation with no resolvable owner never falls back to an unrelated p
     const vm = buildOfficeVM({ engine, now: NOW, tracker: createStateTracker(), canReadSessions: true,
       names: { interlocutorName: () => 'Contact' }, actorOf: () => ({ kind: 'system', name: 'System' }), P });
     const contact = vm.occupants.find(row => row.sessionKey === contactKey);
-    assert.ok(contact, 'unresolved conversations remain visible');
-    assert.equal(contact.parentId, null);
-    assert.equal(contact.visitPhase, undefined);
-    assert.equal(vm.visitIntent, undefined, 'no visit is assigned to the unrelated primary');
+    assert.equal(contact,undefined,'a person with no owning agent is not a physical occupant');
+    assert.equal(vm.occupants[0].visitLabel,undefined,'no conversation is assigned to the unrelated primary');
+    assert.equal(vm.visitIntent,undefined);
     assert.equal(validate(schemasFor(P.version).office, vm).ok, true);
   }
 });

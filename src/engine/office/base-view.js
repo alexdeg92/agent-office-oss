@@ -21,18 +21,30 @@ function countOfficePopulation(occupants) {
 }
 
 // stateSince: when each occupant entered its current state (kept across builds; forgotten when it leaves).
-function createStateTracker() {
-  const seen = new Map();   // occupantId → { state, since }
-  const hostSeen = new Map(); // stable host observation state across poll refreshes
-  const memberHostSeen = new Map(); // memberId → last known host presence during a short source-row gap
-  const visitsByVersion = new Map(); // contract version → conversation id → last safe row retained for the visit lease
-  const relocations = new Map(); // occupantId → stable backend-selected activity/scene travel
-  const idleDebounce = new Map(); // canonical placement id → raw observation signature, effective state and pending idle deadline
+function cloneTrackerMap(map) {
+  return new Map([...map].map(([key, value]) => [key, value instanceof Map ? cloneTrackerMap(value) : structuredClone(value)]));
+}
+function createStateTracker(initial = null) {
+  const seen = new Map(initial?.seen || []);   // occupantId → { state, since }
+  const hostSeen = new Map(initial?.hostSeen || []); // stable host observation state across poll refreshes
+  const memberHostSeen = new Map(initial?.memberHostSeen || []); // memberId → last known host presence during a short source-row gap
+  const visitsByVersion = new Map(initial?.visitsByVersion || []); // contract version → conversation id → last safe row retained for the visit lease
+  const relocations = new Map(initial?.relocations || []); // occupantId → stable backend-selected activity/scene travel
+  const idleDebounce = new Map(initial?.idleDebounce || []); // canonical placement id → raw observation signature, effective state and pending idle deadline
   const idleIdentity = id => id === 'main' ? 'primary' : id;
-  const homeAssignments = {}; // unscoped fallback; durable callers supply store-backed assignments
+  const homeAssignments = { ...(initial?.homeAssignments || {}) }; // unscoped fallback; durable callers supply store-backed assignments
   return {
     relocations,
     homeAssignments,
+    // Shadow parity gets an isolated copy of the production tracker state so
+    // running the compatibility projector cannot mutate or observe a later
+    // state than the engine result being compared.
+    fork() {
+      return createStateTracker({ seen: cloneTrackerMap(seen), hostSeen: cloneTrackerMap(hostSeen),
+        memberHostSeen: cloneTrackerMap(memberHostSeen), visitsByVersion: cloneTrackerMap(visitsByVersion),
+        relocations: cloneTrackerMap(relocations), idleDebounce: cloneTrackerMap(idleDebounce),
+        homeAssignments: structuredClone(homeAssignments) });
+    },
     since(id, state, now) {
       const p = seen.get(id);
       if (p && p.state === state) return p.since;
@@ -318,6 +330,10 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout, conf
   }
   if (!canReadSessions) derived = derived.filter(o => o.role === 'primary' || o.role === 'agent');
 
+  // Channel DMs describe the owning agent's conversation, not another agent
+  // or a physical person in the office. Keep their run evidence on the owner.
+  derived = derived.filter(o => o.role !== 'direct' || !engine.session(o.sessionKey)?.class.channel);
+
   const sessionFor = o => o.sessionKey ? engine.session(o.sessionKey) : null;
   // The Bureau is a presence surface, not a transcript preview. Session
   // summaries, labels and objectives may contain prompts or chat messages, so
@@ -331,7 +347,7 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout, conf
     const id = s?.class?.interlocutorId;
     if (!id) return null;
     try {
-      const value = titleOf(names.interlocutorName?.(id)) || null;
+      const value = titleOf(names.interlocutorName?.(id) || names.senderName?.(s)) || null;
       return value && !isRawChatIdentity(value, { id, role: s?.class?.kind }) ? redactChatIdentity(value, { id, role: s?.class?.kind }) : null;
     } catch (_) { return null; }
   };
@@ -434,6 +450,10 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout, conf
     // role line in the VM so every client can render the card without inference.
     const roleLabel = genericSubagent ? null : sessionKind ? { key: 'occupantRole.session', params: { provider } } : P.roleLabel(role, r.roleLabel);
     const ownerAgentId = o.role === 'primary' ? primary?.id : o.role === 'agent' ? o.id.slice(6) : null;
+    const conversation = canReadSessions && ownerAgentId ? sessions.filter(row => row.class.agentId === ownerAgentId
+      && row.class.kind === 'conversation-direct' && row.class.channel && !row.class.heartbeatOf
+      && isOnStageSession(row, now, key => engine.activity?.(key)?.kind || null, presenceWindowMs))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || a.key.localeCompare(b.key))[0] : null;
     const candidates = ownerAgentId
       ? sessions.filter(x => isStateEvidenceSession(x) && x.class.agentId === ownerAgentId)
       : session ? [session] : [];
@@ -465,6 +485,9 @@ function buildOfficeVM({ engine, now, tracker, names = {}, actorOf, layout, conf
       ...((o.role === 'agent' ? o.id.slice(6) : o.role === 'primary' ? primary?.id : null) &&
         isNewAgent(o.role === 'agent' ? o.id.slice(6) : primary?.id) ? { isNew: true } : {}),
       ...(parent ? { parentId: P.occupantId(parent) } : {}),
+      ...(conversation ? { visitLabel: { key: 'office.visitingWithChannel', params: {
+        name: interlocutorName(conversation) || { key: 'occupantRole.' + (P.version === 3 ? 'direct' : 'dm') },
+        channel: { key: 'channel.' + conversation.class.channel } } } } : {}),
       ...(() => {
         const transcript = canReadSessions && CONVERSATION_ROLES.has(o.role) && o.sessionKey && engine.transcript ? engine.transcript(o.sessionKey) : null;
         const exchanges = exchangesOf(transcript, now), visitPendingAt = pendingVisitAtOf(transcript);

@@ -1,7 +1,7 @@
 // Synthetic API/demo producer only. The product editor consumes its VM unchanged.
 let catalogue;
 export async function mockPalette({floorId='1',category='',search=''}={}) {
-  catalogue ||= fetch(new URL('./examples/office-palette-catalog.json',import.meta.url)).then(async response=>{
+  catalogue ||= fetch(new URL('./examples/office-palette-catalog.json',import.meta.url) /* transport-allow:fetch:palette-catalog */).then(async response=>{
     if(!response.ok)throw Error('palette catalogue unavailable');return response.json();
   }).catch(error=>{catalogue=null;throw error;});
   const {vm:seed,items}=await catalogue,vm=structuredClone(seed);

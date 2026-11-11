@@ -1,5 +1,7 @@
 'use strict';
 
+const { createHash } = require('node:crypto');
+
 const { TeamMember, HostAgent } = require('../model');
 
 // Joins the two read-only adapter snapshots without importing private source
@@ -11,6 +13,10 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
   let revision = 0;
   let hostRevision = 0;
   let teamRevision = 0;
+  let runtimeIdentityRevision = 0;
+  let runtimeIdentityGeneration = 0;
+  let runtimeIdentityFingerprint = null;
+  let identitySyncScheduled = false;
   let hostSnapshot = null;
   let teamSnapshot = null;
   const listeners = new Set();
@@ -20,14 +26,78 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
     revision++;
     for (const listener of [...listeners]) { try { listener({ revision, kind }); } catch (_) { /* observers cannot break source ingestion */ } }
   };
+  const publishIdentityChange = () => {
+    if (identitySyncScheduled) return;
+    identitySyncScheduled = true;
+    setImmediate(() => {
+      identitySyncScheduled = false;
+      revision++;
+      for (const listener of [...listeners]) {
+        try { listener({ revision, kind: 'identity' }); } catch (_) { /* observers cannot break source ingestion */ }
+      }
+    });
+  };
+  const identityFingerprint = (agents, sessions) => {
+    const hash = createHash('sha256');
+    const encodedRows = [];
+    let bytes = 0;
+    for (const [kind, values] of [['agent', agents], ['session', sessions]]) {
+      if (!Array.isArray(values) || values.length > 20_000) return null;
+      for (const row of values) {
+        if (!row || typeof row !== 'object') return null;
+        const fields = kind === 'agent'
+          ? ['id', 'hostId', 'runtimeKind', 'sessionRef', 'identityRef']
+          : ['id', 'agentId', 'hostId', 'runtimeKind', 'sessionRef', 'identityRef', 'sessionKey'];
+        const valuesForRow = [];
+        for (const field of fields) {
+          const value = row[field];
+          // Runtime adapters use null for absent optional identity fields.
+          // Treat it like an omitted JSON value; only present non-string
+          // values make the fingerprint unsafe to compare.
+          if (value !== undefined && value !== null
+              && (typeof value !== 'string' || value.length > 2048 || value.includes('\0'))) return null;
+          valuesForRow.push(value ?? null);
+        }
+        const encoded = JSON.stringify([kind, ...valuesForRow]);
+        bytes += Buffer.byteLength(encoded, 'utf8') + 1;
+        if (bytes > 8 * 1024 * 1024) return null;
+        encodedRows.push(encoded);
+      }
+    }
+    // Runtime registries can return the same identities in a different order
+    // after refresh. Order is not part of the identity set, so sort the
+    // bounded serialized rows before hashing to avoid false generation churn.
+    encodedRows.sort();
+    for (const row of encodedRows) hash.update(row).update('\n');
+    return hash.digest('hex');
+  };
   const get = () => {
     const h = hostSnapshot, t = teamSnapshot;
     // Raw Herdr references are consumed only by the private resolver. Keep them
     // out of the joined snapshot and all public projections.
+    const runtimeAgents = typeof runtimeIdentityAgents === 'function' ? runtimeIdentityAgents() : [];
     const sessionIdentities = typeof runtimeIdentitySessions === 'function' ? runtimeIdentitySessions() : [];
+    const fingerprint = identityFingerprint(runtimeAgents, sessionIdentities);
+    if (fingerprint !== null) {
+      if (runtimeIdentityRevision === null || fingerprint !== runtimeIdentityFingerprint) {
+        if (runtimeIdentityGeneration >= Number.MAX_SAFE_INTEGER) {
+          runtimeIdentityRevision = null;
+          runtimeIdentityFingerprint = null;
+        } else {
+          runtimeIdentityRevision = ++runtimeIdentityGeneration;
+          runtimeIdentityFingerprint = fingerprint;
+          publishIdentityChange();
+        }
+      }
+    } else {
+      // Invalid or over-bound identity input cannot be aligned safely. Give
+      // the compatibility view no usable token so parity fails closed.
+      runtimeIdentityRevision = null;
+      runtimeIdentityFingerprint = null;
+    }
     const identityLinks = h && identityResolver ? identityResolver.reconcile({
       hosts: (h.agents || []).map(row => ({ row, sessionRef: h.privateIdentityRefs?.get(row.id) || null })),
-      agents: [...(typeof runtimeIdentityAgents === 'function' ? runtimeIdentityAgents() : []),
+      agents: [...runtimeAgents,
         ...sessionIdentities.filter(row => row && typeof row.agentId === 'string').map(row => ({ ...row, id: row.agentId }))],
     }) : [];
     const hostByPane = new Map();
@@ -76,16 +146,24 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
     }
     const memberSessionKeys = {};
     const memberSessionRefs = {};
+    // A registry row without pane or session metadata (the team skill writes a bare record for a
+    // spawner that registered no pane) joins by the skill's own identity rule: the herdr pane named
+    // like the member. Only a name unique among panes and among members links; anything else stays unlinked.
+    const countBy = (rows, key) => rows.reduce((counts, row) => counts.set(key(row), (counts.get(key(row)) || 0) + 1), new Map());
+    const paneNames = countBy(h?.agents || [], row => row.name), memberNames = countBy(t?.members || [], row => row.name);
+    const hostByName = name => typeof name === 'string' && name && paneNames.get(name) === 1 && memberNames.get(name) === 1
+      ? h.agents.find(row => row.name === name) : null;
     const canonicalMembers = (t?.members || []).map(member => {
       const sourceRows = Object.entries(memberRefs).filter(([id]) => member.id === id);
       const source = sourceRows.length === 1 ? sourceRows[0][1] : null;
       const recordedSession = source?.session?.value;
-      const runtimeKind = source?.runtime === 'claude' ? 'claude-code' : source?.runtime;
       const sessionMatches = typeof recordedSession === 'string' && recordedSession
         ? hostBySession.get(recordedSession) || [] : [];
       const recordedRuntimeMatches = typeof recordedSession === 'string' && recordedSession
         ? sessionRows.get(recordedSession) || [] : [];
-      const paneHost = source?.herdrPane ? hostByPane.get(source.herdrPane) : null;
+      const paneHost = source?.herdrPane ? hostByPane.get(source.herdrPane)
+        : source && !recordedSession ? hostByName(member.name) : null;
+      const runtimeKind = (source?.runtime === 'claude' ? 'claude-code' : source?.runtime) || paneHost?.runtimeKind;
       const paneSession = paneHost && h.privateIdentityRefs?.get(paneHost.id);
       const paneRuntimeMatches = paneHost && typeof paneSession === 'string' && paneSession
         ? (sessionRows.get(paneSession) || []).filter(row => row.runtimeKind === runtimeKind && row.hostId === paneHost.hostId) : [];
@@ -123,7 +201,8 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
         observedAt: h.orchestrator.observedAt }]) : Object.freeze([]),
       agents: Object.freeze(linkedHostAgents),
       identityLinks: Object.freeze(identityLinks),
-      team: t?.team || null,
+      team: t?.team || t?.teams?.[0] || null,
+      teams: Object.freeze([...(t?.teams || (t?.team ? [t.team] : []))]),
       members: Object.freeze(canonicalMembers),
       tasks: Object.freeze([...(t?.tasks || [])].map(row => row.toJSON ? row.toJSON() : row)),
       reviews: Object.freeze([...(t?.reviews || [])].map(row => row.toJSON ? row.toJSON() : row)),
@@ -132,6 +211,8 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
           ? Math.min(5000, t.diagnostics.skippedTaskCount) : 0,
         skippedMemberCount: Number.isSafeInteger(t?.diagnostics?.skippedMemberCount) && t.diagnostics.skippedMemberCount > 0
           ? Math.min(5000, t.diagnostics.skippedMemberCount) : 0,
+        storeErrorCount: Number.isSafeInteger(t?.diagnostics?.storeErrorCount) && t.diagnostics.storeErrorCount > 0
+          ? Math.min(5000, t.diagnostics.storeErrorCount) : 0,
       }),
       revision, hostRevision, teamRevision, observedAt: now(),
     };
@@ -139,6 +220,7 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
     // enumerable/public source snapshot or canonical TeamMember rows.
     Object.defineProperty(snapshot, 'privateMemberSessionKeys', { enumerable: false, value: Object.freeze(memberSessionKeys) });
     Object.defineProperty(snapshot, 'privateMemberSessionRefs', { enumerable: false, value: Object.freeze(memberSessionRefs) });
+    Object.defineProperty(snapshot, 'runtimeIdentityRevision', { enumerable: false, value: runtimeIdentityRevision });
     // Do not publish linked host/team occupants from the partially initialized
     // join. Identity links can arrive before the first member registry snapshot
     // during boot; callers can keep the runtime-only OfficeVM until both
@@ -196,9 +278,9 @@ function createOrchestratorTeamSnapshots({ herdr = null, teamStore = null, now =
     },
     close,
     onChange(listener) { if (typeof listener !== 'function') throw new TypeError('listener required'); listeners.add(listener); return () => listeners.delete(listener); },
-    get enabled() { return !!(herdrReader || teamReader); },
+    get enabled() { return !!(herdrReader || (teamReader?.hasStores ?? !!teamReader)); },
     get hasHerdr() { return !!herdrReader; },
-    get hasTeamStore() { return !!teamReader; },
+    get hasTeamStore() { return teamReader?.hasStores ?? !!teamReader; },
   });
 }
 

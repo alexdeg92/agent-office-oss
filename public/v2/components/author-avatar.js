@@ -1,17 +1,14 @@
 // Render the backend-supplied Office appearance; identity selection stays in the VM.
 import { html, useEffect, useState } from '../lib.js';
 import { config } from '../config.js';
+import * as api from '../api.js';
 import { indexManifest } from '../office/assets.js';
 import { avatarSource, CharacterAvatar } from '../office/avatar.js';
 
 const manifests = new Map();
 function portraitIndex(base) {
   if (!manifests.has(base)) {
-    const pending = fetch(base + 'office/manifest.example.json')
-      .then(response => {
-        if (!response.ok) throw Error('Portrait registry unavailable');
-        return response.json();
-      }).then(indexManifest);
+    const pending = api.getAsset('bureau/office/manifest.example.json').then(indexManifest);
     manifests.set(base, pending);
     pending.catch(() => {
       if (manifests.get(base) === pending) manifests.delete(base);

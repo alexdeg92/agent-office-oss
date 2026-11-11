@@ -16,7 +16,11 @@ Version 1.0.0 is published on [npm](https://www.npmjs.com/package/@alexdeg92/age
 
 For a first npm/npx install, run `agent-office setup` and follow the browser wizard, then `agent-office start`. For Homebrew, use the service's data directory during setup, as shown below. The published Docker command starts the wizard on first boot. Setup persists configuration and secrets locally.
 
-For an environment-managed OpenClaw install, the required names are: `OC_GATEWAY_TOKEN`, `PORTAL_EMAIL`, `PORTAL_PASSWORD_HASH`, `PORTAL_SECRET`. Copy `.env.example` to a mode-`600` file and fill it in. Do not commit that file. npm and npx do not read that file on their own: pass `--env-file` (a variable already set in the environment wins; values are not printed). Homebrew's service script sources `~/.config/agent-office.env` or `AO_ENV_FILE`. Docker Compose uses `env_file`; an environment-managed `docker run` can use `--env-file`. A fresh wizard-based install does not require an env file.
+**Start every new install with the wizard**, whatever runs it later (npm, Homebrew, Docker, a systemd unit from a checkout: see `agent-office.service`). The wizard is the only path that detects runtimes, names the agents, picks their characters and installs the project skill. An env file is still useful for ports and `AO_PUBLIC_URL`; keep its `PORTAL_*` lines commented, because any of them turns the wizard off for good.
+
+Behind an HTTPS reverse proxy, set `AO_PUBLIC_URL` to the origin people type (`https://office.example.com`) in the env file, or choose the public/tunnel access in the wizard. Without it, a proxy that rewrites the Host gets every save refused with 403, and the server log names the value to set.
+
+An environment-managed install (automation, or an existing install) sets the login itself. The required names are: `OC_GATEWAY_TOKEN`, `PORTAL_EMAIL`, `PORTAL_PASSWORD_HASH`, `PORTAL_SECRET`, all three login names or none. Copy `.env.example` to a mode-`600` file and uncomment them. Do not commit that file. npm and npx do not read that file on their own: pass `--env-file` (a variable already set in the environment wins; values are not printed). Homebrew's service script sources `~/.config/agent-office.env` or `AO_ENV_FILE`. Docker Compose uses `env_file`; an environment-managed `docker run` can use `--env-file`. A fresh wizard-based install does not require an env file.
 
 ## Try it without OpenClaw
 

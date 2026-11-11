@@ -16,9 +16,20 @@ const { buildOfficeVM, createStateTracker, officeDefaults } = require('./vm/offi
 const { DEFAULT_SESSION_PRESENCE_WINDOW_MS, DEFAULT_AGENT_PRESENCE_WINDOW_MS, occupantIdOf } = require('../../engine/derive/occupants');
 const { projectionFor } = require('./project3x');
 const { project2x: P2 } = require('./project2x');
+const { dedupeRows } = require('./vm/dedupe');
 const { isInterlocutorId, cpLength, OCCUPANT_ID_MAX } = require('../../engine/model/kinds');
 const { every } = require('../../ops/timescale');
 const Pof = (req) => projectionFor(req.apiVersion);   // G5: the request's contract projection
+
+// The seen inventory is a single-occupant index. Old and new classifier rows for
+// the same session may differ by a 2.x alias (e.g. group/conversation); choose
+// one deterministic row before persisting so a future v2 projection cannot emit
+// duplicate channel IDs. Prefer the newest observation, then the current generic
+// conversation classification over the legacy group alias on ties.
+const dedupeSeenRows = rows => dedupeRows(rows, {
+  keyOf: row => P2.occupantId(row.id),
+  tieBreak: row => row.role === 'conversation' ? 2 : 1,
+});
 
 const LIVE_PULL_MS = 5000;          // transcripts of running sessions and open flow details, while subscribed
 const STALE_MS = 30000;             // an on-demand read older than this is refreshed on GET
@@ -36,6 +47,7 @@ const FLOW_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 const {resolveWireId}=require('./runtime-projection');
 const { redactText } = require('../../security/redact-text');
 const {parseId}=require('../../runtime-ids');
+const { compareOrSkipOrchestrationProjection } = require('../orchestration-parity');
 
 // agent-identity-1 (security-112, critic-164): summaries, models, projects, timing, exchanges, the journal and session
 // KPIs come from sessions and transcripts. A caller without the sessions read grant (`sessionsReadable({ session,
@@ -61,6 +73,13 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   officeEngineOrchestration = false, log = () => {} }) {
   const { orchestrationOfficeSnapshot } = require('../orchestration-engine-office');
   const currentOfficeTimings = () => officeTimings?.() || { finishedSessionWindowMs: presenceWindowMs, agentPresenceWindowMs, idleRelocationMinutes: 15, idleTransitionDebounceMs: 3_000 };
+  const legacyParitySnapshot = snapshot => snapshot && ({ ...snapshot,
+    hasHerdr: orchestratorTeams?.hasHerdr === true, hasTeamStore: orchestratorTeams?.hasTeamStore === true,
+    identityRevision: snapshot.runtimeIdentityRevision });
+  const recordOfficeParity = (surface, compatibility, canonical, oldProjection, newProjection, fields) => {
+    return compareOrSkipOrchestrationProjection(engine, surface, legacyParitySnapshot(compatibility), canonical,
+      oldProjection, newProjection, fields);
+  };
   const ownerChatRefs = new Set([scopeForAccount(store?.users?.owner?.()?.id, store), scopeForAccount(null, store)]
     .map(sessionRefForScope).filter(Boolean));
   // G7 (ADR-001 §14.2): interlocutor profiles come from the selected enrichers (InterlocutorProfile, cached only)
@@ -196,16 +215,24 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   const assignLook = store?.office?.automaticLook ? (id, index, opts) => store.office.automaticLook(id, index, opts) : undefined;
   const assignMemberAppearances = store?.office?.memberAppearances
     ? (ids, index, opts) => store.office.memberAppearances(ids, index, opts) : undefined;
-  const buildBaseOfficeView = options => officeEngineOrchestration
-    ? engine.buildOfficeView({ baseOptions: { ...options, scheduleVM, P2 } })
-    : buildOfficeVM(options);
-  const placementPopulationFor = (office, snapshot, P, sourceEnabled = !!(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore)) => {
+  const buildBaseOfficeView = options => {
+    const vm = officeEngineOrchestration
+      ? engine.buildOfficeView({ baseOptions: { ...options, scheduleVM, P2 } })
+      : buildOfficeVM(options);
+    if (!vm) return vm;
+    const { projectFloorAgentGroups } = require('../../engine/office/roster');
+    return { ...vm,
+      rosterFloors: projectFloorAgentGroups(vm.rosterFloors, vm.occupants, []),
+      teamGroups: Array.isArray(vm.teamGroups) ? vm.teamGroups : [],
+      teamLegend: Array.isArray(vm.teamLegend) ? vm.teamLegend : [] };
+  };
+  const placementPopulationFor = (office, snapshot, P, sourceEnabled = !!(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore), stateTracker = tracker) => {
     if (!office || !snapshot || !sourceEnabled) return office?.occupants || [];
     if (snapshot.sourcesReady === false) return office.occupants || [];
     return require('../orchestrator-team-projection').projectOfficeTeamPlacementPopulation(office, snapshot, {
       runtimeAgents: engine.agents(), primaryAgentId: engine.primaryAgent()?.id || null,
       runtimeIdentitySessions: engine.identitySessions?.(snapshot.agents?.[0]?.hostId) || [], runtimeSessions: engine.sessions(),
-      version: P.version, tracker, agentPresenceWindowMs: currentOfficeTimings().agentPresenceWindowMs,
+      version: P.version, tracker: stateTracker, agentPresenceWindowMs: currentOfficeTimings().agentPresenceWindowMs,
     });
   };
   topics.define('office', { params: ['view'], build: (q, P) => {
@@ -218,6 +245,7 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
       const baseOptions = { engine, now: now(), tracker: limitedTracker, names, actorOf, layout: layoutState,
         configuredAgents, canReadSessions: false, P, P2, assignLook, presenceWindowMs: timing.finishedSessionWindowMs,
         agentPresenceWindowMs: timing.agentPresenceWindowMs, idleTransitionDebounceMs: timing.idleTransitionDebounceMs };
+      const parityLimitedTracker = limitedTracker.fork(), parityPlanningTracker = tracker.fork();
       if (officeEngineOrchestration) {
         const planningBaseOptions = { ...baseOptions, tracker, canReadSessions: true, isNewAgent };
         const placed = engine.buildOfficeView({ baseOptions, planningBaseOptions, snapshot: sourceSnapshot, sourceEnabled,
@@ -232,14 +260,14 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
         // counter while the engine cutover is being observed.
         const legacySnapshot = orchestratorTeams?.getSnapshot?.();
         if (sourceSnapshot && legacySnapshot && sourceSnapshot.sourcesReady !== false && legacySnapshot.sourcesReady !== false) {
-          const shadowLimitedBase = engine.buildOfficeView({ baseOptions: { ...baseOptions, tracker: limitedTracker } });
-          const shadowPlanning = engine.buildOfficeView({ baseOptions: { ...planningBaseOptions, tracker } });
+          const shadowLimitedBase = engine.buildOfficeView({ baseOptions: { ...baseOptions, tracker: parityLimitedTracker } });
+          const shadowPlanning = engine.buildOfficeView({ baseOptions: { ...planningBaseOptions, tracker: parityPlanningTracker } });
           const { projectOfficePlacement: projectLegacyPlacement } = require('./vm/office-roster');
           const legacyLimited = projectLegacyPlacement(shadowLimitedBase, { layout: layoutState.layout, index: officeDefaults().index,
-            projectOccupantId: P.occupantId, now: now(), tracker: teamShadowTracker,
-            planningOccupants: placementPopulationFor(shadowPlanning, legacySnapshot, P, true), engine,
+            projectOccupantId: P.occupantId, now: now(), tracker: parityLimitedTracker,
+            planningOccupants: placementPopulationFor(shadowPlanning, legacySnapshot, P, true, parityPlanningTracker), engine,
             canReadSessions: false, idleTransitionDebounceMs: timing.idleTransitionDebounceMs });
-          engine.compareOrchestrationProjection?.('office.limited', legacyLimited, placed,
+          recordOfficeParity('office.limited', legacySnapshot, sourceSnapshot, legacyLimited, placed,
             ['id', 'parentId', 'teamId', 'teamIds', 'groupId', 'order', 'floorId', 'stationUid', 'state', 'stateLabel', 'status']);
         }
         scheduleOfficeExpiry(placed);
@@ -270,7 +298,7 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
         ...(o.automaticLook && { automaticLook: o.automaticLook }) }));
       // PM after R26-01: an occupant whose id is too long to store stays on stage and in every view; only the inventory
       // leaves it out, with a warning (store.unindexed). Not retried: it can't fit.
-      const seen = all.filter((o) => cpLength(o.id) <= OCCUPANT_ID_MAX);
+      const seen = dedupeSeenRows(all).filter((o) => cpLength(o.id) <= OCCUPANT_ID_MAX);
       if (seen.length < all.length) {
         try { engine.quarantine.record({ code: 'store.unindexed', severity: 'warn', channel: 'store.office_agents_seen', path: '$.occupant_id', source: 'store' }); } catch (_) { /* never breaks a view */ }
       }
@@ -300,12 +328,14 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   const traceStateOf = (out) => (out.ok ? 'fresh' : out.category === 'capability-unavailable' ? 'unavailable' : 'stale');
   // architect-55: the trace never shows what the adapter declares hidden (the project-tag call)
   const shown = t => { const hidden = (runtime?.definitionFor?.(t?.sessionKey) || runtime?.definition)?.hiddenTraceEvent; return t && hidden && t.events.some(hidden) ? { ...t, events: t.events.filter(e => !hidden(e)) } : t; };
-  const buildLegacyTeamOfficeProjection = (office, snapshot, principal, P, planningOffice, stateTracker, sourceEnabled, { persist = true } = {}) =>
+  const buildLegacyTeamOfficeProjection = (office, snapshot, principal, P, planningOffice, stateTracker, sourceEnabled,
+    { persist = true, homeAssignmentsOverride = undefined } = {}) =>
     require('./legacy-office-projection').buildLegacyTeamOfficeProjection({ office, snapshot, principal, projection: P,
       planningOffice, tracker: stateTracker, sourceEnabled, engine, now, activeLayout, officeDefaults, placementPopulationFor,
-      sessionsReadable, currentOfficeTimings, store, persist });
+      sessionsReadable, currentOfficeTimings, store, persist, homeAssignmentsOverride });
   const buildEngineTeamOfficeProjection = (office, snapshot, principal, P, planningOffice, stateTracker, sourceEnabled,
-    { persist = true, limited = false, planningBaseOptions = null, planningTracker = tracker } = {}) => {
+    { persist = true, limited = false, planningBaseOptions = null, planningTracker = tracker,
+      homeAssignmentsOverride = undefined } = {}) => {
     if (!snapshot || !sourceEnabled) return office;
     const placementLayout = activeLayout();
     return engine.buildOfficeView({ office, snapshot, principal, projection: P, planningOffice, planningBaseOptions,
@@ -314,7 +344,8 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
       ...(limited ? { scope: { canReadSessions: false, includeTeams: true }, planningTracker } : {}),
       agentPresenceWindowMs: currentOfficeTimings().agentPresenceWindowMs,
       idleTransitionDebounceMs: currentOfficeTimings().idleTransitionDebounceMs,
-      homeAssignments: store?.office?.teamHomeAssignments?.(placementLayout.revision) || null,
+      homeAssignments: homeAssignmentsOverride === undefined
+        ? store?.office?.teamHomeAssignments?.(placementLayout.revision) || null : homeAssignmentsOverride,
       rememberHomeAssignments: store?.office?.rememberTeamHomeAssignments
         ? assignments => store.office.rememberTeamHomeAssignments(placementLayout.revision, assignments) : null,
       persist });
@@ -327,6 +358,12 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     if (!principal) return null;
     const limited = !!scope?.officeLimited;
     const timing = currentOfficeTimings(), layoutState = activeLayout();
+    // Both sides of the shadow comparison must see the same saved homes. The
+    // engine projection can persist a newly selected home before the legacy
+    // projection runs; reading the store again would compare different inputs.
+    const homeAssignments = store?.office?.teamHomeAssignments?.(layoutState.revision) || null;
+    const parityBaseTracker = (limited ? limitedTracker : tracker).fork();
+    const parityPlanningTracker = tracker.fork(), parityTeamTracker = teamTracker.fork();
     const baseOptions = { engine, now: now(), tracker: limited ? limitedTracker : tracker, names, actorOf, layout: layoutState, scheduleVM, P2,
       configuredAgents, canReadSessions: !limited, P, assignLook, assignMemberAppearances,
       ...(limited ? {} : { isNewAgent }), presenceWindowMs: timing.finishedSessionWindowMs,
@@ -358,47 +395,62 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
     const herdrActive = officeEngineOrchestration ? engineSnapshot?.hasHerdr : orchestratorTeams?.hasHerdr;
     const activationHint = principal.role === 'admin' && detected && !herdrActive
       ? { orchestratorActivationAvailable: true } : null;
+    const withActivationHint = vm => {
+      const hasGrouping = (vm?.teamGroups || []).length > 0 || (vm?.rosterFloors || []).some(floor => (floor.teamGroups || []).length > 0);
+      return activationHint && !hasGrouping ? { ...vm, ...activationHint } : vm;
+    };
     // During boot, exact runtime/Herdr links can precede the team registry.
     // Keep the normal runtime projection until the source join is complete so
     // a registered runtime agent is never briefly rendered as a duplicate.
     if (snapshot?.sourcesReady === false) {
       if (officeEngineOrchestration) {
-        const base = engine.buildOfficeView({ baseOptions });
+        const base = buildBaseOfficeView(baseOptions);
         scheduleOfficeExpiry(base);
-        return activationHint ? { ...base, ...activationHint } : base;
+        return withActivationHint(base);
       }
-      return activationHint ? { ...office, ...activationHint } : office;
+      return withActivationHint(office);
     }
     if (!snapshot || !snapshotEnabled(snapshot)) {
       if (officeEngineOrchestration) {
-        const base = engine.buildOfficeView({ baseOptions });
+        const base = buildBaseOfficeView(baseOptions);
         scheduleOfficeExpiry(base);
-        return activationHint ? { ...base, ...activationHint } : base;
+        return withActivationHint(base);
       }
-      return activationHint ? { ...office, ...activationHint } : office;
+      return withActivationHint(office);
     }
     let placed = officeEngineOrchestration
       ? engine.buildOfficeView({ baseOptions, snapshot, principal, projection: P, planningOffice, planningBaseOptions,
         tracker: teamTracker, planningTracker: tracker, sourceEnabled: true, scope: { canReadSessions: !limited, includeTeams: true },
         layout: layoutState.layout, index: officeDefaults().index, now: now(), canReadSessions: !limited,
         agentPresenceWindowMs: timing.agentPresenceWindowMs, idleTransitionDebounceMs: timing.idleTransitionDebounceMs,
-        homeAssignments: store?.office?.teamHomeAssignments?.(layoutState.revision) || null,
+        homeAssignments,
         rememberHomeAssignments: store?.office?.rememberTeamHomeAssignments
           ? assignments => store.office.rememberTeamHomeAssignments(layoutState.revision, assignments) : null })
       : buildLegacyTeamOfficeProjection(office, snapshot, principal, P, planningOffice, teamTracker, true);
     if (engineSnapshot && legacySnapshot && engineSnapshot.sourcesReady !== false && legacySnapshot.sourcesReady !== false) {
-      const otherSnapshot = officeEngineOrchestration ? legacySnapshot : engineSnapshot;
-      const otherBuilder = officeEngineOrchestration ? buildLegacyTeamOfficeProjection : buildEngineTeamOfficeProjection;
-      const comparisonPlanningOffice = officeEngineOrchestration && limited
-        ? engine.buildOfficeView({ baseOptions: planningBaseOptions }) : (planningOffice || office);
-      const comparisonBase = office || engine.buildOfficeView({ baseOptions: { ...baseOptions, tracker: limited ? limitedTracker : tracker } });
-      const comparison = otherBuilder(comparisonBase, otherSnapshot, principal, P, comparisonPlanningOffice, teamShadowTracker,
-        officeEngineOrchestration ? !!(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore) : !!(engineSnapshot?.hasHerdr || engineSnapshot?.hasTeamStore), { persist: false });
-      engine.compareOrchestrationProjection?.(limited ? 'office.limited' : 'office', officeEngineOrchestration ? comparison : placed, officeEngineOrchestration ? placed : comparison,
-        ['id', 'parentId', 'teamId', 'teamIds', 'groupId', 'order', 'floorId', 'stationUid', 'state', 'stateLabel', 'status', 'evidenceLevel', 'observedAt', 'staleAfter', 'hostRole', 'hostStatus']);
+      try {
+        const otherSnapshot = officeEngineOrchestration ? legacySnapshot : engineSnapshot;
+        const otherBuilder = officeEngineOrchestration ? buildLegacyTeamOfficeProjection : buildEngineTeamOfficeProjection;
+        const comparisonPlanningOptions = limited ? planningBaseOptions : baseOptions;
+        const comparisonPlanningOffice = officeEngineOrchestration
+          ? buildOfficeVM({ ...comparisonPlanningOptions, tracker: parityPlanningTracker, canReadSessions: true })
+          : (planningOffice || office);
+        const comparisonBase = office || buildOfficeVM({ ...baseOptions, tracker: parityBaseTracker });
+        const comparison = otherBuilder(comparisonBase, otherSnapshot, principal, P, comparisonPlanningOffice, parityTeamTracker,
+          officeEngineOrchestration ? !!(orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore) : !!(engineSnapshot?.hasHerdr || engineSnapshot?.hasTeamStore),
+          { persist: false, homeAssignmentsOverride: homeAssignments });
+        recordOfficeParity(limited ? 'office.limited' : 'office', legacySnapshot, engineSnapshot,
+          officeEngineOrchestration ? comparison : placed, officeEngineOrchestration ? placed : comparison,
+          ['id', 'parentId', 'teamId', 'teamIds', 'groupId', 'order', 'floorId', 'stationUid', 'state', 'stateLabel', 'status', 'evidenceLevel', 'observedAt', 'staleAfter', 'hostRole', 'hostStatus', 'teamGroups']);
+      } catch {
+        // Parity is shadow-only: a missing gateway/identity snapshot may make
+        // the alternate builder unavailable during boot. Never let that turn
+        // the already-built Office response into a 500 or a false comparison.
+        engine.recordOrchestrationShadowError?.(limited ? 'office.limited' : 'office');
+      }
     }
     scheduleOfficeExpiry(placed);
-    return activationHint ? { ...placed, ...activationHint } : placed;
+    return withActivationHint(placed);
   } });
   const officeTopic = req => {
     const ordinary = officeTopicFor(req, sessionsReadable);
@@ -591,4 +643,4 @@ function mountViews({ r, engine, topics, store, runtime, configuredAgents = {}, 
   return { pendingRestart, close: () => { clearInterval(ticker); clearTimeout(visitExpiryTimer); }, pull, actorOf, chatAvatarFor };
 }
 
-module.exports = { OFFICE_LIMITED, officeTopicFor, mountViews };
+module.exports = { OFFICE_LIMITED, officeTopicFor, mountViews, dedupeSeenRows };

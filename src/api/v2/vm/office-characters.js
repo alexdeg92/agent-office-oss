@@ -1,6 +1,7 @@
 'use strict';
 
 const { project2x: P2 } = require('../project2x');
+const { dedupeRows } = require('./dedupe');
 
 const countLabel = n => ({ key: n === 1 ? 'office.characters.count.one' : 'office.characters.count.other', params: { n } });
 
@@ -35,9 +36,10 @@ function buildOfficeCharactersVM({ office, layout, rules, index, seen = [], runt
     });
   }
 
+  const uniqueRows = dedupeRows(rows);
   const query = String(search || '').trim().toLocaleLowerCase('en');
   const matches = row => !query || `${row.name} ${row.runtime || ''}`.toLocaleLowerCase('en').includes(query);
-  const byId = new Map(rows.map(row => [row.id, row]));
+  const byId = new Map(uniqueRows.map(row => [row.id, row]));
   const used = new Set();
   const groups = [];
   for (const group of office.rosterGroups || []) {
@@ -47,10 +49,10 @@ function buildOfficeCharactersVM({ office, layout, rules, index, seen = [], runt
     for (const row of members) used.add(row.id);
     groups.push({ id: group.id, label: group.label, count: members.length, countLabel: countLabel(members.length), rows: members });
   }
-  const independent = rows.filter(row => !used.has(row.id) && row.inOffice && matches(row));
+  const independent = uniqueRows.filter(row => !used.has(row.id) && row.inOffice && matches(row));
   if (independent.length) groups.push({ id: null, label: { key: 'office.characters.independent' }, count: independent.length,
     countLabel: countLabel(independent.length), rows: independent });
-  const detected = rows.filter(row => !row.inOffice && matches(row));
+  const detected = uniqueRows.filter(row => !row.inOffice && matches(row));
   if (detected.length) groups.push({ id: 'detected', label: { key: 'office.characters.detectedGroup' }, count: detected.length,
     countLabel: countLabel(detected.length), rows: detected });
   const count = groups.reduce((total, group) => total + group.count, 0);

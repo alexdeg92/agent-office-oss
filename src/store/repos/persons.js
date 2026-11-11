@@ -29,6 +29,7 @@ function createPersonsRepo(db, { now = () => Date.now() } = {}) {
 
   return {
     owner: () => { const row = owner.get(); return row ? toPerson(row) : null; },
+    byId: id => { const row = typeof id === 'string' ? db.prepare('SELECT * FROM persons WHERE id=?').get(id) : null; return row ? toPerson(row) : null; },
     // → the owner Person; created once, never renamed by the seed afterwards
     // `rename`: an explicitly configured name (PORTAL_DISPLAY_NAME) replaces the stored one
     ensureOwner(name, { rename = false } = {}) {

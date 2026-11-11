@@ -5,10 +5,11 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { orchestratorSourceAdapter, orchestratorSourceCapabilities, detectOrchestratorSource } = require('../adapters');
 const { createOrchestratorTeamSnapshots } = require('./orchestrator-team-snapshots');
+const { createMultiTeamStoreReader } = require('./multi-team-store-reader');
 const { createSourceActivation } = require('./source-activation');
 
 function createConfiguredOrchestrators({ env = process.env, enabled, binaryPath = null, hostId = null, platform = process.platform,
-  label = null, run, teamRoot = null, readInbox, log, engine = null, runtimeIdentityAgents = () => [], runtimeIdentitySessions = () => [], now = Date.now, setIntervalFn, clearIntervalFn } = {}) {
+  label = null, run, teamRoot = null, readInbox, log, engine = null, projectDirectoryHints = () => [], runtimeIdentityAgents = () => [], runtimeIdentitySessions = () => [], now = Date.now, setIntervalFn, clearIntervalFn } = {}) {
   const detectedPath = detectOrchestratorSource('herdr',{env,binaryPath});
   const resolvedHostId = hostId || 'host_' + createHash('sha256').update(os.hostname() + '\0' + platform).digest('hex').slice(0, 24);
   const platformName = ({ linux: 'linux', darwin: 'macos', win32: 'windows' })[platform] || 'unknown';
@@ -17,9 +18,27 @@ function createConfiguredOrchestrators({ env = process.env, enabled, binaryPath 
     ...(setIntervalFn ? { setIntervalFn } : {}), ...(clearIntervalFn ? { clearIntervalFn } : {}) }) : null;
   const activation=createSourceActivation({configured:enabled,detected:!!detectedPath,capabilities:orchestratorSourceCapabilities('herdr')});
   let active = activation.shouldProbe ? makeReader() : null;
-  const validTeamRoot = typeof teamRoot === 'string' && teamRoot.length <= 4096 && !teamRoot.includes('\0') && path.isAbsolute(teamRoot) ? teamRoot : null;
+  const explicitTeamRoots = [teamRoot, env.AO_TEAM_STORE_ROOT].filter((value, index, rows) => typeof value === 'string' &&
+    value.length <= 4096 && !value.includes('\0') && path.isAbsolute(value) && rows.indexOf(value) === index);
   const inboxEnabled = readInbox === true || (readInbox !== false && env.AO_TEAM_STORE_READ_INBOX === '1');
-  const teamStore = validTeamRoot ? orchestratorSourceAdapter('agent-team-pm', { root: validTeamRoot, now, includeInbox: inboxEnabled, log }) : null;
+  const teamStore = createMultiTeamStoreReader({ env, explicitRoots: explicitTeamRoots,
+    getProjectDirectories: async () => {
+      const dirs = [];
+      try {
+        const provided = await projectDirectoryHints();
+        if (Array.isArray(provided)) for (const hint of provided.slice(0, 128)) {
+          const cwd = typeof hint === 'string' ? hint : hint?.cwd;
+          if (typeof cwd === 'string') dirs.push(cwd);
+        }
+      } catch { /* one adapter's private hint failure cannot block other stores */ }
+      if (active) {
+        const latest = active.currentSnapshot || await active.refresh();
+        if (latest?.orchestrator?.sourceStatus === 'available') dirs.push(...(latest.privatePaneCwds?.values?.() || []));
+      }
+      return dirs.slice(0, 128);
+    },
+    createReader: options => orchestratorSourceAdapter('agent-team-pm', { ...options, now, includeInbox: inboxEnabled, log }),
+    now, log, ...(setIntervalFn ? { setIntervalFn } : {}), ...(clearIntervalFn ? { clearIntervalFn } : {}) });
   const snapshots = createOrchestratorTeamSnapshots({ herdr: active,
     runtimeIdentityAgents: () => runtimeIdentityAgents(resolvedHostId),
     runtimeIdentitySessions: () => runtimeIdentitySessions(resolvedHostId), teamStore, now });
@@ -28,30 +47,37 @@ function createConfiguredOrchestrators({ env = process.env, enabled, binaryPath 
   let engineHostRows = null, engineTeamRows = null;
   const hostAdapter = { capabilities: { ...orchestratorSourceCapabilities('herdr'), discovery: { detected: !!detectedPath } }, readSnapshot: async () => engineHostRows || {} };
   const teamAdapter = { capabilities: orchestratorSourceCapabilities('agent-team-pm'), readSnapshot: async () => engineTeamRows || {} };
-  const engineRegistered = engine && typeof engine.registerOrchestrationSource === 'function'
-    ? { herdr: engine.registerOrchestrationSource('herdr', hostAdapter, { enabled: !!active }),
-      team: engine.registerOrchestrationSource('agent-team-pm', teamAdapter, { enabled: !!teamStore }) } : null;
+  const registerSources = () => ({ herdr: engine.registerOrchestrationSource('herdr', hostAdapter, { enabled: !!active }),
+    team: engine.registerOrchestrationSource('agent-team-pm', teamAdapter, { enabled: teamStore.hasStores }) });
+  let engineRegistered = engine && typeof engine.registerOrchestrationSource === 'function' ? registerSources() : null;
   function withPrivateRefs(rows, refs) {
     Object.defineProperty(rows, 'privateRefs', { enumerable: false, value: Object.freeze(refs) });
     return rows;
   }
   function syncEngine() {
     if (!engineRegistered) return;
+    // The runtime controller replaces its engine (and source registry) when the runtime set
+    // changes, e.g. the first connector saved on an env-only install. Register again there.
+    const listed = new Set((engine.orchestrationSourceStatus?.() || []).map(row => row.id));
+    if (!listed.has('herdr') || !listed.has('agent-team-pm')) engineRegistered = registerSources();
     const snapshot = snapshots.getSnapshot();
     engine.setOrchestrationSourceEnabled?.('herdr', !!active);
+    engine.setOrchestrationSourceEnabled?.('agent-team-pm', teamStore.hasStores);
     if (engineRegistered.herdr && active && snapshot.hostSourceReady) {
       const refs = Object.create(null);
       for (const [id, value] of Object.entries(snapshot.privateHostRefs || {})) refs[id] = value;
       engineHostRows = withPrivateRefs({ hosts: snapshot.hosts || [], orchestrators: snapshot.orchestrators || [],
         hostAgents: snapshot.agents || [], identityLinks: snapshot.identityLinks || [] }, refs);
-      engine.ingestOrchestrationSource('herdr', engineHostRows, { observedAt: snapshot.observedAt });
+      engine.ingestOrchestrationSource('herdr', engineHostRows, { observedAt: snapshot.observedAt,
+        sourceRevision: snapshot.hostRevision, identityRevision: snapshot.runtimeIdentityRevision });
     }
     if (engineRegistered.team && teamStore && snapshot.teamSourceReady) {
       const refs = Object.create(null);
       for (const [id, value] of Object.entries(snapshot.privateMemberSessionRefs || {})) refs[id] = value;
-      engineTeamRows = withPrivateRefs({ teams: snapshot.team ? [snapshot.team] : [], members: snapshot.members || [],
+      engineTeamRows = withPrivateRefs({ teams: snapshot.teams || (snapshot.team ? [snapshot.team] : []), members: snapshot.members || [],
         tasks: snapshot.tasks || [], reviews: snapshot.reviews || [] }, refs);
-      engine.ingestOrchestrationSource('agent-team-pm', engineTeamRows, { observedAt: snapshot.observedAt });
+      engine.ingestOrchestrationSource('agent-team-pm', engineTeamRows, { observedAt: snapshot.observedAt,
+        sourceRevision: snapshot.teamRevision, identityRevision: snapshot.runtimeIdentityRevision });
     }
   }
   const offEngineSync = engineRegistered ? snapshots.onChange(syncEngine) : null;
@@ -64,8 +90,10 @@ function createConfiguredOrchestrators({ env = process.env, enabled, binaryPath 
     return result;
   };
   return Object.freeze({
-    getSnapshot: snapshots.getSnapshot, refresh: snapshots.refresh, start: snapshots.start,
-    close() { offEngineSync?.(); snapshots.close(); },
+    getSnapshot: snapshots.getSnapshot,
+    async refresh() { await snapshots.refresh(); return snapshots.getSnapshot(); },
+    start: snapshots.start,
+    close() { offEngineSync?.(); snapshots.close(); teamStore.close(); },
     onChange: snapshots.onChange,
     async configureHerdr(value) {
       if (typeof value !== 'boolean') throw new TypeError('Herdr activation must be boolean');

@@ -32,7 +32,7 @@ test('first load: requests, JS and CSS stay within the budget (raw and gzip)', (
   if (r.css.gzip > BUDGET.cssGzip) over.push(`CSS gzip ${kb(r.css.gzip)} > ${kb(BUDGET.cssGzip)}`);
   for (const [name, x] of Object.entries(r.routes)) if (x.gzip > BUDGET.routeGzip) over.push(`route ${name} ${kb(x.gzip)} gz > ${kb(BUDGET.routeGzip)}`);
   if (r.js.gzip + r.routes.bureau.gzip > BUDGET.landingGzip) over.push(`landing ${kb(r.js.gzip + r.routes.bureau.gzip)} gz > ${kb(BUDGET.landingGzip)}`);
-  assert.deepEqual(over, [], 'first-load budget (node scripts/first-load.js prints the table)');
+  assert.deepEqual(over, [], `first-load budget (landing ${r.js.gzip + r.routes.bureau.gzip}/${BUDGET.landingGzip} bytes)`);
 });
 
 test('setup owns its onboarding dictionary and styles; signed-in pages do not load them', () => {

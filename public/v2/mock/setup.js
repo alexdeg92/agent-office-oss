@@ -3,7 +3,7 @@
 //   GET  /api/v2/setup           → SetupVM { state, configured, adapters, draft (null unless open), suggestedTimeZone, locales }
 //   POST /api/v2/setup/check     { setupCode, runtime } → CommandResult<{ ok, status, protocol, latencyMs }> (a failed connection is a 200)
 //   POST /api/v2/setup/discover  { setupCode, runtime } → CommandResult<{ agents }> (unreachable runtime → 502 upstream_failed)
-//   PUT  /api/v2/setup           { setupCode, instance, owner{…, password?}, runtime{…, token?}, agents, integrations? } → CommandResult<{ configured: true, integrations }>
+//   PUT  /api/v2/setup           { setupCode, instance, owner{…, password?}, runtime{…, token?}, agents, integrations? } → CommandResult<{ configured: true, restartNeeded, integrations }>
 // Write-only secrets: runtime.token and owner.password are accepted, never returned (draft: tokenSet / passwordSet).
 // A wrong code → 403 forbidden {field:'setupCode', issue:'invalid'} and counts toward the login throttle (6 → 429).
 // Every code-guarded route (check, discover, save) applies the live state: locked or read-only → 403 {issue:'locked'} / readonly. Hooks (?installation=…): injoignable, refuse, jeton, sans-agent,
@@ -68,8 +68,8 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
       state,
       configured: state === 'locked', lockReason: null,
       network: { host: '127.0.0.1', port: 18789 },
-      adapters: [{ id: 'openclaw', name: 'OpenClaw', connect: true, fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789' },
-        { id: 'demo', name: 'Démo', connect: true, fields: [], defaultGatewayUrl: null }],   // G6: no connection (api.md 2.5 §5.7)
+      adapters: [{ id: 'openclaw', name: 'OpenClaw', connect: true, fields: ['gatewayUrl', 'token'], defaultGatewayUrl: 'ws://127.0.0.1:18789', agentsOptional: false },
+        { id: 'demo', name: 'Démo', connect: true, fields: [], defaultGatewayUrl: null, agentsOptional: false }],   // G6: no connection (api.md 2.5 §5.7)
       draft: state === 'open' ? { instance: { ...draft.instance }, owner: { displayName: '', email: '', passwordSet: draft.owner.passwordSet }, runtime: { ...draft.runtime, tokenSet } } : null,
       suggestedTimeZone: 'UTC',          // the server process's zone (ADR §12.7), never a built-in installation zone
       locales: ['fr', 'en'],
@@ -119,7 +119,7 @@ export function createSetup({ hook = null, now = () => Date.now() } = {}) {
       const optIn = !(b.integrations && b.integrations.projet === false);
       const projet = b.integrations?.reviewed ? { status: 'skipped', reason: 'reviewed' } : b.runtime.adapter !== 'openclaw' ? { status: 'skipped', reason: 'adapter' } : !optIn ? { status: 'skipped', reason: 'opted-out' }
         : hook === 'etiquette-conflit' ? { status: 'conflict', reason: 'skill-not-ours' } : hook === 'etiquette-erreur' ? { status: 'failed', reason: 'error' } : { status: 'installed' };
-      return { result: { configured: true, integrations: { projet } } };
+      return { result: { configured: true, restartNeeded: false, integrations: { projet } } };
     },
   };
 }

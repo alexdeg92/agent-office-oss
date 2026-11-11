@@ -190,7 +190,7 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false,chatSessionF
           o.communication=null;
           o.screenIntent=require('../engine/office/communication').projectScreenIntent(o);
           o.sessionKey=null;o.tokens=null;o.lastSeenAt=null;o.execution={status:'unknown',evidence:{level:'unknown',observedAt:null,expiresAt:null}};
-          delete o.exchanges;delete o.visitPhase;delete o.visitOnStage;delete o.visitStateLabel;
+          delete o.exchanges;delete o.visitLabel;delete o.visitPhase;delete o.visitOnStage;delete o.visitStateLabel;
         }
         vm.journal=[];
         // The cached OfficeVM is built from the full population. Rebuild every
@@ -434,6 +434,9 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false,chatSessionF
       if(vm.restart)vm.restart.supported=vm.restart.supported&&can(user,'settings.restart','write');
       const sectionResource={diagnostic:'health',runtimes:'settings.runtimes',connection:'settings.runtimes',integrations:'settings.integrations',instance:'settings.instance'};
       vm.diagnostics=vm.diagnostics.filter(d=>d.section==='account'||sectionResource[d.section]&&can(user,sectionResource[d.section]));
+      // "Finish setting up" summarises runtimes, agents, characters, instance, skills and access: only a caller who may
+      // read every one of them gets it (its done bits would otherwise leak hidden sections).
+      if(vm.finishSetup&&!['settings.runtimes','settings.integrations','settings.instance','settings.network','store'].every(key=>can(user,key)))delete vm.finishSetup;
       const local=user.credential_source==='database'&&!cfg.readonlyStore,source=user.credential_source==='env'?'env':'file';
       vm.owner={revision:user.permission_revision,displayName:field(store.persons.list().find(p=>p.id===user.person_id)?.name||user.email,source,local),email:field(user.email,source,local),passwordChangeEnabled:local,reason:local?null:{key:'settings.externalAccount'}};
     }

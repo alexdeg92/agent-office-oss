@@ -61,7 +61,7 @@ const READONLY = () => fail(403, 'readonly', 'Instance de test : actions désact
 export const isStandalone = () => standalone;
 
 // ---- auth (standalone only: a static server has no /api/login) ----
-export function me() { return loggedIn ? { email: 'Owner@example.invalid', displayName: 'Owner', gwConnected: scenario !== 'panne' } : null; }
+export function me() { return loggedIn ? { email: 'Owner@example.invalid', displayName: 'Owner', roleName: 'Administrateur', gwConnected: scenario !== 'panne' } : null; }
 export async function login(email, password) {
   await sleep(400);
   if (!email || !password || password.length < 4) {
@@ -125,7 +125,7 @@ let lastRestartAt = -Infinity;
 let om = null, omPromise = null;
 function officeMock() {
   if (!omPromise) {
-    const get = (f,base='bureau/office/') => fetch(new URL(assetUrl(base + f), globalThis.location ? location.origin : 'http://localhost')).then((r) => r.json());
+    const get = (f,base='bureau/office/') => fetch(new URL(assetUrl(base + f) /* transport-allow:fetch:office-asset */, globalThis.location ? location.origin : 'http://localhost')).then((r) => r.json());
     omPromise = Promise.all([get('manifest.example.json'), get('layout.example.json'),get('office-floors.json','mock/examples/')])
       .then(([manifest, layout,floorDefaults]) => (om = createOfficeMock({ manifest, layout,floorDefaults, scenario, version: config.apiVersion })));   // office-dev-14: D3/D4 in the configured contract
   }
@@ -238,7 +238,7 @@ async function settingsMock() {
     const {createSettingsMock}=await loadModule(() => import('./settings.js' + buildQuery));
     const variant=['settings-fixall','settings-fixall-partial','settings-fixall-delayed'].includes(scenario) ? 'settings-fixall-vm' : ['settings-readonly','settings-env','settings-restart-manual'].includes(scenario) ? scenario + '-vm' : 'settings-vm';
     const names=[variant,'check-result','integration-plan-result','reauth-request',...(scenario === 'settings-fixall-partial' ? ['fix-all-partial-result'] : [])];
-    const examples=Object.fromEntries(await Promise.all(names.map(async name => [name,await fetch(assetUrl('mock/examples/settings/' + name + '.json')).then(r => r.json())])));
+    const examples=Object.fromEntries(await Promise.all(names.map(async name => [name,await fetch(assetUrl('mock/examples/settings/' /* transport-allow:fetch:settings-example */ + name + '.json')).then(r => r.json())])));
     return createSettingsMock({vm:examples[variant].data,examples,onChange: event => {
       // A real SSE frame is its own task, never dispatched inside the HTTP response that caused it.
       setTimeout(() => { for (const source of sources) source._emit('settings',{type:'settings',...event}); }, 0);
@@ -293,7 +293,7 @@ async function handle2(method, path, body) {
     const slow = globalThis.location ? Number(new URLSearchParams(location.search).get('setup-lent')) || 0 : 0;
     await sleep(p.endsWith('/check') ? slow || 1200 : p.endsWith('/discover') ? slow || 900 : 300);
     const db = setupDb();
-    if (method === 'GET' && p === '/api/v2/setup/catalog') return ok(await fetch(assetUrl('bureau/office/manifest.example.json')).then(r => r.json()));
+    if (method === 'GET' && p === '/api/v2/setup/catalog') return ok(await fetch(assetUrl('bureau/office/manifest.example.json') /* transport-allow:fetch:setup-catalog */).then(r => r.json()));
     if (method === 'GET' && p === '/api/v2/setup') return ok(db.vm());
     const out = method === 'POST' && p === '/api/v2/setup/check' ? db.check(body)
       : method === 'POST' && p === '/api/v2/setup/discover' ? db.discover(body)
@@ -352,7 +352,7 @@ async function handle2(method, path, body) {
   }
   if (method === 'GET' && p === '/api/v2/views/office/store') {
     await officeMock();
-    const response=await fetch(assetUrl('mock/examples/office-store-catalog.json'));
+    const response=await fetch(assetUrl('mock/examples/office-store-catalog.json') /* transport-allow:fetch:store-catalog */);
     if(!response.ok)return fail(503,'upstream_unavailable','Catalogue indisponible.');
     const catalog=await response.json(),section=url.searchParams.get('section') || 'mobilier',category=url.searchParams.get('category') || '';
     const value=Object.hasOwn(catalog,section)&&Object.hasOwn(catalog[section],category) ? catalog[section][category] : null;

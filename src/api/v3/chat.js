@@ -81,7 +81,7 @@ function readCursor(value, sessionId) {
     if(!crypto.timingSafeEqual(Buffer.from(sig||''),Buffer.from(expected)))return null;return {kind:'local',sequence:Number(raw)};
   } catch { return null; }
 }
-function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, dataDir, orchestratorTeams = null, avatarFor = () => null, authed, guard, ok, now = () => Date.now(), log = () => {}, dispatchScheduler = { schedule: setImmediate, cancel: clearImmediate }, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), paneReplyTimeoutMs = 30000, conversationCacheOptions = {}, lateReply = { timeoutMs: 10 * 60 * 1000, intervalMs: 4000, sleep: ms => new Promise(resolve => { const timer = setTimeout(resolve, ms); timer.unref?.(); }) } }) {
+function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, rbacEnabled = false, dataDir, orchestratorTeams = null, avatarFor = () => null, profileAvatarForPerson = () => null, authed, guard, ok, now = () => Date.now(), log = () => {}, dispatchScheduler = { schedule: setImmediate, cancel: clearImmediate }, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), paneReplyTimeoutMs = 30000, conversationCacheOptions = {}, lateReply = { timeoutMs: 10 * 60 * 1000, intervalMs: 4000, sleep: ms => new Promise(resolve => { const timer = setTimeout(resolve, ms); timer.unref?.(); }) } }) {
   const repo=store?.chatV3;if(!repo) return null;
   const scopeUsers=new Map();
   const scopeTokens=new Map(),tokenScopes=new Map();
@@ -107,8 +107,11 @@ function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, 
   const principalId=req=>req.user?.id||req.session?.userId||req.principal?.id||null;
   const topicTokenFor=(scope,variant='default')=>{const key=variant==='default'?scope:scope+'\0'+variant;let token=scopeTokens.get(key);if(!token){token=crypto.createHmac('sha256',cursorSecret).update('chat-topic\0'+scope+(variant==='default'?'':'\0'+variant)).digest('base64url');scopeTokens.set(key,token);tokenScopes.set(token,scope);}return token;};
   const scopeForTopic=token=>tokenScopes.get(token)||null;
-  const scopeOf=req=>{const id=principalId(req),scope=scopeForAccount(id,store);topicTokenFor(scope);if(id)scopeUsers.set(scope,id);return scope;};
-  const allowed=(req,resource,level='read')=>!store.policy||store.policy.can(req.user||principalId(req),resource,level);
+  const scopeOf=req=>{const id=principalId(req),scope=scopeForAccount(id,store);topicTokenFor(scope);if(id)scopeUsers.set(scope,id);else if(req.session&&!req.principal)scopeUsers.set(scope,null);return scope;};
+  // The policy repository exists before account authority is activated. Auth
+  // verifies the env-owner cookie in that mode; no users row exists to query.
+  const legacyOwner=req=>!rbacEnabled&&!store.rbac?.state?.().owner_user_id&&!!req.session&&!req.principal&&!principalId(req);
+  const allowed=(req,resource,level='read')=>!store.policy||legacyOwner(req)||store.policy.can(req.user||principalId(req),resource,level);
   const requireGrant=(req,resource,level='read')=>{req.authorize?.();if(!allowed(req,resource,level))throw new ApiError('forbidden',{details:[{issue:'permission-denied'}]});};
   const runtimeOf=agentId=>engine.runtimeFor?.(agentId)||engine.runtime?.();
   const canonicalFromTarget=target=>typeof target?.source_ref==='string'&&target.source_ref.startsWith('agent:')?target.source_ref.slice(6):null;
@@ -327,7 +330,7 @@ function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, 
   const internalSessionTopic=(owner,id)=>topics.parse('chat-session-scope?scope='+encodeURIComponent(topicTokenFor(owner))+'&sessionId='+encodeURIComponent(id),3)?.id||null;
   const internalAgentsTopic=(owner,teamsRead)=>topics.parse('chat-agents-scope?scope='+encodeURIComponent(topicTokenFor(owner,'agents:'+(teamsRead?'teams':'chat'))),3)?.id||null;
   const internalSessionsTopic=(owner,id,filter='active')=>topics.parse('chat-agent-sessions-scope?scope='+encodeURIComponent(topicTokenFor(owner))+'&targetId='+encodeURIComponent(id)+'&filter='+encodeURIComponent(filter),3)?.id||null;
-  const requestForScope=owner=>{const userId=scopeUsers.get(owner),user=userId&&store.users.byId(userId);return {user:user||null,session:user?{userId:user.id}:null,query:{}};};
+  const requestForScope=owner=>{const userId=scopeUsers.get(owner),user=userId&&store.users.byId(userId);return {user:user||null,session:user?{userId:user.id}:scopeUsers.has(owner)&&userId===null?{}:null,query:{}};};
   // Durable dispatches may resume before any HTTP request repopulates the
   // in-memory scopeUsers index. Reconstruct the request from the principal
   // persisted with the accepted turn instead of relying on that cache.
@@ -379,11 +382,13 @@ function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, 
           ? targetPublic(req,row.principal_scope,target,targetInfo.agent,{team:targetInfo.team}).portrait.look
           : null)
         : null;
+      const profileAvatar=resolved.kind==='human'&&user?.id
+        ? profileAvatarForPerson(resolved.id,resolved.name||'',user.id)||null : null;
       const meta={model:storedMeta.model||null,tokens:storedMeta.tokens??null,durationMs:storedMeta.durationMs??null};
       const queueActions=m.role==='user'&&m.status==='queued'&&m.turn_id&&row.pending_turn_id!==m.turn_id&&isPaneStoredRow(row)?{turnId:m.turn_id,cancelLabel:label('chat.pane.cancelQueued'),
         sendNowLabel:label('chat.pane.sendNowAction'),titleLabel:label('chat.pane.sendNowTitle'),warningLabel:label('chat.pane.sendNowWarning'),keepQueuedLabel:label('chat.pane.keepQueued')}:null;
       return {id:m.message_id,kind:m.kind,role:m.role,at:m.at,text:m.body.text||'',body:m.body,title:m.title,status:m.status,
-        statusLabel:m.status_label_json?JSON.parse(m.status_label_json):null,queueActions,collapsedByDefault:m.kind==='subagent-result',avatar:appearance||null,senderInfo:resolved,meta,
+        statusLabel:m.status_label_json?JSON.parse(m.status_label_json):null,queueActions,collapsedByDefault:m.kind==='subagent-result',avatar:appearance||null,profileAvatar,senderInfo:resolved,meta,
         attachments:JSON.parse(m.attachments_json).map(a=>({...a,url:'/api/v3/chat/attachments/'+encodeURIComponent(a.id),preview:attachmentPreview(row,a)}))};
     });
     const oldest=storedFallback[0];const paginationRemote=usableTranscriptRows?remote:null;return {id:row.session_id,agentId:row.agent_id,title:row.title||label('chat.newSession'),messages,
@@ -1048,11 +1053,9 @@ function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, 
   return { targetRowsFor, projectSession, scopeOf, projectCreateVM, resolveProjectTarget, authorizeProjectKickoff, createProjectKickoff, projectKickoffVM, retryProjectKickoff, authorizeTopic(topic,context){
     if(!['chat-session','chat-agents','chat-agent-sessions','chat-agent-sessions-archived'].includes(topic?.name))return false;
     if(context?.apiVersion!==3)return false;
-    const principal=context?.session?.userId||context?.user?.id||context?.principal?.id||null;
-    const owner=scopeForAccount(principal,store);topicTokenFor(owner);if(principal)scopeUsers.set(owner,principal);
-    if(!store.policy)return true;const user=context?.user||principal;
-    if(!store.policy.can(user,'chat','read'))return false;
-    const wireId=topic.params?.key,req={user:user&&typeof user==='object'?user:store.users?.byId?.(principal)||null,session:principal?{userId:principal}:null,query:{}};
+    const req={user:context?.user||null,session:context?.session||null,principal:context?.principal||null,query:{}};
+    const owner=scopeOf(req),wireId=topic.params?.key;
+    if(!allowed(req,'chat','read'))return false;
     try{
       if(topic.name==='chat-agents')return true;
       if(['chat-agent-sessions','chat-agent-sessions-archived'].includes(topic.name)){
@@ -1063,6 +1066,9 @@ function mountChat({ r, engine, topics, store, runtime, runtimeWritable = true, 
       }
       return false;
     }catch{return false;}
-  },topicScope(session,kind=null){const id=session?.userId||session?.user?.id||session?.principal?.id||null,owner=scopeForAccount(id,store);if(kind==='agents'){const user=session?.user||id&&store.users?.byId?.(id)||null;return topicTokenFor(owner,'agents:'+(!store.policy||store.policy.can(user||id,'teams','read')?'teams':'chat'));}return topicTokenFor(owner);},close(){closed=true;conversationHistoryCache.close();for(const timer of dispatchTimers)dispatchScheduler.cancel(timer);dispatchTimers.clear();clearInterval(cleanupTimer);clearInterval(paneQueueTimer);}};
+  },topicScope(session,kind=null){
+    const req={session,user:session?.user||null,principal:session?.principal||null},owner=scopeOf(req);
+    return topicTokenFor(owner,kind==='agents'?'agents:'+(allowed(req,'teams','read')?'teams':'chat'):'default');
+  },close(){closed=true;conversationHistoryCache.close();for(const timer of dispatchTimers)dispatchScheduler.cancel(timer);dispatchTimers.clear();clearInterval(cleanupTimer);clearInterval(paneQueueTimer);}};
 }
 module.exports={mountChat,randomId};

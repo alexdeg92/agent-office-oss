@@ -6,9 +6,11 @@ function createUsersRepo(db, { now = Date.now } = {}) {
   const owner = db.prepare('SELECT * FROM users WHERE id=(SELECT owner_user_id FROM authorization_state WHERE singleton=1)');
   const byEmail = db.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND status<>'deleted' LIMIT 1");
   const byId = db.prepare('SELECT * FROM users WHERE id=?');
+  const byPerson = db.prepare("SELECT * FROM users WHERE person_id=? AND status='active' LIMIT 1");
   return {
     owner: () => owner.get() || null,
     byId: id => typeof id==='string' ? byId.get(id)||null : null,
+    byPerson: id => typeof id==='string' ? byPerson.get(id)||null : null,
     authGeneration: (id) => (id ? byId.get(id) : owner.get())?.auth_generation ?? 0,
     prepareLegacy(ttlMs) {
       if(!Number.isSafeInteger(ttlMs)||ttlMs<1)throw new Error('invalid session lifetime');

@@ -4,11 +4,11 @@ const { parseId, scopedId, validNativeId } = require('../runtime-ids');
 // Settings field controls use scalar text values; keep canonical array options in config/runtime data
 // and serialize chip/textarea values as newline-delimited text for the browser contract.
 const fieldValue = value => Array.isArray(value) && value.every(item => typeof item === 'string') ? value.join('\n') : value;
-function runtimeRows({ config, cfg, engine, detections, checks, field, label, store }) {
+function runtimeRows({ config, cfg, env, engine, detections, checks, field, label, store }) {
   return require('./runtime-detections').runtimeDetections({ config, cfg, detections }).map(({ entry: r, detection: d, name }) => {
     const A = ADAPTER_IDS.includes(r.adapter) ? adapterById(r.adapter) : null, S = A?.setup.settings;
     const child = cfg.runtimeInstances?.find(i => i.id === r.id)?.cfg;
-    const values = S ? child ? S.values(child) : S.detectedValues(d || {}) : {};
+    const values = S ? child ? S.values(child) : S.detectedValues(d || {}, env) : {};
     const connection = engine.runtimes?.().find(i => i.id === r.id), checked = checks.get(r.id);
     const status = !S ? 'unsupported' : checked?.status || (!r.enabled ? 'not-configured' : connection?.connected ? 'connected' : 'unreachable');
     const defaultEnabled=defaultAutoAdd(r.adapter),policy=store?.runtimeAutoAdd?.get(r.id,defaultEnabled) || {enabled:defaultEnabled,managed:false};

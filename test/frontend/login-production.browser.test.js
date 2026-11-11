@@ -12,7 +12,13 @@ test('production login: full office blend, four distinct families, couch guest, 
 }, async () => {
   const b = await openLayoutBrowser({ theme:'light' }), p = b.page;
   const errors = [], screenshots = [], loginRequests = [];
-  const source = execFileSync('git', ['rev-parse', 'HEAD'], { encoding:'utf8' }).trim();
+  try {
+  let source = 'unversioned-test-tree';
+  try {
+    source = execFileSync('git', ['-c', `safe.directory=${process.cwd()}`, 'rev-parse', 'HEAD'], {
+      encoding:'utf8', stdio:['ignore','pipe','ignore'],
+    }).trim();
+  } catch { /* Screenshot provenance is optional when the runner stages a source archive without Git metadata. */ }
   await p.emulateMedia({ reducedMotion:'reduce' });
   p.on('pageerror', error => errors.push(error.message));
   await p.route('**/backend/**', async route => {
@@ -27,14 +33,16 @@ test('production login: full office blend, four distinct families, couch guest, 
     }
     return route.fulfill({ status:404, contentType:'application/json', body:'{}' });
   });
-  try {
     await p.goto(b.origin + '/connexion', { waitUntil:'networkidle' });
     await p.locator('#login-email').waitFor({ state:'visible' });
     await p.locator('.bu-login__scene[data-scene-ready="true"]').waitFor({ state:'attached', timeout:30000 });
     const identity = await p.locator('.bu-login__scene').evaluate(host => {
       const scene = host.aoScene;
       return {
-        characters:scene._packOccupants.map(o => ({ id:o.look.character, variant:o.look.variant, accessories:o.look.accessories, station:o.stationUid })),
+        characters:scene._packOccupants.map(o => {
+          const character = scene.chars.get(o.id);
+          return { id:o.look.character, variant:o.look.variant, accessories:o.look.accessories, station:character?.target?.uid };
+        }),
         rendered:scene.chars.size,
         reducedMotion:scene.reducedMotion,
         scarfLayers:[...host.querySelectorAll('img')].filter(img => /\/Characters\/fen\/33\.webp/.test(img.currentSrc || img.src)).length,
@@ -104,6 +112,9 @@ test('production login: full office blend, four distinct families, couch guest, 
     assert.deepEqual(loginRequests,[{ body:{ email:'owner@example.invalid', password:'abc' }, requestHeader:'1' }]);
     assert.deepEqual(errors,[]);
     if (screenshots.length) await writeFile('design/reports/login-1-production/captures.json', JSON.stringify(screenshots,null,2)+'\n');
+  } catch (error) {
+    console.error('production login test failed:', error.stack || error);
+    throw error;
   } finally { await b.close(); }
 });
 
@@ -113,6 +124,7 @@ test('production login keeps a native sign-in form when Bureau controls and offi
   const b = await openLayoutBrowser({ theme:'light' }), p = b.page;
   const errors = [], loginRequests = [];
   let controlStylesheetRequests = 0;
+  try {
   p.on('pageerror', error => errors.push(error.message));
   await p.route('**/components/bureau/bureau.css*', async route => { controlStylesheetRequests++; await route.abort(); });
   await p.route('**/office/manifest.example.json*', route => route.abort());
@@ -128,7 +140,6 @@ test('production login keeps a native sign-in form when Bureau controls and offi
     }
     return route.fulfill({ status:404, contentType:'application/json', body:'{}' });
   });
-  try {
     await p.goto(b.origin + '/connexion', { waitUntil:'networkidle' });
     await p.locator('#login-email').waitFor({ state:'visible' });
     await p.locator('.bu-login__controls-error').waitFor({ state:'visible' });
@@ -146,5 +157,8 @@ test('production login keeps a native sign-in form when Bureau controls and offi
     await p.getByRole('alert').waitFor({ state:'visible' });
     assert.deepEqual(loginRequests,[{ body:{ email:'fallback@example.invalid', password:'unchanged' }, requestHeader:'1' }]);
     assert.deepEqual(errors,[]);
+  } catch (error) {
+    console.error('production login fallback test failed:', error.stack || error);
+    throw error;
   } finally { await b.close(); }
 });

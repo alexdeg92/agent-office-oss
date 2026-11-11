@@ -54,7 +54,8 @@ export function SetupPage() {
   const q = new URLSearchParams(location.search);
   const asked = Math.max(0, Math.min(R.STEPS.length - 1, Number(q.get('etape')) || 0));
   const DONE = R.STEPS.indexOf('done');
-  const max = saved ? DONE : Math.min(asked, R.reachable(s));   // « done » only after a successful save
+  const rules = { ...s, agentsOptional: !!vm?.adapters?.find((a) => a.id === s.adapter)?.agentsOptional };   // the backend says which runtimes may have no agent yet
+  const max = saved ? DONE : Math.min(asked, R.reachable(rules));   // « done » only after a successful save
   const step = R.STEPS[max];
 
   async function load() {
@@ -150,10 +151,22 @@ export function SetupPage() {
       if (g === conn.current) set({ skillResults: r.data.result.agents });
     } catch (e) { if (g === conn.current) fail(e); } finally { if (g === conn.current) setBusy(null); }
   }
+  // The server hands its port over to the configured app after the final save; the app needs a moment to boot.
+  // Navigate once it answers as configured, not into a closed port or a 502.
+  async function openOffice() {
+    if (busy === 'open') return;
+    setBusy('open');
+    for (let i = 0; i < 120; i++) {
+      try { if ((await get('/api/v2/meta', { quiet: true, cache: 'no-store', notifyUnauthorized: false }))?.data?.instance?.configured !== false) break; } catch { /* still booting */ }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    location.assign(router.href('bureau'));
+  }
   useEffect(() => {
     if (vm?.state !== 'open') return;
     if (step === 'detection' && s.detections === null) detect();
-    if (step === 'gateway' && !s.check && s.detections?.some(d => d.runtime === s.adapter && d.connection?.gatewayUrl === s.gatewayUrl && d.connection?.tokenSet)) check();
+    // A runtime without a gateway (Claude Code, Codex, Demo) needs no credential: its readiness test starts on its own too
+    if (step === 'gateway' && !s.check && (!R.takes(s, 'gatewayUrl') || s.detections?.some(d => d.runtime === s.adapter && d.connection?.gatewayUrl === s.gatewayUrl && d.connection?.tokenSet))) check();
     if (step === 'skills' && !s.skillPlan) plan();
     if (step === 'identities' && !s.catalog) get('/api/v2/setup/catalog', { quiet: true }).then(r => set({ catalog: r.data }), fail);
   }, [step, vm?.state]);
@@ -163,13 +176,13 @@ export function SetupPage() {
     try {
       const r = await put('/api/v2/setup', R.payload(s, vm), { quiet: true });
       const res = r && r.data && r.data.result;
-      set({ token: '', password: '', password2: '', projetResult: (res && res.integrations && res.integrations.projet) || null }); setSaved(true); go(DONE);
+      set({ token: '', password: '', password2: '', projetResult: (res && res.integrations && res.integrations.projet) || null, restartNeeded: !!(res && res.restartNeeded) }); setSaved(true); go(DONE);
     }
     catch (e) { fail(e); } finally { setBusy(null); }
   }
   function next(e) {
     if (e) e.preventDefault();
-    const b = R.blocker(max, s);
+    const b = R.blocker(max, rules);
     if (b) { setError(msg(b)); return; }
     if (step === 'welcome') { createOwner(); return; }
     if (step === 'review') { save(); return; }
@@ -179,7 +192,7 @@ export function SetupPage() {
   const [accessFooter,setAccessFooter]=useState(null);
   const closed = vm && vm.state !== 'open' && !saved;
   return html`<div class="ao-setup-page"><${Frame} tag="main" class="bu-page ao-setup" aria-labelledby="setup-titre"
-    foot=${vm && !closed && step === 'network' ? html`<div class="ao-setup__footer">${accessFooter}</div>` : vm && !closed ? html`<div class="ao-setup__footer">${step === 'done' ? html`<a class="bu-btn bu-btn--primary bu-btn--lg" href=${router.href('bureau')} onClick=${(e) => { e.preventDefault(); location.assign(router.href('bureau')); }}>${msg('setup.open')}</a>`
+    foot=${vm && !closed && step === 'network' ? html`<div class="ao-setup__footer">${accessFooter}</div>` : vm && !closed ? html`<div class="ao-setup__footer">${step === 'done' ? html`<a class="bu-btn bu-btn--primary bu-btn--lg" href=${router.href('bureau')} aria-disabled=${busy === 'open' ? 'true' : null} onClick=${(e) => { e.preventDefault(); openOffice(); }}>${busy === 'open' ? html`<span class="bu-spinner" aria-hidden="true"></span>` : null}${msg('setup.open')}</a>`
             : html`<div class="ao-setup__nav">
               ${max > 0 ? html`<button type="button" class="bu-btn" onClick=${() => go(max - 1)}>${msg('setup.back')}</button>` : null}
               <button type="submit" form="setup-form" class="bu-btn bu-btn--primary" disabled=${!!busy} aria-busy=${busy === 'save' ? 'true' : undefined} aria-describedby=${error ? 'setup-erreur' : undefined}>
@@ -286,7 +299,7 @@ function Step({ step, s, vm, set, setConn, busy, check, discover, detect, plan, 
             <span class="bu-caption">${msg(a.nameSource ? 'onboarding.name.source' : 'onboarding.name.missing', { source: a.nameSource })}</span>${a.isPrimary ? html` <span class="bu-chip bu-chip--sm bu-chip--accent">${msg('setup.agents.runtimePrimary')}</span>` : null}</span>
             <span class="bu-row__sub bu-mono-sm">${a.id}${a.model ? ' · ' + a.model : ''}</span>
             ${R.TAG_CHIP[a.projectTag] ? html`<span class="ao-setup__tag"><span class=${'bu-chip bu-chip--sm' + (R.TAG_CHIP[a.projectTag][0] ? ' bu-chip--' + R.TAG_CHIP[a.projectTag][0] : '')} data-project-tag=${a.projectTag}>${msg(R.TAG_CHIP[a.projectTag][1])}</span></span>` : null}</span></li>`)}</ul>` : null}
-      ${s.agents && !s.agents.length ? html`<p class="ao-setup__warn">${msg('setup.agents.zero')}</p>` : null}
+      ${s.agents && !s.agents.length ? (vm.adapters.find((a) => a.id === s.adapter)?.agentsOptional ? html`<p class="bu-caption" data-agents-later>${msg('setup.agents.later')}</p>` : html`<p class="ao-setup__warn">${msg('setup.agents.zero')}</p>`) : null}
       <button type="button" class="bu-btn" onClick=${discover} disabled=${busy === 'discover'}><${Icon} name="refresh" />${msg(s.agents ? 'setup.agents.again' : 'setup.agents.run')}</button>`;
     case 'identities': return html`<h2 class="bu-title ao-setup__h" id="setup-etape">${msg('setup.ids.head')}</h2>
       <p class="bu-text-secondary ao-setup__lede">${msg('setup.ids.text')}</p>
@@ -325,7 +338,7 @@ function Step({ step, s, vm, set, setConn, busy, check, discover, detect, plan, 
       const primary = (s.agents || []).find((a) => a.id === s.primary);
       const out = s.projetResult?.reason === 'reviewed' ? null : R.offersProjet(vm, s) ? R.projetOutcome(s.projetResult, primary && primary.projectTag) : null;   // nothing to say for a runtime it doesn't apply to
       return html`<h2 class="bu-title ao-setup__h" id="setup-etape">${msg('setup.done.head')}</h2>
-      <p class="bu-text-secondary ao-setup__lede">${msg('setup.done.text')}</p><p class="bu-caption">${msg('onboarding.done.network')}</p>
+      <p class="bu-text-secondary ao-setup__lede">${msg('setup.done.text')}</p>${s.restartNeeded ? html`<p class="bu-caption">${msg('onboarding.done.network')}</p>` : null}
       ${out ? html`<p class="ao-setup__tagresult" role="status" data-tag-result=${s.projetResult.status}>
         <span class=${'bu-chip bu-chip--sm' + (out.tone ? ' bu-chip--' + out.tone : '')}>${msg('setup.tag.chip.' + (out.key === 'setup.tag.result.already' ? 'already' : s.projetResult.status))}</span>
         <span>${msg(out.key, { agent: primary ? primary.name : s.primary || '' })}</span></p>` : null}`;

@@ -45,13 +45,19 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
   let checks = new Map();
   const detections = () => discovery.rows();
   const confirmations = new Map();
-  let authorization = null;
+  let authorization = null, accountAvatar = null;
   supervisor ||= require('../ops/host-supervisor').createHostSupervisor({ env });
   let restartAccepted = false;
   const restartAt = store.db.prepare('SELECT accepted_at FROM settings_restart WHERE singleton=1');
   const acceptRestart = store.db.prepare('INSERT INTO settings_restart(singleton,accepted_at) VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET accepted_at=excluded.accepted_at');
   const getRevision = store.db.prepare("SELECT value FROM settings_state WHERE key='revision'");
   const setRevision = store.db.prepare("UPDATE settings_state SET value=? WHERE key='revision'");
+  // B-lite (migration 038): an install whose login came from the environment, with no config.json at that boot, offers
+  // "Finish setting up your office" until the owner hides it. Opened once, so it survives the first save (which writes
+  // config.json); installs that already had config.json, and wizard installs, never see it.
+  const finishState = store.db.prepare("SELECT value FROM settings_state WHERE key='finish_setup'");
+  const hideFinish = store.db.prepare("UPDATE settings_state SET value=2 WHERE key='finish_setup'");
+  if (IC.completeEnvLogin(env) && !initialFiles.config && !cfg.readonlyStore) store.db.prepare("INSERT OR IGNORE INTO settings_state(key,value) VALUES('finish_setup',1)").run();
   const putHash = store.db.prepare("INSERT INTO store_meta(key,value) VALUES('setup_config_hash',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
   const revision = () => getRevision.get().value;
   const networkMode = value => value.host === '0.0.0.0' ? 'lan' : value.publicUrl ? 'tunnel' : 'local';
@@ -130,7 +136,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     try { return { ...S.resolve(native, saved), ...(instanceId ? { id: instanceId } : {}) }; } catch (e) { throw invalid(e.field || 'runtime', 'invalid'); }
   }
   function edited(rt) { const A = adapter(rt.adapter), instance = rt.id && cfg.runtimeInstances?.find(r => r.id === rt.id && r.adapter === rt.adapter);
-    const saved = instance ? instance.cfg : !rt.id && cfg.runtimeAdapter === rt.adapter ? cfg : null;
+    const saved = instance ? instance.cfg : (!rt.id || rt.id === 'legacy' && !cfg.runtimeInstances) && cfg.runtimeAdapter === rt.adapter ? cfg : null;
     if (!saved) return true;
     const previous = A.setup.settings.resolve(A.setup.settings.values(saved), {});
     return A.setup.settings.fields.some(f => JSON.stringify(previous[f.id]) !== JSON.stringify(rt[f.id])); }
@@ -164,7 +170,10 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     const A = adapter(cfg.runtimeAdapter);
     return { version: 2, instance: { name: cfg.instanceName || 'Agent Office', locale: cfg.instanceLocale.startsWith('en') ? 'en' : 'fr', timeZone: cfg.timeZone },
       owner: { displayName: store.owner.name, email: cfg.loginEmail, authSource: 'database' },
-      runtime: A.setup.config({ adapter: cfg.runtimeAdapter, ...A.setup.settings.values(cfg) }), agents: { primary: cfg.primaryAgent, looks: {}, names: {} } };
+      // A gateway-less adapter's values() are form strings (Claude Code/Codex include/exclude lines): resolve them into the
+      // stored shape, as setup does (src/api/v2/setup.js runtimeOf). Gateway adapters keep their values as they are.
+      runtime: A.setup.config(A.setup.fields.length && !A.setup.fields.includes('gatewayUrl') ? { ...A.setup.settings.resolve(A.setup.settings.values(cfg), {}), adapter: cfg.runtimeAdapter }
+        : { adapter: cfg.runtimeAdapter, ...A.setup.settings.values(cfg) }), agents: { primary: cfg.primaryAgent, looks: {}, names: {} } };
   }
   function secrets() { return files.secrets?.version === 3 ? structuredClone(files.secrets) : { version: 2, sessionSecret: files.secrets?.sessionSecret || cfg.sessionSecret, runtimeToken: files.secrets?.runtimeToken ?? cfg.gatewayToken ?? null }; }
   function persist(req, res, config, privateValues, expected, fields, { sensitive = false, dbChange = () => {}, runtimeChanged = false, sourceChanged = false } = {}) {
@@ -276,11 +285,11 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     const restartRequired = ['host', 'port', 'publicUrl', 'cookieSecure'].some(k => desiredNetwork[k] !== activeNetwork[k]);
     const all = new Map(detections().map(d => [d.runtime, d]));
     for (const id of ADAPTER_IDS) if (!all.has(id)) all.set(id, { runtime: id, name: adapterById(id).setup.name, found: false, confidence: 'none', agents: [] });
-    const runtimes = conf?.version === 3 ? require('./runtime-rows').runtimeRows({ config: conf, cfg, engine, detections: detections(), checks, field, label, store }) : [...all.values()].filter(d => !ADAPTER_IDS.includes(d.runtime) || !adapterById(d.runtime).setup.settings?.optional || d.runtime === cfg.runtimeAdapter).map(d => {
+    const runtimes = conf?.version === 3 ? require('./runtime-rows').runtimeRows({ config: conf, cfg, env: currentEnv(), engine, detections: detections(), checks, field, label, store }) : [...all.values()].filter(d => !ADAPTER_IDS.includes(d.runtime) || !adapterById(d.runtime).setup.settings?.optional || d.runtime === cfg.runtimeAdapter).map(d => {
       const A = ADAPTER_IDS.includes(d.runtime) ? adapterById(d.runtime) : null, S = A?.setup?.settings;
       const selected = d.runtime === cfg.runtimeAdapter;
       const autoAddDefault=defaultAutoAdd(d.runtime),autoPolicy=store.runtimeAutoAdd?.get(selected?'legacy':d.runtime,autoAddDefault) || {enabled:autoAddDefault,managed:false};
-      const values = selected && S ? S.values(cfg) : S ? S.detectedValues(d) : {};
+      const values = selected && S ? S.values(cfg) : S ? S.detectedValues(d, currentEnv()) : {};
       return { id: d.runtime, adapter: d.runtime, enabled: selected, candidate: !selected, name: d.name, brand: settingsBrand(d.runtime), optional:!!S?.optional, autoAdd:{enabled:autoPolicy.enabled,defaultEnabled:autoAddDefault,managed:!!autoPolicy.managed}, supported: !!S, selected, ...require('./detection-state').detectionView(d, S?.optional && selected),
         checkedPaths: d.checkedPaths || [], fields: S?.fields || [], values: Object.fromEntries((S?.fields || []).map(def => [def.id,
           { ...field(def.writeOnly ? null : values[def.id] ?? null, S.envKeys[def.id], selected && !!conf, true), ...(def.writeOnly ? { tokenSet: !!values[def.id] } : {}) }])),
@@ -297,6 +306,14 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     const diagnostics = require('./diagnostics').diagnostics({runtimes,agents,
       orchestrator:{detected:herdrFound,enabled:herdrEnabled,label:'herdr'},
       permissionOk,stale,restartRequired,readonly:readonly()});
+    // The wizard's chapters, as the Settings sections that write them; each "done" is read from what is configured now.
+    const finishSetup = finishState.get()?.value !== 1 ? null : { steps: [
+      { id: 'connection', section: 'connection', done: runtimes.some(r => r.selected && r.connection.status === 'connected') },
+      { id: 'agents', section: 'runtimes', done: Object.values(conf?.agents?.names || {}).some(names => Object.keys(names).length > 0) },
+      { id: 'looks', section: 'store', done: null },
+      { id: 'instance', section: 'instance', done: !!conf && conf.instance.name !== 'Agent Office' },
+      { id: 'integrations', section: 'integrations', done: agents.filter(a => a.configured).every(a => a.integrations.every(i => ['installed', 'unsupported'].includes(i.status))) },
+      { id: 'access', section: 'access', done: !!conf?.access } ] };
     const c = confirmations.get(req.session?.sid), expiresAt = c && elapsed() < c.until ? c.expiresAt : null;
     const timingEntries = officeTimingEntries();
     const office = Object.fromEntries(OFFICE_TIMINGS.map(def => [def.key, { ...field(timingEntries[def.key].value,
@@ -317,7 +334,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
         active: activeNetwork, restartRequired },
       herdr: { found: herdrFound, enabled: herdrEnabled, active: !!orchestratorTeams?.hasHerdr, brand:sourceBrand('herdr'),
         status: herdrDetection.status, checkedAt: herdrDetection.checkedAt ?? null },
-      runtimes, agents, diagnostics };
+      runtimes, agents, diagnostics, ...(finishSetup ? { finishSetup } : {}) };
   }
   function recoveryVm(req) {
     const session=auth.sessionOf(req),user=session&&store.users.byId(session.userId);
@@ -330,7 +347,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
   }
   async function account(command,req,res) {
     active(req,true);
-    const b=body(req.body,command==='password'?['expectedRevision','password']:['expectedRevision','displayName','email']);
+    const b=body(req.body,command==='password'?['expectedRevision','password']:['expectedRevision','displayName','email','avatarStageId']);
     const binding=authorization.reauthentication.requireRecent(req);
     const ctx={userId:binding.userId,authGeneration:binding.generation,requestId:req.requestId,recoveryOnly:auth.sessionOf(req)?.recoveryOnly===true,authorize:()=>active(req,true)};
     let value;
@@ -342,7 +359,16 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
         let committed=false;
         try {const passwordHash=await derivePassword(b.password);active(req,true);value=store.selfAccount.password({expectedRevision:b.expectedRevision,passwordHash},ctx);committed=true;}
         finally {gate.release(committed);}
-      } else value=store.selfAccount.profile(b,ctx);
+      } else {
+        let staged=null,avatarChange=null;
+        if(b.avatarStageId!==undefined) {
+          if(typeof b.avatarStageId!=='string'||!accountAvatar)throw invalid('avatarStageId','invalid');
+          const selected=accountAvatar.stagedChange(req,b.avatarStageId);staged=selected.pending;avatarChange=selected.change;
+        }
+        const {avatarStageId:_avatarStageId,...profile}=b;
+        value=store.selfAccount.profile({...profile,...(avatarChange?{avatarChange}: {})},ctx);
+        if(staged)accountAvatar.commitStage(staged,value.previousAvatarBlobId);
+      }
     }catch(error){
       if(error instanceof ApiError)throw error;
       if(error.code==='empty-change')throw invalid(null,'empty-change');
@@ -384,6 +410,11 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
       active(req);
       const value = vm(req);
       return { ok: true, result: { runtimes: value.runtimes, agents: value.agents }, revision: revision(), vm: value };
+    }
+    if (command === 'finishSetupHide') {
+      body(b, []); if (readonly()) throw new ApiError('readonly');
+      hideFinish.run();
+      return { ok: true, result: { hidden: true }, revision: revision(), vm: vm(req) };
     }
     if (command === 'herdrCheck') {
       body(b, []); active(req);
@@ -536,10 +567,13 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
     } else if (command === 'runtimes') {
       body(b, ['expectedRevision', 'runtimes', 'herdrEnabled']); sensitive = true; active(req, true);
       if (b.herdrEnabled !== undefined && typeof b.herdrEnabled !== 'boolean') throw invalid('herdrEnabled', 'invalid');
-      if (!Array.isArray(b.runtimes) || b.runtimes.length > 32 || new Set(b.runtimes.map(r => r?.id)).size !== b.runtimes.length) throw invalid('runtimes', 'invalid');
+      if (!Array.isArray(b.runtimes) || b.runtimes.length > 32) throw invalid('runtimes', 'invalid');
+      // Before the first v3 save the Settings VM lists the env/v2 runtime under its kind; its instance identity is 'legacy'.
+      const rows = config.version === 3 ? b.runtimes : b.runtimes.map(r => r?.id && r.id === cfg.runtimeAdapter && r.adapter === cfg.runtimeAdapter ? { ...r, id: 'legacy' } : r);
+      if (new Set(rows.map(r => r?.id)).size !== rows.length) throw invalid('runtimes', 'invalid');
       const upgraded = config.version === 3 ? { config, secrets: privateValues } : IC.upgradeV2(config, privateValues);
       const entries = [], credentials = {};
-      for (const row of b.runtimes) {
+      for (const row of rows) {
         if (!row || !INSTANCE_ID.test(row.id || '') || typeof row.enabled !== 'boolean') throw invalid('runtimes', 'invalid');
         const A = adapter(row.adapter), previous = upgraded.config.runtimes.find(r => r.id === row.id);
         const bound = store.runtimeReferences.adapterFor(row.id);
@@ -651,6 +685,7 @@ function createSettings({ env, files: initialFiles, cfg, store, auth, controller
   }
   auth.onRevoke(session => { if (session.allExcept) { for (const sid of confirmations.keys()) if (sid !== session.allExcept) confirmations.delete(sid); } else confirmations.delete(session.sid); });
   return { vm, recoveryVm, run, officeTimings, accessConfig: () => files.config?.access || null, accessRevision: () => files.config?.accessRevision ?? null,
+    setAccountAvatar: value => { accountAvatar=value||null; },
     useAuthorization: value => { if(!value?.reauthentication)throw new Error('shared reauthentication required');authorization=value; }, startDetection: options => discovery.start(options), close: () => { discovery.close(); confirmations.clear(); integration.invalidate(); for (const helper of integrations.values()) helper.invalidate(); planOwners.clear(); }, revision };
 }
 module.exports = { createSettings };

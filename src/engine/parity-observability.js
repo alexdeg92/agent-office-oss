@@ -6,7 +6,7 @@ const SURFACES = Object.freeze({
   office: 'health.parity.surface.office',
   'office.limited': 'health.parity.surface.officeLimited',
 });
-const FIELDS = Object.freeze(['comparisons', 'mismatches', 'changedRows', 'overflowKeys', 'overflowSurfaces']);
+const FIELDS = Object.freeze(['comparisons', 'mismatches', 'skippedUnsynced', 'shadowErrors', 'changedRows', 'overflowKeys', 'overflowSurfaces']);
 const MAX = 1_000_000;
 
 function value(n) { return Number.isSafeInteger(n) && n >= 0 ? Math.min(MAX, n) : 0; }

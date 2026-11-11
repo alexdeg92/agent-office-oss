@@ -181,6 +181,24 @@ function createMultiRuntimeController({ cfg: initial, store, cliEnv, resolveAdap
       },
       refreshFlows: () => Promise.allSettled(instances.filter(i => i.enabled && !i.failure).map(i => engine.bounded(i, () => i.runtime.refreshFlows?.()))),
       refreshSkills: () => Promise.allSettled(instances.filter(i => i.enabled && !i.failure).map(i => engine.bounded(i, () => i.runtime.refreshSkills?.()))),
+      // Private adapter hints are consumed only by bounded team-store discovery.
+      projectDirectoryHints() {
+        const hints = [], seen = new Set();
+        for (const instance of instances) {
+          if (!instance.enabled || instance.failure || typeof instance.runtime?.projectDirectoryHints !== 'function') continue;
+          try {
+            const rows = instance.runtime.projectDirectoryHints();
+            if (Array.isArray(rows)) for (const hint of rows.slice(0, 128)) {
+              const cwd = typeof hint === 'string' ? hint : hint?.cwd;
+              if (typeof cwd !== 'string' || seen.has(cwd)) continue;
+              seen.add(cwd); hints.push(hint);
+              if (hints.length >= 128) break;
+            }
+          } catch { /* isolate adapter hint failures */ }
+          if (hints.length >= 128) break;
+        }
+        return hints;
+      },
       skillDoc: (file, key) => (key ? engine.owner(key, 'skill').instance : chosen())?.runtime.skillDoc?.(file),
       get gw() { return chosen()?.runtime?.gw; },
       close(keep = new Set()) { for (const i of instances) if (!keep.has(i)) closeSource(i); engine.close(); },

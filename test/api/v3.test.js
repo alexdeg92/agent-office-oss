@@ -52,7 +52,8 @@ describe('G5 · /api/v3 on a foreign instance', () => {
     const office = await get('/api/v3/views/office');
     assert.equal(office.occupantOverflowCount, 0, 'the bounded Office VM exposes the exact zero-overflow count when sessions are readable');
     assert.deepEqual([office.occupants[0].id, office.occupants[0].role, office.occupants[0].roleLabel.key], ['primary', 'primary', 'occupantRole.primary']);
-    assert.ok(office.occupants.some((o) => o.role === 'direct' && o.id.startsWith('direct:')), 'the Telegram conversation is in the office');
+    assert.equal(office.occupants.some(o => o.role === 'direct'), false, 'human channel DMs are not physical office agents');
+    assert.deepEqual(office.occupants[0].visitLabel.params.channel, { key: 'channel.telegram' });
     const logs = await get('/api/v3/views/logs?limit=200');
     const tg = logs.items.find((x) => x.id === TG);
     assert.deepEqual([tg.kind, tg.runtimeKind, tg.channel], ['conversation-direct', null, 'telegram']);

@@ -20,12 +20,11 @@ export async function connectorFixture({extraProviders=false,herdrDetected=false
   claude.values=Object.fromEntries(claude.fields.map(f=>[f.id,{value:f.id==='home'?'/fixture/claude':f.id==='include'?'demo-project':'',source:'file',editable:true,reason:null}]));
   const template=vm.runtimes.find(r=>r.id==='codex');
   template.connection.status='not-configured';
-  for(const [id,name,logo,dark,found] of [['cursor-cli','Cursor','cursor-light.svg','cursor-dark.svg',true],['opencode','OpenCode','opencode-light.svg','opencode-dark.svg',false]]) {
+  for(const [id,name,logo,dark,found,supported] of [['cursor','Cursor','cursor-light.svg','cursor-dark.svg',true,true],['opencode','OpenCode','opencode-light.svg','opencode-dark.svg',false,false]]) {
     const r=structuredClone(template);
-    vm.runtimes.push({...r,id,adapter:id,name,found,supported:false,enabled:false,brand:{mark:'?',color:'#596579',foreground:'#ffffff',providerName:name,logo:'assets/connectors/'+logo,logoDark:'assets/connectors/'+dark},detection:{...r.detection,status:found?'detected':'not-detected'}});
+    vm.runtimes.push({...r,id,adapter:id,name,found,supported,enabled:false,brand:supported?{mark:'CU',color:'#26251e',foreground:'#ffffff',providerName:name,logo:'assets/connectors/'+logo,logoDark:'assets/connectors/'+dark}:{mark:'?',color:'#596579',foreground:'#ffffff',providerName:name,logo:'assets/connectors/'+logo,logoDark:'assets/connectors/'+dark},detection:{...r.detection,status:found?'detected':'not-detected'}});
   }
   if(extraProviders)for(const [id,name] of [['hermes','Hermes'],['herdr','herdr']])vm.runtimes.push({...structuredClone(template),id,adapter:id,name,brand:null,found:false,supported:false});
-  vm.runtimes.find(r=>r.id==='cursor-cli').brand=null;
   vm.runtimes.find(r=>r.id==='opencode').brand=null;
   return example;
 }

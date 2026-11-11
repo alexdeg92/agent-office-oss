@@ -88,7 +88,9 @@ function createApp({ readonly, readonlyStore = false, publicDir, mountRoutes, au
   // /v2/ with the API on the same root (apiBase ''). It's intercepted BEFORE the static handler, which would
   // otherwise serve the raw template for /v2/ and /v2/index.html. A template without its markers fails loudly
   // (logged at startup, 500 for the shell) instead of serving an unconfigured UI.
-  const readBuild = require('./ui-build').createBuildReader(path.join(publicDir, 'v2'));
+  const { createBuildReader, warnIfUnbuilt } = require('./ui-build');
+  const readBuild = createBuildReader(path.join(publicDir, 'v2'));
+  warnIfUnbuilt(path.join(publicDir, 'v2'));
   let shellSource, shellValue;
   const shell = () => {
     const deployed = readBuild();

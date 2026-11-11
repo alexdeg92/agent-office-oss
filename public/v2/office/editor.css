@@ -317,19 +317,8 @@
 .ao-bureau--editing .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__card .ao-sc-figure--sm { width: 32px; height: 48px; }
 .ao-bureau--editing .ao-editpanel[data-mode="characters"] .ao-sc--external .ao-sc__card .ao-sc-figure img { width: 100%; height: 100%; }
 
-/* Item thumbnails are the accessory controls; names remain accessible/tooltipped. */
-.ao-sc--external .ao-sc__slotlabel { flex-basis: 100%; }
-.ao-sc--external .ao-sc__acc--visual { width: 52px; height: 52px; padding: 3px; justify-content: center; }
-.ao-sc-gear { position: relative; display: grid; place-items: center; width: 44px; height: 44px; overflow: hidden; }
-.ao-sc-gear img { position: absolute; inset: auto; max-width: none; width: 100%; height: 100%; left: 0; top: 0; object-fit: fill; }
-.ao-sc__acc--visual[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--bu-accent); background: color-mix(in srgb, var(--bu-accent) 10%, var(--bu-surface-raised)); }
-
 .ao-editbar__modepick { flex: 1 1 auto; min-width: 0; }
 .ao-editbar__modepick .bu-input-control { width: 100%; }
-
-.ao-sc__acc--visual:has([data-thumbnail-error]) { width: auto; max-width: 100%; }
-.ao-sc-gear[data-thumbnail-error] { width: auto; max-width: 128px; }
-.ao-sc-gear__fallback { padding: 2px 4px; font: var(--bu-type-caption); line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
 
 /* Customize action menu stays in the top layer and is clamped to the viewport. */
 .ao-more__menu { position: fixed; inset: auto; max-width: calc(100vw - 2 * var(--bu-space-2)); max-height: calc(100svh - 2 * var(--bu-space-2)); overflow: auto; box-sizing: border-box; }

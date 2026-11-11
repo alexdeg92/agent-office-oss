@@ -68,22 +68,28 @@ describe('topics (§4.1, §4.3)', () => {
     t.close();
   });
 
-  it('logs topic build/check failures with only the declared topic and fixed failure class', () => {
-    const run = issue => {
+  it('logs topic build/check failures with a redacted cause category only', () => {
+    const run = (issue, stage, schemaError = false) => {
       const diagnostics = [];
-      const failure = Object.assign(new Error('PRIVATE_PAYLOAD_CANARY'), { code: 'vm.invalid', issues: [issue] });
-      const t = createTopics({ 'office-scope': { params: 'path', build: () => ({ known: 'ok', sk_live_T0095_SENTINEL: 'SECRET_VALUE_CANARY' }) } }, {
-        check: () => { throw failure; }, onError: event => diagnostics.push(event),
+      const failure = schemaError ? new (require('../../src/api/v2/vm/check').VmError)('office', [issue])
+        : Object.assign(new Error('PRIVATE_PAYLOAD_CANARY'), { code: 'vm.invalid', issues: [issue] });
+      const t = createTopics({ 'office-scope': { params: 'path', build: () => {
+        if (stage === 'builder') throw failure;
+        return { known: 'ok', sk_live_T0095_SENTINEL: 'SECRET_VALUE_CANARY' };
+      } } }, {
+        check: () => { if (stage !== 'builder') throw failure; }, onError: event => diagnostics.push(event),
       });
       try { assert.throws(() => t.current('office-scope:opaque'), error => error === failure); }
       finally { t.close(); }
       return diagnostics;
     };
-    const declaredPath = run({ path: '$.occupants[0].role', parent: '$', detail: 'PRIVATE_PAYLOAD_CANARY' });
-    assert.deepEqual(declaredPath, [{ topic: 'office-scope', code: 'build_or_check_failed' }], 'even declared paths are omitted');
-    const dynamicKey = run({ path: '$.sk_live_T0095_SENTINEL', parent: '$', detail: 'SECRET_VALUE_CANARY' });
-    assert.deepEqual(dynamicKey, [{ topic: 'office-scope', code: 'build_or_check_failed' }], 'caller-controlled issue paths are omitted');
-    const serialized = JSON.stringify([declaredPath, dynamicKey]);
+    const declaredPath = run({ path: '$.occupants[0].role', parent: '$', detail: 'PRIVATE_PAYLOAD_CANARY' }, 'builder');
+    assert.deepEqual(declaredPath, [{ topic: 'office-scope', code: 'build_or_check_failed', causeCategory: 'builder_exception' }], 'even declared paths are omitted');
+    const dynamicKey = run({ path: '$.sk_live_T0095_SENTINEL', parent: '$', detail: 'SECRET_VALUE_CANARY' }, 'check');
+    assert.deepEqual(dynamicKey, [{ topic: 'office-scope', code: 'build_or_check_failed', causeCategory: 'check_exception' }], 'caller-controlled issue paths are omitted');
+    const schemaFailure = run({ path: '$.occupants[0].role', detail: 'PRIVATE_PAYLOAD_CANARY' }, 'check', true);
+    assert.deepEqual(schemaFailure, [{ topic: 'office-scope', code: 'build_or_check_failed', causeCategory: 'schema_check' }]);
+    const serialized = JSON.stringify([declaredPath, dynamicKey, schemaFailure]);
     for (const secret of ['PRIVATE_PAYLOAD_CANARY', 'sk_live_T0095_SENTINEL', 'SECRET_VALUE_CANARY', '$.occupants']) {
       assert.equal(serialized.includes(secret), false, secret);
     }

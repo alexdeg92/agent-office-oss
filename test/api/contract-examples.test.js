@@ -37,6 +37,19 @@ describe('contract-shape checker (strict, S6.2: R8-08/09)', () => {
     p.summaryMeta.author = { kind: 'system', name: 'Système' };   // a sidecar variant
     assert.deepEqual(compareExample('project-vm', p), []);
   });
+  it('sidecar variants can model a non-empty collection when the example has no rows', () => {
+    const example = { rows: [] };
+    const variants = { '$.rows': [{ id: 'row-1', kind: 'occupant' }, { id: 'header-1', kind: 'team-header' }] };
+    assert.deepEqual(compareShape(example, { rows: [{ id: 'row-1', kind: 'occupant' }, { id: 'header-1', kind: 'team-header' }] }, { variants }), []);
+    assert.ok(compareShape(example, { rows: [{ id: 'row-1', kind: 'occupant', private: true }] }, { variants }).length > 0);
+  });
+  it('additional optional fields remain optional across array shape variants', () => {
+    const example = { rows: [{ id: 'group', teamLabel: { key: 'team.name' } }, { id: 'person' }] };
+    const actual = { rows: [{ id: 'person' }] };
+    assert.deepEqual(compareShape(example, actual, {
+      additional: { '$.rows[].teamLabel': { key: 'team.name' } },
+    }), []);
+  });
   it('structural alternatives (FlagVM) must each match one member', () => {
     const e = [{ kind: 'label', key: 'k', removable: true }, { kind: 'priority', key: 'P1' }];
     assert.deepEqual(compareShape(e, [{ kind: 'priority', key: 'P2' }, { kind: 'label', key: 'x', removable: true }]), []);

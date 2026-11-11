@@ -13,14 +13,14 @@ const layout = JSON.parse(fs.readFileSync(path.join(ROOT, 'design/office/layout.
 const STATES = ['idle', 'thinking', 'working', 'researching', 'writing', 'calling', 'waiting', 'error', 'offline'];
 
 describe('mock OfficeVM', () => {
-  it('has the api.md §3.2 shape: connection, 6 KPIs, occupants, journal, layoutRevision, queue', async () => {
+  it('has the api.md §3.2 shape: connection, 6 KPIs, occupants, journal, team groups, layoutRevision, queue', async () => {
     let t = 1_791_220_000_000;
     const om = createOfficeMock({ manifest, layout, now: () => (t += 1000) });
     for (let i = 0; i < 6; i++) om.tick();
     const vm = await om.officeVM();
     // T-0092 adds server-projected roster and visit data to the api.md §3.2 OfficeVM base shape.
     assert.deepEqual(Object.keys(vm).sort(), ['connection', 'conversationCount', 'conversationIds', 'conversationLabel', 'journal', 'kpis', 'layoutRevision', 'occupants', 'queue',
-      'rosterAllLabel', 'rosterFloors', 'rosterGroups', 'rosterItems', 'rosterOverflowCount', 'rosterOverflowLabel', 'rosterPreviewItems', 'rosterSummary', 'stateLabels', 'unseatedTeams', 'visitIntent']);
+      'rosterAllLabel', 'rosterFloors', 'rosterGroups', 'rosterItems', 'rosterOverflowCount', 'rosterOverflowLabel', 'rosterPreviewItems', 'rosterSummary', 'stateLabels', 'teamGroups', 'teamLegend', 'unseatedTeams', 'visitIntent']);
     assert.deepEqual(vm.kpis.map((k) => k.id), ['active', 'runs', 'subagents', 'flows', 'tokens', 'cpu']);
     for (const k of vm.kpis) { assert.equal(typeof k.label.key, 'string'); assert.ok(['count', 'tokens', 'percent'].includes(k.unit)); }
     assert.equal(vm.occupants[0].id, 'main');

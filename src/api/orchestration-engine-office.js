@@ -32,6 +32,10 @@ function orchestrationOfficeSnapshot(engine) {
     herdrDetected: sources.some(row => row.capabilities?.discovery?.detected === true),
   };
   Object.defineProperties(result, {
+    // Revisions are private parity metadata. They never enter an Office VM or
+    // serialized source diagnostics.
+    sourceRevisions: { enumerable: false, value: admitted.sourceRevisions || Object.freeze({}) },
+    identityRevisions: { enumerable: false, value: admitted.identityRevisions || Object.freeze({}) },
     privateMemberSessionRefs: { enumerable: false, value: Object.freeze(privateMemberSessionRefs) },
     privateMemberSessionKeys: { enumerable: false, value: Object.freeze(privateMemberSessionKeys) },
     privateHostRefs: { enumerable: false, value: Object.freeze(privateHostRefs) },

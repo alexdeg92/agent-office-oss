@@ -36,7 +36,10 @@ describe('R17-04 · normalised origin comparison (IPv6, IPv4, hostnames)', () =>
     pass(g, { host: 'office.example:80', origin: 'http://office.example' }, '203.0.113.9');
     pass(g, { host: '192.168.1.20:18789', origin: 'http://192.168.1.20:18789' }, '203.0.113.9');
     refused(g, { host: '192.168.1.20:18789', origin: 'http://192.168.1.21:18789', 'x-ao-request': '1' }, '203.0.113.9');
-    refused(g, { host: 'office.example', origin: 'https://office.example' }, '203.0.113.9');   // scheme differs
+    // The same Host over https is a TLS-terminating proxy that keeps the Host (fresh install, no AO_PUBLIC_URL); another port is not
+    pass(g, { host: 'office.example', origin: 'https://office.example' }, '203.0.113.9');
+    refused(g, { host: 'office.example', origin: 'https://office.example:8443' }, '203.0.113.9');
+    refused(g, { host: 'office.example:8080', origin: 'https://office.example' }, '203.0.113.9');
     refused(g, { host: '[::1]:18789', origin: 'http://[::2]:18789' }, '203.0.113.9');
   });
   it('the configured public origin is normalised the same way', () => {

@@ -17,7 +17,7 @@ export function openSource(url,{apiVersion=config.apiVersion}={}) {
   const topics = (parsed.searchParams.get('topics') || '').split(',').filter(Boolean);
   api.post(`/api/v${apiVersion}/stream/ticket`,{topics:topics.length?topics:['system']},{apiVersion,quiet:true}).then(({data:ticket}) => {
     if (closed) return;
-    source = new EventSource(ticket.streamUrl, {withCredentials:false}); state = 0;
+    source = new EventSource(ticket.streamUrl, {withCredentials:false}) /* transport-allow:EventSource:split-stream */; state = 0;
     for (const [type, fns] of listeners) for (const fn of fns) source.addEventListener(type,fn);
     source.addEventListener('error', () => { if (closed) return; source?.close(); source = null; state = 2; for (const fn of listeners.get('error') || []) fn(new Event('error')); }, {once:true});
   }).catch(() => {

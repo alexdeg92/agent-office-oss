@@ -41,7 +41,7 @@ for(const width of [1440,390])for(const theme of ['day','night'])test(`canonical
   const initial=await vm(h,version),floor=initial.occupants[0].floorId;
   assert.ok(initial.occupants.every(o=>o.floorId===floor&&o.sceneTarget.mode==='desk'));
   await p.goto(b.origin+'/bureau?etage='+floor,{waitUntil:'domcontentloaded'});await settled(p,initial.occupants);
-  if(version===3)await p.waitForFunction(()=>document.querySelector('.ao-team-office .ao-team-empty'));
+  if(version===3)await p.waitForFunction(()=>!document.querySelector('.ao-team-office'));
   await mkdir('design/reports/desk-communication',{recursive:true});
   for(const reply of [false,true]){
    h.clock.value+=1000;exchange(h,reply);const data=await vm(h,version),pair=data.occupants.filter(o=>o.communication);assert.equal(pair.length,2);

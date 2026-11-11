@@ -83,6 +83,7 @@ export class OfficeScene {
       this._sortDirty = true;
       this._build();
       this.setLayout(opts.layout);
+      this.setTeamGroups(opts.teamGroups ?? [], opts.teamOverlay);
       this._nextLifeCheck = this.now() + this.lifeConfig.intervalMs;
       this._lifeTimer = watchLife(() => this._tickLife());
       this._themeTimer = setInterval(() => { this._applyTheme(); this._checkLounge(); }, 30_000);
@@ -396,6 +397,7 @@ export class OfficeScene {
       this.layers.wall.append(img);
       this.itemNodes.set(it.uid, { it, f, parts: { [f.id]: img } });
     }
+    this.teamOverlay?.renderZones?.(this, this.teamGroups || []);
     for (const c of this.chars.values()) this._retarget(c, true);
     this._applyTheme();
     this._sortDirty = true;
@@ -507,6 +509,15 @@ export class OfficeScene {
   setTheme(mode) {
     this.themeMode = mode;
     this._applyTheme();
+  }
+
+  /** Team membership, order and geometry come from OfficeVM; this only draws it. */
+  setTeamGroups(groups, overlay = this.teamOverlay) {
+    this.teamGroups = Array.isArray(groups) ? groups : [];
+    this.teamOverlay = overlay || null;
+    this.teamOverlay?.renderZones?.(this, this.teamGroups);
+    this.teamOverlay?.renderLinks?.(this, this.teamGroups);
+    this.teamOverlay?.positionLinks?.(this, this.teamGroups);
   }
 
   _applyTheme() {
@@ -1862,6 +1873,7 @@ export class OfficeScene {
   }
 
   _positionLabels() {
+    this.teamOverlay?.positionLinks?.(this, this.teamGroups || []);
     const { zoom, x, y } = this.cam;
     const width = this.viewport.clientWidth, height = this.viewport.clientHeight;
     if (this.stage.hasAttribute('data-plates-primary')) {

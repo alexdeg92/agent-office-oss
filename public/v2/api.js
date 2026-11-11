@@ -7,21 +7,21 @@ import { getLang, msg, messageKeys } from './i18n.js';
 
 // Route prewarm: HTTP cache only, never the module map.
 export async function prewarm(url) {
-  const r = await fetch(url, { priority: 'low', credentials: 'same-origin' });
+  const r = await fetch(url, { /* t:fetch:api-prewarm */ priority: 'low', credentials: 'same-origin' });
   await r.arrayBuffer();
   if (!r.ok) throw new Error('preload');
 }
 
 /** The deployed static UI release, independently of the API version and mock mode. */
 export async function getUIBuildId() {
-  const r = await fetch(assetUrl('build.json'), { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(15000) });
+  const r = await fetch(assetUrl('build.json') /* t:fetch:ui-build */, { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(15000) });
   if (!r.ok) return null;
   return (await r.json()).buildId;
 }
 
 export class ApiError extends Error {
   constructor({ status = 0, code = 'internal', message, details = null, requestId = null, current = null }) {
-    super(localMessage(code, message) || msg('common.unexpected'));
+    super(localMessage(code, message, details) || msg('common.unexpected'));
     this.name = 'ApiError';
     this.serverMessage = message || null;
     // current: { revision, vm } — only on a 409 for project and layout writes (api.md 2.0 §2.2)
@@ -31,7 +31,25 @@ export class ApiError extends Error {
 
 const CODE_BY_STATUS = { 400: 'validation_failed', 401: 'unauthorized', 403: 'readonly', 404: 'not_found', 409: 'conflict', 415: 'unsupported_media_type', 429: 'rate_limited', 502: 'upstream_failed', 503: 'upstream_unavailable' };
 const known = (code) => messageKeys(getLang()).includes('apiError.' + code);
-const localMessage = (code, message) => (known(code) && (getLang() !== 'fr' || !message) ? msg('apiError.' + code) : message);
+const forbiddenIssueKey = (details) => {
+  if (!Array.isArray(details)) return null;
+  for (const row of details) {
+    const issue = row && typeof row.issue === 'string' ? row.issue : null;
+    if (!issue) continue;
+    // Prefer the settings copy when that dictionary is loaded; else the shared apiError key.
+    if (issue === 'reauth-required' && messageKeys(getLang()).includes('settings.reauth.required')) return 'settings.reauth.required';
+    const key = 'apiError.forbidden.' + issue;
+    if (messageKeys(getLang()).includes(key)) return key;
+  }
+  return null;
+};
+const localMessage = (code, message, details = null) => {
+  if (code === 'forbidden') {
+    const issueKey = forbiddenIssueKey(details);
+    if (issueKey) return msg(issueKey);
+  }
+  return known(code) && (getLang() !== 'fr' || !message) ? msg('apiError.' + code) : message;
+};
 
 /** Turns any error body into an ApiError: the v2 format, or v1's `{error: 'texte'}`. */
 export function toApiError(status, body, headerRequestId = null) {
@@ -69,7 +87,7 @@ export async function init({ search = location.search, hostname = location.hostn
   const mockableHost = isLoopbackHost(hostname);
   let res;
   try {
-    res = await fetch(apiUrl('/api/v2/meta?locale=' + getLang()), { headers: { accept: 'application/json', 'accept-language': getLang() }, credentials: 'same-origin' });
+    res = await fetch(apiUrl('/api/v2/meta?locale=' /* t:fetch:meta */ + getLang()), { headers: { accept: 'application/json', 'accept-language': getLang() }, credentials: 'same-origin' });
   } catch {
     throw new ApiError({ code: 'network' });
   }
@@ -95,16 +113,16 @@ async function useMock(scenario, { standalone }) {
 }
 
 /** Sends a JSON API request with optional cancellation and explicit API version. */
-export async function request(method, path, body, { quiet = false, apiVersion, notifyUnauthorized: notifyAuth = true, signal, cache, live = false } = {}) {
+export async function request(method, path, body, { quiet = false, apiVersion, notifyUnauthorized: notifyAuth = true, signal, cache, live = false, raw } = {}) {
   try {
     signal?.throwIfAborted();
     if (!live && mode === 'mock' && /^\/api\/v[23]\//.test(path)) return checked(method, path, unwrapMock(await (await mock()).handle(method, versioned(path, apiVersion), body)),apiVersion);
     const url = apiUrl(path, apiVersion);
     const options = { method, signal, cache, credentials:'same-origin',
-      headers: { accept: 'application/json', 'accept-language': getLang(), ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(method === 'GET' || method === 'HEAD' ? {} : { 'x-ao-request': '1' }) },
-      body: body === undefined ? undefined : JSON.stringify(body) };
+      headers: { accept: 'application/json', 'accept-language': getLang(), ...(body !== undefined && !raw && { 'content-type': 'application/json' }), ...(method === 'GET' || method === 'HEAD' ? {} : { 'x-ao-request': '1' }) },
+      body: raw ? body : JSON.stringify(body) };
     let res;
-    try { res = splitOrigin ? await (await loadSplitAuth()).request(url,options,apiUrl('/api/auth/refresh')) : await fetch(url,options); }
+    try { res = splitOrigin ? await (await loadSplitAuth()).request(url,options,apiUrl('/api/auth/refresh')) : await fetch(url,options) /* t:fetch:request */; }
     catch (error) { if (signal?.aborted) throw signal.reason || error; if(error instanceof ApiError)throw error; throw new ApiError({ code:'network' }); }
     const rid = res.headers.get('x-request-id');
     let json = null;
@@ -148,7 +166,7 @@ export const post = (path, body, opts) => request('POST', path, body ?? {}, opts
 export const put = (path, body, opts) => request('PUT', path, body ?? {}, opts);
 export const patch = (path, body, opts) => request('PATCH', path, body ?? {}, opts);
 export const del = (path, opts) => request('DELETE', path, undefined, opts);
-
+/** Multipart upload: let the browser set the boundary and bypass the JSON mock transport. */
 // ---- auth (unchanged v1 routes; /api/v2/me when it exists) ----
 
 /** Returns the current user or null when signed out. */
@@ -158,7 +176,7 @@ export async function me() {
     return (await loadSplitAuth()).me(apiUrl('/api/auth/refresh'),()=>get('/api/v3/me', {quiet:true,notifyUnauthorized:false,apiVersion:3}));
   }
   const tryGet = async (path) => {
-    const res = await fetch(apiUrl(path), { credentials: 'same-origin', headers: { accept: 'application/json' } });
+    const res = await fetch(apiUrl(path), /* t:fetch:me */ { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (res.status === 401) return null;
     if (res.status === 404) return undefined;
     const json = await res.json().catch(() => null);
@@ -202,13 +220,13 @@ export async function refreshHumanAccess() {
 /** A static text file shipped with the UI (a licence, F13): same rules as getAsset. */
 export async function getAssetText(path) {
   let res;
-  try { res = await fetch(assetUrl(path), { headers: { accept: 'text/plain' } }); } catch { throw new ApiError({ code: 'network' }); }
+  try { res = await fetch(assetUrl(path), { /* t:fetch:asset-text */ headers: { accept: 'text/plain' } }); } catch { throw new ApiError({ code: 'network' }); }
   if (!res.ok) throw toApiError(res.status, null);
   return res.text();
 }
 export async function getAsset(path) {
   let res;
-  try { res = await fetch(assetUrl(path), { headers: { accept: 'application/json' } }); } catch { throw new ApiError({ code: 'network' }); }
+  try { res = await fetch(assetUrl(path), { /* t:fetch:asset-json */ headers: { accept: 'application/json' } }); } catch { throw new ApiError({ code: 'network' }); }
   if (!res.ok) throw toApiError(res.status, null);
   return res.json();
 }

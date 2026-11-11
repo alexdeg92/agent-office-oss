@@ -62,6 +62,9 @@ module.exports = function settingsSchema(s, LabelRef) {
     agents: collection(obj({ id: str(), agentId: str(), runtime: str(), name: nstr(), detectedName: nstr(), nameSource: nstr(), autoAddedAt:nn().nullable().optional(), isNew:bool().optional(),
       configured: bool(), hidden: bool(), isPrimary: bool(), model: nstr(), lookRoute: nstr(),
       integrations: collection(obj({ id: str(), status: integrationStatus })) })),
+    // onboarding B-lite: present only while an env-login install's "Finish setting up your office" card is open
+    finishSetup: obj({ steps: collection(obj({ id: s.enumOf(['connection', 'agents', 'looks', 'instance', 'integrations', 'access']),
+      section: s.enumOf(['connection', 'runtimes', 'store', 'instance', 'integrations', 'access']), done: bool().nullable() })) }).optional(),
     diagnostics: collection(obj({ id: str(), level: s.enumOf(['error', 'warning', 'info', 'ok']), label: LabelRef, detail: label(), section,
       fix: fixAllSchemas(s, LabelRef).Fix.nullable() })),
   });

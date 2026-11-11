@@ -5,9 +5,11 @@ const CONVERSATION_ROLES = new Set(['direct', 'group', 'conversation', 'session'
 const HUMAN_CONTACT_ROLES = new Set(['direct', 'dm']);
 const ROSTER_ROOT_ROLES = new Set(['primary', 'main', 'agent']);
 const MOBILE_LABEL_LIMIT = 3;
+const officeAgentCountLabel = count => ({ key: count === 1 ? 'office.floor.count.one' : 'office.floor.count.other', params: { n: count } });
 const WORKING_STATES = new Set(['thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting']);
 const { MAX_OFFICE_OCCUPANTS } = require('../../../engine/session-limits');
 const { tagTeamMember, teamMemberId, teamMemberAliases } = require('./office-placement-identity');
+const { projectFloorAgentGroups } = require('../../../engine/office/roster');
 
 function boundedOccupants(rows) {
   if (rows.length <= MAX_OFFICE_OCCUPANTS) return { rows, overflow: 0 };
@@ -156,6 +158,9 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
       rosterDepth: row.visitPhase && parents.get(id) && byId.get(parents.get(id))?.floorId !== row.floorId ? 1
         : conversations.has(id) && !row.visitPhase ? 0 : depth,
       parentName: !row.visitPhase && !conversations.has(id) && parents.get(id) ? byId.get(parents.get(id))?.name || null : null,
+      drawerRoleLabel: row.visitPhase && HUMAN_CONTACT_ROLES.has(row.role)
+        ? { key: `occupantRole.${row.role}` }
+        : row.roleLabel || { key: `occupantRole.${row.role}` },
       ...(row.visitPhase && HUMAN_CONTACT_ROLES.has(row.role) ? { roleLabel: { key: 'occupantRole.visitor' } } : {}),
       stateLabel: row.visitPhase ? { key: 'occupantRole.visitor' } : { key: `agentState.${state}` },
       stateDetailLabel: row.visitPhase ? { key: 'occupantRole.visitor' } : stateDetailLabel(state),
@@ -198,17 +203,21 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
     floorsMap.get(id).push(row);
   }
   const floorOrder = id => id === 'rdc' ? 0 : id === 'gym' ? 10002 : Number(id) || 1;
-  const rosterFloors = [...floorsMap].map(([id, people]) => { const agents = agentRows(people); const active = activeCount(people); return { id, order: floorOrder(id), label: floorLabel(id), countLabel: { key: 'office.floor.count', params: { n: agents.length } }, occupantIds: people.map(row => row.id), mobileLabelIds: mobileLabelIds(people, rosterGroups), items: floorRosterItems(people, rows, projectReference),
+  const rosterFloors = projectFloorAgentGroups([...floorsMap].map(([id, people]) => { const agents = agentRows(people); const active = activeCount(people); return { id, order: floorOrder(id), label: floorLabel(id), countLabel: officeAgentCountLabel(agents.length), occupantIds: people.map(row => row.id), mobileLabelIds: mobileLabelIds(people, rosterGroups), items: floorRosterItems(people, rows, projectReference),
     count: agents.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: agents.filter(row => ['idle', 'offline'].includes(stateOf(row))).length } },
     idleCount: agents.filter(row => ['idle', 'offline'].includes(stateOf(row))).length,
     kind: id === 'rdc' ? 'lobby' : id === 'gym' ? 'gym' : 'office', layout: null, capacity: null } })
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => a.order - b.order), occupants);
   const stateLabels = Object.fromEntries([...OFFICE_STATES].map(state => [state, { key: `agentState.${state}` }]));
   stateLabels.observed = { key: 'agentState.observed' };
   return { ...office, occupants, rosterGroups, rosterItems, rosterPreviewItems, rosterOverflowCount, rosterSummary, conversationIds,
     conversationCount: conversationIds.length, stateLabels, rosterAllLabel: { key: 'office.mobile.all', params: { n: rosterItems.length } },
     rosterOverflowLabel: { key: 'office.mobile.overflowCount', params: { n: rosterOverflowCount } },
     conversationLabel: { key: 'office.mobile.conversations', params: { n: conversationIds.length } }, rosterFloors,
+    // Keep the compatibility VM contract complete even when this legacy
+    // roster projector is called directly, outside the mounted views wrapper.
+    teamGroups: Array.isArray(office.teamGroups) ? office.teamGroups : [],
+    teamLegend: Array.isArray(office.teamLegend) ? office.teamLegend : [],
     unseatedTeams: Array.isArray(office.unseatedTeams) ? office.unseatedTeams : [] };
 }
 
@@ -327,12 +336,14 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
     const agentPeople = finalPeople.filter(row => !row.visitPhase);
     const active = agentPeople.some(row => !OFFICE_STATES.has(row.state) || row.state === 'unknown')
       ? null : agentPeople.filter(row => !['idle', 'offline'].includes(row.state)).length;
-    return { id: floor.id, order: floorOrder(floor.id), label: floorLabel(floor.id), countLabel: { key: 'office.floor.count', params: { n: agentPeople.length } }, kind: floor.kind, occupantIds: finalPeople.map(row => row.id), mobileLabelIds: mobileLabelIds(finalPeople, rosterOffice.rosterGroups), items: floorRosterItems(finalPeople, byId, projectReference),
+    return { id: floor.id, order: floorOrder(floor.id), label: floorLabel(floor.id), countLabel: officeAgentCountLabel(agentPeople.length), kind: floor.kind, occupantIds: finalPeople.map(row => row.id), mobileLabelIds: mobileLabelIds(finalPeople, rosterOffice.rosterGroups), items: floorRosterItems(finalPeople, byId, projectReference),
       count: agentPeople.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: agentPeople.filter(row => ['idle', 'offline'].includes(row.state)).length } },
       idleCount: agentPeople.filter(row => ['idle', 'offline'].includes(row.state)).length, layout: floor.layout, capacity: floor.capacity };
   }).sort((a, b) => a.order - b.order);
-  return require('../../../engine/office/communication').projectCommunication(
+  const communicated = require('../../../engine/office/communication').projectCommunication(
     { ...rosterOffice, rosterFloors, unseatedTeams: visibleUnseatedTeams }, { engine, index, layout, now, canReadSessions });
+  return { ...communicated,
+    rosterFloors: projectFloorAgentGroups(communicated.rosterFloors, communicated.occupants, communicated.teamGroups || []) };
 }
 
 function exactMemberLayoutRule(layout, row) {

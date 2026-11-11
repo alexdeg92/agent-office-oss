@@ -2,7 +2,7 @@
 // Runtime adapter registry (ADR-001 §3). The core asks for an adapter by id; it never imports adapter
 // internals. One adapter per instance in 3.0 (PM decision on ADR-001 Q2); G4 picks it from the instance config.
 // G6: `demo` synthesises a small team with no runtime at all (src/adapters/demo; ADR-001 §13)
-const ADAPTERS = { openclaw: () => require('./openclaw'), demo: () => require('./demo'), 'claude-code': () => require('./claude-code'), codex: () => require('./codex') };
+const ADAPTERS = { openclaw: () => require('./openclaw'), demo: () => require('./demo'), 'claude-code': () => require('./claude-code'), codex: () => require('./codex'), cursor: () => require('./cursor') };
 const ORCHESTRATOR_SOURCES = { herdr: () => require('./herdr'), 'agent-team-pm': () => require('./agent-team-pm') };
 
 function adapterById(id) {

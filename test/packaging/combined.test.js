@@ -98,6 +98,47 @@ describe('combined proxy headers', () => {
       api.close();
     }
   });
+
+  it('setup → app handoff: a read sent while the API child re-listens waits for it; a write is not replayed', async () => {
+    const probe = http.createServer(); const apiPort = await listen(probe); await new Promise((r) => probe.close(r));   // a port with nobody on it
+    const proxy = http.createServer((req, res) => combined.forward(req, res, apiPort, req.url, 18789));
+    const proxyPort = await listen(proxy);
+    const call = (method) => new Promise((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port: proxyPort, path: '/api/v2/meta', method, headers: { host: '127.0.0.1:18789', 'content-length': '0' } }, (res) => {
+        let body = ''; res.on('data', (d) => { body += d; }); res.on('end', () => resolve({ status: res.statusCode, body }));
+      });
+      req.on('error', reject); req.end();
+    });
+    let api = null;
+    try {
+      assert.equal((await call('POST')).status, 502, 'a write during the handoff fails at once');
+      const read = call('GET');
+      await new Promise((r) => setTimeout(r, 400));
+      api = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('configured'); });
+      await new Promise((r) => api.listen(apiPort, '127.0.0.1', r));
+      assert.deepEqual(await read, { status: 200, body: 'configured' });
+    } finally {
+      proxy.close(); api?.close();
+    }
+  });
+});
+
+it('agent-office setup on a port already taken (an OpenClaw gateway on 18789) says so and how to pick another', async () => {
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const busy = http.createServer(); const port = await listen(busy);
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-port-busy-'));
+  try {
+    const r = await new Promise((resolve) => {
+      const child = require('child_process').spawn(process.execPath, [path.join(__dirname, '../../packaging/bin/agent-office.js'), 'setup', '--port', String(port)],
+        { env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: path.join(home, 'config'), XDG_DATA_HOME: path.join(home, 'data'), AO_ENV: 'test' } });
+      let err = ''; child.stderr.on('data', (d) => { err += d; }); child.stdout.resume();
+      const timer = setTimeout(() => child.kill('SIGKILL'), 15000);
+      child.on('exit', (code) => { clearTimeout(timer); resolve({ code, err }); });
+    });
+    assert.equal(r.code, 1);
+    assert.match(r.err, new RegExp(`127\\.0\\.0\\.1:${port} is already in use`));
+    assert.match(r.err, /--port \d+/);
+  } finally { busy.close(); fs.rmSync(home, { recursive: true, force: true }); }
 });
 
 

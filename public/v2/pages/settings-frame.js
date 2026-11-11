@@ -77,18 +77,21 @@ export function SettingsFrame({ tab, onSelect, head, foot, children, busy = fals
   </${Frame}>`;
 }
 
-export function SettingsFooter({ dirty, pendingSections = [], busy, writable, onDetails, onCancel, onSave, saveLabel, saveTestId, canSave = true, form = 'settings-section-form' }) {
-  const status = busy ? msg('settings.busy') : pendingSections.length ? msg('settings.dirtySections',{sections:pendingSections.map(id => msg('settings.tab.' + id)).join(', ')}) : msg('settings.clean');
+export function SettingsFooter({ dirty, pendingSections = [], busy, writable, onDetails, onCancel, onSave, saveLabel, saveTestId, canSave = true, saveHint = null, form = 'settings-section-form' }) {
+  // Prefer the apply/save blocker copy in the existing status slot so the footer height stays stable on mobile.
+  const status = busy ? msg('settings.busy') : saveHint || (pendingSections.length ? msg('settings.dirtySections',{sections:pendingSections.map(id => msg('settings.tab.' + id)).join(', ')}) : msg('settings.clean'));
+  const primaryDisabled = !dirty || !canSave || busy || !writable;
+  const hintId = saveHint ? 'settings-save-hint' : undefined;
   return html`<div class="ao-settings__footer">
-    <span class=${'bu-caption ao-settings__dirty' + (pendingSections.length ? ' ao-settings__dirty--active' : '')} role="status" aria-live="polite" title=${status}>
-      ${pendingSections.length ? html`<${Icon} name="pencil" />` : html`<${Icon} name="check" />`}
+    <span id=${hintId} class=${'bu-caption ao-settings__dirty' + ((pendingSections.length || saveHint) ? ' ao-settings__dirty--active' : '')} role="status" aria-live="polite" title=${status} data-testid=${saveHint ? 'settings-save-hint' : undefined}>
+      ${pendingSections.length || saveHint ? html`<${Icon} name="pencil" />` : html`<${Icon} name="check" />`}
       <span class="ao-settings__dirty-text">${status}</span>
     </span>
     <div class="bu-btn-group">
       <${Button} type="button" disabled=${!pendingSections.length || busy} onClick=${onDetails} variant="ghost" size="md" label=${msg('settings.saveDetails')} />
       <${Button} type="button"  disabled=${!dirty || busy || !writable} onClick=${onCancel} variant="secondary" size="md" label=${msg('common.cancel')} />
-      <${Button} testId=${saveTestId} type=${form ? 'submit' : 'button'} form=${form || undefined}  disabled=${!dirty || !canSave || busy || !writable} onClick=${form ? undefined : onSave}
-        busy=${busy} variant="primary" size="md" label=${saveLabel || msg('settings.save')} />
+      <${Button} testId=${saveTestId} type=${form ? 'submit' : 'button'} form=${form || undefined}  disabled=${primaryDisabled} onClick=${form ? undefined : onSave}
+        busy=${busy} variant="primary" size="md" label=${saveLabel || msg('settings.save')} title=${primaryDisabled && saveHint ? saveHint : undefined} describedBy=${hintId} />
     </div>
   </div>`;
 }

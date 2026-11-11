@@ -1,0 +1,46 @@
+{
+  "$fixture": {
+    "channel": "openclaw",
+    "source": "synthetic",
+    "note": "account-scoped channel DM session (WeChat shape), placeholders only"
+  },
+  "body": {
+    "kind": "json",
+    "value": {
+      "key": "agent:synthetic-agent:wechat-native-isolated:synthetic-account:direct:synthetic-peer",
+      "chatType": "direct",
+      "createdVia": "channel",
+      "createdActor": {
+        "type": "human",
+        "source": "channel",
+        "id": "synthetic-peer",
+        "label": "Synthetic person"
+      },
+      "delivery": {
+        "kind": "external",
+        "route": {
+          "channel": "wechat-native-isolated",
+          "accountId": "synthetic-account",
+          "target": {
+            "to": "synthetic-peer"
+          }
+        },
+        "context": {
+          "channel": "wechat-native-isolated",
+          "to": "synthetic-peer",
+          "accountId": "synthetic-account"
+        },
+        "origin": {
+          "label": "Synthetic person",
+          "provider": "wechat-native-isolated",
+          "surface": "wechat-native-isolated",
+          "chatType": "direct",
+          "from": "synthetic-peer",
+          "to": "synthetic-peer",
+          "nativeChannelId": "synthetic-peer",
+          "accountId": "synthetic-account"
+        }
+      }
+    }
+  }
+}

@@ -104,7 +104,7 @@ test(`bounded mobile map labels keep all 13 floor occupants reachable (${theme},
       assert.equal(await p.locator('.ao-bureau__stage').evaluate((el,id) => !el.aoScene.chars.get(id).plate.hidden, target.id), true);
       await p.locator('.bu-drawer [aria-label="Fermer"]').click(); await p.locator('#ao-drawer-title').waitFor({ state: 'detached' });
       await p.waitForFunction(() => document.querySelector('.ao-bureau__stage').aoScene.selected === null);
-      await p.locator('.ao-mobile-stack').click();
+      await p.locator('.ao-mobile-roster--teams [data-floor-agent-group-kind]').click();
       assert.equal(await p.locator('[role=dialog] [data-occupant]').count(), 13, 'roster still lists every occupant');
       await p.locator('[role=dialog] .bu-modal__header > button').click();
       // Replays retain the same shortlist, and resizing restores all desktop labels.

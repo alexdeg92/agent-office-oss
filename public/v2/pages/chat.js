@@ -22,6 +22,7 @@ export function loadStyles(){
  return Promise.all([styles,loadBureauStyles(),loadWorkspaceStyles()]);
 }
 const waiting=createStore({conn:'connecting',topicsOk:false});
+const CREATE_SESSION_TIMEOUT_MS=15000;
 function Placeholder({title,text}){return html`<div class="ao-messenger__placeholder bu-empty"><${Icon} name="discuter" /><p class="bu-empty__title">${title}</p>${text?html`<p class="bu-empty__text">${text}</p>`:null}</div>`;}
 function Loading(){return html`<div class="ao-messenger__loading" role="status" aria-label=${msg('editorial.loading')}><${Skeleton} /><${Skeleton} w="70" /><${Skeleton} w="50" /></div>`;}
 export function ChatPage({match}){
@@ -36,8 +37,8 @@ function ChatWorkspace({client,match}){
  const screen=['agents','sessions','conversation'].includes(match.query.vue)?match.query.vue:'agents';
  const setScreen=vue=>services.router.setQuery({vue},{replace:false});
  const [creating,setCreating]=useState(false),[createError,setCreateError]=useState(null);
- const createIntent=useRef(null),currentAgent=useRef(null),drafts=useRef(new Map()),pane=useRef(null),live=useRef(true);
- useEffect(()=>()=>{live.current=false;drafts.current.clear();},[]);
+ const createIntent=useRef(null),createController=useRef(null),currentAgent=useRef(null),drafts=useRef(new Map()),pane=useRef(null),live=useRef(true);
+ useEffect(()=>()=>{live.current=false;createController.current?.abort();drafts.current.clear();},[]);
  const denied=[401,403,404].includes(index.error?.status),agents=denied?null:index.data?.agents;
  const agent=agents?.find(row=>row.id===selected.agentId)||null;
  currentAgent.current=agent?.id;
@@ -48,14 +49,15 @@ function ChatWorkspace({client,match}){
  const [renameId,setRenameId]=useState(null),[renameValue,setRenameValue]=useState(''),[rowError,setRowError]=useState(null),[rowBusy,setRowBusy]=useState(false),[deleteRow,setDeleteRow]=useState(null),[deleteError,setDeleteError]=useState(null),[swipeCue,setSwipeCue]=useState(null);
  const swipeStart=useRef(null),renameInput=useRef(null),lifecycleKeys=useRef(new Map());
  const online=status.conn==='open'&&status.topicsOk!==false;
- function selectAgent(row){services.router.setQuery({cible:row.id,discussion:null,vue:'sessions',archives:null},{replace:false});setCreateError(null);setCreating(false);createIntent.current=null;setRenameId(null);setDeleteRow(null);}
+ function selectAgent(row){createController.current?.abort();createController.current=null;services.router.setQuery({cible:row.id,discussion:null,vue:'sessions',archives:null},{replace:false});setCreateError(null);setCreating(false);createIntent.current=null;setRenameId(null);setDeleteRow(null);}
  function selectSession(id){services.router.setQuery({discussion:id,vue:'conversation'},{replace:false});}
  async function createSession(){
   if(!list?.capabilities.startSession||creating||!online)return;
-  const id=agent.id;createIntent.current||={id,key:commandKey()};const intent=createIntent.current;
+  const id=agent.id,sourceSessionId=sessionId||list.defaultSessionId,draft=drafts.current.get(sourceSessionId)||'';createIntent.current||={id,key:commandKey()};const intent=createIntent.current,controller=new AbortController();createController.current=controller;
   setCreating(true);setCreateError(null);
-  try{const result=await chatCommand(agentPath(id),{},{key:intent.key});if(!live.current||currentAgent.current!==id)return;createIntent.current=null;client.resync('chat-agent-sessions:'+id);client.resync('chat-agents');selectSession(result.result.sessionId);}
-  catch(e){if(live.current&&currentAgent.current===id)setCreateError(e.message);}finally{if(live.current&&currentAgent.current===id)setCreating(false);}
+  const timeout=setTimeout(()=>controller.abort(),CREATE_SESSION_TIMEOUT_MS);
+  try{const result=await chatCommand(agentPath(id),{},{key:intent.key,signal:controller.signal});if(!live.current||currentAgent.current!==id)return;createIntent.current=null;drafts.current.set(result.result.sessionId,draft);if(sourceSessionId)drafts.current.delete(sourceSessionId);client.resync('chat-agent-sessions:'+id);client.resync('chat-agents');selectSession(result.result.sessionId);}
+  catch(e){if(live.current&&currentAgent.current===id&&!controller.signal.aborted)setCreateError(e.message);}finally{clearTimeout(timeout);if(createController.current===controller)createController.current=null;if(live.current&&currentAgent.current===id)setCreating(false);}
  }
  function refreshSessionLists(){if(sessionTopic)client.resync(sessionTopic);client.resync('chat-agents');}
  function lifecycleKey(action,id,value=''){const key=JSON.stringify([action,id,value]);if(!lifecycleKeys.current.has(key))lifecycleKeys.current.set(key,commandKey());return [key,lifecycleKeys.current.get(key)];}
@@ -72,20 +74,20 @@ function ChatWorkspace({client,match}){
  return html`<div ref=${pane} class="ao-messenger__workspace" data-chat-screen=${small?screen:'desktop'}>
  <section class="ao-messenger__pane ao-messenger__agents" data-chat-pane="agents" hidden=${small&&screen!=='agents'} aria-label=${msg('messenger.agents')}>
  <header class="ao-messenger__pane-head"><h2 tabindex="-1">${index.data?label(index.data.labels.title):msg('messenger.agents')}</h2></header>
- <div class="ao-messenger__list" data-chat-list="agents">
+ <div class="ao-messenger__list" data-chat-list="agents" data-scroll-body>
  ${index.error?html`<${ErrorState} compact error=${index.error} onRetry=${index.retry} />`:null}
  ${!agents?!index.error?html`<${Loading} />`:null:!agents.length?html`<p class="ao-messenger__notice">${label(index.data.labels.empty)}</p>`:html`<ul>${agents.map(row=>{const role=row.context||label(row.contextLabel)||'';const state=label(row.stateLabel);return html`<li key=${row.id}><button type="button" class="ao-messenger__row ao-messenger__agent-row" data-chat-agent=${row.id} data-chat-kind=${row.kind} aria-current=${agent?.id===row.id?'true':undefined} onClick=${()=>selectAgent(row)}><${ChatPortrait} portrait=${row.portrait} /><span class="ao-messenger__row-copy"><span class="ao-messenger__row-primary"><strong>${row.name}</strong>${role?html`<span aria-hidden="true">·</span><span>${role}</span>`:null}</span><span class="ao-messenger__row-secondary">${row.provider?html`<span class="ao-messenger__provider"><${ConnectorBrandMark} brand=${row.provider.mark} /><span>${label(row.provider.label)}</span></span>`:null}<span class="ao-messenger__state-dot" data-state-key=${row.stateLabel?.key||''} role="img" aria-label=${state} title=${state}></span></span></span>${row.unread.count?html`<span class="bu-count" aria-label=${label(row.unread.label)}>${row.unread.count}</span>`:null}</button></li>`})}</ul>`}
  </div></section>
  <section class="ao-messenger__pane ao-messenger__sessions" data-chat-pane="sessions" hidden=${small&&screen!=='sessions'} aria-label=${msg('messenger.sessions')}>
  <header class="ao-messenger__pane-head">${small?html`<${Button} variant="ghost" size="sm" label=${msg('messenger.backAgents')} icon=${html`<${Icon} name="arrow-left" />`} onPress=${()=>setScreen('agents')} />`:null}<h2 tabindex="-1">${agent?.name||msg('messenger.sessions')}</h2></header>
  ${agent&&list?html`<div class="ao-messenger__new"><${Button} label=${msg('messenger.new')} icon=${html`<${Icon} name="add" />`} disabled=${!list.capabilities.startSession||!online} busy=${creating} onPress=${createSession} />${!list.capabilities.startSession?html`<p>${msg('messenger.newUnavailable')}</p>`:null}${createError?html`<p role="alert" class="bu-field__error">${createError}</p>`:null}</div>`:null}
- <div class="ao-messenger__list" data-chat-list="sessions">
+ <div class="ao-messenger__list" data-chat-list="sessions" data-scroll-body>
  ${!agent?html`<p class="ao-messenger__notice">${msg('messenger.selectAgentForSessions')}</p>`:sessions.error?html`<${ErrorState} compact error=${sessions.error} onRetry=${sessions.retry} />`:!list?html`<${Loading} />`:!list.sessions.length?html`<${EmptyState} icon="discuter" title=${label(list.labels?.empty)||msg('messenger.emptySessions')} />`:html`<ul>${list.sessions.map(row=>html`<li key=${row.id} class=${swipeCue?.id===row.id?'is-swipe-'+swipeCue.direction:''} onTouchStart=${event=>{swipeStart.current={id:row.id,x:event.touches[0].clientX,y:event.touches[0].clientY};}} onTouchEnd=${event=>{const start=swipeStart.current;if(start?.id===row.id){const dx=event.changedTouches[0].clientX-start.x,dy=event.changedTouches[0].clientY-start.y;if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)){const direction=dx<0?'rename':'delete';setSwipeCue({id:row.id,direction});setTimeout(()=>setSwipeCue(current=>current?.id===row.id?null:current),180);if(direction==='rename')beginRename(row);else{setDeleteError(null);setDeleteRow(row);}}}swipeStart.current=null;}}>
   <div class=${'ao-messenger__session-line'+(sessionId===row.id?' is-current':'')+(renameId===row.id?' is-renaming':'')}><button type="button" class="ao-messenger__row ao-messenger__session-row" data-chat-session=${row.id} aria-current=${sessionId===row.id?'true':undefined} onClick=${()=>selectSession(row.id)}><span class="ao-messenger__row-copy"><strong class=${renameId===row.id?'ao-messenger__title-hidden':''}>${label(row.title)}</strong><span>${row.preview||msg('messenger.noPreview')}</span><small><span>${label(row.stateLabel)}</span>${row.updatedAt?html`<${Ago} at=${row.updatedAt} />`:null}</small></span>${row.unread.count?html`<span class="bu-count" aria-label=${label(row.unread.label)}>${row.unread.count}</span>`:null}</button>${renameId===row.id?html`<form class="ao-messenger__rename" onSubmit=${event=>{event.preventDefault();saveRename(row);}}><input ref=${renameInput} data-chat-rename=${row.id} aria-label=${msg('messenger.renamePlaceholder')} maxlength="120" value=${renameValue} onInput=${event=>setRenameValue(event.currentTarget.value)} onClick=${event=>event.stopPropagation()} onBlur=${event=>{if(!event.currentTarget.form?.contains(event.relatedTarget))cancelRename();}} onKeyDown=${event=>{if(event.key==='Escape'){event.preventDefault();cancelRename();}else if(event.key==='Enter'){event.preventDefault();saveRename(row);}}} />${rowError?html`<small role="alert">${rowError}</small>`:null}</form>`:null}<${Menu} label=${msg('messenger.sessionActions')} class="ao-messenger__row-menu" testId=${'chat-session-menu-'+row.id} items=${sessionActions(row)} /></div>
  </li>`)}</ul>`}
  </div></section>
  <div class="ao-messenger__conversation-slot" hidden=${small&&screen!=='conversation'}>
- ${agent&&sessionId&&!sessionDenied?html`<${ChatConversation} key=${sessionId} client=${client} id=${sessionId} sessionTitle=${list?.sessions.find(row=>row.id===sessionId)?.title} online=${online} small=${small} active=${!small||screen==='conversation'} drafts=${drafts.current} onBack=${()=>setScreen('sessions')} />`:html`<section class="ao-messenger__pane">${small?html`<header class="ao-messenger__pane-head"><${Button} label=${msg('messenger.backAgents')} icon=${html`<${Icon} name="arrow-left" />`} onPress=${()=>setScreen('agents')} /></header>`:null}<${Placeholder} title=${msg(agent?'messenger.chooseSession':'messenger.chooseAgent')} text=${msg(agent?'messenger.chooseSessionText':'messenger.chooseAgentText')} /></section>`}
+ ${agent&&sessionId&&!sessionDenied?html`<${ChatConversation} key=${sessionId} client=${client} id=${sessionId} sessionTitle=${list?.sessions.find(row=>row.id===sessionId)?.title} online=${online} small=${small} active=${!small||screen==='conversation'} creationPending=${creating} drafts=${drafts.current} onBack=${()=>setScreen('sessions')} />`:html`<section class="ao-messenger__pane">${small?html`<header class="ao-messenger__pane-head"><${Button} label=${msg('messenger.backAgents')} icon=${html`<${Icon} name="arrow-left" />`} onPress=${()=>setScreen('agents')} /></header>`:null}<${Placeholder} title=${msg(agent?'messenger.chooseSession':'messenger.chooseAgent')} text=${msg(agent?'messenger.chooseSessionText':'messenger.chooseAgentText')} /></section>`}
  </div>
  </div>
  <${ConfirmDialog} open=${!!deleteRow} title=${msg('messenger.deleteTitle')} description=${deleteRow?.runtimeTranscriptDeleteLabel?label(deleteRow.runtimeTranscriptDeleteLabel):undefined} confirmLabel=${msg('messenger.deleteConfirm')} cancelLabel=${msg('common.cancel')} busy=${rowBusy} error=${deleteError} modalClass="ao-messenger__delete-modal" onCancel=${()=>{setDeleteRow(null);setDeleteError(null);}} onConfirm=${deleteConversation} />`;

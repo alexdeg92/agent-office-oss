@@ -16,7 +16,7 @@ export async function chatRead(path,{signal}={}){
 let split;
 async function fetchChat(path,options){
  if(splitOrigin){split||=loadModule(()=>import('../split-auth.js'+buildQuery)).then(auth=>{auth.configure(api.ApiError,api.toApiError);return auth;});return (await split).request(apiUrl(path,3),options,apiUrl('/api/auth/refresh'));}
- try{return await fetch(apiUrl(path,3),{...options,credentials:'same-origin'});}catch(error){if(options.signal?.aborted)throw error;throw new api.ApiError({code:'network'});}
+ try{return await fetch(apiUrl(path,3), /* transport-allow:fetch:chat-request */{...options,credentials:'same-origin'});}catch(error){if(options.signal?.aborted)throw error;throw new api.ApiError({code:'network'});}
 }
 export async function chatCommand(path,body,{method='POST',key=commandKey(),signal,digest}={}){
  if(api.isMock()){const result=await (await api.mock()).handle(method,path,body);if(result.status>=400)throw api.toApiError(result.status,result.body);return result.body.data;}

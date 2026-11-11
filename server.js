@@ -173,7 +173,7 @@ function bootFull(env, files) {
     writeClassOf,
     audit: auditMiddleware({ store, sessionOf: (req) => auth.sessionOf(req) }),
     // S7d: the agent's scoped token. G3a: only the resolver's primary agent, as { kind: 'agent', agentId }
-    csrf: createCsrfGuard({ publicUrl: cfg.publicUrl, onLoginRefused: (req, d) => auth.loginRefused(req, d) }),
+    csrf: createCsrfGuard({ publicUrl: cfg.publicUrl, origins: IC.savedOrigins(files.config), onLoginRefused: (req, d) => auth.loginRefused(req, d), warn: (m) => console.warn(m) }),
     onLoginRefused: (req, d) => auth.loginRefused(req, d),
     tokenGate,
     publicDir: path.join(__dirname, 'public'),
@@ -187,6 +187,7 @@ function bootFull(env, files) {
         teamRoot: process.env.AO_TEAM_STORE_ROOT || null,
         readInbox: process.env.AO_TEAM_STORE_READ_INBOX === '1',
         engine,
+        projectDirectoryHints: () => runtime.projectDirectoryHints?.() || [],
         log: entry => console.warn('Agent Office source warning: ' + JSON.stringify(entry)),
         runtimeIdentityAgents: hostId => engine.identityAgents?.(hostId) || [],
         runtimeIdentitySessions: hostId => engine.identitySessions?.(hostId) || [] });

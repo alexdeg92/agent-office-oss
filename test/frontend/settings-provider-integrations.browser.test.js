@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdirSync,readFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {browserSkipReason,openLayoutBrowser,visit} from './helpers/layout-browser.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {connectorFixture} from './helpers/settings-connectors-fixture.js';
 const skip=browserSkipReason()||false;
 const apply=p=>p.getByTestId('settings-integration-apply');
@@ -36,11 +38,15 @@ test('provider integration sections scope instances, preserve plans and drafts, 
   assert.ok((await section(p).innerText()).includes('Remote fixture'));assert.ok(!(await section(p).innerText()).includes('Runner'));
   await p.locator('#settings-plan').click();await p.locator('#settings-plan-confirm').waitFor();
   assert.equal(await apply(p).isDisabled(),true);assert.equal(await p.locator('#settings-current-password').count(),0);
+  assert.match(await p.getByTestId('settings-save-hint').innerText(),/autorisation|authorization/i);
   await p.locator('#settings-plan-confirm').check();assert.equal(await apply(p).isEnabled(),true);
+  assert.equal(await p.getByTestId('settings-save-hint').count(),0);
   await p.locator('#settings-label-openclaw').fill('Connection draft retained');
   await p.waitForFunction(()=>new URL(location.href).searchParams.get('section')===null);
   assert.equal(new URL(p.url()).searchParams.get('section'),null,'editing connection fields restores the connection save action');
   assert.equal(await apply(p).count(),0);assert.equal(await p.locator('#settings-plan-confirm').isChecked(),true);
+  assert.equal(await p.locator('.ao-settings__footer button[type=submit]').innerText(),'Enregistrer');
+  assert.equal(await p.locator('.ao-settings__footer button[type=submit]').isEnabled(),true,'pending Connection changes keep Save');
   await p.locator('[data-connector-back]').click();await p.locator('[data-provider="claude-code"]').click();
   assert.equal(await p.locator('#settings-integration-runtime').count(),0,'a single provider instance has no global runtime picker');
   assert.ok(!(await section(p).innerText()).includes('Remote fixture'));
@@ -52,6 +58,75 @@ test('provider integration sections scope instances, preserve plans and drafts, 
   assert.equal(await p.locator('#settings-plan-confirm').isChecked(),true);assert.equal(await p.locator('#settings-label-openclaw').inputValue(),'Connection draft retained');
   await p.locator('[data-connector-back]').click();await p.locator('[data-provider="herdr"]').click();
   assert.equal(await section(p).getByRole('button').count(),0);assert.ok((await section(p).innerText()).includes('Aucune intégration installable'));
+ }finally{await h.close();}
+});
+
+async function setAppearance(p,{theme,lang='fr'}={}){
+ await p.evaluate(async({theme,lang})=>{
+  const build=document.querySelector('meta[name=ao-build]').content;
+  const [{setTheme},{setLang}]=await Promise.all([import('/theme.js?v='+build),import('/i18n.js?v='+build)]);
+  if(theme)setTheme(theme); if(lang)setLang(lang);
+  await document.fonts?.ready;
+ },{theme,lang});
+ await p.waitForFunction(()=>[...document.styleSheets].some(s=>[...s.cssRules||[]].some(r=>String(r.cssText||'').includes('--bu-'))));
+}
+async function shootSettings(p,path){
+ // Full viewport with app CSS (bureau bundle synced). Scroll the dirty footer into view so Save/Apply hints are on-screen.
+ await p.waitForFunction(()=>{
+  const root=document.querySelector('.ao-settings'),foot=document.querySelector('.ao-settings__footer'),icon=foot?.querySelector('.bu-icon');
+  if(!root||!foot||root.getBoundingClientRect().height<80) return false;
+  const cs=icon&&getComputedStyle(icon);
+  return !!cs&&cs.width==='16px'&&cs.stroke!=='none';
+ });
+ await p.locator('.ao-settings__footer').evaluate(el=>el.scrollIntoView({block:'nearest',inline:'nearest'}));
+ await p.screenshot({path,animations:'disabled'});
+}
+
+test('dirty Connection on Integrations keeps Save and Apply explains empty plan until confirmed',{skip,timeout:90000},async()=>{
+ const h=await openLayoutBrowser(),p=h.page;
+ const shots=join(process.env.AO_TEST_SHOTS_DIR||tmpdir(),'settings-provider-integrations');
+ mkdirSync(shots,{recursive:true});
+ try{
+  await fixture(p,{remotePlan:true});
+  await visit(p,h.origin,'/parametres?onglet=connexion&connecteur=openclaw&mock=settings-fixall','#settings-label-openclaw');
+  await p.locator('#settings-label-openclaw').fill('Pending connector draft');
+  await p.locator('.ao-settings__footer button[type=submit]').waitFor();
+  await p.getByRole('link',{name:/Voir les intégrations|View integrations/i}).click();
+  await p.waitForFunction(()=>new URL(location.href).searchParams.get('section')==='integrations');
+  assert.equal(await apply(p).count(),0,'Apply does not replace Save while Connection is dirty');
+  assert.equal(await p.locator('.ao-settings__footer button[type=submit]').innerText(),'Enregistrer');
+  assert.match(await p.getByTestId('settings-save-hint').innerText(),/Enregistrez|Save pending/i);
+  for(const theme of ['light','dark']){
+   await setAppearance(p,{theme});
+   await p.setViewportSize({width:1440,height:900});
+   await shootSettings(p,`${shots}/desktop-dirty-save-${theme}.png`);
+   await p.setViewportSize({width:390,height:844});
+   assert.equal(await p.locator('.ao-settings__footer button[type=submit]').innerText(),'Enregistrer');
+   assert.match(await p.getByTestId('settings-save-hint').innerText(),/Enregistrez|Save pending/i);
+   await shootSettings(p,`${shots}/phone-dirty-save-${theme}.png`);
+  }
+  await p.setViewportSize({width:1440,height:900});
+  await setAppearance(p,{theme:'light'});
+  await p.locator('.ao-settings__footer').getByRole('button',{name:/Annuler|Cancel/i}).click();
+  await p.waitForFunction(()=>new URL(location.href).searchParams.get('section')==='integrations'&&!document.querySelector('.ao-settings__footer'));
+  await p.locator('#settings-plan').click();await p.locator('#settings-plan-confirm').waitFor();
+  assert.equal(await apply(p).isDisabled(),true);
+  assert.match(await p.getByTestId('settings-save-hint').innerText(),/autorisation|authorization/i);
+  for(const theme of ['light','dark']){
+   await setAppearance(p,{theme});
+   await p.setViewportSize({width:1440,height:900});
+   await shootSettings(p,`${shots}/desktop-apply-hint-${theme}.png`);
+   await p.setViewportSize({width:390,height:844});
+   assert.equal(await apply(p).innerText(),'Appliquer le plan');
+   assert.match(await p.getByTestId('settings-save-hint').innerText(),/autorisation|authorization/i);
+   await shootSettings(p,`${shots}/phone-apply-hint-${theme}.png`);
+  }
+  writeFileSync(`${shots}/screenshot-index.json`,JSON.stringify({
+   dirtySave:{label:'Enregistrer',hint:'Enregistrez d’abord les changements de connexion avant d’appliquer le plan.'},
+   applyHint:{label:'Appliquer le plan',hint:await p.getByTestId('settings-save-hint').innerText()},
+   files:['desktop-dirty-save-light.png','desktop-dirty-save-dark.png','phone-dirty-save-light.png','phone-dirty-save-dark.png',
+    'desktop-apply-hint-light.png','desktop-apply-hint-dark.png','phone-apply-hint-light.png','phone-apply-hint-dark.png'],
+  },null,2));
  }finally{await h.close();}
 });
 

@@ -19,6 +19,11 @@ export async function openLayoutBrowser({ root = resolve('public/v2'), theme = '
   const { createFrontendServer } = require('../../../scripts/serve-frontend');
   const options = { root, allowDesignSystem:true, ...(apiVersion ? { apiVersion } : {}) };
   const server = createFrontendServer({ ...options, ...(typeof apiProxy === 'string' ? { apiProxy } : {}) });
+  const serverSockets = new Set();
+  server.on('connection', socket => {
+    serverSockets.add(socket);
+    socket.once('close', () => serverSockets.delete(socket));
+  });
   await new Promise((resolve, reject) => {
     const onError = error => { server.removeListener('listening', onListening); reject(error); };
     const onListening = () => { server.removeListener('error', onError); resolve(); };
@@ -37,12 +42,26 @@ export async function openLayoutBrowser({ root = resolve('public/v2'), theme = '
   watchdog?.unref?.();
   const stopBrowser = async () => {
     const child = browserServer?.process();
-    const killTimer = setTimeout(() => child?.kill('SIGKILL'), 5000);
+    const killTimer = setTimeout(() => {
+      if (child && child.exitCode == null && child.signalCode == null) child.kill('SIGKILL');
+    }, 5000);
     killTimer.unref?.();
+    const waitForExit = async (timeoutMs) => {
+      if (!child || child.exitCode != null || child.signalCode != null) return true;
+      return new Promise(resolve => {
+        const onExit = () => { clearTimeout(timer); resolve(true); };
+        const timer = setTimeout(() => { child.removeListener('exit', onExit); resolve(false); }, timeoutMs);
+        child.once('exit', onExit);
+      });
+    };
     let failure;
     try {
       try { await browser?.close(); } catch (error) { if (!child?.killed) failure = error; }
       try { if (browserServer) await browserServer.close(); } catch (error) { if (!child?.killed) failure ||= error; }
+      if (child && !await waitForExit(1500)) {
+        child.kill('SIGKILL');
+        if (!await waitForExit(1500)) failure ||= new Error('Chromium did not exit after browser teardown');
+      }
       if (failure) {
         // A browser protocol call can remain pending after the test timeout. The
         // server handle gives teardown a direct way to end that child process.
@@ -82,6 +101,7 @@ export async function openLayoutBrowser({ root = resolve('public/v2'), theme = '
       // Stop accepting first, then terminate keep-alive/SSE sockets. Otherwise
       // server.close() can wait forever after a browser test has timed out.
       server.close(error => error ? reject(error) : resolve());
+      for (const socket of serverSockets) socket.destroy();
       server.closeAllConnections?.();
     });
     return {
@@ -97,6 +117,7 @@ export async function openLayoutBrowser({ root = resolve('public/v2'), theme = '
       stopBrowser,
       () => new Promise((resolve, reject) => {
         server.close(closeError => closeError ? reject(closeError) : resolve());
+        for (const socket of serverSockets) socket.destroy();
         server.closeAllConnections?.();
       }),
     ], 'layout browser setup');
@@ -129,7 +150,9 @@ export const routes = [
 ];
 export async function visit(page, origin, path, ready) {
   const url = new URL(path, origin); if (!url.searchParams.has('mock')) url.searchParams.set('mock', '1'); url.searchParams.set('agent', 'Atlas');
-  await page.goto(url.href, { waitUntil: 'networkidle' });
+  // Discuter keeps its live transport open after the shell loads, so
+  // networkidle is not a meaningful readiness signal for that route.
+  await page.goto(url.href, { waitUntil: url.pathname.endsWith('/discuter') ? 'domcontentloaded' : 'networkidle' });
   if(url.pathname.endsWith('/discuter')&&ready!=='.ao-messenger__workspace')await chooseChatConversation(page);
   await page.locator(ready).first().waitFor({ state: 'visible' });
   await page.evaluate(() => document.fonts.ready);

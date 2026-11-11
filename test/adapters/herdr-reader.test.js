@@ -19,6 +19,9 @@ test('Herdr fixture envelope maps allowlisted host-agent data to opaque, stable 
   assert.equal(parsed.agents[0].name, 'Agent');
   assert.match(parsed.agents[0].id, /^ha_[a-f0-9]{32}$/);
   assert.equal(parsed.agents[0].id, parseSnapshot(response([row('pane-0')]), { ...config, observedAt: BASE + 1_000 }).agents[0].id);
+  assert.equal(parsed.privatePaneCwds.get(parsed.agents[0].id), '/private/path', 'pane cwd remains available only as private discovery metadata');
+  assert.equal(Object.keys(parsed).includes('privatePaneCwds'), false, 'cwd metadata is non-enumerable at the adapter boundary');
+  assert.equal(JSON.stringify(parsed).includes('/private/path'), false, 'serialized source snapshots never contain pane working paths');
   const json = JSON.stringify({ host: parsed.host, orchestrator: parsed.orchestrator, agents: parsed.agents });
   for (const secret of ['/private/path', 'private title', 'private:pane-0', 'pane-0', 'terminal_title']) assert.equal(json.includes(secret), false);
   assert.equal(parsed.privateIdentityRefs.size, 0, 'identity refs are disabled unless source stability is explicitly configured');

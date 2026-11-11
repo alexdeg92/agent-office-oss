@@ -161,7 +161,9 @@ export function createOfficeMock({ manifest, layout, floorDefaults = [], scenari
         const r = resolved[i];
         return {
           id: pid(s.id), role: prole(s.role), name: r.name,
-          roleLabel: r.roleLabel.key === 'custom' ? r.roleLabel : { key: `occupantRole.${prole(s.role)}` }, ruleId: r.ruleId && (v3 ? canonicalRuleId(r.ruleId) : toVocabulary({ agents: [{ agentId: r.ruleId }] }, '2.x').agents[0].agentId),
+          roleLabel: r.roleLabel.key === 'custom' ? r.roleLabel : { key: `occupantRole.${prole(s.role)}` },
+          drawerRoleLabel: r.roleLabel.key === 'custom' ? r.roleLabel : { key: `occupantRole.${prole(s.role)}` },
+          ruleId: r.ruleId && (v3 ? canonicalRuleId(r.ruleId) : toVocabulary({ agents: [{ agentId: r.ruleId }] }, '2.x').agents[0].agentId),
           // 2.4 (architect-26): the session title as a LabelRef; a discovered name is `sessionTitle.named`, an unnamed
           // primary session `sessionTitle.main`, an unnamed sub-agent `sessionTitle.subagent {id}`.
           title: s.sourceName && !/^(main|subagent:)/.test(s.sourceName) ? { key: 'sessionTitle.named', params: { name: s.sourceName } }
@@ -238,10 +240,19 @@ export function createOfficeMock({ manifest, layout, floorDefaults = [], scenari
       const order = id => id === 'rdc' ? 0 : id === 'gym' ? 10002 : Number(id) || 1;
       const rosterFloors = floorPlan.floors.map(floor => {
         const people = floor.occupants, floorActive = people.some(o => o.state === 'unknown') ? null : people.filter(o => !['idle','offline'].includes(o.state)).length;
+        const floorIds = people.map(o => o.id);
+        const items = people.map(o => ({ kind: 'occupant', id: `occupant:${o.id}`, occupantId: o.id }));
         return { id: floor.id, order: order(floor.id), label: { key: floor.id === 'rdc' ? 'office.floor.rdc' : floor.id === 'gym' ? 'office.floor.gym' : floor.id === '1' ? 'office.floor.first' : 'office.floor.number', ...(Number(floor.id) > 1 ? { params: { n: Number(floor.id) } } : {}) },
-          countLabel: { key: 'office.floor.count', params: { n: people.length } },
+          countLabel: { key: people.length === 1 ? 'office.floor.count.one' : 'office.floor.count.other', params: { n: people.length } },
           statusLabel: floorActive == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active: floorActive, idle: people.filter(o => ['idle','offline'].includes(o.state)).length } },
-          kind: floor.kind, occupantIds: people.map(o => o.id), mobileLabelIds: [], items: people.map(o => ({ kind: 'occupant', id: `occupant:${o.id}`, occupantId: o.id })), count: people.length, activeCount: floorActive,
+          kind: floor.kind, occupantIds: floorIds, mobileLabelIds: [], items,
+          // The mock's existing rosterItems already provide authoritative mobile
+          // hierarchy. Keep the optional floor team-group list empty so those
+          // groups remain the rendered mobile representation in mock scenarios.
+          agentGroups: [],
+          agentGroupsLabel: { key: 'office.floor.agentGroups' }, teamGroups: [],
+          otherItems: items, showTeamPanel: false,
+          count: people.length, activeCount: floorActive,
           idleCount: people.filter(o => ['idle','offline'].includes(o.state)).length,
           layout: { room: floor.layout.room, theme: floor.layout.theme, items: floor.layout.items }, capacity: floor.capacity };
       });
@@ -255,7 +266,7 @@ export function createOfficeMock({ manifest, layout, floorDefaults = [], scenari
           { id: 'tokens', label: { key: 'kpi.tokens' }, value: occupants.reduce((n, o) => n + o.tokens, 0), unit: 'tokens', sub: null },
           { id: 'cpu', label: { key: 'kpi.cpu' }, value: 18 + (step % 5) * 3, unit: 'percent', sub: null },
         ],
-        occupants: ordered.map(entry => rows.get(entry.id)), rosterGroups: [], rosterItems, rosterPreviewItems,
+        occupants: ordered.map(entry => rows.get(entry.id)), rosterGroups: [], teamGroups: [], teamLegend: [], rosterItems, rosterPreviewItems,
         rosterOverflowCount: Math.max(0, rosterItems.length - rosterPreviewItems.length), rosterSummary: { count: rosterPopulation.length,
           activeCount: rosterPopulation.some(o => o.state === 'unknown') ? null : rosterPopulation.filter(o => !['idle', 'offline'].includes(o.state)).length },
         rosterAllLabel: { key: 'office.mobile.all', params: { n: rosterItems.length } },

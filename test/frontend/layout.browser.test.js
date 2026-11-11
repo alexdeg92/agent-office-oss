@@ -192,9 +192,10 @@ test('one title per page and frame scroll resets on route and tab changes', { sk
     await visit(h.page, h.origin, '/boutique?onglet=personnages', '.ao-shop__savebar');
     await h.page.evaluate(() => { window.__windowScrollCalls = 0; window.scrollTo = () => { window.__windowScrollCalls++; }; });
     await h.page.locator('.ao-shop__catalogue').evaluate(e => { const ul=e.querySelector('ul'); for(let i=0;i<20;i++)ul.append(ul.firstElementChild.cloneNode(true)); e.scrollTop=e.scrollHeight; });
-    await h.page.locator('[role=tab]').filter({ hasText: 'Thèmes' }).click();
+    await h.page.locator('#ao-shop-section').selectOption('themes');
+    await h.page.waitForFunction(() => document.querySelector('.ao-shop')?.dataset.storeSection === 'themes');
     await h.page.waitForFunction(() => document.querySelector('.ao-shop__catalogue')?.scrollTop === 0);
-    await h.page.locator('.ao-shop__back').click();
+    await h.page.getByRole('link', { name: 'Bureau', exact: true }).click();
     await h.page.locator('.ao-bureau__stage').waitFor();
     bounded(await viewport(h.page), 'route change');
     await h.page.goBack();

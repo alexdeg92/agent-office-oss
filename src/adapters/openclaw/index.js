@@ -84,6 +84,7 @@ function runtimeHealth({ healthEvent, channelsStatus }) {
 const definition = {
   id: 'openclaw',
   name: 'OpenClaw',
+  runtimePresentation: { label: { key: 'team.runtime.openclaw' } },
   mark: { monogram: 'OC', color: '#b23a0b', providerName: 'OpenClaw', logo: 'assets/connectors/openclaw.svg' },
   testedWith: TESTED_WITH,
   schemas: SCHEMAS,
@@ -225,10 +226,19 @@ function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
       const { readOpenclawConfig } = require('./config-source');
       const readConfig = () => engine.ingest({ source: 'config', channel: 'config.openclaw', receivedAt: Date.now(), body: readOpenclawConfig(cfg.openclawConfigPath) });
       const fire = (name, ...args) => { try { if (hooks[name]) hooks[name](...args); } catch (e) { console.log('[hook]', e.message); } };
+      // Sessions OpenClaw ran through another runtime's CLI belong to its agents (see cli-bindings.js).
+      let claimsReading = false;
+      const readCliClaims = () => {
+        if (disposed || claimsReading || !engine.setForeignClaims) return;
+        claimsReading = true;
+        require('./cli-bindings').readCliBindings({ stateDir: cfg.stateDir, agents: engine.agents() })
+          .then(claims => { if (!disposed) engine.setForeignClaims(claims); }).catch(() => {}).finally(() => { claimsReading = false; });
+      };
       gw.on('open', async () => {
         await refreshAll();
         if (disposed) return;
         fire('refreshed');
+        readCliClaims();
         this.refreshSkills();   // the listing is known now: the resolver has a primary
         call('sessions.subscribe', {}); call('sessions.messages.subscribe', {});
       });
@@ -238,9 +248,10 @@ function createRuntime(cfg, { senderCaptures = null, cliEnv } = {}) {
         if (event === 'sessions.changed') listAllSessions();
       });
       gw.start();
-      readConfig(); this.refreshSkills();
+      readConfig(); this.refreshSkills(); readCliClaims();
       loops.push(setInterval(() => { if (engine.gateway().connected) refreshAll().then(() => fire('refreshed')); }, every(10000)));
       loops.push(setInterval(readConfig, every(60000)));
+      loops.push(setInterval(readCliClaims, every(60000)));
       loops.push(setInterval(() => this.refreshSkills(), every(120000)));
       for (const t of loops) if (t.unref) t.unref();
     },

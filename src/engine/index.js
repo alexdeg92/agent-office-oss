@@ -104,6 +104,7 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
   // Adapter-private cross-source identifiers, keyed by canonical session key.
   // They are deliberately kept outside canonical entities and VM projections.
   const identitySessionRefs = new Map();
+  let foreignClaims = { sessions: [] };
   const ev = new EventEmitter();
   const orchestrationSourceRegistry = createOrchestrationSources({ now,
     onIssue: ({ sourceId, code }) => quarantine.record({ source: sourceId, channel: 'canonical.orchestrationSources',
@@ -785,6 +786,18 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
       // transcript or public entity data.
       return true;
     },
+    // Private cross-runtime ownership input: each indexed session's agent and stable session ref.
+    sessionOrigins: () => [...identitySessionRefs].map(([sessionKey, ref]) => ({ sessionKey, agentId: reg.get(sessionKey)?.class?.agentId || ref.agentId || null,
+      runtimeKind: adapter.id || 'generic', sessionRef: ref.sessionRef })),
+    // A runtime that launches another runtime's CLI claims the sessions it recorded (exact refs only, never a
+    // folder). Ids only; bounded; replaced wholesale on each read.
+    setForeignClaims({ sessions = [] } = {}) {
+      foreignClaims = { sessions: (Array.isArray(sessions) ? sessions : []).slice(0, 20000).filter(row => row && typeof row.runtimeKind === 'string' && typeof row.sessionRef === 'string'
+        && row.sessionRef && row.sessionRef.length <= 256).map(row => ({ runtimeKind: row.runtimeKind, sessionRef: row.sessionRef, agentId: typeof row.agentId === 'string' ? row.agentId : null })) };
+      ev.emit('change', { type: 'Ownership' });
+      return true;
+    },
+    foreignClaims: () => foreignClaims,
     detectedAgents: () => rawAgents,
     updateAgents({ names = {}, hidden = [], primary: configuredPrimary = null, configured = null, autoAdded: autoAddedIds, excluded: excludedIds, manageAutoAdd }) {
       agentNames = names; hiddenAgents = hidden; primary = configuredPrimary; configuredAgents = configured;
@@ -833,18 +846,37 @@ function createEngine({ adapter, schemas, now = () => Date.now(), normalise, ove
     // The engine owns the orchestration-aware Office roster/state/placement
     // projection. API callers authorize the input and serialize the result.
     buildOfficeView(options) { return require('./office/builder').buildOfficeView(this, options); },
+    runtimePresentationFor(kind) { return require('../adapters').runtimePresentationFor(kind); },
     compareOrchestrationProjection(surface, oldProjection, newProjection, fields) {
       if (typeof surface !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(surface)) return null;
       let result; try { result = compareOrchestrationProjection(oldProjection, newProjection, fields); } catch { return null; }
       let key = surface;
       if (!shadowParity.has(key) && shadowParity.size >= MAX_PARITY_SURFACES) key = '$overflow';
-      const previous = shadowParity.get(key) || { comparisons: 0, mismatches: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 };
+      const previous = shadowParity.get(key) || { comparisons: 0, mismatches: 0, skippedUnsynced: 0, shadowErrors: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 };
       shadowParity.set(key, { comparisons: Math.min(1_000_000, previous.comparisons + 1),
         mismatches: Math.min(1_000_000, previous.mismatches + (result.equal ? 0 : 1)),
+        skippedUnsynced: previous.skippedUnsynced,
+        shadowErrors: previous.shadowErrors,
         changedRows: Math.min(1_000_000, previous.changedRows + result.changedRows),
         overflowKeys: Math.min(1_000_000, previous.overflowKeys + result.overflowKeys),
         overflowSurfaces: Math.min(1_000_000, previous.overflowSurfaces + (key === '$overflow' && surface !== key ? 1 : 0)) });
       return result;
+    },
+    skipOrchestrationProjection(surface, reason = 'unsynced') {
+      if (reason !== 'unsynced' || typeof surface !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(surface)) return false;
+      const key = shadowParity.has(surface) || shadowParity.size < MAX_PARITY_SURFACES ? surface : '$overflow';
+      const previous = shadowParity.get(key) || { comparisons: 0, mismatches: 0, skippedUnsynced: 0, shadowErrors: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 };
+      shadowParity.set(key, { ...previous, skippedUnsynced: Math.min(1_000_000, previous.skippedUnsynced + 1),
+        overflowSurfaces: Math.min(1_000_000, previous.overflowSurfaces + (key === '$overflow' && surface !== key ? 1 : 0)) });
+      return true;
+    },
+    recordOrchestrationShadowError(surface) {
+      if (typeof surface !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(surface)) return false;
+      const key = shadowParity.has(surface) || shadowParity.size < MAX_PARITY_SURFACES ? surface : '$overflow';
+      const previous = shadowParity.get(key) || { comparisons: 0, mismatches: 0, skippedUnsynced: 0, shadowErrors: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 };
+      shadowParity.set(key, { ...previous, shadowErrors: Math.min(1_000_000, previous.shadowErrors + 1),
+        overflowSurfaces: Math.min(1_000_000, previous.overflowSurfaces + (key === '$overflow' && surface !== key ? 1 : 0)) });
+      return true;
     },
     orchestrationParityCounters: () => Object.fromEntries([...shadowParity.entries()]
       .sort(([a], [b]) => a.localeCompare(b)).map(([surface, counts]) => [surface, { ...counts }])),

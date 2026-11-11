@@ -5,8 +5,9 @@
 // host/team annotations, roster construction, and placement live here. The
 // legacy API projector remains independent for rollback/parity comparison.
 const { projectOfficeOccupant, projectOfficeTeamOccupants, projectOfficeTeamPlacementPopulation } = require('./team-projection');
-const { projectOfficeRoster, projectOfficePlacement } = require('./roster');
+const { projectOfficeRoster, projectOfficePlacement, projectFloorAgentGroups, withoutTeamMembership } = require('./roster');
 const { buildOfficeVM: buildRuntimeOfficeView } = require('./base-view');
+const { allowsPrincipal } = require('../../security/orchestrator-team-resources');
 
 function buildOfficeView(engine, {
   office, snapshot, principal, projection, planningOffice, tracker, planningTracker = tracker, sourceEnabled, baseOptions = null,
@@ -14,10 +15,20 @@ function buildOfficeView(engine, {
   layout, index, now, canReadSessions, agentPresenceWindowMs, idleTransitionDebounceMs,
   homeAssignments = null, rememberHomeAssignments = null, persist = true,
 }) {
+  const canReadTeams = scope?.includeTeams !== false && allowsPrincipal(principal, 'teams', 'read');
   if (!office) {
     if (!baseOptions || typeof baseOptions !== 'object') throw new TypeError('base Office view options are required');
     office = buildRuntimeOfficeView({ ...baseOptions, engine });
   }
+  const authorizedOffice = value => {
+    const authorized = canReadTeams ? value : withoutTeamMembership(value);
+    // The floor's agent collections are part of the canonical OfficeVM even
+    // when no team source is configured. Ordinary agents still need a
+    // server-authored unassigned group in that case.
+    return authorized && Array.isArray(authorized.rosterFloors)
+      ? { ...authorized, rosterFloors: projectFloorAgentGroups(authorized.rosterFloors, authorized.occupants, []) }
+      : authorized;
+  };
   const limited = scope?.canReadSessions === false;
   if (limited) {
     // Limited callers receive a VM built without transcript-derived fields.
@@ -27,7 +38,7 @@ function buildOfficeView(engine, {
       planningOffice = buildRuntimeOfficeView({ ...planningBaseOptions, engine, canReadSessions: true,
         tracker: planningTracker });
     }
-    if (!snapshot || !sourceEnabled || snapshot.sourcesReady === false || !planningOffice) return office;
+    if (!snapshot || !sourceEnabled || snapshot.sourcesReady === false || !planningOffice) return authorizedOffice(office);
     if (scope.includeTeams !== true) {
       const planningOccupants = projectOfficeTeamPlacementPopulation(planningOffice, snapshot, {
         runtimeAgents: engine.agents(), primaryAgentId: engine.primaryAgent()?.id || null,
@@ -36,10 +47,11 @@ function buildOfficeView(engine, {
       });
       return projectOfficePlacement(office, { layout, index, projectOccupantId: projection.occupantId, now, tracker,
         planningOccupants, engine, canReadSessions: false, idleTransitionDebounceMs,
+        teamSnapshot: snapshot, canReadTeams,
         homeAssignments, ...(persist && typeof rememberHomeAssignments === 'function' ? { rememberHomeAssignments } : {}) });
     }
   }
-  if (!snapshot || !sourceEnabled) return office;
+  if (!snapshot || !sourceEnabled) return authorizedOffice(office);
   const agents = engine.agents(), links = snapshot.identityLinks || [];
   const rows = new Map((snapshot.agents || []).map(row => [row.id, row]));
   const occupantAgent = occupant => occupant.role === 'primary' ? engine.primaryAgent() : agents.find(agent => occupant.id === 'agent:' + agent.id);
@@ -81,6 +93,7 @@ function buildOfficeView(engine, {
   return projectOfficePlacement(roster, { layout, index, projectOccupantId: projection.occupantId, now, tracker,
     planningOccupants: placementPopulation, engine, canReadSessions: limited ? false : canReadSessions,
     idleTransitionDebounceMs,
+    teamSnapshot: snapshot, canReadTeams,
     homeAssignments,
     ...(persist && typeof rememberHomeAssignments === 'function' ? { rememberHomeAssignments } : {}) });
 }

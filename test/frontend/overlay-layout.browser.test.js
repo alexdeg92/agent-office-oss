@@ -121,8 +121,18 @@ for(const width of [390,1440])for(const theme of ['light','dark'])test(`register
     const split=fixture.cookie.indexOf('=');await chatPage.context().addCookies([{name:fixture.cookie.slice(0,split),value:fixture.cookie.slice(split+1),url:chatBrowser.origin,httpOnly:true,sameSite:'Lax'}]);
     await chatPage.goto(chatBrowser.origin+'/discuter',{waitUntil:'domcontentloaded'});
     const target=chatPage.locator(`[data-chat-agent="${fixture.targetId}"]`);await target.waitFor({state:'visible'});await target.click();
-    const fresh=chatPage.getByRole('button',{name:'Nouvelle discussion'});await fresh.waitFor({state:'visible'});await fresh.click();
-    await chatPage.locator('#chat-texte').fill('Peux-tu vérifier la dernière version ?');await chatPage.locator('.ao-chat__send').click();
+    const fresh=chatPage.getByRole('button',{name:'Nouvelle discussion'});await fresh.waitFor({state:'visible'});
+    const previousDiscussion=new URL(chatPage.url()).searchParams.get('discussion');await fresh.click();
+    // On desktop the prior conversation stays visible while creation is in
+    // flight. Wait until the route selects the new session before composing,
+    // just as the mobile hidden-pane locator naturally does.
+    await chatPage.waitForFunction(previous=>{
+      const current=new URL(location.href).searchParams.get('discussion');
+      return current&&current!==previous;
+    },previousDiscussion);
+    const composer=chatPage.locator('#chat-texte'),message='Peux-tu vérifier la dernière version ?';
+    await composer.fill(message);assert.equal(await composer.inputValue(),message,'new-session composer retains the entered message');
+    const sendButton=chatPage.locator('.ao-chat__send');assert.equal(await sendButton.isEnabled(),true,'send is enabled after composing');await sendButton.click();
     const queued=chatPage.locator('[data-queue-state="queued"]');await queued.waitFor({state:'visible'});
     await openAndAudit(chatPage,queued.locator('[data-queue-send-now]'),{overlay:'.ao-chat__send-now-modal',kind:'dialog'},`T-0238 send-now ${width}px ${theme}`);
     assert.deepEqual(await chatPage.evaluate(()=>window.__AO_VM_ISSUES||[]),[]);

@@ -31,6 +31,8 @@ const MAX_CAPABILITY_KEYS = 128;
 const MAX_PARITY_ROWS = 10_000;
 const MAX_PARITY_KEYS = 1024;
 const MAX_PARITY_SURFACES = 16;
+const MAX_PARITY_TEAM_GROUPS = 10_000;
+const MAX_PARITY_TEAM_GROUP_BYTES = 256 * 1024;
 const SOURCE_ID = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 
 function jsonStringChar(text, index) {
@@ -159,7 +161,7 @@ function createOrchestrationSources({ onIssue = () => {}, onChange = () => {}, n
       try { prior.adapter.stop?.(); prior.adapter.close?.(); } catch { issue(id, 'source.close-failed'); }
     }
     sources.set(id, { id, adapter, capabilities, enabled: enabled === true, status: enabled ? 'unavailable' : 'disabled',
-      observedAt: null, rows: emptyRows(), privateRefs: Object.freeze({}), quality: { invalidRows: 0, invalidRowsByTable: Object.create(null) }, lastError: null });
+      observedAt: null, sourceRevision: null, identityRevision: null, rows: emptyRows(), privateRefs: Object.freeze({}), quality: { invalidRows: 0, invalidRowsByTable: Object.create(null) }, lastError: null });
     sources.get(id).bytes = 0;
     sources.get(id).issuedGeneration = 0;
     sources.get(id).generation = 0;
@@ -181,11 +183,20 @@ function createOrchestrationSources({ onIssue = () => {}, onChange = () => {}, n
     return { ok: false, issue: code };
   }
 
-  function ingestGeneration(id, snapshot, { observedAt = now(), generation, sourceRef } = {}) {
+  function ingestGeneration(id, snapshot, { observedAt = now(), generation, sourceRevision, identityRevision, sourceRef } = {}) {
     const source = sources.get(id);
     if (!source || !source.enabled || closed) return { ok: false, issue: 'source-unavailable' };
     if (sourceRef && source !== sourceRef) return { ok: false, issue: 'stale-generation' };
     if (generation !== source.issuedGeneration) return { ok: false, issue: 'stale-generation' };
+    const admittedRevision = sourceRevision ?? (source.sourceRevision === null ? generation : source.sourceRevision + 1);
+    if (!Number.isSafeInteger(admittedRevision) || admittedRevision < 0) return reject(source, id, 'invalid-source-revision');
+    if (source.sourceRevision !== null && admittedRevision < source.sourceRevision) {
+      return { ok: false, issue: 'stale-generation' };
+    }
+    if (identityRevision !== undefined && identityRevision !== null && (!Number.isSafeInteger(identityRevision) || identityRevision < 0
+        || (source.identityRevision !== null && identityRevision < source.identityRevision))) {
+      return reject(source, id, 'invalid-identity-revision');
+    }
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
       return reject(source, id, 'invalid-snapshot');
     }
@@ -266,6 +277,8 @@ function createOrchestrationSources({ onIssue = () => {}, onChange = () => {}, n
     source.rows = Object.freeze(rows);
     source.privateRefs = Object.freeze(privateCopy);
     source.observedAt = observedAt;
+    source.sourceRevision = admittedRevision;
+    if (Number.isSafeInteger(identityRevision) && identityRevision >= 0) source.identityRevision = identityRevision;
     source.bytes = candidateBytes;
     source.generation = generation;
     source.status = snapshot.status === 'stale' ? 'stale' : 'available';
@@ -318,9 +331,19 @@ function createOrchestrationSources({ onIssue = () => {}, onChange = () => {}, n
         privateSources[source.id] = source.privateRefs;
       }
     }
+    const sourceRevisions = Object.create(null);
+    const identityRevisions = Object.create(null);
+    for (const source of sources.values()) {
+      if (source.enabled && ['available', 'stale'].includes(source.status) && source.observedAt !== null
+          && Number.isSafeInteger(source.sourceRevision)) sourceRevisions[source.id] = source.sourceRevision;
+      if (source.enabled && ['available', 'stale'].includes(source.status) && source.observedAt !== null
+          && Number.isSafeInteger(source.identityRevision)) identityRevisions[source.id] = source.identityRevision;
+    }
     const snapshot = { ...rows, sourceStatus: states,
       sourcesReady: states.every(row => row.status !== 'unavailable') };
     Object.defineProperty(snapshot, 'privateSources', { enumerable: false, value: Object.freeze(privateSources) });
+    Object.defineProperty(snapshot, 'sourceRevisions', { enumerable: false, value: Object.freeze(sourceRevisions) });
+    Object.defineProperty(snapshot, 'identityRevisions', { enumerable: false, value: Object.freeze(identityRevisions) });
     return Object.freeze(snapshot);
   }
 
@@ -362,19 +385,57 @@ function createOrchestrationSources({ onIssue = () => {}, onChange = () => {}, n
 // Compare only approved, value-free semantic fields. Return aggregate counts;
 // neither identifiers nor source values are retained or logged.
 const PARITY_FIELDS = new Set(['id', 'parentId', 'parentKey', 'teamId', 'teamIds', 'groupId', 'order', 'floorId', 'stationUid',
-  'state', 'stateLabel', 'status', 'evidenceLevel', 'observedAt', 'staleAfter', 'roleKind', 'hostRole', 'hostStatus']);
+  'state', 'stateLabel', 'status', 'evidenceLevel', 'observedAt', 'staleAfter', 'roleKind', 'hostRole', 'hostStatus', 'teamGroups', 'teamLegend']);
+const teamGroupSummary = group => ({
+  id: group?.id ?? null,
+  label: group?.label ?? null,
+  accentToken: group?.accentToken ?? null,
+  floorId: group?.floorId ?? null,
+  leadOccupantId: group?.leadOccupantId ?? null,
+  members: Array.isArray(group?.members) ? group.members.map(member => ({
+    occupantId: member?.occupantId ?? null,
+    roleLabel: member?.roleLabel ?? null,
+    parentLabel: member?.parentLabel ?? null,
+    runtimeLabel: member?.runtimeLabel ?? null,
+    runtimeMark: member?.runtimeMark ?? null,
+    stateLabel: member?.stateLabel ?? null,
+    stateTone: member?.stateTone ?? null,
+  })) : null,
+  memberCount: group?.memberCount ?? null,
+  memberCountLabel: group?.memberCountLabel ?? null,
+  pod: group?.pod ? {
+    floorId: group.pod.floorId ?? null,
+    coordinateSpace: group.pod.coordinateSpace ?? null,
+    zone: group.pod.zone ?? null,
+    seats: Array.isArray(group.pod.seats) ? group.pod.seats.map(seat => ({
+      occupantId: seat?.occupantId ?? null,
+      stationUid: seat?.stationUid ?? null,
+      standingPoint: seat?.standingPoint ?? null,
+    })) : null,
+  } : null,
+  sharedLeadLinks: Array.isArray(group?.sharedLeadLinks) ? group.sharedLeadLinks.map(link => ({
+    occupantId: link?.occupantId ?? null,
+    teamId: link?.teamId ?? null,
+    label: link?.label ?? null,
+    fromPoint: link?.fromPoint ?? null,
+    toPoint: link?.toPoint ?? null,
+  })) : null,
+});
+
 function compareProjection(oldValue, newValue, fields = ['id', 'parentId', 'state', 'status']) {
   if (!Array.isArray(fields) || fields.length > PARITY_FIELDS.size || fields.some(field => !PARITY_FIELDS.has(field))) {
     throw new TypeError('unsupported parity field');
   }
+  const compareTeamGroups = fields.includes('teamGroups') || fields.includes('teamLegend');
+  const rowFields = fields.filter(field => field !== 'teamGroups' && field !== 'teamLegend');
   const rows = value => Array.isArray(value) ? value : Array.isArray(value?.occupants) ? value.occupants : [];
   const leftRows = rows(oldValue), rightRows = rows(newValue);
-  if (leftRows.length > MAX_PARITY_ROWS || rightRows.length > MAX_PARITY_ROWS) throw new TypeError('parity row limit');
+  if (rowFields.length && (leftRows.length > MAX_PARITY_ROWS || rightRows.length > MAX_PARITY_ROWS)) throw new TypeError('parity row limit');
   const summarize = value => rows(value).map((row, position) => ({
     id: typeof row?.id === 'string' ? row.id : '', position,
-    values: fields.map(field => row?.[field] ?? null),
+    values: rowFields.map(field => row?.[field] ?? null),
   })).sort((a, b) => a.id.localeCompare(b.id) || a.position - b.position);
-  const left = summarize(oldValue), right = summarize(newValue);
+  const left = rowFields.length ? summarize(oldValue) : [], right = rowFields.length ? summarize(newValue) : [];
   const limit = Math.min(MAX_PARITY_KEYS, Math.max(left.length, right.length));
   let changedRows = 0, overflowKeys = 0;
   const comparePair = (a, b) => a.id !== b.id || a.position !== b.position || JSON.stringify(a.values) !== JSON.stringify(b.values);
@@ -389,6 +450,59 @@ function compareProjection(oldValue, newValue, fields = ['id', 'parentId', 'stat
     if (changed) {
       if (changedRows < limit) changedRows++;
       else overflowKeys++;
+    }
+  }
+
+  if (compareTeamGroups) {
+    const groups = value => Array.isArray(value?.teamGroups) ? value.teamGroups : [];
+    const leftGroups = groups(oldValue), rightGroups = groups(newValue);
+    const legend = value => Array.isArray(value?.teamLegend) ? value.teamLegend : [];
+    const leftLegend = fields.includes('teamLegend') ? legend(oldValue) : [];
+    const rightLegend = fields.includes('teamLegend') ? legend(newValue) : [];
+    let groupDiffs = null;
+    if (leftGroups.length <= MAX_PARITY_TEAM_GROUPS && rightGroups.length <= MAX_PARITY_TEAM_GROUPS) {
+      const summarizeGroups = list => list.map((group, position) => ({
+        id: typeof group?.id === 'string' ? group.id : '', position, value: teamGroupSummary(group),
+      })).sort((a, b) => a.id.localeCompare(b.id) || a.position - b.position);
+      // Preflight both inputs before mapping any nested member/link arrays.
+      if (leftLegend.length <= MAX_PARITY_TEAM_GROUPS && rightLegend.length <= MAX_PARITY_TEAM_GROUPS
+          && boundedJsonBytes([leftGroups, leftLegend], MAX_PARITY_TEAM_GROUP_BYTES) !== null
+          && boundedJsonBytes([rightGroups, rightLegend], MAX_PARITY_TEAM_GROUP_BYTES) !== null) {
+        const oldSummary = summarizeGroups(leftGroups), newSummary = summarizeGroups(rightGroups);
+        if (boundedJsonBytes(oldSummary, MAX_PARITY_TEAM_GROUP_BYTES) === null
+            || boundedJsonBytes(newSummary, MAX_PARITY_TEAM_GROUP_BYTES) === null) {
+          groupDiffs = null;
+        } else {
+          groupDiffs = 0;
+          let oldIndex = 0, newIndex = 0;
+          while (oldIndex < oldSummary.length || newIndex < newSummary.length) {
+            let changed = false;
+            if (oldIndex >= oldSummary.length) { newIndex++; changed = true; }
+            else if (newIndex >= newSummary.length) { oldIndex++; changed = true; }
+            else if (oldSummary[oldIndex].id < newSummary[newIndex].id) { oldIndex++; changed = true; }
+            else if (oldSummary[oldIndex].id > newSummary[newIndex].id) { newIndex++; changed = true; }
+            else {
+              changed = oldSummary[oldIndex].position !== newSummary[newIndex].position
+                || JSON.stringify(oldSummary[oldIndex].value) !== JSON.stringify(newSummary[newIndex].value);
+              oldIndex++; newIndex++;
+            }
+            if (changed) groupDiffs++;
+          }
+          if (fields.includes('teamLegend') && JSON.stringify(leftLegend) !== JSON.stringify(rightLegend)) groupDiffs++;
+        }
+      }
+    }
+    // A group projection that exceeds its comparison budget is conservatively
+    // reported as a value-free mismatch, never silently treated as parity.
+    if (groupDiffs === null) {
+      if (changedRows < MAX_PARITY_KEYS) changedRows++;
+      overflowKeys++;
+    }
+    else if (groupDiffs > 0) {
+      const groupLimit = Math.min(MAX_PARITY_KEYS, Math.max(leftGroups.length, rightGroups.length, leftLegend.length, rightLegend.length));
+      const added = Math.min(groupDiffs, Math.max(0, groupLimit - changedRows));
+      changedRows += added;
+      overflowKeys += groupDiffs - added;
     }
   }
   return Object.freeze({ compared: Math.max(left.length, right.length), oldCount: left.length, newCount: right.length,

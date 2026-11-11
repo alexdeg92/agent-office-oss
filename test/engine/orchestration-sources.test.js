@@ -121,9 +121,67 @@ test('private cross-source refs stay outside canonical rows, diagnostics, and pa
   const parity = engine.compareOrchestrationProjection('office', [{ id: 'opaque-1', state: 'working', name: 'private name' }],
     [{ id: 'opaque-1', state: 'idle', name: 'other private name' }], ['id', 'state']);
   assert.deepEqual(parity, { compared: 1, oldCount: 1, newCount: 1, changedRows: 1, overflowKeys: 0, equal: false });
-  assert.deepEqual(engine.orchestrationParityCounters(), { office: { comparisons: 1, mismatches: 1, changedRows: 1, overflowKeys: 0, overflowSurfaces: 0 } });
+  assert.deepEqual(engine.orchestrationParityCounters(), { office: { comparisons: 1, mismatches: 1, skippedUnsynced: 0, shadowErrors: 0, changedRows: 1, overflowKeys: 0, overflowSurfaces: 0 } });
   assert.equal(engine.compareOrchestrationProjection('office', [], [], ['name']), null, 'non-approved comparison fields are rejected');
   assert.ok(!JSON.stringify(engine.orchestrationParityCounters()).includes('private'));
+});
+
+test('Office parity counts bounded team-group semantic changes without retaining values', t => {
+  const { engine } = setup(); t.after(() => engine.close());
+  const group = { id: 'team-a', label: { key: 'custom', params: { text: 'Private team label' } }, accentToken: 'teal',
+    floorId: '2', leadOccupantId: 'agent:lead', members: [{ occupantId: 'agent:lead', roleLabel: null, parentLabel: null,
+      runtimeLabel: { key: 'team.runtime.codex' }, runtimeMark: null, stateLabel: { key: 'agentState.idle' }, stateTone: 'idle' }],
+    memberCount: 1, memberCountLabel: { key: 'office.team.memberCount', params: { n: 1 } },
+    pod: { floorId: '2', coordinateSpace: 'floor-grid', zone: { bounds: { minX: 0, minY: 1, maxX: 4, maxY: 5 },
+      polygon: [{ x: 0, y: 1 }, { x: 4, y: 1 }, { x: 4, y: 5 }, { x: 0, y: 5 }] }, seats: [] },
+    sharedLeadLinks: [{ occupantId: 'agent:other', teamId: 'team-b', label: { key: 'team.other' },
+      fromPoint: { x: 2, y: 3 }, toPoint: { x: 6, y: 3 } }] };
+  const legend = [{ teamId: 'team-a', label: group.label, accentToken: group.accentToken }];
+  const before = { occupants: [{ id: 'agent:lead', state: 'idle' }], teamGroups: [group], teamLegend: legend };
+  const after = { ...before, teamGroups: [{ ...group, sharedLeadLinks: [{ ...group.sharedLeadLinks[0], toPoint: { x: 7, y: 3 } }] }] };
+  const parity = engine.compareOrchestrationProjection('office', before, after, ['id', 'state', 'teamGroups', 'teamLegend']);
+  assert.equal(parity.equal, false);
+  assert.equal(parity.changedRows, 1, 'a server-projected shared-link endpoint change contributes to Office parity');
+  assert.equal(engine.orchestrationParityCounters().office.mismatches, 1);
+  assert.equal(engine.orchestrationParityCounters().office.changedRows, 1);
+  assert.ok(!JSON.stringify(engine.orchestrationParityCounters()).includes('Private team label'));
+  const duplicatedLinkGroup = { ...group, sharedLeadLinks: [...group.sharedLeadLinks,
+    { ...group.sharedLeadLinks[0], teamId: 'team-a', fromPoint: group.sharedLeadLinks[0].toPoint, toPoint: group.sharedLeadLinks[0].fromPoint }] };
+  assert.equal(engine.compareOrchestrationProjection('office', { teamGroups: [group] },
+    { teamGroups: [duplicatedLinkGroup] }, ['teamGroups']).equal, false,
+  'Office parity detects an extra reciprocal shared-lead connector');
+  const orderedLegend = [{ teamId: 'team-b', label: { key: 'team.b' }, accentToken: 'violet' }, ...legend];
+  const reversedLegend = [...orderedLegend].reverse();
+  assert.equal(engine.compareOrchestrationProjection('office', { teamLegend: orderedLegend },
+    { teamLegend: reversedLegend }, ['teamLegend']).equal, false, 'legend order is part of Office parity');
+});
+
+test('parity counts an unsynced source revision as skipped and still records aligned differences', t => {
+  const { engine } = setup(); t.after(() => engine.close());
+  assert.equal(engine.skipOrchestrationProjection('office', 'unsynced'), true);
+  assert.deepEqual(engine.orchestrationParityCounters(), { office: {
+    comparisons: 0, mismatches: 0, skippedUnsynced: 1, shadowErrors: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0,
+  } });
+  const result = engine.compareOrchestrationProjection('office', [{ id: 'row-a', state: 'working' }],
+    [{ id: 'row-a', state: 'idle' }], ['id', 'state']);
+  assert.equal(result.equal, false);
+  assert.deepEqual(engine.orchestrationParityCounters(), { office: {
+    comparisons: 1, mismatches: 1, skippedUnsynced: 1, shadowErrors: 0, changedRows: 1, overflowKeys: 0, overflowSurfaces: 0,
+  } });
+});
+
+test('source revision metadata is private and stale revisions cannot overwrite a newer admission', t => {
+  const { engine } = setup(); t.after(() => engine.close());
+  assert.equal(engine.ingestOrchestrationSource('synthetic-source', sourceRows(), { observedAt: NOW, sourceRevision: 8, identityRevision: 3 }).ok, true);
+  const projection = engine.orchestrationProjectionSnapshot();
+  assert.equal(projection.sourceRevisions['synthetic-source'], 8);
+  assert.equal(projection.identityRevisions['synthetic-source'], 3);
+  assert.equal(JSON.stringify(projection).includes('sourceRevisions'), false);
+  assert.equal(JSON.stringify(projection).includes('identityRevisions'), false);
+  assert.deepEqual(engine.ingestOrchestrationSource('synthetic-source', sourceRows(), { observedAt: NOW, sourceRevision: 7 }),
+    { ok: false, issue: 'stale-generation' });
+  assert.equal(engine.orchestrationProjectionSnapshot().sourceRevisions['synthetic-source'], 8);
+  assert.equal(engine.orchestrationProjectionSnapshot().identityRevisions['synthetic-source'], 3);
 });
 
 test('disabled sources expose no records or private references and close their adapters', t => {

@@ -1356,3 +1356,28 @@ test('v3 conversation lifecycle is owner-scoped, idempotent, audited, undoable, 
   assert.deepEqual(audit.map(row=>row.command),['chat.renameSession','chat.renameSession','chat.archiveSession','chat.archiveSession','chat.deleteSession','chat.deleteSession','chat.undoDeleteSession']);
   assert.equal(audit.at(-1).target,sessionId);
 });
+
+test('streams reject direct internal scope ids even with a valid owner token and retain public aliases',async t=>{
+  const f=await fixture(t),index=await f.request('GET','/api/v3/chat/agents'),agent=index.json.data.agents.find(row=>row.kind==='agent');
+  const created=await f.request('POST',`/api/v3/chat/agents/${agent.id}/sessions`,{}, {'Idempotency-Key':key()});assert.equal(created.status,201);
+  const sessionId=created.json.data.result.sessionId;
+  assert.equal((await f.request('GET',`/api/v3/chat/agents/${agent.id}/sessions`)).status,200);
+  assert.equal((await f.request('GET',`/api/v3/chat/sessions/${sessionId}`)).status,200);
+  const internal=['chat-agents-scope','chat-agent-sessions-scope','chat-session-scope'].map(name=>{
+    const ids=f.api.topics.ids(name);assert.equal(ids.length,1);return ids[0];
+  });
+  const rejected=internal.map(topic=>({topic,issue:'permission-denied'}));
+  for(const user of [f.owner,f.member]){
+    const stream=openSse(f.base,'/api/v3/stream?topics='+encodeURIComponent(['chat-agents',...internal].join(',')),{cookie:f.cookieFor(user)});t.after(()=>stream.close());
+    const hello=await stream.next(frame=>frame.event==='hello');assert.deepEqual(hello.data.rejected,rejected);
+    await stream.next(frame=>frame.event==='snapshot'&&frame.data.topic==='chat-agents');
+    const streamId=hello.data.streamId;
+    const changed=await f.request('POST',`/api/v3/stream/${streamId}/topics`,{add:internal},{},user);assert.equal(changed.status,200);
+    assert.deepEqual(changed.json.data.rejected,rejected);assert.deepEqual(changed.json.data.topics,['chat-agents']);
+    assert.equal(stream.frames.some(frame=>internal.includes(frame.data?.topic)),false);
+    const resync=await f.request('POST',`/api/v3/stream/${streamId}/resync`,{topic:internal[0]},{},user);assert.equal(resync.status,403);
+  }
+  const aliases=[`chat-agent-sessions:${agent.id}`,`chat-session:${sessionId}`];
+  const publicStream=openSse(f.base,'/api/v3/stream?topics='+encodeURIComponent(aliases.join(',')),{cookie:f.cookie});t.after(()=>publicStream.close());
+  for(const topic of aliases)await publicStream.next(frame=>frame.event==='snapshot'&&frame.data.topic===topic);
+});

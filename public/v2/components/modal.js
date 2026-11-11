@@ -5,7 +5,7 @@ import { Frame, Icon } from './ui.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function Modal({ title, desc, onClose, footer, children, size = 'sm', class: cls = '' }) {
+export function Modal({ title, desc, onClose, footer, children, size = 'sm', class: cls = '', restoreFocus = true }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
     const opener = document.activeElement;
@@ -21,7 +21,7 @@ export function Modal({ title, desc, onClose, footer, children, size = 'sm', cla
       else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
     };
     document.addEventListener('keydown', onKey, true);
-    return () => { document.removeEventListener('keydown', onKey, true); if (opener && opener.focus) opener.focus(); };
+    return () => { document.removeEventListener('keydown', onKey, true); if (restoreFocus && opener && opener.focus) opener.focus(); };
   }, []);
   return html`<div class="bu-scrim" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <${Frame} elementRef=${ref} class=${'bu-modal' + (size === 'sm' ? ' bu-modal--sm' : '') + (cls ? ' ' + cls : '')} role="dialog" aria-modal="true" aria-labelledby="modal-title" bodyClass="bu-modal__body" head=${html`

@@ -56,34 +56,35 @@ for (const theme of ['light','dark']) test(`Bureau mobile cards, labelled map an
     await p.setViewportSize({ width: 390, height: 844 });
     await visit(p, h.origin, '/bureau?mock=lignee', '.ao-bureau__stage');
     const vm = await officeFixture(); await feed(p, vm);
-    const group = p.locator('.ao-mobile-group').filter({ has: p.locator('[data-mobile-agent="agent:pm-t98"]') });
+    const teamFloor = vm.occupants.find(row => row.id === 'agent:pm-t98').floorId;
+    await p.locator('.ao-floor-mobile-trigger').click();
+    await p.locator('[role=dialog] [data-floor="' + teamFloor + '"]').click();
+    await p.waitForFunction(id => document.querySelector('.ao-bureau__stage')?.dataset.floor === id, teamFloor);
+    const groupData = vm.rosterFloors.find(row => row.id === teamFloor).agentGroups.find(row => row.occupantIds.includes('agent:pm-t98'));
+    const group = p.locator(`.ao-mobile-team-preview[data-floor-agent-group="${groupData.id}"]`);
     await group.waitFor(); await group.locator('.bu-avatar[data-avatar-ready=true]').first().waitFor();
-    const item = vm.rosterItems.find(item => item.rootId === 'agent:pm-t98');
-    assert.equal(await group.locator('.bu-avatar').count(), item.previewOccupantIds.length);
-    assert.equal((await group.locator('.ao-mobile-stack__count').innerText()).trim(), '+5');
-    assert.match(await group.innerText(), /Sous-agents · 7/);
+    assert.equal(await group.locator('.bu-avatar').count(), Math.min(2, groupData.occupantIds.length), 'the preview stack is bounded and follows the backend group');
+    assert.ok(groupData.label?.key, 'the project group label is supplied by the OfficeVM');
+    assert.ok((await group.innerText()).trim(), 'the preview renders its backend-authored group label');
+    assert.ok((await group.innerText()).includes(String(groupData.count)), 'the preview displays the backend group count');
     const geometry = await group.evaluate(el => {
-      const stack = el.querySelector('.ao-mobile-stack').getBoundingClientRect(), label = el.querySelector('.ao-mobile-parent').getBoundingClientRect();
-      const avatar = el.querySelector('.bu-avatar'), style = getComputedStyle(avatar);
-      return { stackWidth: stack.width, labelGap: label.x - stack.right, shadow: style.boxShadow, stateColor: style.getPropertyValue('--_st').trim() };
+      const stack = el.querySelector('.ao-mobile-team-preview__avatars').getBoundingClientRect(), copy = el.querySelector('.ao-mobile-team-preview__copy').getBoundingClientRect();
+      return { labelGap: copy.x - stack.right, left: stack.left, right: copy.right };
     });
-    assert.ok(Math.abs(geometry.labelGap - 8) <= 1, JSON.stringify(geometry));
-    assert.ok(geometry.shadow.includes('4px'), 'lead keeps the same outer state ring as an individual avatar');
-    const standalone = p.locator('[data-mobile-agent=main] .bu-avatar');
-    assert.ok(Math.abs((await standalone.boundingBox()).x - (await group.locator('.bu-avatar').first().boundingBox()).x) <= 2, 'avatars share the same left alignment');
-    assert.equal(await group.locator('.ao-agentcard__name').getAttribute('title'), 'Project Manager');
-    assert.equal(await group.locator('.ao-mobile-parent .bu-cell-sub').first().innerText(), 'Claude Code');
+    const groupBox = await group.boundingBox();
+    assert.ok(geometry.labelGap >= 0 && geometry.right <= groupBox.x + groupBox.width, JSON.stringify(geometry));
     await capture(p, 'mobile-' + theme + '-390');
+    await group.click();
+    const memberSheet = p.getByRole('dialog'); await memberSheet.waitFor();
+    const memberRows = memberSheet.locator('[data-occupant]');
+    assert.equal(await memberRows.count(), groupData.occupantIds.length, 'opening a project group exposes each backend-supplied member once');
+    await memberSheet.locator('.bu-modal__header > button').click(); await memberSheet.waitFor({ state: 'detached' });
 
     // Follow the backend's team's floor so all group name pills are exercised.
-    const floor = vm.occupants.find(row => row.id === 'agent:pm-t98').floorId;
-    await p.locator('.ao-floor-mobile-trigger').click();
-    await p.locator('[role=dialog] [data-floor="' + floor + '"]').click();
-    await p.waitForFunction(id => document.querySelector('.ao-bureau__stage')?.dataset.floor === id, floor);
     const plates = p.locator('.ao-bureau__stage .ao-plate:not([hidden])'); await plates.first().waitFor();
     assert.ok(await p.locator('.ao-bureau__stage .ao-plate').count() >= 7);
     assert.ok(await plates.count() <= 3, 'mobile shows only the bounded backend shortlist');
-    const supplied = vm.rosterFloors.find(row => row.id === floor).mobileLabelIds;
+    const supplied = vm.rosterFloors.find(row => row.id === teamFloor).mobileLabelIds;
     assert.equal(await p.locator('.ao-bureau__stage').evaluate((el, ids) => [...el.aoScene.chars.values()].every(c => c.plate.hidden || ids.includes(c.id)), supplied), true);
     for (const plate of await plates.all()) {
       assert.equal(await plate.locator('.ao-plate__name').isVisible(), true, 'each shown map pill displays the supplied VM name');
@@ -106,8 +107,8 @@ for (const theme of ['light','dark']) test(`Bureau mobile cards, labelled map an
     assert.equal(await p.locator('#ao-drawer-title').innerText(), selectedName, 'visible label hit area opens the matching agent');
     await p.locator('.bu-drawer [aria-label="Fermer"]').click();
     await p.locator('#ao-drawer-title').waitFor({ state: 'detached' });
-    await p.locator('[data-overflow-count]').click();
-    const sheet = p.getByRole('dialog', { name: 'Agents au bureau', exact: true }); await sheet.waitFor();
+    await group.click();
+    const sheet = p.getByRole('dialog'); await sheet.waitFor();
     await p.evaluate(() => Promise.all(document.getAnimations().filter(a => a.playState === 'running' && a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))));
     const bounds = await sheet.evaluate(el => {
       const head = el.querySelector('.bu-modal__header').getBoundingClientRect(), close = el.querySelector('.bu-modal__header > button').getBoundingClientRect();
@@ -116,7 +117,7 @@ for (const theme of ['light','dark']) test(`Bureau mobile cards, labelled map an
     });
     assert.ok(Math.abs(bounds.rightGap) <= 1, JSON.stringify(bounds));
     assert.ok(bounds.width >= 44 && bounds.height >= 44);
-    await capture(p, 'mobile-roster-' + theme + '-390');
+    await capture(p, 'mobile-team-members-' + theme + '-390');
     await sheet.locator('.bu-modal__header > button').click(); await sheet.waitFor({ state: 'detached' });
     await p.setViewportSize({ width: 320, height: 700 });
     assert.equal(await p.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth), true);

@@ -3,6 +3,7 @@
     "ok": true,
     "result": {
       "configured": true,
+      "restartNeeded": false,
       "integrations": {
         "projet": {
           "status": "skipped",

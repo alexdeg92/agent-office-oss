@@ -265,6 +265,7 @@ function createRuntime(cfg, { now = Date.now, pollIntervalMs = POLL_INTERVAL_MS 
     } },
   } };
   return { definition: boundDefinition, files, commands: {}, reads,
+    projectDirectoryHints() { return [...new Set(files.rows().slice(0, 128).flatMap(row => typeof row.projectPath === 'string' && row.projectPath.length <= 4096 ? [row.projectPath] : []))].map(cwd => ({ cwd })); },
     attach(value) { engine = value; engine.setReads(reads); },
     async start(value, hooks = {}) { engine = value; await cycle(); if (closed) return; hooks.refreshed?.(); files.watch(change => { if (change?.path && pendingChangePaths.size < BOUNDS.sessions) pendingChangePaths.add(change.path); else pendingFullScan = true; scheduleWatchFlush(hooks); }); timer = setInterval(() => { if (cycling) { pendingFullScan = true; scheduleWatchFlush(hooks, 25); } else void cycle().then(() => hooks.refreshed?.()); }, pollIntervalMs); timer.unref?.(); },
     cycle, close() { closed = true; transcriptContinuationPending = false; clearInterval(timer); clearTimeout(debounceTimer); clearTimeout(scanContinuationTimer); clearTimeout(transcriptContinuationTimer); transcriptContinuationTimer = null; transcriptContinuationAt = 0; files.close(); engine?.close(); }, refreshFlows: async () => {}, refreshSkills: async () => {} };
@@ -293,14 +294,14 @@ async function discover({runtime={},env={}}={}) {
   }
   finally { files.close(); }
 }
-const setup = { connect: true, name: 'Claude Code', fields: fields.map(f => f.id), defaultGatewayUrl: null, capabilities: { autoAddDefault: true, brand: { mark: 'CC', color: '#b8753e', foreground: '#20130b', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' } },
+const setup = { connect: true, agentsOptional: true, name: 'Claude Code', fields: fields.map(f => f.id), defaultGatewayUrl: null, capabilities: { autoAddDefault: true, brand: { mark: 'CC', color: '#b8753e', foreground: '#20130b', providerName: 'Claude Code', logo: 'assets/connectors/claude-code.svg' } },
   configSchema: s.object({ adapter: s.literal('claude-code'), claudeCode: optionsSchema }, { extra: 'reject' }),
   env: ({ runtime }) => ({ AO_CLAUDE_HOME: runtime.claudeCode.home }),
   config: rt => ({ adapter: 'claude-code', claudeCode: defaults(rt) }),
   agents: () => [], discover,
   settings: { detectionIdentity: ({ cfg, detection }) => ({ paths: [detection ? detection.home || detection.checkedPaths?.[0] : cfg.claudeHome || cfg.runtimeConfig?.claudeCode?.home] }), fields, envKeys: { home: 'AO_CLAUDE_HOME' }, values, resolve, secret: () => null,
-    detectedValues: (d = {}) => {
-      const home = d.home || d.checkedPaths?.find(p => path.basename(p) === '.claude') || paths({}).claudeHome;
+    detectedValues: (d = {}, env = {}) => {
+      const home = d.home || d.checkedPaths?.find(p => path.basename(p) === '.claude') || paths(env).claudeHome;
       return { ...values({ runtimeConfig: { claudeCode: { home } } }), home };
     },
     async probe({ runtime }) {

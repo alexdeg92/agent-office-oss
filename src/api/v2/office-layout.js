@@ -13,6 +13,7 @@ const { ApiError, invalid } = require('./errors');
 const { officeDefaults } = require('./vm/office');
 const { project2x: P2 } = require('./project2x');
 const { redactChatIdentity } = require('../../security/redact-text');
+const { dedupeRows } = require('./vm/dedupe');
 const backendRules = require('../../engine/office/layout-rules');
 const { floorId, floorKind, floorLayout, saveFloor, validateFloors } = require('../../engine/office/floors');
 
@@ -102,6 +103,9 @@ function seenAs(x, version) {
   }
   return Object.assign({}, row, { id: P2.occupantId(id), role: P2.occupantRole(role) });
 }
+function seenRowsAs(rows, version) {
+  return dedupeRows((rows || []).map(row => seenAs(row, version)));
+}
 
 function validate(data, hideAgents = false, previous = null) {
   const bad = structural(data);
@@ -156,7 +160,7 @@ function mountOfficeLayout({ r, store, topics, authed, guard, ok, actorOf, actor
       theme: resolveTheme(data.theme, t, typeof timeZone === 'function' ? timeZone() : timeZone),
       default: { data: asVersion(layoutViewData(selected ? floorLayout(off.layout, off.index, selected) : off.layout), version) },
       revisions: store.office.revisions(l.id).map((x) => ({ id: String(x.revision), revision: x.revision, updatedAt: x.updatedAt, updatedBy: actorOf(x.updatedBy) })),
-      agentsSeen: store.office.seenRecent(t).map((x) => seenAs(x, version)),
+      agentsSeen: seenRowsAs(store.office.seenRecent(t), version),
     };
   };
   topics.define('layout', { params: ['floorId'], build: (q, P) => vmOf(P.version, selectedFloor(q.floorId)) });

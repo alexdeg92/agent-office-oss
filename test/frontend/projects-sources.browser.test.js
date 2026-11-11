@@ -85,7 +85,11 @@ for(const width of [1440,390])for(const theme of ['light','dark'])test(`Projects
   assert.equal(portraitSources.length,memberRows.length,'every roster member renders its supplied Bureau portrait');
   assert.equal(new Set(portraitSources).size,portraitSources.length,`no two members render the same portrait asset: ${JSON.stringify({sources:portraitSources,looks:memberRows.map(member=>({id:member.id,name:member.identity.name,look:member.portrait.look})),expected:expectedMembers})}`);
   for(const member of memberRows){
-    if(['pm','designer'].includes(member.identity.name))assert.equal(member.roleLabel,null,`${member.identity.name} role label is omitted when it repeats the name`);
+    if(['pm','designer'].includes(member.identity.name)){
+      assert.equal(h.sourceRoleLabelsByMember[member.id],member.identity.name,
+        'duplicate name/role comes from a raw registered member record read by the Agent Team PM adapter');
+      assert.equal(member.roleLabel,null,`${member.identity.name} role label is omitted when it repeats the source role`);
+    }
     if(member.roleLabel)assert.notEqual(member.roleLabel.trim().toLocaleLowerCase('en'),member.identity.name.trim().toLocaleLowerCase('en'));
     const row=people.locator(`[data-member-id="${member.id}"]`),role=row.locator('.ao-project-member__role');
     if(['pm','designer'].includes(member.identity.name))assert.equal(await role.count(),0,`${member.identity.name} has no duplicate role line on the rendered People sheet`);

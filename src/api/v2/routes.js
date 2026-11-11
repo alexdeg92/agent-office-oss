@@ -52,6 +52,7 @@ const WRITE_CLASSES = [
   // S14b: the office layout and the UI prefs (store)
   { method: 'PUT', re: /^\/api\/v[23]\/office\/layout(\/theme)?\/?$/i, cls: 'store' },
   { method: 'PATCH', re: /^\/api\/v[23]\/prefs\/?$/i, cls: 'store' },
+  { method: '*', re: /^\/api\/v3\/me\/avatar(?:\/.*)?\/?$/i, cls: 'store' },
 ];
 // R22-08: the contract version is the mount path's, case-insensitively, as Express matches it (/API/V3 is v3, everywhere)
 const apiVersionOf = (req) => (/^\/api\/v3$/i.test(String(req.baseUrl || '')) ? 3 : 2);
@@ -123,6 +124,13 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     if (!user || user.status !== 'active' || (req.session.authGeneration ?? 0) !== user.auth_generation) return null;
     return principalFromUser(user);
   };
+  // Legacy single-owner mode: the signed env-login cookie has no user row until identity is activated.
+  // Same rule as team comments and Chat (never machine auth, never once identity or RBAC is active).
+  // Used only to scope the Office projection; other source topics keep requiring an account.
+  const legacyOwnerPrincipal = req => {
+    const identityActive = cfg?.rbacEnabled === true || !!store?.rbac?.state?.().owner_user_id;
+    return !identityActive && !req.principal && !req.session.userId ? { id: 'env-owner', role: 'admin', permissionRevision: 0, permissions: {} } : null;
+  };
   const permissionFingerprint = principal => JSON.stringify([principal.id, principal.role, principal.permissionRevision || 0,
     Object.fromEntries(Object.keys(principal.permissions || {}).sort().map(key => [key, principal.permissions[key]]))]);
   const canReadHealth = principal => principal?.role === 'admin'
@@ -133,7 +141,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     return buildHealthVM({ engine, series, P, includeEngineParity: true });
   } });
   const sourceTopic = (req, kind) => {
-    const principal = sourcePrincipal(req, true);
+    const principal = sourcePrincipal(req, true) || (kind === 'office' && req.session ? legacyOwnerPrincipal(req) : null);
     const resource = kind === 'health-admin' ? 'health' : kind;
     if (!principal || (kind !== 'office' && !(resource === 'health' ? canReadHealth(principal) : sourcePermissions.allowsPrincipal(principal, resource, 'read')))
       || (kind === 'health-admin' && principal.role !== 'admin')) throw new ApiError('forbidden');
@@ -175,6 +183,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   };
   let chatBackend=null;
   const authorizeSourceTopic = (topic, context) => {
+    // Scoped topics are internal projections selected by resolveTopic, never wire subscriptions.
+    if (topic?.name?.endsWith('-scope')) return false;
     if(topic?.name==='chat')return !!commands?.chatAvailable?.(context);
     if(topic?.name==='chat-session'||topic?.name==='chat-agents'||topic?.name==='chat-agent-sessions'||topic?.name==='chat-agent-sessions-archived')return !!chatBackend?.authorizeTopic?.(topic,context);
     if (topic?.name === 'session') {
@@ -196,13 +206,13 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
       }
       return true;
     }
-    if (!['orchestrators', 'teams', 'office-scope', 'health-admin'].includes(topic?.name)) return true;
+    if (!['orchestrators', 'teams', 'health-admin'].includes(topic?.name)) return true;
     const principal = sourcePrincipal({ session: context?.session });
     const key = topic.params?.key;
     const scope = typeof key === 'string' ? sourceScopes.get(key) : null;
     if (!principal || !scope || permissionFingerprint(principal) !== scope.fingerprint) return false;
     const resource = topic.name === 'health-admin' ? 'health' : topic.name;
-    if (topic.name !== 'office-scope' && !(resource === 'health' ? canReadHealth(principal) : sourcePermissions.allowsPrincipal(principal, resource, 'read'))) return false;
+    if (!(resource === 'health' ? canReadHealth(principal) : sourcePermissions.allowsPrincipal(principal, resource, 'read'))) return false;
     if (topic.name === 'health-admin' && (principal.role !== 'admin' || scope.principal?.role !== 'admin')) return false;
     if (topic.name === 'orchestrators' && !orchestratorTeams?.hasHerdr) return false;
     if (topic.name === 'teams' && !orchestratorTeams?.hasTeamStore) return false;
@@ -306,6 +316,10 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     try { return 'office-scope:' + sourceTopic({ session }, 'office').slice('office:'.length); }
     catch (_) { return ordinary; }
   };
+  // Orchestrator scope ids cover both full and limited Office projections.
+  // Cue eligibility follows the recorded projection, not the topic's prefix.
+  const officeFull = id => id === 'office' || typeof id === 'string' && id.startsWith('office-scope:')
+    && sourceScopes.get(id.slice('office-scope:'.length))?.officeLimited === false;
   const admission = new Map(); // global/session caps span both API versions
   const warnings = new Set();
   const streamPolicies={};
@@ -319,8 +333,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
       mayExposeSources:projector.mayExposeSources}),
   }:{};
   const hubs = {
-    2: createStreamHub({ admission, warnings, log, resolveTopic, authorizeTopic: authorizeSourceTopic, topics: topics.of(2), engine, systemState, contractVersion: CONTRACT_VERSION, modelVersion: MODEL_VERSION, now, buildId: () => readBuild().buildId, ...streamSecurity(2) }),
-    3: createStreamHub({ admission, warnings, log, resolveTopic, authorizeTopic: authorizeSourceTopic, topics: topics.of(3), engine, systemState, contractVersion: CONTRACT_VERSION_V3, modelVersion: MODEL_VERSION, now, buildId: () => readBuild().buildId, ...streamSecurity(3) }),
+    2: createStreamHub({ admission, warnings, log, resolveTopic, officeFull, authorizeTopic: authorizeSourceTopic, topics: topics.of(2), engine, systemState, contractVersion: CONTRACT_VERSION, modelVersion: MODEL_VERSION, now, buildId: () => readBuild().buildId, ...streamSecurity(2) }),
+    3: createStreamHub({ admission, warnings, log, resolveTopic, officeFull, authorizeTopic: authorizeSourceTopic, topics: topics.of(3), engine, systemState, contractVersion: CONTRACT_VERSION_V3, modelVersion: MODEL_VERSION, now, buildId: () => readBuild().buildId, ...streamSecurity(3) }),
   };
   const hub = hubs[2];
   const hubOf = (req) => hubs[req.apiVersion] || hubs[2];
@@ -361,6 +375,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   const localeOf = (req) => resolveLocale({ explicit: typeof req.query.locale === 'string' ? req.query.locale : null, pref: store && store.office ? store.office.prefs().locale : null, acceptLanguage: req.headers['accept-language'], instance: cfg.instanceLocale });
   // G4 (api.md §5.7): on a configured instance the setup routes only say 'locked' (or 'readonly')
   if (setup) setup.mount(r);
+  const accountAvatar = require('../v3/account-avatar').mountAccountAvatar({ r, auth, store, cfg, authed, ok, log, now, localeOf });
+  settings?.setAccountAvatar?.(accountAvatar);
   if (settings) require('../v3/settings').mountSettings({ r, settings, auth, authed, ok, reauthentication, externalAccess, check: vm => vms[3].check('settings',vm,'route:settings') });
   if(reauthentication)require('../v3/access-management').mountAccessManagement({r,store,reauthentication,readonly:()=>!!(cfg.readonly||cfg.readonlyStore)});
   const metadataIdentity=enforceAuthorization?require('../../security/route-policy').createRouteGuard(require('../../security/route-declarations').ROUTES.get('GET /me'),{auth,store}):null;
@@ -376,7 +392,20 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     const checked = vms[req.apiVersion].check('meta',projected,authenticated?'route:meta:'+cohort:'route:meta:public');
     res.json(okBody(checked, { engine: authenticated&&(!httpProjection||httpProjection.mayExposeSources(req)) ? engine : null, now: now() }));
   });
-  r.get('/me', authed, (req, res) => ok(res, buildMeVM({ session: req.session, cfg, engine, ownerName: () => (store && store.owner ? store.owner.name : null) }), null, 'me'));
+  r.get('/me', authed, (req, res) => {
+    const session=auth.sessionOf(req),user=session?.userId?store?.users?.byId?.(session.userId):null;
+    const name=user?.person_id?store.persons.byId?.(user.person_id)?.name:null;
+    const locale=localeOf(req);
+    // Display-only: env-owner cookies have no userId. A users row keeps its RBAC role or omits roleName.
+    let roleName=null;
+    if(user) roleName=store?.rbac?.snapshot?.(user.id)?.role?.name||null;
+    else if(!user&&session&&!session.userId) {
+      const labels=require('../../i18n').labelsFor(locale,'server');
+      roleName=labels['role.admin']||store?.rbac?.role?.('rol_admin')?.name||null;
+    }
+    ok(res, buildMeVM({ session: req.session, cfg, engine, ownerName: () => name || (store && store.owner ? store.owner.name : null),
+      roleName, avatar:user?accountAvatar.avatarFor(user.id,name||user.email?.split('@')[0]||'',locale):null }), null, 'me');
+  });
 
   r.get('/design-system/access', authed, (req, res) => {
     const isOwner = require('../design-system-access').isOwnerSession(auth.sessionOf(req), { store, ownerEmail: cfg.loginEmail });
@@ -445,7 +474,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
     ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : null,
     authed, ok, now, sessionsReadable, isSubscribed: (id,version) => version ? hubs[version].isSubscribed(id) : hubs[2].isSubscribed(id) || hubs[3].isSubscribed(id) });
   const commands = mountCommands({ r, engine, topics, store, runtime, authed, guard, ok, views, now, log });
-  chatBackend=require('../v3/chat').mountChat({r,engine,topics,store,runtime,runtimeWritable:capabilitiesOf(cfg).openclawWrites,dataDir:cfg.dataDir,orchestratorTeams,avatarFor:views.chatAvatarFor,authed,guard,ok,now,log,...(chatDispatchScheduler?{dispatchScheduler:chatDispatchScheduler}:{}),...(chatLateReply?{lateReply:chatLateReply}:{})});
+  chatBackend=require('../v3/chat').mountChat({r,engine,topics,store,runtime,runtimeWritable:capabilitiesOf(cfg).openclawWrites,rbacEnabled:cfg.rbacEnabled===true,dataDir:cfg.dataDir,orchestratorTeams,avatarFor:views.chatAvatarFor,profileAvatarForPerson:accountAvatar.profileAvatarForPerson,authed,guard,ok,now,log,...(chatDispatchScheduler?{dispatchScheduler:chatDispatchScheduler}:{}),...(chatLateReply?{lateReply:chatLateReply}:{})});
   // S14b: the office layout and the UI prefs (store)
   const office = store ? mountOfficeLayout({ r, store, topics, authed, guard, ok, now, actorOf: views.actorOf, timeZone: () => cfg.timeZone,
     officeTimings: settings?.officeTimings,
@@ -462,7 +491,8 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   // architect-57: the project threads (comments, agent replies, the summary request), on the projects module
   const dispatchAuthority=enforceAuthorization?require('../../security/dispatch-authority').createDispatchAuthority({store,now}):null;
   const thread = store && store.comments ? createProjectThread({ store, engine, runtime, topics, cfg, log, now, dispatchAuthority }) : null;
-  const projects = store ? mountProjects(r, { capturer, store, engine, topics, cfg, runtime, authed, guard, ok, enrichment, log, thread, enforceAuthorization, orchestratorTeams, chatBackend,
+  const projects = store ? mountProjects(r, { capturer, store, engine, topics, cfg, runtime, authed, guard, ok, enrichment, log, thread, enforceAuthorization, orchestratorTeams, chatBackend, auth,
+    profileAvatarForPerson: accountAvatar.profileAvatarForPerson,
     officeTopicFor: req => orchestratorTeams?.hasHerdr || orchestratorTeams?.hasTeamStore || orchestratorTeams?.detected
       ? 'office-scope:' + sourceTopic(req, 'office').slice('office:'.length) : null }) : null;
   teamProjectById = projects?.teamProjectById || (() => null);
@@ -499,7 +529,7 @@ function mountV2(app, { auth, engine, cfg, store, runtime, enrichment = null, se
   app.use(['/api/v2', '/api/v3'], r);
   app.use(['/api/v2', '/api/v3'], except('api.error',errorMiddleware(log)));   // errors raised before the router (body parsing)
   return { router:r, reauthentication, topics, hub, hubs, series, projects, thread, views, commands, office,
-    close: () => { reauthentication?.close();engine.removeListener('live', onOfficeLive); clearInterval(sampler); stopParityReporter(); views.close(); if (thread) thread.close(); if (office) office.close(); externalAccess?.close(); settings?.close(); chatBackend?.close?.(); topics.close(); hubs[2].closeAll(); hubs[3].closeAll(); if (projects) projects.close(); offOrchestratorTeams?.(); orchestratorTeams?.close?.(); } };
+    close: () => { reauthentication?.close();engine.removeListener('live', onOfficeLive); clearInterval(sampler); stopParityReporter(); views.close(); if (thread) thread.close(); if (office) office.close(); externalAccess?.close(); accountAvatar.close(); settings?.close(); chatBackend?.close?.(); topics.close(); hubs[2].closeAll(); hubs[3].closeAll(); if (projects) projects.close(); offOrchestratorTeams?.(); orchestratorTeams?.close?.(); } };
 }
 
 module.exports = { mountV2, writeClassOf, WRITE_CLASSES, apiVersionOf };

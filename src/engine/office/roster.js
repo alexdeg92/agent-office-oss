@@ -8,6 +8,209 @@ const MOBILE_LABEL_LIMIT = 3;
 const WORKING_STATES = new Set(['thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting']);
 const { MAX_OFFICE_OCCUPANTS } = require('../session-limits');
 const { tagTeamMember, teamMemberId, teamMemberAliases } = require('./placement-identity');
+const { seatTile } = require('./layout-rules');
+
+const TEAM_ACCENTS = Object.freeze(['violet', 'teal', 'amber', 'rose', 'sky', 'lime']);
+const comparableLabel = value => String(value || '').normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
+function assignTeamAccents(groups) {
+  // Palette collision ownership is based only on stable team identity, never
+  // snapshot order or source timestamps. Adding/removing a non-colliding team
+  // therefore leaves every existing assignment intact. A team in a collision
+  // chain can move when an earlier-sorting colliding ID joins or leaves.
+  const ordered = [...groups].sort((a, b) => a.id.localeCompare(b.id));
+  const assigned = new Set(), counts = new Map(TEAM_ACCENTS.map(token => [token, 0]));
+  for (const group of ordered) {
+    const preferred = accentHash(group.id) % TEAM_ACCENTS.length;
+    let token = null;
+    for (let offset = 0; offset < TEAM_ACCENTS.length; offset++) {
+      const candidate = TEAM_ACCENTS[(preferred + offset) % TEAM_ACCENTS.length];
+      if (!assigned.has(candidate)) { token = candidate; break; }
+    }
+    if (!token) {
+      const least = Math.min(...counts.values());
+      for (let offset = 0; offset < TEAM_ACCENTS.length; offset++) {
+        const candidate = TEAM_ACCENTS[(preferred + offset) % TEAM_ACCENTS.length];
+        if (counts.get(candidate) === least) { token = candidate; break; }
+      }
+    }
+    group.accentToken = token;
+    assigned.add(token); counts.set(token, counts.get(token) + 1);
+  }
+}
+function accentHash(id) {
+  let hash = 2166136261;
+  for (const char of String(id)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return hash >>> 0;
+}
+const labelText = text => ({ key: 'custom', params: { text: String(text || '') } });
+function projectTeamGroups(occupants, snapshot, runtimePresentationFor = null, { floorLayouts = [], index = null } = {}) {
+  if (!snapshot || !Array.isArray(snapshot.members) || !snapshot.members.length) return [];
+  const teams = new Map();
+  const teamRows = [...(snapshot.teams || []), ...(snapshot.team ? [snapshot.team] : [])]
+    .filter(team => team && typeof team.id === 'string');
+  for (const team of teamRows) {
+    if (team && typeof team.id === 'string' && !teams.has(team.id)) {
+      teams.set(team.id, team);
+    }
+  }
+  const linksByHost = new Map();
+  for (const link of snapshot.identityLinks || []) if (link?.confidence === 'exact') {
+    const prior = linksByHost.get(link.hostAgentId) || [];
+    prior.push(link.agentId); linksByHost.set(link.hostAgentId, prior);
+  }
+  const byId = new Map(occupants.map(row => [row.id, row]));
+  const memberOccupant = member => {
+    const direct = occupants.find(row => row.memberId === member.id);
+    if (direct) return direct;
+    const agentIds = linksByHost.get(member.hostAgentId) || [];
+    for (const agentId of agentIds) {
+      const match = occupants.find(row => row.id === `agent:${agentId}` || row.id === `subagent:${agentId}`
+        || row.id === 'main' && (row.hostAgentId === member.hostAgentId || row.memberId === member.id)
+        || row.id === 'primary' && (row.hostAgentId === member.hostAgentId || row.memberId === member.id));
+      if (match) return match;
+    }
+    return null;
+  };
+  const membersByTeam = new Map();
+  for (const member of snapshot.members) {
+    const teamId = member?.teamId || snapshot.team?.id;
+    if (!member || typeof teamId !== 'string') continue;
+    const list = membersByTeam.get(teamId) || [];
+    list.push(member.teamId ? member : { ...member, teamId }); membersByTeam.set(teamId, list);
+  }
+  const groups = [];
+  for (const [teamId, records] of membersByTeam) {
+    const team = teams.get(teamId) || { id: teamId, label: teamId };
+    const resolved = records.map(member => ({ member, occupant: memberOccupant(member) }))
+      .filter(pair => pair.occupant && pair.occupant.teamId === teamId || pair.occupant?.teamIds?.includes(teamId));
+    if (!resolved.length) continue;
+    const explicitLeads = resolved.filter(pair => pair.member.roleKind === 'lead');
+    const structuralLeads = resolved.filter(pair => !pair.member.parentMemberId);
+    const lead = explicitLeads.length === 1 ? explicitLeads[0] : explicitLeads.length === 0 && structuralLeads.length === 1 ? structuralLeads[0] : null;
+    if (!lead) continue;
+    const leadOccupantId = lead.occupant.id;
+    const floorId = lead.occupant.floorId || '1';
+    resolved.sort((a, b) => (a.member.roleKind === 'lead' ? -1 : 0) - (b.member.roleKind === 'lead' ? -1 : 0)
+      || (a.occupant.rosterOrder ?? Number.MAX_SAFE_INTEGER) - (b.occupant.rosterOrder ?? Number.MAX_SAFE_INTEGER)
+      || a.member.id.localeCompare(b.member.id));
+    const memberRows = resolved.map(({ member, occupant }) => {
+      const parent = records.find(row => row.id === member.parentMemberId);
+      const parentOccupant = parent && memberOccupant(parent);
+      const runtime = runtimePresentationFor?.(member.runtimeKind) || null;
+      const state = occupant.state || 'unknown';
+      const tone = ['thinking', 'working', 'researching', 'writing', 'executing', 'calling', 'waiting'].includes(state) ? 'working'
+        : ['blocked', 'error'].includes(state) ? 'attention' : ['idle', 'offline'].includes(state) ? 'idle' : 'unknown';
+      const roleLabel = member.roleLabel && comparableLabel(member.roleLabel) === comparableLabel(member.name)
+        ? null : member.roleLabel ? labelText(member.roleLabel) : { key: `occupantRole.${member.roleKind === 'lead' ? 'agent' : 'subagent'}` };
+      return { occupantId: occupant.id,
+        roleLabel,
+        parentLabel: parent ? { key: 'team.member.reportsTo', params: { name: parentOccupant?.name || parent.name } } : null,
+        runtimeLabel: runtime?.label || { key: 'team.runtime.other' },
+        runtimeMark: runtime?.brand || null,
+        stateLabel: occupant.stateLabel || { key: `agentState.${state}` }, stateTone: tone,
+      };
+    });
+    const label = labelText(team.label);
+    groups.push({ id: teamId, label,
+      floorId, leadOccupantId,
+      members: memberRows, memberCount: memberRows.length,
+      memberCountLabel: { key: 'office.team.memberCount', params: { n: memberRows.length } },
+      _resolvedOccupants: resolved.map(pair => pair.occupant) });
+  }
+  const floorOrder = id => id === 'rdc' ? 0 : id === 'gym' ? 10002 : Number(id) || 1;
+  const ordered = groups.sort((a, b) => floorOrder(a.floorId) - floorOrder(b.floorId) || a.id.localeCompare(b.id));
+  assignTeamAccents(ordered);
+  const teamsByLead = new Map();
+  for (const group of ordered) {
+    const teamIds = teamsByLead.get(group.leadOccupantId) || [];
+    teamIds.push(group.id);
+    teamsByLead.set(group.leadOccupantId, teamIds);
+  }
+  const homePodByLead = new Map();
+  for (const group of ordered) {
+    if (homePodByLead.has(group.leadOccupantId)) continue;
+    const leadOccupant = group._resolvedOccupants.find(occupant => occupant.id === group.leadOccupantId);
+    const homeTeamId = leadOccupant?.teamId;
+    homePodByLead.set(group.leadOccupantId, teamsByLead.get(group.leadOccupantId)?.includes(homeTeamId) ? homeTeamId : group.id);
+  }
+  for (const group of ordered) {
+    // A shared lead is represented in every team's member list, but its
+    // canonical team owns the physical seat and pod geometry.
+    const podOccupants = group._resolvedOccupants.filter(occupant => occupant.id !== group.leadOccupantId
+      || homePodByLead.get(group.leadOccupantId) === group.id);
+    const geometry = teamPodGeometry(podOccupants, group.floorId, floorLayouts, index);
+    group.pod = { floorId: group.floorId, coordinateSpace: 'floor-grid', ...geometry,
+      seats: podOccupants.map(occupant => ({ occupantId: occupant.id,
+        stationUid: occupant.stationUid || null, standingPoint: occupant.standingPoint || null })) };
+  }
+  const byTeamId = new Map(ordered.map(group => [group.id, group]));
+  return ordered.map(group => {
+    const isHomePod = homePodByLead.get(group.leadOccupantId) === group.id;
+    const sharedLeadLinks = isHomePod ? (teamsByLead.get(group.leadOccupantId) || []).filter(otherTeamId => otherTeamId !== group.id).map(otherTeamId => {
+      const other = byTeamId.get(otherTeamId);
+      return { occupantId: group.leadOccupantId, teamId: otherTeamId, label: labelText(teams.get(otherTeamId)?.label || otherTeamId),
+        fromPoint: zoneCenter(group.pod.zone), toPoint: zoneCenter(other?.pod.zone) };
+    }) : [];
+    const { _resolvedOccupants: _podMembers, ...result } = group;
+    return { ...result, sharedLeadLinks };
+  });
+}
+
+function teamPodGeometry(occupants, floorId, floorLayouts, index) {
+  const floor = (Array.isArray(floorLayouts) ? floorLayouts : []).find(row => row.id === floorId);
+  const room = floor?.layout?.room && index?.rooms?.get(floor.layout.room);
+  if (!room || !Number.isFinite(room.cols) || !Number.isFinite(room.rows)) return { zone: null };
+  const points = occupants.map(occupant => teamOccupantPoint(occupant, floorId, floorLayouts, index))
+    .filter(Boolean).map(point => ({ x: Math.max(0, Math.min(room.cols, point.x)), y: Math.max(0, Math.min(room.rows, point.y)) }));
+  if (!points.length) return { zone: null };
+  const bounds = {
+    minX: Math.max(0, Math.min(...points.map(point => point.x)) - 1),
+    minY: Math.max(0, Math.min(...points.map(point => point.y)) - 1),
+    maxX: Math.min(room.cols, Math.max(...points.map(point => point.x)) + 1),
+    maxY: Math.min(room.rows, Math.max(...points.map(point => point.y)) + 1),
+  };
+  const zone = { bounds, polygon: [
+    { x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY }, { x: bounds.minX, y: bounds.maxY },
+  ] };
+  return { zone };
+}
+
+function zoneCenter(zone) {
+  const bounds = zone?.bounds;
+  return bounds && Number.isFinite(bounds.minX) && Number.isFinite(bounds.maxX)
+    && Number.isFinite(bounds.minY) && Number.isFinite(bounds.maxY)
+    ? { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 } : null;
+}
+
+function teamOccupantPoint(occupant, floorId, floorLayouts, index) {
+  const floor = (Array.isArray(floorLayouts) ? floorLayouts : []).find(row => row.id === floorId);
+  const roomItems = floor?.layout?.items || [];
+  const itemByUid = new Map(roomItems.filter(row => typeof row.uid === 'string').map(row => [row.uid, row]));
+  const station = occupant?.stationUid && itemByUid.get(occupant.stationUid);
+  const furniture = station && index?.furniture?.get(station.asset);
+  if (station && furniture?.station) {
+    try { return seatTile(station, furniture); } catch { /* use a supplied target below */ }
+  }
+  if (occupant?.standingPoint && Number.isFinite(occupant.standingPoint.x) && Number.isFinite(occupant.standingPoint.y)) return occupant.standingPoint;
+  if (occupant?.sceneTarget?.point && Number.isFinite(occupant.sceneTarget.point.x) && Number.isFinite(occupant.sceneTarget.point.y)) return occupant.sceneTarget.point;
+  return null;
+}
+
+function withoutTeamMembership(office) {
+  if (!office || typeof office !== 'object') return office;
+  const withoutTeamLabel = ({ teamLabel: _teamLabel, ...item }) => item;
+  const occupants = (office.occupants || []).map(({ teamId: _teamId, teamIds: _teamIds, memberId: _memberId, ...row }) => ({ ...row, teamId: null }));
+  return { ...office,
+    occupants,
+    rosterGroups: (office.rosterGroups || []).map(({ teamId: _teamId, ...group }) => ({ ...group, teamId: null })),
+    rosterItems: (office.rosterItems || []).map(withoutTeamLabel),
+    rosterPreviewItems: (office.rosterPreviewItems || []).map(withoutTeamLabel),
+    rosterFloors: projectFloorAgentGroups((office.rosterFloors || []).map(floor => ({ ...floor,
+      items: (floor.items || []).filter(item => item.kind !== 'team-group') })), occupants),
+    unseatedTeams: [], teamGroups: [], teamLegend: [],
+  };
+}
 
 function boundedOccupants(rows) {
   if (rows.length <= MAX_OFFICE_OCCUPANTS) return { rows, overflow: 0 };
@@ -71,6 +274,68 @@ function floorRosterItems(people, byId, projectOccupantId = id => id) {
     items.push({ kind: 'occupant', id: `occupant:${occupantId}`, occupantId });
   }
   return items;
+}
+
+function officeAgentCountLabel(count) {
+  return { key: count === 1 ? 'office.floor.count.one' : 'office.floor.count.other', params: { n: count } };
+}
+
+function projectFloorAgentGroups(rosterFloors, occupants, teamGroups = []) {
+  const byId = new Map((occupants || []).map(row => [row.id, row]));
+  const previewFor = occupantIds => {
+    const occupantId = occupantIds[0] || null, row = occupantId ? byId.get(occupantId) : null;
+    return row ? { previewOccupantId: occupantId, previewState: row.state, previewStateKind: row.stateKind || row.state,
+      previewStateLabel: row.stateLabel || { key: `agentState.${row.state || 'unknown'}` },
+      previewStateActive: row.stateActive === true } : {};
+  };
+  return (rosterFloors || []).map(floor => {
+    const floorIds = new Set((floor.occupantIds || []).filter(id => byId.has(id)));
+    const agentIds = (floor.occupantIds || []).filter(id => {
+      const row = byId.get(id);
+      return row && !row.visitPhase && !CONVERSATION_ROLES.has(row.role);
+    });
+    const assigned = new Set();
+    const groups = [];
+    const floorTeamGroups = [];
+    const floorTeams = (teamGroups || []).filter(team => team.floorId === floor.id)
+      .sort((a, b) => {
+        const aCanonical = byId.get(a.leadOccupantId)?.teamId === a.id ? 0 : 1;
+        const bCanonical = byId.get(b.leadOccupantId)?.teamId === b.id ? 0 : 1;
+        return aCanonical - bCanonical || a.id.localeCompare(b.id);
+      });
+    for (const team of floorTeams) {
+      const occupantIds = (team.members || []).map(member => member.occupantId)
+        .filter(id => floorIds.has(id) && agentIds.includes(id) && !assigned.has(id));
+      if (!occupantIds.length) continue;
+      for (const id of occupantIds) assigned.add(id);
+      floorTeamGroups.push(team);
+      groups.push({ id: team.id, kind: 'team', teamId: team.id, label: team.label, accentToken: team.accentToken, leadOccupantId: team.leadOccupantId, occupantIds,
+        count: occupantIds.length, countLabel: officeAgentCountLabel(occupantIds.length),
+        ...previewFor([[team.leadOccupantId, ...occupantIds].find(id => occupantIds.includes(id))].filter(Boolean)),
+        sharedLabel: team.sharedLeadLinks?.length ? { key: 'office.floor.sharedAcrossTeams', params: { n: team.sharedLeadLinks.length + 1 } } : null });
+    }
+    const unassignedIds = agentIds.filter(id => !assigned.has(id));
+    if (unassignedIds.length) groups.push({ id: `unassigned:${floor.id}`, kind: 'unassigned', teamId: null,
+      label: { key: 'office.floor.unassignedAgents' }, occupantIds: unassignedIds,
+      count: unassignedIds.length, countLabel: officeAgentCountLabel(unassignedIds.length), ...previewFor(unassignedIds) });
+    const nonAgentIds = new Set((floor.occupantIds || []).filter(id => !agentIds.includes(id)));
+    const otherItems = [];
+    let pendingHeaders = [];
+    for (const item of floor.items || []) {
+      if (item.kind === 'team-header') { pendingHeaders.push(item); continue; }
+      if (nonAgentIds.has(item.occupantId)) {
+        const row = byId.get(item.occupantId), parent = row && byId.get(row.parentId);
+        if (parent && !pendingHeaders.length) pendingHeaders.push({
+          kind: 'team-header', id: `team-header:${parent.id}:${floor.id}`,
+          label: { key: 'office.floor.team', params: { name: parent.name, floor: floorLabel(parent.floorId) } },
+        });
+        otherItems.push(...pendingHeaders, item);
+      }
+      pendingHeaders = [];
+    }
+    return { ...floor, agentGroups: groups, agentGroupsLabel: { key: 'office.floor.agentGroups' }, teamGroups: floorTeamGroups,
+      showTeamPanel: floorTeamGroups.length > 0, otherItems };
+  });
 }
 
 function rosterReferenceProjector(rows, projectOccupantId) {
@@ -156,6 +421,9 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
       rosterDepth: row.visitPhase && parents.get(id) && byId.get(parents.get(id))?.floorId !== row.floorId ? 1
         : conversations.has(id) && !row.visitPhase ? 0 : depth,
       parentName: !row.visitPhase && !conversations.has(id) && parents.get(id) ? byId.get(parents.get(id))?.name || null : null,
+      drawerRoleLabel: row.visitPhase && HUMAN_CONTACT_ROLES.has(row.role)
+        ? { key: `occupantRole.${row.role}` }
+        : row.roleLabel || { key: `occupantRole.${row.role}` },
       ...(row.visitPhase && HUMAN_CONTACT_ROLES.has(row.role) ? { roleLabel: { key: 'occupantRole.visitor' } } : {}),
       stateLabel: row.visitPhase ? { key: 'occupantRole.visitor' } : { key: `agentState.${state}` },
       stateDetailLabel: row.visitPhase ? { key: 'occupantRole.visitor' } : stateDetailLabel(state),
@@ -198,22 +466,23 @@ function projectOfficeRoster(office, { now = Date.now(), projectOccupantId = id 
     floorsMap.get(id).push(row);
   }
   const floorOrder = id => id === 'rdc' ? 0 : id === 'gym' ? 10002 : Number(id) || 1;
-  const rosterFloors = [...floorsMap].map(([id, people]) => { const agents = agentRows(people); const active = activeCount(people); return { id, order: floorOrder(id), label: floorLabel(id), countLabel: { key: 'office.floor.count', params: { n: agents.length } }, occupantIds: people.map(row => row.id), mobileLabelIds: mobileLabelIds(people, rosterGroups), items: floorRosterItems(people, rows, projectReference),
+  const rosterFloors = projectFloorAgentGroups([...floorsMap].map(([id, people]) => { const agents = agentRows(people); const active = activeCount(people); return { id, order: floorOrder(id), label: floorLabel(id), countLabel: officeAgentCountLabel(agents.length), occupantIds: people.map(row => row.id), mobileLabelIds: mobileLabelIds(people, rosterGroups), items: floorRosterItems(people, rows, projectReference),
     count: agents.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: agents.filter(row => ['idle', 'offline'].includes(stateOf(row))).length } },
     idleCount: agents.filter(row => ['idle', 'offline'].includes(stateOf(row))).length,
     kind: id === 'rdc' ? 'lobby' : id === 'gym' ? 'gym' : 'office', layout: null, capacity: null } })
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => a.order - b.order), occupants);
   const stateLabels = Object.fromEntries([...OFFICE_STATES].map(state => [state, { key: `agentState.${state}` }]));
   stateLabels.observed = { key: 'agentState.observed' };
   return { ...office, occupants, rosterGroups, rosterItems, rosterPreviewItems, rosterOverflowCount, rosterSummary, conversationIds,
     conversationCount: conversationIds.length, stateLabels, rosterAllLabel: { key: 'office.mobile.all', params: { n: rosterItems.length } },
     rosterOverflowLabel: { key: 'office.mobile.overflowCount', params: { n: rosterOverflowCount } },
-    conversationLabel: { key: 'office.mobile.conversations', params: { n: conversationIds.length } }, rosterFloors,
+    conversationLabel: { key: 'office.mobile.conversations', params: { n: conversationIds.length } }, rosterFloors, teamGroups: [], teamLegend: [],
     unseatedTeams: Array.isArray(office.unseatedTeams) ? office.unseatedTeams : [] };
 }
 
 function projectOfficePlacement(office, { layout, index, projectOccupantId = id => id, now = Date.now(), tracker = null, planningOccupants = null,
-  homeAssignments = null, rememberHomeAssignments = null, engine = null, canReadSessions = false, idleTransitionDebounceMs = 3_000 } = {}) {
+  homeAssignments = null, rememberHomeAssignments = null, engine = null, canReadSessions = false, idleTransitionDebounceMs = 3_000,
+  teamSnapshot = null, canReadTeams = false } = {}) {
   if (!office || !Array.isArray(office.occupants) || !layout || !index) return office;
   const { planOfficePlacement } = require('./placement');
   // Limited views can hide session rows. Plan their visible subset against the
@@ -327,12 +596,18 @@ function projectOfficePlacement(office, { layout, index, projectOccupantId = id 
     const agentPeople = finalPeople.filter(row => !row.visitPhase);
     const active = agentPeople.some(row => !OFFICE_STATES.has(row.state) || row.state === 'unknown')
       ? null : agentPeople.filter(row => !['idle', 'offline'].includes(row.state)).length;
-    return { id: floor.id, order: floorOrder(floor.id), label: floorLabel(floor.id), countLabel: { key: 'office.floor.count', params: { n: agentPeople.length } }, kind: floor.kind, occupantIds: finalPeople.map(row => row.id), mobileLabelIds: mobileLabelIds(finalPeople, rosterOffice.rosterGroups), items: floorRosterItems(finalPeople, byId, projectReference),
+    return { id: floor.id, order: floorOrder(floor.id), label: floorLabel(floor.id), countLabel: officeAgentCountLabel(agentPeople.length), kind: floor.kind, occupantIds: finalPeople.map(row => row.id), mobileLabelIds: mobileLabelIds(finalPeople, rosterOffice.rosterGroups), items: floorRosterItems(finalPeople, byId, projectReference),
       count: agentPeople.length, activeCount: active, statusLabel: active == null ? { key: 'office.floor.activityUnknown' } : { key: 'office.floor.status', params: { active, idle: agentPeople.filter(row => ['idle', 'offline'].includes(row.state)).length } },
       idleCount: agentPeople.filter(row => ['idle', 'offline'].includes(row.state)).length, layout: floor.layout, capacity: floor.capacity };
   }).sort((a, b) => a.order - b.order);
-  return require('./communication').projectCommunication(
+  const communicated = require('./communication').projectCommunication(
     { ...rosterOffice, rosterFloors, unseatedTeams: visibleUnseatedTeams }, { engine, index, layout, now, canReadSessions });
+  const teamGroups = canReadTeams ? projectTeamGroups(communicated.occupants, teamSnapshot,
+    kind => engine?.runtimePresentationFor?.(kind) || null, { floorLayouts: plan.floors, index }) : [];
+  const sanitized = canReadTeams ? communicated : withoutTeamMembership(communicated);
+  const floorAgentGroups = projectFloorAgentGroups(sanitized.rosterFloors, sanitized.occupants, canReadTeams ? teamGroups : []);
+  const teamLegend = teamGroups.map(group => ({ teamId: group.id, label: group.label, accentToken: group.accentToken }));
+  return { ...sanitized, rosterFloors: floorAgentGroups, teamGroups, teamLegend };
 }
 
 function exactMemberLayoutRule(layout, row) {
@@ -368,4 +643,5 @@ function remapSavedMemberStations(homeAssignments, rows, placementId) {
   return next;
 }
 
-module.exports = { projectOfficeRoster, projectOfficePlacement };
+module.exports = { projectOfficeRoster, projectOfficePlacement, projectTeamGroups, projectFloorAgentGroups, withoutTeamMembership,
+  teamOccupantPoint };

@@ -221,3 +221,19 @@ test('modern mock onboarding endpoints: owner first, detection, reviewed per-age
   assert.ok(db.onboard('integrations/apply', { ...apply, action: 'uninstall' }).result.agents.every(a => a.status === 'absent'));
   assert.equal(db.onboard('network', { ...b, action: 'probe' }).result.ok, true);
 });
+
+test('O3: a runtime whose agents come from local sessions (Claude Code, Codex, Cursor) can finish with none yet; OpenClaw still needs one', () => {
+  const none = { ...base(), code: 'AO-1', adapter: 'claude-code', fields: ['home'], agents: [], primary: null, looks: {}, ownerSaved: true };
+  assert.equal(R.blocker(R.STEPS.indexOf('agents'), none), 'setup.err.agents', 'without the backend flag the rule stays strict');
+  const optional = { ...none, agentsOptional: true };
+  assert.equal(R.blocker(R.STEPS.indexOf('agents'), optional), null);
+  assert.equal(R.blocker(R.STEPS.indexOf('identities'), optional), null);
+  assert.equal(R.blocker(R.STEPS.indexOf('agents'), { ...optional, agents: null }), 'setup.err.agents', 'the search must have run');
+  assert.deepEqual(R.payload(optional, { draft: null }).agents, { primary: null, looks: {} }, 'no empty names map');
+  assert.ok(msg('setup.agents.later').includes('session'));
+  const server = createRequire(import.meta.url)('../../src/api/v2/setup.js').createSetup({ env: {}, files: { config: null, secrets: null, paths: {} } });
+  try {
+    const flags = Object.fromEntries(server.vm().adapters.map((a) => [a.id, a.agentsOptional]));
+    assert.deepEqual(flags, { openclaw: false, demo: false, 'claude-code': true, codex: true, cursor: true });
+  } finally { server.close(); }
+});

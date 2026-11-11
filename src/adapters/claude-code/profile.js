@@ -179,7 +179,7 @@ function mapRecord(row, { sessionKey, agentId, fallbackId, runtime = 'claude-cod
   // question timestamp so cached readers and subsequent refreshes expire it
   // at the same deadline.
   const activitySince = activity === 'waiting' && replyPending ? replyAt : at;
-  return { events, at, model: nameOf(m.model), projectName: projectBasename(row.cwd), summary: safeSummary(firstPrompt), recognized: true,
+  return { events, at, model: nameOf(m.model), projectName: projectBasename(row.cwd), cwd: typeof row.cwd === 'string' && row.cwd.length <= 4096 ? row.cwd : null, summary: safeSummary(firstPrompt), recognized: true,
     ...(execution ? { execution } : {}), ...(activity ? { activity: { kind: activity, since: activitySince } } : { activity: null }),
     backgroundPending: backgroundIsPending, backgroundPendingIds: [...pendingIds], pendingBackgroundOverflow: pendingOverflow,
     awaitingReply: replyPending, awaitingReplyAt: replyPending ? replyAt : null,

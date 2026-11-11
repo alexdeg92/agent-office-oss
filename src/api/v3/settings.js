@@ -71,6 +71,7 @@ function mountSettings({ r, settings, auth, authed, ok, check, reauthentication 
   r.post('/settings/check', authed, owner, command('check'));
   r.post('/settings/detect', authed, owner, command('detect'));
   r.post('/settings/herdr/check', authed, owner, command('herdrCheck'));
+  r.post('/settings/finish-setup/hide', authed, owner, command('finishSetupHide'));
   r.put('/settings/agents', authed, owner, command('agents'));
   r.put('/settings/auto-add', authed, owner, command('autoAdd'));
   r.put('/settings/runtime', authed, owner, command('runtime'));

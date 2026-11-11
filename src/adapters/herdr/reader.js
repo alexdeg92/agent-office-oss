@@ -70,6 +70,7 @@ function parseSnapshot(stdout, { hostId, orchestratorId, platform = 'unknown', l
   const staleAfter = at + Math.max(0, Math.min(STALE_RETENTION_MS, staleAfterMs));
   const privateIdentityRefs = new Map();
   const privatePaneRefs = new Map();
+  const privatePaneCwds = new Map();
   const agents = [];
   const seenPanes = new Set();
   for (const source of payload.result.agents) {
@@ -87,6 +88,9 @@ function parseSnapshot(stdout, { hostId, orchestratorId, platform = 'unknown', l
     if (!row) throw new HerdrReadError('invalid_snapshot');
     agents.push(row);
     privatePaneRefs.set(id, source.pane_id);
+    const cwd = source.cwd;
+    if (row.staleAfter > at && typeof cwd === 'string' && Buffer.byteLength(cwd, 'utf8') <= 4096 && path.isAbsolute(cwd) && !cwd.includes('\0') &&
+        !/[\u0000-\u001f\u007f]/.test(cwd)) privatePaneCwds.set(id, cwd);
     const session = source.agent_session;
     if (supportsStableSessionRef && session && typeof session === 'object' && typeof session.value === 'string' &&
         session.value.length > 0 && session.value.length <= 1024 && !session.value.includes('\0')) {
@@ -96,7 +100,13 @@ function parseSnapshot(stdout, { hostId, orchestratorId, platform = 'unknown', l
   const host = Host.from({ id: hostId, label: safeText(label, 160), platform, sourceStatus: 'available', observedAt: at });
   const orchestrator = Orchestrator.from({ id: orchestratorId, hostId, kind: 'herdr', label: null, sourceStatus: 'available', observedAt: at });
   if (!host || !orchestrator) throw new HerdrReadError('invalid_configuration');
-  return Object.freeze({ host, orchestrator, agents: Object.freeze(agents), privateIdentityRefs, privatePaneRefs });
+  const snapshot = { host, orchestrator, agents: Object.freeze(agents) };
+  Object.defineProperties(snapshot, {
+    privateIdentityRefs: { enumerable: false, value: privateIdentityRefs },
+    privatePaneRefs: { enumerable: false, value: privatePaneRefs },
+    privatePaneCwds: { enumerable: false, value: privatePaneCwds },
+  });
+  return Object.freeze(snapshot);
 }
 
 function normaliseBinaryPath(binaryPath) {
@@ -110,6 +120,7 @@ function createHerdrReader({ binaryPath, hostId, orchestratorId, platform = 'unk
   run = execFileAsync, supportsStableSessionRef = false, setIntervalFn = setInterval, clearIntervalFn = clearInterval } = {}) {
   const binary = normaliseBinaryPath(binaryPath);
   let current = null;
+  let lastSnapshot = null;
   let inFlight = null;
   let failures = 0;
   let disabled = false;
@@ -124,8 +135,13 @@ function createHerdrReader({ binaryPath, hostId, orchestratorId, platform = 'unk
       observedAt: current?.orchestrator.observedAt ?? null });
     const age = current ? Math.max(0, at - current.host.observedAt) : Infinity;
     const retain = current && age <= STALE_RETENTION_MS;
-    return Object.freeze({ host, orchestrator, agents: retain ? current.agents : Object.freeze([]),
-      privateIdentityRefs: retain ? current.privateIdentityRefs : new Map(), privatePaneRefs: retain ? current.privatePaneRefs : new Map() });
+    const snapshot = { host, orchestrator, agents: retain ? current.agents : Object.freeze([]) };
+    Object.defineProperties(snapshot, {
+      privateIdentityRefs: { enumerable: false, value: retain ? current.privateIdentityRefs : new Map() },
+      privatePaneRefs: { enumerable: false, value: retain ? current.privatePaneRefs : new Map() },
+      privatePaneCwds: { enumerable: false, value: retain ? current.privatePaneCwds : new Map() },
+    });
+    return Object.freeze(snapshot);
   };
 
   async function refresh() {
@@ -141,21 +157,21 @@ function createHerdrReader({ binaryPath, hostId, orchestratorId, platform = 'unk
           shell: false, windowsHide: true, encoding: 'buffer', timeout: PROCESS_TIMEOUT_MS,
           maxBuffer: MAX_OUTPUT_BYTES, signal: controller.signal, env: safeEnv(env),
         });
-        if (disabled || runGeneration !== generation) return statusSnapshot('unavailable', now());
+        if (disabled || runGeneration !== generation) return lastSnapshot = statusSnapshot('unavailable', now());
         const snapshot = parseSnapshot(result?.stdout, { hostId, orchestratorId, platform, label, observedAt: now(),
           supportsStableSessionRef });
         current = snapshot; failures = 0; nextRetryAt = 0;
-        return snapshot;
+        return lastSnapshot = statusSnapshot('available', now());
       } catch (error) {
-        if (disabled || runGeneration !== generation) return statusSnapshot('unavailable', now());
+        if (disabled || runGeneration !== generation) return lastSnapshot = statusSnapshot('unavailable', now());
         failures++;
         nextRetryAt = now() + Math.min(60_000, 1000 * (2 ** Math.min(failures - 1, 6)));
-        if (error?.code === 'ENOENT') return statusSnapshot('unavailable', now());
-        if (error?.name === 'AbortError' || error?.code === 'ABORT_ERR') return statusSnapshot('unavailable', now());
+        if (error?.code === 'ENOENT') return lastSnapshot = statusSnapshot('unavailable', now());
+        if (error?.name === 'AbortError' || error?.code === 'ABORT_ERR') return lastSnapshot = statusSnapshot('unavailable', now());
         const code = error instanceof HerdrReadError ? error.code : error?.code === 'ETIMEDOUT' ? 'timeout' : error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'output_limit' : 'read_failed';
-        if (code === 'unsupported_response') return statusSnapshot('unsupported', now());
+        if (code === 'unsupported_response') return lastSnapshot = statusSnapshot('unsupported', now());
         const stale = current && now() - current.host.observedAt <= STALE_RETENTION_MS;
-        return statusSnapshot(stale ? 'stale' : 'unavailable', now());
+        return lastSnapshot = statusSnapshot(stale ? 'stale' : 'unavailable', now());
       } finally {
         inFlight = null; controller = null;
       }
@@ -170,6 +186,7 @@ function createHerdrReader({ binaryPath, hostId, orchestratorId, platform = 'unk
     pollTimer = null;
     if (controller) controller.abort();
     current = null;
+    lastSnapshot = statusSnapshot('unavailable', now());
     nextRetryAt = 0;
   }
 
@@ -210,6 +227,7 @@ function createHerdrReader({ binaryPath, hostId, orchestratorId, platform = 'unk
   }
 
   return Object.freeze({ refresh, start, stop, disable, enable, sendPaneText,
+    get currentSnapshot() { return lastSnapshot; },
     get failureCount() { return failures; }, get enabled() { return !disabled; } });
 }
 

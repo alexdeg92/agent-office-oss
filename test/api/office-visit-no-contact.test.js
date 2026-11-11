@@ -37,7 +37,7 @@ for (const P of [project2x, project3x]) {
         canReadSessions: true, actorOf: () => ({ kind: 'system', name: 'System' }), P });
       assert.equal(Object.hasOwn(vm, 'visitIntent'), false);
       assert.doesNotThrow(() => createVmCheck({ mode: 'throw', version: P.version }).check('office', vm));
-      if (unresolvedOwner) assert.ok(vm.occupants.some(row => ['direct', 'dm', 'conversation', 'channel'].includes(row.role) && !row.parentId));
+      if (unresolvedOwner) { assert.equal(vm.occupants.length, 1); assert.equal(vm.occupants[0].visitLabel, undefined, 'unknown owner cannot annotate an unrelated agent'); }
     });
   }
   test(`T-0140 v${P.version}: mounted no-contact Office GET returns 200`, async t => {

@@ -6,16 +6,22 @@ import {openLayoutBrowser,browserSkipReason} from './helpers/layout-browser.js';
 const require=createRequire(import.meta.url);
 const {rosterFloorFixture}=require('../helpers/roster-floor-fixture.cjs');
 const current=async(h,version)=>{const r=await h.get(`/api/v${version}/views/office`);assert.equal(r.status,200,r.text);return r.json.data;};
-const expected=vm=>vm.rosterFloors.map(f=>({id:f.id,count:f.count,items:f.items.map(i=>i.kind==='team-header'?{kind:i.kind,id:i.id}:{kind:i.kind,id:i.occupantId})}));
+const expected=vm=>vm.rosterFloors.map(f=>({id:f.id,count:f.count,
+ agentGroups:(f.agentGroups||[]).map(group=>({id:group.id,kind:group.kind,occupantIds:group.occupantIds})),
+ otherItems:(f.otherItems||[]).map(item=>item.kind==='team-header'?{kind:item.kind,id:item.id}:{kind:item.kind,id:item.occupantId})}));
 async function matches(page,vm){
  const want=expected(vm);
  await page.waitForFunction(want=>{
-  const groups=[...document.querySelectorAll('.ao-bureau__side > .ao-floor-roster > [data-roster-floor]')].map(g=>({id:g.dataset.rosterFloor,count:Number(g.querySelector('.ao-floor-roster__jump span:nth-child(2)').textContent),items:[...g.querySelector(':scope > ul').children].map(li=>li.hasAttribute('data-roster-team-header')?{kind:'team-header',id:li.dataset.rosterTeamHeader}:{kind:'occupant',id:li.querySelector('[data-occupant]')?.dataset.occupant})}));
+  const groups=[...document.querySelectorAll('.ao-bureau__side > .ao-floor-roster > [data-roster-floor]')].map(g=>({id:g.dataset.rosterFloor,count:Number(g.querySelector('.ao-floor-roster__jump span:nth-child(2)').textContent),
+   agentGroups:[...g.querySelectorAll(':scope > [data-floor-agent-group]')].map(group=>({id:group.dataset.floorAgentGroup,kind:group.dataset.floorAgentGroupKind,occupantIds:[...group.querySelectorAll(':scope > ul [data-occupant]')].map(row=>row.dataset.occupant)})),
+   otherItems:[...g.querySelectorAll(':scope > ul')].flatMap(list=>[...list.children].map(li=>li.hasAttribute('data-roster-team-header')?{kind:'team-header',id:li.dataset.rosterTeamHeader}:{kind:'occupant',id:li.querySelector('[data-occupant]')?.dataset.occupant}))}));
   return JSON.stringify(groups)===JSON.stringify(want);
  },want);
- const actual=await page.evaluate(()=>[...document.querySelectorAll('.ao-bureau__side > .ao-floor-roster > [data-roster-floor]')].map(g=>({id:g.dataset.rosterFloor,count:Number(g.querySelector('.ao-floor-roster__jump span:nth-child(2)').textContent),items:[...g.querySelector(':scope > ul').children].map(li=>li.hasAttribute('data-roster-team-header')?{kind:'team-header',id:li.dataset.rosterTeamHeader}:{kind:'occupant',id:li.querySelector('[data-occupant]')?.dataset.occupant})})));
- assert.deepEqual(actual,want,'each floor renders exactly the backend item sequence and count');
- const descendants=actual.flatMap(f=>f.items.filter(i=>i.kind==='occupant').map(i=>i.id));
+ const actual=await page.evaluate(()=>[...document.querySelectorAll('.ao-bureau__side > .ao-floor-roster > [data-roster-floor]')].map(g=>({id:g.dataset.rosterFloor,count:Number(g.querySelector('.ao-floor-roster__jump span:nth-child(2)').textContent),
+  agentGroups:[...g.querySelectorAll(':scope > [data-floor-agent-group]')].map(group=>({id:group.dataset.floorAgentGroup,kind:group.dataset.floorAgentGroupKind,occupantIds:[...group.querySelectorAll(':scope > ul [data-occupant]')].map(row=>row.dataset.occupant)})),
+  otherItems:[...g.querySelectorAll(':scope > ul')].flatMap(list=>[...list.children].map(li=>li.hasAttribute('data-roster-team-header')?{kind:'team-header',id:li.dataset.rosterTeamHeader}:{kind:'occupant',id:li.querySelector('[data-occupant]')?.dataset.occupant}))})));
+ assert.deepEqual(actual,want,'each floor renders exactly the backend group and non-agent collections');
+ const descendants=actual.flatMap(f=>[...f.agentGroups.flatMap(group=>group.occupantIds),...f.otherItems.filter(i=>i.kind==='occupant').map(i=>i.id)]);
  assert.equal(new Set(descendants).size,vm.occupants.length);assert.equal(descendants.length,vm.occupants.length,'no duplicate or leftover rows');
 }
 async function refresh(p,h){
@@ -30,7 +36,7 @@ async function capture(p,path){
  await mkdir('design/reports/roster-floor-125',{recursive:true});
  await p.waitForFunction(()=>document.querySelector('.bu-live')?.textContent==='En direct'&&!document.querySelector('.ao-bureau__stagecap'));
  await p.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.querySelectorAll('.ao-bureau__side img,.ao-bureau__stage img')].filter(i=>i.src).map(i=>i.decode()));});
- await p.locator('.ao-bureau__side').screenshot({path,animations:'disabled'});
+ await p.screenshot({path,fullPage:false,animations:'disabled'});
  console.log('T-0125 capture '+path);
 }
 

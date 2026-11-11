@@ -49,6 +49,29 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
     catch { projectionIssue(i,type); return []; }
   }
   const union = (method, type, map) => () => enabled().flatMap(i=>rowsOf(i,method,type,map));
+  // Cross-runtime ownership, exact ids only. A runtime that runs another runtime's CLI claims the CLI sessions
+  // it recorded. The CLI's own connector drops those sessions, and any agent of it left with no session of its
+  // own. Folders are never evidence: a session started by hand in the same directory stays.
+  let ownershipCache = null;
+  function ownership() {
+    const key = enabled().map(i => i.id).join('\0');
+    if (ownershipCache?.key === key) return ownershipCache;
+    const claimants = new Map(), sessions = new Set(), agents = new Set();
+    for (const i of enabled()) for (const row of i.engine.foreignClaims?.().sessions || []) {
+      const ref = row.runtimeKind + '\0' + row.sessionRef; claimants.set(ref, [...(claimants.get(ref) || []), i.id]);
+    }
+    for (const i of enabled()) {
+      const byAgent = new Map();
+      for (const origin of i.engine.sessionOrigins?.() || []) {
+        const owned = (claimants.get(origin.runtimeKind + '\0' + origin.sessionRef) || []).some(owner => owner !== i.id);
+        if (owned) sessions.add(id(i, 'session', origin.sessionKey));
+        if (origin.agentId) byAgent.set(origin.agentId, (byAgent.get(origin.agentId) ?? true) && owned);
+      }
+      for (const [agentId, allOwned] of byAgent) if (allOwned) agents.add(id(i, 'agent', agentId));
+    }
+    return ownershipCache = { key, sessions, agents };
+  }
+  const unowned = rows => { const owned = ownership(); return rows.filter(row => !owned.agents.has(row.id)); };
   const owner = (key, kind) => {
     const parsed = parseId(key, kind);
     if (parsed) return { instance: enabled().find(i => i.id === parsed.runtime), local: parsed.local };
@@ -60,7 +83,7 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
     ...(raw.delegation ? { delegation: { ...raw.delegation, sessionKey: id(i, 'session', raw.delegation.sessionKey) } } : {}) };
   const lineage = (i, v) => (v === undefined ? {} : { spawnedBy: normaliseLineage(v, { scope: { instance: i.id } }) });
   const agent = (i, raw) => ({ ...plain(raw), id: id(i, 'agent', raw.id), mainSessionKey: id(i, 'session', raw.mainSessionKey), ...lineage(i, raw.spawnedBy) });
-  const agents = union('agents','agent',agent);
+  const agents = () => unowned(union('agents','agent',agent)());
   function primaryAgent() {
     const all = agents();
     const resolved = resolvePrimaryAgent(all.some(a => a.isPrimary) ? all : all.sort((a,b)=>a.id.localeCompare(b.id)), {primary:selected});
@@ -182,6 +205,7 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
   for (const i of enabled()) for (const name of ['change', 'ingested', 'live']) {
     const fn = value => {
       if (closed || !i.enabled) return;
+      if (name !== 'live') ownershipCache = null;
       if((name==='ingested' || name==='change') && i.id==='legacy')rememberLegacyAliases();
       if (name === 'live') {
         let row;
@@ -208,13 +232,31 @@ function createMultiEngine({ instances, primary = null, now = Date.now, timeoutM
   const facade = {
     legacyAliasConflict(kind,value) {rememberLegacyAliases();return aliases.overflow || aliases.seen.has(aliasHash(kind,value));},
     on: events.on.bind(events), removeListener: events.removeListener.bind(events), quarantine, instances,
-    agents, detectedAgents: union('detectedAgents','agent',agent), primaryAgent,
+    agents, detectedAgents: () => unowned(union('detectedAgents','agent',agent)()), primaryAgent,
     configuredAgentIds: () => enabled().flatMap(i => (i.engine.configuredAgentIds?.() || []).map(agentId => id(i, 'agent', agentId))),
     autoAddedAgentIds: () => enabled().flatMap(i => (i.engine.autoAddedAgentIds?.() || []).map(agentId => id(i, 'agent', agentId))),
     identityAgents: hostId => enabled().flatMap(i => (i.engine.identityAgents?.(hostId) || []).map(row => ({ ...row, id: id(i, 'agent', row.id) }))),
     identitySessions: hostId => enabled().flatMap(i => (i.engine.identitySessions?.(hostId) || []).map(row => ({ ...row,
       id: id(i, 'session', row.id), sessionKey: id(i, 'session', row.sessionKey), agentId: id(i, 'agent', row.agentId) }))),
-    sessions: union('sessions','session',session),
+    // The runtime-neutral core owns source admission; route callers use this
+    // multi-runtime facade, so keep the engine Office path and source registry
+    // available here while projecting runtime rows across partitions.
+    registerOrchestrationSource: (...args) => core?.registerOrchestrationSource?.(...args) ?? false,
+    ingestOrchestrationSource: (...args) => core?.ingestOrchestrationSource?.(...args) ?? { ok: false, category: 'capability-unavailable' },
+    refreshOrchestrationSource: (...args) => core?.refreshOrchestrationSource?.(...args) ?? { ok: false, category: 'capability-unavailable' },
+    setOrchestrationSourceEnabled: (...args) => core?.setOrchestrationSourceEnabled?.(...args) ?? false,
+    orchestrationSnapshot: (...args) => core?.orchestrationSnapshot?.(...args) ?? null,
+    orchestrationProjectionSnapshot: (...args) => core?.orchestrationProjectionSnapshot?.(...args) ?? null,
+    orchestrationSourcePrivateRefs: (...args) => core?.orchestrationSourcePrivateRefs?.(...args) ?? null,
+    orchestrationSourceCapabilities: (...args) => core?.orchestrationSourceCapabilities?.(...args) ?? [],
+    orchestrationSourceStatus: (...args) => core?.orchestrationSourceStatus?.(...args) ?? [],
+    compareOrchestrationProjection: (...args) => core?.compareOrchestrationProjection?.(...args) ?? null,
+    skipOrchestrationProjection: (...args) => core?.skipOrchestrationProjection?.(...args) ?? false,
+    recordOrchestrationShadowError: (...args) => core?.recordOrchestrationShadowError?.(...args) ?? false,
+    orchestrationParityCounters: (...args) => core?.orchestrationParityCounters?.(...args) ?? {},
+    buildOfficeView(options) { return require('./office/builder').buildOfficeView(facade, options); },
+    runtimePresentationFor(kind) { return require('../adapters').runtimePresentationFor(kind); },
+    sessions: () => { const owned = ownership().sessions; return union('sessions','session',session)().filter(row => !owned.has(row.key) && !owned.has(row.parentKey)); },
     session: routed('session', 'session', session), classify: key => facade.session(key)?.class || { kind: 'unrecognized', agentId: null },
     transcript: routed('transcript', 'session', trace,'transcript'), conversationMessageCount: routed('conversationMessageCount', 'session', (_, n) => n,'count'),
     cronJobs: union('cronJobs','cronJob',flow),

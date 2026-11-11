@@ -105,6 +105,12 @@ function projectOfficeTeamOccupants(office, snapshot, principal, { sourceEnabled
   if (!sourceEnabled || (!placementOnly && (!principal || !can(principal, 'orchestrators'))) ||
       !office || !Array.isArray(office.occupants) || !snapshot) return office;
   const mayReadTeam = placementOnly || can(principal, 'teams');
+  if (!mayReadTeam) {
+    // A cached or adapter-backed Office row may already carry team references.
+    // Strip them before every early return as well as before later projection;
+    // teams.read is the sole authority for membership identifiers.
+    office = { ...office, occupants: office.occupants.map(({ teamId: _teamId, teamIds: _teamIds, memberId: _memberId, ...row }) => ({ ...row, teamId: null })) };
+  }
   const hosts = new Map((snapshot.agents || []).filter(row => row?.id).map(row => [row.id, row]));
   tracker?.keepHostStates?.([...hosts.keys()]);
   const links = new Map();

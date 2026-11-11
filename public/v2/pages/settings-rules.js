@@ -29,7 +29,7 @@ export function initialDrafts(vm) {
     agents: agentDraft(vm),
     connexion: {adapter: activeRuntime(vm), names:Object.fromEntries(vm.runtimes.map(r=>[r.id,r.name])), values: Object.fromEntries(vm.runtimes.map(r => [r.id, Object.fromEntries(r.fields.filter(f => !f.writeOnly).map(f => [f.id, r.values[f.id]?.value ?? '']))])), secrets: {}, enabled: Object.fromEntries(vm.runtimes.map(r => [r.id, r.enabled ?? r.selected])), herdrEnabled: !!vm.herdr?.enabled},
     instance: {instance: vm.instance ? valuesOf(vm.instance) : null, office: vm.office ? valuesOf(vm.office) : null, network: vm.network ? {mode: vm.network.mode.value, port: vm.network.port.value, publicUrl: vm.network.publicUrl.value || ''} : null},
-    compte: {owner: {displayName: owner.displayName?.value ?? '', email: owner.email?.value ?? ''}, password: '', confirmation: ''},
+    compte: {owner: {displayName: owner.displayName?.value ?? '', email: owner.email?.value ?? ''}, avatar: vm.profileAvatar ?? null, avatarStageId: null, password: '', confirmation: ''},
   };
 }
 export function dirty(tab, drafts, vm) {
@@ -38,6 +38,103 @@ export function dirty(tab, drafts, vm) {
 }
 export const hasDrafts = (drafts, vm) => ['agents','connexion','instance','compte'].some(tab => dirty(tab, drafts, vm));
 export const pendingSections = (drafts, vm, plan) => SETTINGS_TABS.filter(tab => dirty(tab,drafts,vm) || tab==='connexion'&&!!plan?.result);
+/** Presentation-only: why Apply plan stays disabled (message key, or null when ready). */
+export function integrationApplyBlocker(plan, { connectionDirty = false } = {}) {
+  if (connectionDirty) return 'settings.integrations.apply.needConnectorSave';
+  if (!plan?.result || !(plan.agentIds || []).length) return 'settings.integrations.apply.emptyPlan';
+  if (!plan.confirmed) return 'settings.integrations.apply.needConfirm';
+  return null;
+}
+const displayValue = value => value == null || value === '' ? null : Array.isArray(value) ? value.join('\n') : String(value);
+const pushChange = (out, change) => out.push(change);
+const enabledState = on => on ? 'settings.connection.enabled' : 'settings.pending.off';
+/** Presentation-only: field-level pending edits for the Details sheet (secrets never include values). */
+export function pendingChanges(drafts, vm, plan = null) {
+  if (!vm || !drafts) return [];
+  const out = [];
+  if (dirty('agents', drafts, vm)) {
+    const draft = drafts.agents, baseline = agentDraft(vm, draft.runtime);
+    const byId = new Map(baseline.agents.map(a => [a.id, a]));
+    draft.agents.forEach((agent, index) => {
+      const previous = byId.get(agent.id), row = { targetId: 'settings-agent-row-' + index, testId: true, runtime: draft.runtime };
+      if (!previous) pushChange(out, { section: 'agents', id: `agents:add:${agent.id || index}`, labelKey: 'settings.agents.add',
+        before: null, after: agent.name || agent.id || null, ...row });
+      else {
+        if (previous.name !== agent.name) pushChange(out, { section: 'agents', id: `agents:name:${agent.id}`, labelKey: 'settings.agents.name',
+          before: previous.name || null, after: agent.name || null, ...row });
+        if (!!previous.hidden !== !!agent.hidden) pushChange(out, { section: 'agents', id: `agents:hidden:${agent.id}`, labelKey: agent.hidden ? 'settings.agents.hidden' : 'settings.agents.show',
+          before: previous.hidden ? 'settings.agents.hiddenState' : 'settings.agents.inOffice', after: agent.hidden ? 'settings.agents.hiddenState' : 'settings.agents.inOffice',
+          translate: true, ...row });
+      }
+    });
+    for (const previous of baseline.agents) if (!draft.agents.some(a => a.id === previous.id))
+      pushChange(out, { section: 'agents', id: `agents:remove:${previous.id}`, labelKey: 'settings.agents.remove',
+        before: previous.name || previous.id, after: null, targetId: 'settings-agents', runtime: draft.runtime });
+    if (baseline.primary !== draft.primary) pushChange(out, { section: 'agents', id: 'agents:primary', labelKey: 'settings.agents.primary',
+      before: baseline.primary, after: draft.primary, targetId: 'settings-agents', runtime: draft.runtime });
+  }
+  if (dirty('connexion', drafts, vm)) {
+    const draft = drafts.connexion, baseline = initialDrafts(vm).connexion;
+    if (!!baseline.herdrEnabled !== !!draft.herdrEnabled || draft.herdrTouched)
+      pushChange(out, { section: 'connexion', id: 'connexion:herdr', labelKey: 'settings.herdr.source',
+        before: enabledState(baseline.herdrEnabled), after: enabledState(draft.herdrEnabled),
+        translate: true, targetId: 'settings-enabled-herdr', connecteur: 'herdr' });
+    for (const runtime of connectionRows(draft, vm).filter(r => r.supported)) {
+      const connecteur = runtime.adapter || runtime.id;
+      if ((baseline.names?.[runtime.id] ?? runtime.name) !== (draft.names?.[runtime.id] ?? runtime.name))
+        pushChange(out, { section: 'connexion', id: `connexion:name:${runtime.id}`, labelKey: 'settings.connection.instanceName',
+          before: baseline.names?.[runtime.id] ?? runtime.name, after: draft.names?.[runtime.id] ?? runtime.name,
+          targetId: 'settings-label-' + runtime.id, connecteur });
+      if (!!baseline.enabled[runtime.id] !== !!draft.enabled[runtime.id])
+        pushChange(out, { section: 'connexion', id: `connexion:enabled:${runtime.id}`, labelKey: 'settings.connection.enabled',
+          before: enabledState(baseline.enabled[runtime.id]), after: enabledState(draft.enabled[runtime.id]), translate: true,
+          targetId: 'settings-enabled-' + runtime.id, connecteur });
+      for (const field of runtime.fields || []) {
+        if (field.writeOnly) {
+          if (!Object.hasOwn(draft.secrets[runtime.id] || {}, field.id)) continue;
+          pushChange(out, { section: 'connexion', id: `connexion:secret:${runtime.id}:${field.id}`, label: field.label,
+            before: runtime.values?.[field.id]?.tokenSet ? 'settings.pending.secretSaved' : 'settings.pending.empty',
+            after: 'settings.pending.changed', translate: true, secret: true,
+            targetId: 'settings-runtime-' + runtime.id + '-' + field.id, connecteur });
+          continue;
+        }
+        const before = baseline.values[runtime.id]?.[field.id], after = draft.values[runtime.id]?.[field.id];
+        if (before === after) continue;
+        pushChange(out, { section: 'connexion', id: `connexion:value:${runtime.id}:${field.id}`, label: field.label,
+          before: displayValue(before), after: displayValue(after),
+          targetId: 'settings-runtime-' + runtime.id + '-' + field.id, connecteur });
+      }
+    }
+  }
+  if (dirty('instance', drafts, vm)) {
+    const draft = drafts.instance, baseline = initialDrafts(vm).instance;
+    for (const key of ['name', 'locale', 'timeZone']) if ((baseline.instance?.[key] ?? '') !== (draft.instance?.[key] ?? ''))
+      pushChange(out, { section: 'instance', id: 'instance:' + key, labelKey: 'settings.instance.' + key,
+        before: displayValue(baseline.instance?.[key]), after: displayValue(draft.instance?.[key]), targetId: 'settings-instance-' + key });
+    for (const key of Object.keys({ ...(baseline.office || {}), ...(draft.office || {}) }))
+      if ((baseline.office?.[key] ?? null) !== (draft.office?.[key] ?? null))
+        pushChange(out, { section: 'instance', id: 'office:' + key, label: vm.office?.[key]?.label || key,
+          before: displayValue(baseline.office?.[key]), after: displayValue(draft.office?.[key]), targetId: 'settings-office-' + key });
+    for (const key of ['mode', 'port', 'publicUrl']) if ((baseline.network?.[key] ?? '') !== (draft.network?.[key] ?? ''))
+      pushChange(out, { section: 'instance', id: 'network:' + key, labelKey: 'settings.instance.' + (key === 'mode' ? 'mode' : key === 'port' ? 'port' : 'publicUrl'),
+        before: displayValue(baseline.network?.[key]), after: displayValue(draft.network?.[key]), targetId: 'settings-network-' + key });
+  }
+  if (dirty('compte', drafts, vm)) {
+    const draft = drafts.compte, baseline = initialDrafts(vm).compte;
+    for (const key of ['displayName', 'email']) if ((baseline.owner?.[key] ?? '') !== (draft.owner?.[key] ?? ''))
+      pushChange(out, { section: 'compte', id: 'owner:' + key, labelKey: 'settings.account.' + key,
+        before: displayValue(baseline.owner?.[key]), after: displayValue(draft.owner?.[key]), targetId: 'settings-owner-' + key });
+    if (draft.avatarStageId) pushChange(out, { section: 'compte', id: 'owner:avatar', labelKey: 'settings.avatar.title',
+      before: null, after: 'settings.pending.changed', translate: true, targetId: 'settings-avatar-title' });
+    if (draft.password || draft.confirmation) pushChange(out, { section: 'compte', id: 'owner:password', labelKey: 'settings.account.password',
+      before: null, after: 'settings.pending.changed', translate: true, secret: true, targetId: 'settings-password' });
+  }
+  if (plan?.result) pushChange(out, { section: 'connexion', id: 'connexion:integrations-plan', labelKey: 'settings.integrations.apply',
+    before: null, after: plan.action === 'uninstall' ? 'settings.integrations.uninstall' : 'settings.integrations.install', translate: true,
+    targetId: 'settings-provider-integrations-title',
+    connecteur: vm.runtimes.find(r => r.id === plan.runtime)?.adapter || plan.runtime, sectionIntegrations: true, runtime: plan.runtime });
+  return out;
+}
 export const changedFields = (draft, fields) => Object.fromEntries(Object.entries(draft || {}).filter(([id,value]) => fields?.[id]?.editable && value !== fields[id].value));
 
 /** Only declared fields, with a typed secret only when replacing it. An omitted secret preserves a matching saved credential. */

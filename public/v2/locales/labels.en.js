@@ -1,5 +1,6 @@
 // English fallback for backend LabelRefs when MetaVM uses another locale.
 export const LABELS_EN = {
+  'office.visitingWithChannel': 'In conversation with {name} · {channel}',
   'chat.target.team': 'Team',
   "settings.office.managed": "This duration is set by the server configuration.",
   "office.activity.idle": "On a break",

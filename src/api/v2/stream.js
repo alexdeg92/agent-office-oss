@@ -25,7 +25,7 @@ const LIMITS = Object.freeze({ perSession: 8, global: 64, frameBytes: 1024 * 102
 const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const mintStreamId = () => 'str_' + [...crypto.randomBytes(22)].map((b) => B62[b % 62]).join('');
 
-function createStreamHub({ topics, engine, systemState, contractVersion, modelVersion, buildId = () => null, authorizeTopic = () => true, now = () => Date.now(), heartbeatMs = HEARTBEAT_MS, resumeMs = RESUME_MS, limits: overrides = {}, admission = new Map(), warnings = new Set(), log = () => {}, resolveTopic = (id) => id, security=null, authorizationEvents=null }) {
+function createStreamHub({ topics, engine, systemState, contractVersion, modelVersion, buildId = () => null, authorizeTopic = () => true, now = () => Date.now(), heartbeatMs = HEARTBEAT_MS, resumeMs = RESUME_MS, limits: overrides = {}, admission = new Map(), warnings = new Set(), log = () => {}, resolveTopic = (id) => id, officeFull = id => id === 'office', security=null, authorizationEvents=null }) {
   if(security&&!authorizationEvents)throw new TypeError('stream authorization events required');
   const limits = { ...LIMITS, ...overrides };
   for (const value of Object.values(limits)) if (!Number.isSafeInteger(value) || value < 1) throw new TypeError('invalid stream limit');
@@ -339,11 +339,8 @@ function createStreamHub({ topics, engine, systemState, contractVersion, modelVe
     for (const st of streams.values()) {
       if (st.closed) continue;
       const logicalOffice = st.topics.has('office') ? projected(st, 'office') : null;
-      const fullLogicalOffice = logicalOffice === 'office'
-        ? authorizeQueuedTopic(st, 'office')
-        : typeof logicalOffice === 'string' && logicalOffice.startsWith('office-scope:') && authorizeQueuedTopic(st, logicalOffice);
-      const scopedOffice = [...st.topics].some(id => id.startsWith('office-scope:') && authorizeQueuedTopic(st, id));
-      if (fullLogicalOffice || scopedOffice) write(st, 'cue', frame);
+      // Reauthorize the public subscription, not its server-internal projection.
+      if (logicalOffice && sameProjection(st, st.session) && officeFull(logicalOffice) && authorizeQueuedTopic(st, 'office')) write(st, 'cue', frame);
     }
   }
   function toast(level, message) { for (const st of streams.values()) if (!st.closed) write(st, 'toast', { type: 'toast', level, message }); }

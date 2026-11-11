@@ -47,10 +47,21 @@ const RULES = [
 ];
 
 function chat(key, scopeOk) {
-  const m = key.match(/^agent:[^:]+:([a-z][a-z0-9-]*):([a-z][a-z0-9-]*):(.+)$/);
-  if (!m || NOT_CHANNELS.has(m[1]) || !scopeOk(m[2])) return null;
+  const m = key.match(/^agent:[^:]+:([a-z][a-z0-9-]*):([^:]+):(.+)$/);
+  if (!m || NOT_CHANNELS.has(m[1])) return null;
+  let scope = m[2], peer = m[3];
+  // Newer channel keys include an account before the scope. Consume it only
+  // when the first segment is not already a known scope: legacy peers are opaque
+  // and may themselves contain colons (matrix room/user ids, Discord threads).
+  if (!DIRECT.includes(scope) && !GROUP.includes(scope)) {
+    const accountScope = peer.match(/^([a-z][a-z0-9-]*):(.+)$/);
+    if (accountScope && (DIRECT.includes(accountScope[1]) || GROUP.includes(accountScope[1]))) {
+      scope = accountScope[1]; peer = accountScope[2];
+    }
+  }
+  if (!/^[a-z][a-z0-9-]*$/.test(scope) || !scopeOk(scope)) return null;
   const channel = channelRefOf(m[1]);
-  return channel ? { channel, scope: m[2], peer: m[3] } : null;
+  return channel ? { channel, scope, peer } : null;
 }
 
 // Interlocutor id (§12.5): the CHANNEL's grammar decides (ADR-001 §14.1; Discord's keeps its exact 2.x ids)

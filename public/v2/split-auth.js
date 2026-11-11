@@ -15,7 +15,7 @@ function value(result) {
 async function authOperation(url, body, csrfToken = null) {
   let response;
   try {
-    response = await fetch(url, {method:'POST',credentials:'include',cache:'no-store',redirect:'error',
+    response = await fetch(url, { /* transport-allow:fetch:auth-operation */ method:'POST',credentials:'include',cache:'no-store',redirect:'error',
       headers:{accept:'application/json','content-type':'application/json','x-ao-request':'1',...(csrfToken?{'x-ao-csrf':csrfToken}:{})},body:JSON.stringify(body)});
   } catch { return {ok:false,error:{code:'network'}}; }
   const json = await response.json().catch(()=>null);
@@ -60,7 +60,7 @@ export function refresh(url) {
 }
 
 export async function request(url, options, refreshUrl) {
-  const send = () => fetch(url,{...options,credentials:'omit',redirect:'error',headers:{...options.headers,...(humanAccessToken?{authorization:'Bearer '+humanAccessToken}:{})}});
+  const send = () => fetch(url,{ /* transport-allow:fetch:split-request */ ...options,credentials:'omit',redirect:'error',headers:{...options.headers,...(humanAccessToken?{authorization:'Bearer '+humanAccessToken}:{})}});
   let response;
   try { response=await send(); } catch { throw new ApiErrorType({code:'network'}); }
   if(response.status===401&&humanAccessToken&&['GET','HEAD'].includes(String(options.method||'GET').toUpperCase())&&!/\/api\/auth\//.test(url)){

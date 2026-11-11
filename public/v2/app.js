@@ -50,7 +50,7 @@ async function makeStream(meta) {
   const mock = api.isMock() ? await api.mock() : null;
   const openSource = mock ? (url) => new mock.MockEventSource(versioned(url))
     : splitOrigin ? (await loadModule(() => import('./split-stream.js' + buildQuery))).openSource
-    : (url) => new EventSource(apiUrl(url), {withCredentials:true});
+    : (url) => new EventSource(apiUrl(url), {withCredentials:true}) /* t:EventSource:app-stream */;
   return createStream({
     openSource,
     fetchVM: async (url) => { const r = await api.get(url, { quiet: true }); return { data: r.data, topic: (r.meta && r.meta.topic) || null, meta: r.meta || null }; },
@@ -132,7 +132,7 @@ function loadPage(name) {
   return pageLoads.get(name);
 }
 function PageBoundary({ children }) {
-  const [error, reset] = useErrorBoundary();
+  const [error, reset] = useErrorBoundary((caught, info) => console.error('AO_PAGE_BOUNDARY', caught?.stack || caught, info));
   return error ? html`<div class="bu-page"><${ErrorState} error=${{ code: 'internal', message: msg('common.unexpected') }} onRetry=${reset} /></div>` : children;
 }
 function LazyPage({ name, ...props }) {

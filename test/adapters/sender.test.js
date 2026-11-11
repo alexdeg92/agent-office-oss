@@ -10,7 +10,7 @@ const raw = (p, text) => ({ role: 'user', content: p ? `Conversation info (untru
 const context = (kind) => ({ session: { class: kind === 'operator' ? { kind: 'explicit', explicitKey: 'portal-chat' } : { kind: kind === 'dm' ? 'conversation-direct' : 'conversation-group', channel: 'discord' } } });
 senderConformance('openclaw', { ...oc, raw, context });
 senderConformance('generic', { ...core, raw: (p, content) => ({ role: 'user', content, ...(p ? { senderInfo: { kind: 'human', id: 'local-user:' + p.id, name: p.name, runtime: 'generic', channel: null, avatarHint: null } } : {}) }), context: () => ({}) });
-for (const runtime of ['claude-code', 'codex', 'opencode', 'cursor-cli', 'hermes']) test(`${runtime}: generic CLI defaults to local operator`, () => assert.equal(core.resolveSender({ role: 'user' }, { runtime, operator: fixture.operator }).name, 'Camille'));
+for (const runtime of ['claude-code', 'codex', 'opencode', 'cursor', 'hermes']) test(`${runtime}: generic CLI defaults to local operator`, () => assert.equal(core.resolveSender({ role: 'user' }, { runtime, operator: fixture.operator }).name, 'Camille'));
 test('OpenClaw: stripping preserves literal metadata in body and malformed JSON', () => {
   assert.equal(oc.stripEnvelope('Explain this:\n' + raw(fixture.humans[0], 'Hello').content), 'Explain this:\n' + raw(fixture.humans[0], 'Hello').content);
   const broken = 'Sender (untrusted metadata):\n```json\n{bad}\n```\nHello'; assert.equal(oc.stripEnvelope(broken), broken);

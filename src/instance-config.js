@@ -191,8 +191,14 @@ function effectiveEnv(env, { config, secrets }) {
   if (completeEnvLogin(env)) {
     for (const k of LOGIN_ENV) if (env[k] === undefined) delete out[k];
     delete out.AO_AUTH_DATABASE;
-  } else if (LOGIN_ENV.some(k => env[k] !== undefined)) {
-    throw new ConfigError('environment', [{ path: '$', detail: 'incomplete environment login: ' + LOGIN_ENV.filter(k => env[k] !== undefined).join(', ') }]);
+  } else if (envConfigured(env)) {
+    const missing = ['PORTAL_EMAIL', 'PORTAL_SECRET', 'PORTAL_PASSWORD_HASH'].filter(k => !env[k] && !(k === 'PORTAL_PASSWORD_HASH' && env.PORTAL_PASSWORD));
+    throw new ConfigError('environment', [{ path: '$', detail: 'incomplete environment login: ' + LOGIN_ENV.filter(k => env[k]).join(', ')
+      + ' (missing or empty: ' + missing.join(', ') + '). Complete it, or remove every PORTAL_EMAIL, PORTAL_SECRET and PORTAL_PASSWORD* line to create the owner in the setup wizard' }]);
+  } else {
+    // Blank login lines (an env file copied from .env.example) set nothing: the file login, or first-run setup, applies.
+    const file = fileEnv(config, secrets);
+    for (const k of LOGIN_ENV) if (env[k] === '') { if (file[k] === undefined) delete out[k]; else out[k] = file[k]; }
   }
 
   if (config?.version === 3) {
@@ -252,6 +258,9 @@ function runtimeInstances(base, files, env = {}) {
 }
 
 const completeEnvLogin = env => !!(env.PORTAL_EMAIL && env.PORTAL_SECRET && (env.PORTAL_PASSWORD_HASH || env.PORTAL_PASSWORD));
+// The browser origins the setup wizard saved: the legacy network step's public URL, and the access profile's origin when
+// the UI and API share it (public same-origin, tunnel). CSRF accepts them at once; split-origin uses bearer tokens.
+const savedOrigins = (config) => [config?.network?.publicUrl, ['public-same-origin', 'tunnel'].includes(config?.access?.mode) ? config.access.apiPublicUrl : null].filter(Boolean);
 const envConfigured = (env) => LOGIN_ENV.some((k) => env[k] !== undefined && env[k] !== '');
 const isConfigured = (eff) => !!(eff.PORTAL_EMAIL && eff.PORTAL_SECRET && (eff.AO_AUTH_DATABASE === '1' || eff.PORTAL_PASSWORD_HASH || eff.PORTAL_PASSWORD));
 
@@ -296,6 +305,6 @@ function securePermissions({ paths, dataDir = null, uid = process.getuid ? proce
   }
 }
 
-module.exports = { VERSION, configPaths, readInstanceConfig, writeInstanceConfig, securePermissions, acquirePublishLock, effectiveEnv, fileEnv, setupState, isConfigured, envConfigured,
+module.exports = { VERSION, configPaths, readInstanceConfig, writeInstanceConfig, securePermissions, acquirePublishLock, effectiveEnv, fileEnv, setupState, isConfigured, envConfigured, savedOrigins,
   LegacyConfigSchema, LegacySecretsSchema, ConfigV2Schema, SecretsV2Schema, ConfigV3Schema, SecretsV3Schema, ConfigSchema, SecretsSchema,
   upgradeV2, runtimeInstances, nativeRuntime, completeEnvLogin, ConfigError, AGENT_ID, GATEWAY_URL, EMAIL, validZone, LOGIN_ENV };

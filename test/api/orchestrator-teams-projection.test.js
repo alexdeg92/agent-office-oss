@@ -12,6 +12,7 @@ const { createTeamStoreReader } = require('../../src/adapters/agent-team-pm/stor
 const { createOrchestratorTeamSnapshots } = require('../../src/sources/orchestrator-team-snapshots');
 const { validate } = require('../../src/schema');
 const { hashPassword } = require('../../src/security/password');
+const { officeSceneFixture } = require('../helpers/office-scene-fixture.cjs');
 
 const people = ['pm', 'chars-b', 'chars-c', 'access-codex', 'office-codex', 'backend-codex', 'decor', 'critic', 'security', 'designer'];
 const statuses = ['working', 'idle', 'done', 'blocked'];
@@ -53,6 +54,32 @@ describe('T-0045 · wired orchestrator/team projections', () => {
   });
   after(async () => { await h?.close(); });
 
+  it('serves a mixed-adapter TeamsVM for the mounted Bureau fixture', async t => {
+    const at = Date.now(), runtimeKinds = ['claude-code', 'codex', 'openclaw'];
+    const members = Array.from({ length: 6 }, (_, index) => ({
+      id: `member:mounted-${index}`, name: `Member ${index}`, roleKind: index ? 'member' : 'lead',
+      roleLabel: index ? 'engineer' : 'lead', status: index === 2 ? 'inactive' : 'active',
+      runtimeKind: runtimeKinds[index % runtimeKinds.length], hostAgentId: null,
+      parentMemberId: index ? 'member:mounted-0' : null,
+    }));
+    const snapshot = { revision: 1, observedAt: at, hosts: [], orchestrators: [], agents: [], identityLinks: [],
+      team: { id: 'team:mounted', label: 'Mounted fixture', status: 'active', observedAt: at }, members,
+      tasks: [{ id: 'task:mounted', teamId: 'team:mounted', title: 'Fixture task', state: 'working', priority: 1,
+        ownerMemberId: members[1].id, reviewerMemberIds: [], createdAt: at - 1000, updatedAt: at }],
+      reviews: [], diagnostics: { skippedTaskCount: 0, skippedMemberCount: 0 } };
+    const source = { detected: true, hasHerdr: false, hasTeamStore: true, enabled: true,
+      teamCapabilities: require('../../src/adapters/agent-team-pm').setup.capabilities,
+      start() {}, close() {}, onChange: () => () => {}, getSnapshot: () => snapshot };
+    const fixture = await officeSceneFixture({ occupantCount: 7, namedAgents: true, primaryName: 'Atlas', orchestratorTeams: source });
+    t.after(() => fixture.close());
+    const response = await fixture.get('/api/v3/teams');
+    let vmIssues = [];
+    try { fixture.api.topics.current('teams', 3); } catch (error) { vmIssues = error.issues || []; }
+    assert.equal(response.status, 200, `${response.text} ${JSON.stringify(vmIssues)}`);
+    assert.equal(response.json.data.members.length, 6);
+    assert.equal(response.json.data.members[2].status, 'inactive');
+  });
+
   it('projects the synthetic PM team, runtime panes and board over v3 HTTP with private source fields removed', async () => {
     const hosts = await h.get('/api/v3/orchestrators');
     const teams = await h.get('/api/v3/teams');
@@ -78,8 +105,42 @@ describe('T-0045 · wired orchestrator/team projections', () => {
     assert.ok(people.every(name => teams.json.data.members.some(member => member.name === name)));
     const office = await h.get('/api/v3/views/office');
     assert.equal(office.status, 200, office.text);
+    const v3Group = office.json.data.teamGroups.find(group => group.memberCount === people.length);
+    assert.ok(v3Group, 'the OfficeVM supplies the registered team group');
+    assert.equal(v3Group.memberCount, people.length);
+    assert.equal(v3Group.memberCountLabel.params.n, people.length);
+    assert.equal(v3Group.pod.floorId, v3Group.floorId);
+    assert.equal(v3Group.pod.coordinateSpace, 'floor-grid');
+    assert.ok(v3Group.pod.zone?.bounds && v3Group.pod.zone.polygon.length === 4, 'the backend provides bounded pod geometry');
+    assert.deepEqual(Object.keys(v3Group.pod).sort(), ['coordinateSpace', 'floorId', 'seats', 'zone'], 'v3 pods contain only zone geometry and seats');
+    assert.deepEqual(office.json.data.teamLegend.map(item => item.teamId), office.json.data.teamGroups.map(group => group.id),
+      'v3 supplies the card-chrome legend in team-group order');
+    assert.deepEqual(office.json.data.teamLegend.find(item => item.teamId === v3Group.id), {
+      teamId: v3Group.id, label: v3Group.label, accentToken: v3Group.accentToken,
+    });
+    assert.ok(v3Group.sharedLeadLinks.every(link => link.fromPoint && link.toPoint),
+      'shared-lead connectors use server-projected pod-zone endpoints');
+    assert.deepEqual(v3Group.pod.seats.map(seat => seat.occupantId), v3Group.members.map(member => member.occupantId));
+    assert.ok(v3Group.members.every(member => member.stateLabel?.key && ['working', 'idle', 'attention', 'unknown'].includes(member.stateTone)));
+    assert.equal(validate(require('../../src/api/v2/vm/schemas').schemasFor(3).office, office.json.data).ok, true,
+      'v3 team-group fields validate at the mounted API boundary');
     const projectedMembers = office.json.data.occupants.filter(row => people.includes(row.name));
     assert.equal(projectedMembers.length, people.length, 'registered Herdr panes with no live runtime occupants still join the office');
+    assert.deepEqual(v3Group.members.map(member => member.occupantId), projectedMembers.map(member => member.id),
+      'team members are delivered in the same backend-defined roster order');
+    const v3Floor = office.json.data.rosterFloors.find(floor => floor.id === v3Group.floorId);
+    assert.ok(Array.isArray(v3Floor.agentGroups), 'each floor supplies backend-authored agent groups for its seated roster');
+    assert.ok(v3Floor.agentGroups.some(group => group.kind === 'team' && group.id === v3Group.id),
+      'the registered project team appears only in its seated floor collection');
+    assert.ok(v3Floor.agentGroups.every(group => group.occupantIds.every(id => v3Floor.occupantIds.includes(id))),
+      'floor groups reference only occupants seated on that floor');
+    assert.equal(office.json.data.rosterFloors.flatMap(floor => floor.agentGroups)
+      .filter(group => group.kind === 'team' && group.id === v3Group.id).length, 1,
+    'a project team is not repeated in other floor rosters');
+    assert.ok(office.json.data.rosterFloors.every(floor => floor.agentGroups.every(group =>
+      group.occupantIds.every(id => floor.occupantIds.includes(id)))), 'every floor group is scoped to its own seated occupants');
+    assert.ok(v3Group.members.every(member => v3Floor.items.some(item => item.kind === 'occupant' && item.occupantId === member.occupantId)),
+      'the separate team pod projection leaves ordinary floor roster occupants intact');
     const executionByHerdrStatus = { working: 'running', idle: 'idle', done: 'succeeded', blocked: 'failed' };
     for (const occupant of projectedMembers) {
       const status = statuses[people.indexOf(occupant.name) % statuses.length];
@@ -106,11 +167,26 @@ describe('T-0045 · wired orchestrator/team projections', () => {
     // enrichment must reach that route too or the owner sees no team grouping.
     const bureauOffice = await h.get('/api/v2/views/office');
     assert.equal(bureauOffice.status, 200, bureauOffice.text);
+    const v2Group = bureauOffice.json.data.teamGroups.find(group => group.memberCount === people.length);
+    assert.ok(v2Group, 'the shipped v2 Bureau gets the same backend team structure');
+    assert.deepEqual(Object.keys(v2Group.pod).sort(), ['coordinateSpace', 'floorId', 'seats', 'zone'], 'v2 pods contain only zone geometry and seats');
+    assert.deepEqual(bureauOffice.json.data.teamLegend.map(item => item.teamId), bureauOffice.json.data.teamGroups.map(group => group.id),
+      'v2 supplies the card-chrome legend in team-group order');
+    assert.deepEqual(bureauOffice.json.data.teamLegend.find(item => item.teamId === v2Group.id), {
+      teamId: v2Group.id, label: v2Group.label, accentToken: v2Group.accentToken,
+    });
+    const v2OccupantIds = new Set(bureauOffice.json.data.occupants.map(row => row.id));
+    assert.ok(v2Group.members.every(member => v2OccupantIds.has(member.occupantId)), 'v2 group references use projected 2.x occupant IDs');
+    assert.equal(validate(require('../../src/api/v2/vm/schemas').schemasFor(2).office, bureauOffice.json.data).ok, true,
+      'v2 team-group fields validate at the mounted API boundary');
+    const v2Floor = bureauOffice.json.data.rosterFloors.find(floor => floor.id === v2Group.floorId);
     const bureauMembers = bureauOffice.json.data.occupants.filter(row => people.includes(row.name));
     assert.equal(bureauMembers.length, people.length, 'the v2 Bureau API includes registered Herdr team members');
     const bureauPm = bureauMembers.find(row => row.name === 'pm');
     assert.ok(bureauPm);
     for (const member of bureauMembers.filter(row => row.name !== 'pm')) assert.equal(member.parentId, bureauPm.id, member.name + ' grouped beneath PM in the shipped Bureau API');
+    assert.ok(v2Group.members.every(member => bureauOffice.json.data.rosterFloors.some(floor => floor.items.some(item => item.kind === 'occupant' && item.occupantId === member.occupantId))),
+      'team pods are additive and never replace the existing floor roster occupants');
     const bureauIds = new Set(bureauOffice.json.data.occupants.map(row => row.id));
     for (const item of bureauOffice.json.data.rosterFloors.flatMap(floor => floor.items).filter(item => item.kind === 'occupant')) {
       assert.ok(bureauIds.has(item.occupantId), `floor roster references the projected v2 occupant ${item.occupantId}`);
@@ -148,6 +224,56 @@ describe('T-0045 · wired orchestrator/team projections', () => {
         const prior = [...adminRows.values()].find(candidate => candidate.name === row.name);
         assert.ok(prior);
         assert.deepEqual([row.floorId, row.stationUid], [prior.floorId, prior.stationUid], `${row.name} keeps the same home after v2→v3/admin/reader projections`);
+      }
+    } finally {
+      activePrincipal = { id: 'owner-fixture', role: 'admin', permissionRevision: 1 };
+      sessionsGrant = true;
+    }
+  });
+
+  it('withholds team grouping and membership refs from office+orchestrator readers without teams.read over HTTP and SSE', async () => {
+    activePrincipal = { id: 'team-redaction-reader', role: 'reader', permissionRevision: 20,
+      permissions: { office: 'read', orchestrators: 'read' } };
+    sessionsGrant = true;
+    try {
+      for (const version of [2, 3]) {
+        const response = await h.get(`/api/v${version}/views/office`);
+        assert.equal(response.status, 200, response.text);
+        assert.equal((response.json.data.teamGroups || []).length, 0, `v${version} omits teamGroups without teams.read`);
+        assert.deepEqual(response.json.data.teamLegend, [], `v${version} omits the team legend without teams.read`);
+        assert.ok(response.json.data.occupants.every(row => !row.teamId && !row.teamIds && !row.memberId),
+          `v${version} omits team membership references from occupants`);
+        assert.ok(response.json.data.rosterFloors.every(floor => floor.items.every(item => item.kind !== 'team-group')),
+          `v${version} floor roster remains the ordinary occupant tree`);
+        assert.ok(response.json.data.rosterFloors.every(floor => (floor.teamGroups || []).length === 0
+          && floor.agentGroups.every(group => group.kind === 'unassigned')),
+        `v${version} floor groups withhold registered team membership without teams.read`);
+        assert.ok(response.json.data.rosterPreviewItems.every(item => !item.teamLabel),
+          `v${version} roster preview omits team labels without teams.read`);
+        const containsExactValue = (value, expected) => typeof value === 'string' ? value === expected
+          : Array.isArray(value) ? value.some(item => containsExactValue(item, expected))
+            : value && typeof value === 'object' ? Object.values(value).some(item => containsExactValue(item, expected)) : false;
+        for (const name of people) assert.equal(containsExactValue(response.json.data, name), false,
+          `v${version} withholds registered team member name ${name}`);
+        assert.equal(containsExactValue(response.json.data, 'Agent Office team'), false, `v${version} withholds the registered team label`);
+        const stream = openSse(h.base, `/api/v${version}/stream?topics=office`, { cookie: h.cookie });
+        try {
+          const frame = await stream.next(event => event.data?.topic === 'office');
+          assert.equal((frame.data.data.teamGroups || []).length, 0, `v${version} SSE omits teamGroups without teams.read`);
+          assert.deepEqual(frame.data.data.teamLegend, [], `v${version} SSE omits the team legend without teams.read`);
+          assert.ok(frame.data.data.occupants.every(row => !row.teamId && !row.teamIds && !row.memberId),
+            `v${version} SSE omits membership references`);
+          assert.ok(frame.data.data.rosterFloors.every(floor => floor.items.every(item => item.kind !== 'team-group')),
+            `v${version} SSE floor roster remains the ordinary occupant tree`);
+          assert.ok(frame.data.data.rosterFloors.every(floor => (floor.teamGroups || []).length === 0
+            && floor.agentGroups.every(group => group.kind === 'unassigned')),
+          `v${version} SSE floor groups withhold registered team membership without teams.read`);
+          assert.ok(frame.data.data.rosterPreviewItems.every(item => !item.teamLabel),
+            `v${version} SSE roster preview omits team labels without teams.read`);
+          for (const name of people) assert.equal(containsExactValue(frame.data.data, name), false,
+            `v${version} SSE withholds registered team member name ${name}`);
+          assert.equal(containsExactValue(frame.data.data, 'Agent Office team'), false, `v${version} SSE withholds the registered team label`);
+        } finally { stream.close(); }
       }
     } finally {
       activePrincipal = { id: 'owner-fixture', role: 'admin', permissionRevision: 1 };
@@ -798,22 +924,41 @@ describe('T-0045 · wired orchestrator/team projections', () => {
     } finally { await fixture.close(); }
   });
 
-  it('broadcasts cues to authorized logical full-office streams and excludes limited Office streams', async () => {
+  for (const version of [2, 3]) it(`v${version}: one Office hub sends cues only to full subscribers and keeps limited orchestrator updates`, async () => {
     const source = { detected: true, hasHerdr: true, hasTeamStore: false, enabled: true,
       start() {}, close() {}, onChange: () => () => {}, getSnapshot: () => ({ hosts: [], orchestrators: [], agents: [], identityLinks: [], team: null, members: [], tasks: [], reviews: [], observedAt: Date.now() }) };
-    const full = await settingsFixture({ sourcePrincipalFor: () => ({ id: 'cue-full', role: 'admin', permissionRevision: 1 }), sessionsReadable: () => true, orchestratorTeams: source });
-    const limited = await settingsFixture({ sourcePrincipalFor: () => ({ id: 'cue-limited', role: 'admin', permissionRevision: 1 }), sessionsReadable: () => false, orchestratorTeams: source });
-    const fullStream = openSse(full.base, '/api/v2/stream?topics=office', { cookie: full.cookie });
-    const limitedStream = openSse(limited.base, '/api/v2/stream?topics=office', { cookie: limited.cookie });
+    // Compatibility mode exercises the projection gate itself; enforced RBAC also filters cue frames.
+    const fixture = await settingsFixture({ envOnly: true, orchestratorTeams: source });
+    const streams = [];
     try {
-      await fullStream.next(event => event.data?.topic === 'office');
-      await limitedStream.next(event => event.data?.topic === 'office');
+      const owner = fixture.store.users.ensureEnv({ email: 'cue-owner@example.invalid', personId: fixture.store.owner.id, fingerprint: 'c'.repeat(64) });
+      fixture.cookie = 'taco_sess=' + fixture.auth.signSession({ userId: owner.id, authGeneration: owner.auth_generation, sid: 'synthetic-cue-owner', exp: Date.now() + 60000 });
+      const context = { userId: owner.id, authGeneration: owner.auth_generation, requestId: 'req_cue_reader', authorize: () => {} };
+      const invited = fixture.store.userManagement.invite({ name: 'Synthetic limited member', email: 'cue-reader@example.invalid', roleId: 'rol_reader' }, context);
+      fixture.store.userManagement.accept({ token: invited.token, purpose: 'invite', passwordHash: await hashPassword('synthetic-cue-reader-password') }, context);
+      const reader = fixture.store.users.byId(invited.user.id);
+      assert.equal(fixture.store.policy.can(reader, 'office', 'read'), true);
+      assert.equal(fixture.store.policy.can(reader, 'logs', 'read'), false);
+      const readerCookie = 'taco_sess=' + fixture.auth.signSession({ userId: reader.id, authGeneration: reader.auth_generation, sid: 'synthetic-cue-reader', exp: Date.now() + 60000 });
+      const full = openSse(fixture.base, `/api/v${version}/stream?topics=office`, { cookie: fixture.cookie });streams.push(full);
+      const limited = openSse(fixture.base, `/api/v${version}/stream?topics=office`, { cookie: readerCookie });streams.push(limited);
+      await full.next(frame => frame.event === 'snapshot' && frame.data.topic === 'office');
+      const initial = await limited.next(frame => frame.event === 'snapshot' && frame.data.topic === 'office');
+      assert.ok(initial.data.data.occupants.length);
+      assert.ok(initial.data.data.occupants.every(row => row.sessionKey === null), 'member starts with a limited projection');
+      const projections = [...fixture.api.hubs[version]._streams.values()].map(stream => stream.view.get('office'));
+      assert.equal(projections.length, 2);assert.ok(projections.every(id => id.startsWith('office-scope:')), JSON.stringify(projections));
+      assert.notEqual(projections[0], projections[1], 'subscriber projections are distinct on the same hub');
       const cue = { occupantId: 'primary', kind: 'subagent.spawn', at: Date.now() };
-      full.api.hubs[2].broadcastOffice(cue);
-      const received = await fullStream.next(event => event.event === 'cue');
-      assert.equal(received.event, 'cue');
-      await assert.rejects(limitedStream.next(event => event.event === 'cue', 250), /no matching frame/);
-    } finally { fullStream.close(); limitedStream.close(); await full.close(); await limited.close(); }
+      fixture.api.hubs[version].broadcastOffice(cue);
+      const received = await full.next(frame => frame.event === 'cue');assert.deepEqual(received.data, cue);
+      await assert.rejects(limited.next(frame => frame.event === 'cue', 250), /no matching frame/);
+      assert.equal(fixture.engine.ingestCanonical('agents', [{ id: 'atlas', name: 'Synthetic changed primary', workspace: null, model: null, fallbackModels: [], isPrimary: true, mainSessionKey: null }]).ok, true);
+      fixture.api.topics.invalidate('office-scope');
+      const later = await limited.next(frame => frame !== initial && ['delta', 'snapshot'].includes(frame.event) && frame.data.topic === 'office');
+      assert.ok(later.data.rev > initial.data.rev, 'limited member still receives change-driven Office updates');
+      assert.equal(limited.frames.some(frame => frame.event === 'cue'), false);
+    } finally { for (const stream of streams) stream.close();await fixture.close(); }
   });
 
   it('offers the opt-in office hint only to administrators when the orchestrator is detected but disabled', async () => {

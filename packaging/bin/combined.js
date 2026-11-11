@@ -93,33 +93,43 @@ function freePort() {
   });
 }
 
+// After the final setup save the API child closes its port and re-listens as the configured app (server.js handoff).
+// A read that arrives in that window waits for it instead of failing with 502; a write is never replayed.
+const HANDOFF_RETRY_MS = 15000;
 function forward(req, res, apiPort, target, listenPort) {
   const headers = proxyHeaders(req.headers, {
     remoteAddress: req.socket && req.socket.remoteAddress,
     listenPort,
     apiPort,
   });
-  const up = http.request({
-    host: '127.0.0.1',
-    port: apiPort,
-    method: req.method,
-    path: target,
-    headers,
-  }, (upstream) => {
-    res.writeHead(upstream.statusCode, endToEnd(upstream.headers));
-    upstream.pipe(res);
-    upstream.on('aborted', () => res.destroy());
-    upstream.on('error', () => res.destroy());
-    upstream.on('close', () => { if (!upstream.complete) res.destroy(); });
-  });
-  up.on('error', () => {
-    if (!res.headersSent) {
-      res.writeHead(502, { 'content-type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: { code: 'upstream_unavailable', message: 'API injoignable.', requestId: 'req_combined' } }));
-    } else res.destroy();
-  });
-  res.on('close', () => { if (!res.writableFinished) up.destroy(); });
-  req.pipe(up);
+  const replayable = req.method === 'GET' || req.method === 'HEAD';
+  const until = Date.now() + HANDOFF_RETRY_MS;
+  let up = null;
+  res.on('close', () => { if (!res.writableFinished && up) up.destroy(); });
+  const attempt = () => {
+    up = http.request({
+      host: '127.0.0.1',
+      port: apiPort,
+      method: req.method,
+      path: target,
+      headers,
+    }, (upstream) => {
+      res.writeHead(upstream.statusCode, endToEnd(upstream.headers));
+      upstream.pipe(res);
+      upstream.on('aborted', () => res.destroy());
+      upstream.on('error', () => res.destroy());
+      upstream.on('close', () => { if (!upstream.complete) res.destroy(); });
+    });
+    up.on('error', (err) => {
+      if (replayable && err.code === 'ECONNREFUSED' && !res.headersSent && !res.destroyed && Date.now() < until) { setTimeout(attempt, 100); return; }
+      if (!res.headersSent) {
+        res.writeHead(502, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: { code: 'upstream_unavailable', message: 'API injoignable.', requestId: 'req_combined' } }));
+      } else res.destroy();
+    });
+    if (replayable) up.end(); else req.pipe(up);
+  };
+  attempt();
 }
 
 function startCombined({ root, env = process.env } = {}) {
@@ -169,7 +179,11 @@ function startCombined({ root, env = process.env } = {}) {
       if (target) return forward(req, res, apiPort, target.path, port);
       ui.emit('request', req, res);
     });
-    server.on('error', () => {
+    server.on('error', (err) => {
+      // The usual first-run clash: an OpenClaw gateway also defaults to 18789. Say so instead of exiting silently.
+      process.stderr.write(err.code === 'EADDRINUSE'
+        ? `agent-office: ${host}:${port} is already in use (an OpenClaw gateway uses 18789 by default). Start on another port, e.g. --port ${port === 18790 ? 18791 : 18790}.\n`
+        : `agent-office: cannot listen on ${host}:${port} (${err.code || 'error'}).\n`);
       if (api && api.exitCode == null) { try { api.kill('SIGTERM'); } catch { /* already gone */ } }
       finish(1);
     });

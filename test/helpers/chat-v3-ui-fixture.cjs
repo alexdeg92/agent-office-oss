@@ -7,9 +7,10 @@ async function chatV3UiFixture({publicUrl,historyCount=58,resultText,targetInven
  const h=await projectTeamFixture({publicUrl}),calls=[];let gate=null,release=null,failNext=false;
  try{
   const commands={agentTurn:async args=>{calls.push(args);if(gate)await gate;if(failNext){failNext=false;return {failed:'synthetic'};}return {text:'La vérification est terminée. Les éléments demandés sont prêts.'};}};
-  const baseCaps={chat:true,chatSessionScope:'principal',chatRetry:true,...(writableCapture?{conversations:{read:true,send:true,attachments:true}}:{}),chatAttachments:{enabled:true,maxBytes:1024*1024,maxCountPerMessage:3,maxCountPerSession:10,mimeTypes:['application/pdf','text/plain','image/png','image/jpeg']}};
-  const adapters=['claude-code','codex','openclaw'];
-  const runtimes=adapters.map(adapter=>({adapterId:adapter,name:require('../../src/adapters/'+adapter).definition.name,connected:true,gatewayLabel:'Passerelle synthétique',capabilities:{...baseCaps},commands,...(writableCapture?{conversations:{async send(){return {accepted:true};},async history(){return {messages:[]};},async subscribe(){return ()=>{};}}}:{})}));
+  const baseCaps={chat:true,chatSessionScope:'principal',chatRetry:true,attachmentDelivery:'file-reference',chatAttachments:{enabled:true,maxBytes:1024*1024,maxCountPerMessage:3,maxCountPerSession:10,mimeTypes:['application/pdf','text/plain','image/png','image/jpeg']},...(writableCapture?{conversations:{read:true,send:true,attachments:true}}:{})};
+  const attachmentFiles={canStage:()=>true,stage:async({files})=>files.map(file=>({reference:'workspace-inbox://fixture/'+encodeURIComponent(file.fileName),fileName:file.fileName,displayName:file.name,mimeType:file.mimeType,size:file.size})),remove:async()=>true};
+  const adapters=['openclaw','claude-code','codex'];
+  const runtimes=adapters.map(adapter=>({adapterId:adapter,name:require('../../src/adapters/'+adapter).definition.name,connected:true,gatewayLabel:'Passerelle synthétique',capabilities:{...baseCaps},commands,attachmentFiles,...(writableCapture?{conversations:{async send(){return {accepted:true};},async history(){return {messages:[]};},async subscribe(){return ()=>{};}}}:{})}));
   const catalog=targetInventory?.agents||h.viewEngine.agents();
   const runtimeForId=agentId=>{const runtimeId=require('../../src/runtime-ids').parseId(agentId,'agent')?.runtime;return targetInventory?.runtimes?.[runtimeId]||null;};
   const customRuntimes=targetInventory?Object.values(targetInventory.runtimes).map(row=>({...row,commands})):null;
@@ -23,9 +24,16 @@ async function chatV3UiFixture({publicUrl,historyCount=58,resultText,targetInven
   h.viewEngine.connectorOf=key=>{const native=targetInventory?.sessions?.find(row=>row.key===key),rt=native?runtimeForId(native.class?.agentId):byAgent.get(key);return rt?connectors[rt.adapterId]||null:connectors.openclaw||null;};
   const source=h.source||h.orchestratorTeams,oldSnapshot=source.getSnapshot;
   if(targetInventory?.orchestratorTeams)source.getSnapshot=()=>targetInventory.orchestratorTeams.getSnapshot();
-  else source.getSnapshot=()=>{const snapshot=oldSnapshot();return {...snapshot,privateMemberSessionRefs:Object.fromEntries(snapshot.members.map((member,index)=>[
-   member.id,{agentId:catalog[index]?.id||catalog[0].id,sessionKey:index===0?'main':`worker-${index}`}
-  ]))};};
+  else source.getSnapshot=()=>{const snapshot=oldSnapshot();const refs=Object.fromEntries((writableCapture?[]:snapshot.members.slice(1)).map((member,index)=>{
+   index+=1;
+   const sessionKey=index===0?'main':`worker-${index}`;
+   return [member.id,{agentId:catalog[index]?.id||catalog[0].id,runtimeKind:'synthetic-office',sessionKey,sessionRef:`fixture:${sessionKey}`}];
+  }));
+   h.viewEngine.setIdentitySessionRefs(Object.entries(refs).map(([memberId,ref])=>({...ref,id:memberId})));
+   const lead=snapshot.members[0],hostAgentId='host:fixture-primary';
+   return {...snapshot,members:snapshot.members.map((member,index)=>({...member,sessionStatus:member.sessionStatus||'known',...(index===0?{hostAgentId}:{})})),
+    identityLinks:[{hostAgentId,agentId:catalog[0]?.id||catalog[0].id,confidence:'exact'}],privateMemberSessionRefs:refs};
+  };
   const paneCalls=[];let paneEvents=[];
   if(paneQueueCapture){
    const selectedAgent=catalog.find(row=>!row.isPrimary)||catalog[0],sessionKey='capture:synthetic-pane-session',sessionRef='capture:synthetic-pane-ref';
@@ -60,6 +68,10 @@ async function chatV3UiFixture({publicUrl,historyCount=58,resultText,targetInven
    return response.json.data.result.sessionId;
   };
   const sessionId=await createSession();
+  const owner=require('../../src/api/chat-identity').scopeForAccount(h.store.users.owner()?.id,h.store),savedTarget=h.store.chatV3.target(owner,target.id);
+  const defaultSessionId=id('cs');
+  h.store.chatV3.createSession({sessionId:defaultSessionId,principalScope:owner,agentId:target.id,runtimeId:savedTarget.runtime_id,nativeAgentId:savedTarget.native_agent_id,
+   nativeSessionRef:`fixture:${owner}:${defaultSessionId}`,title:null});
   // Seed realistic server-projected titles for the visual fixture. The UI
   // renders these values; title generation itself is covered by the mounted
   // v3 API test for the first accepted user message.
@@ -98,7 +110,6 @@ async function chatV3UiFixture({publicUrl,historyCount=58,resultText,targetInven
    h.store.chatV3.addMessage(sessionId,{id:id('msg'),role:'user',at:Date.now(),body:{text:'Voici les éléments à consulter.',blocks:[{type:'text',text:'Voici les éléments à consulter.'}]},attachments});
    h.store.chatV3.finishAttachments(attachments.map(item=>item.id));h.api.topics.invalidate();
   }
-  const defaultSessionId=sessionId;
   h.store.chatV3.addMessage(defaultSessionId,{id:id('msg'),role:'assistant',at:Date.now(),body:{text:'La note de version est prête à être relue.',blocks:[{type:'text',text:'La note de version est prête à être relue.'}]},attachments:[]},{unread:true});
   h.api.topics.invalidate();
   return {...h,targets:index.json.data.agents,targetId:target.id,targetName:target.name,sessionId,sessionTitle,defaultSessionId,calls,paneCalls,runtimes:availableRuntimes,holdReply(){gate=new Promise(resolve=>release=resolve);},releaseReply(){release?.();release=null;gate=null;},failNextReply(){failNext=true;},

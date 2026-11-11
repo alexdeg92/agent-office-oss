@@ -20,4 +20,11 @@ function createBuildReader(root = path.join(__dirname, '../../public/v2')) {
     } catch { stamp = null; return { source: null, buildId: null }; }
   };
 }
-module.exports = { createBuildReader };
+// A checkout run without `node scripts/build-frontend.js` serves an unstyled page (the generated Bureau CSS, fonts and art
+// are missing): say so once at boot instead of failing silently in the browser.
+function warnIfUnbuilt(root, warn = (m) => console.warn(m)) {
+  if (fs.existsSync(path.join(root, 'bureau', 'bundle.css'))) return false;
+  warn('Agent Office: the interface is not built (' + path.join(root, 'bureau') + ' is missing): run `node scripts/build-frontend.js` in this checkout, then restart.');
+  return true;
+}
+module.exports = { createBuildReader, warnIfUnbuilt };

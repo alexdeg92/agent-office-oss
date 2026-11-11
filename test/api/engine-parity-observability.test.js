@@ -6,24 +6,26 @@ const { settingsFixture } = require('../helpers/settings-fixture');
 
 test('parity export has bounded counters, fixed surface labels, and no projection data', () => {
   const engine = { orchestrationParityCounters: () => ({
-    office: { comparisons: 7, mismatches: 1, changedRows: 2, overflowKeys: 3, overflowSurfaces: 0 },
-    'office.limited': { comparisons: 4, mismatches: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 },
-    'private-session-identity': { comparisons: 9, mismatches: 2, changedRows: 8, overflowKeys: 5, overflowSurfaces: 1 },
+    office: { comparisons: 7, mismatches: 1, skippedUnsynced: 2, shadowErrors: 1, changedRows: 2, overflowKeys: 3, overflowSurfaces: 0 },
+    'office.limited': { comparisons: 4, mismatches: 0, skippedUnsynced: 1, shadowErrors: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 },
+    'private-session-identity': { comparisons: 9, mismatches: 2, skippedUnsynced: 4, shadowErrors: 3, changedRows: 8, overflowKeys: 5, overflowSurfaces: 1 },
   }) };
   const vmRows = healthRows(engine), line = logSnapshot(engine);
   assert.deepEqual(vmRows.map(row => row.surface.key), [
     'health.parity.surface.office', 'health.parity.surface.officeLimited', 'health.parity.surface.other',
   ]);
   assert.equal(vmRows[2].comparisons, 9, 'unknown surfaces aggregate without their internal key');
+  assert.equal(vmRows[2].skippedUnsynced, 4, 'unsynced generations are counted separately');
+  assert.equal(vmRows[0].shadowErrors, 1, 'shadow builder errors have their own value-free counter');
   assert.deepEqual(line, { event: 'engine.parity', surfaces: [
-    { surface: 'office', comparisons: 7, mismatches: 1, changedRows: 2, overflowKeys: 3, overflowSurfaces: 0 },
-    { surface: 'office.limited', comparisons: 4, mismatches: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 },
-    { surface: 'other', comparisons: 9, mismatches: 2, changedRows: 8, overflowKeys: 5, overflowSurfaces: 1 },
+    { surface: 'office', comparisons: 7, mismatches: 1, skippedUnsynced: 2, shadowErrors: 1, changedRows: 2, overflowKeys: 3, overflowSurfaces: 0 },
+    { surface: 'office.limited', comparisons: 4, mismatches: 0, skippedUnsynced: 1, shadowErrors: 0, changedRows: 0, overflowKeys: 0, overflowSurfaces: 0 },
+    { surface: 'other', comparisons: 9, mismatches: 2, skippedUnsynced: 4, shadowErrors: 3, changedRows: 8, overflowKeys: 5, overflowSurfaces: 1 },
   ] });
   assert.doesNotMatch(JSON.stringify({ vmRows, line }), /private-session-identity/);
   for (const row of vmRows) {
-    assert.deepEqual(Object.keys(row).sort(), ['changedRows', 'comparisons', 'labels', 'mismatches', 'overflowKeys', 'overflowSurfaces', 'surface']);
-    assert.deepEqual(Object.keys(row.labels).sort(), ['changedRows', 'comparisons', 'mismatches', 'overflowKeys', 'overflowSurfaces']);
+    assert.deepEqual(Object.keys(row).sort(), ['changedRows', 'comparisons', 'labels', 'mismatches', 'overflowKeys', 'overflowSurfaces', 'shadowErrors', 'skippedUnsynced', 'surface']);
+    assert.deepEqual(Object.keys(row.labels).sort(), ['changedRows', 'comparisons', 'mismatches', 'overflowKeys', 'overflowSurfaces', 'shadowErrors', 'skippedUnsynced']);
   }
   assert.equal(collect({ orchestrationParityCounters: () => ({ office: { comparisons: Number.MAX_SAFE_INTEGER } }) }).known.get('office').comparisons, 1_000_000);
 });
@@ -45,6 +47,7 @@ test('mounted HealthVM exposes parity only to admins and denies an admin-topic r
   const h = await settingsFixture({ sourcePrincipalFor: () => principal });
   t.after(() => h.close());
   h.engine.compareOrchestrationProjection('office', [{ id: 'private-row-id', state: 'working' }], [{ id: 'private-row-id', state: 'idle' }], ['id', 'state']);
+  h.engine.recordOrchestrationShadowError('office');
 
   let adminTopicId;
   for (const version of [2, 3]) {
@@ -54,6 +57,7 @@ test('mounted HealthVM exposes parity only to admins and denies an admin-topic r
     assert.ok(Array.isArray(admin.json.data.engineParity), admin.text);
     assert.equal(admin.json.data.engineParity[0].comparisons, 1);
     assert.equal(admin.json.data.engineParity[0].mismatches, 1);
+    assert.equal(admin.json.data.engineParity[0].shadowErrors, 1);
     assert.match(admin.json.meta.topic.id, /^health-admin:/);
     adminTopicId = admin.json.meta.topic.id;
     assert.doesNotMatch(admin.text, /private-row-id|private-row|working|idle/);

@@ -39,7 +39,7 @@ test(`idle desk doze and monitor off, then immediate active presentation v${vers
     for(const c of rendered){const o=idleVM.occupants.find(o=>o.id===c.id);assert.deepEqual(c.point,o.sceneTarget.point);assert.equal(c.mode,'desk');assert.equal(c.marker,true);assert.equal(c.bubble,null);assert.equal(c.letters,c.state==='idle'?'zZz':null);if(c.state==='idle')assert.equal(c.animation,'none','reduced motion uses static sleep letters');
       if(c.state==='idle'){assert.equal(c.pose,'life-sleep-ne');assert.equal(c.screen,'');assert.equal(c.glow,'off');assert.doesNotMatch(c.monitor,/monitor(?:@|%40)on|monitor-screens/);}}
     await p.waitForFunction(()=>document.querySelector('.bu-live')?.textContent==='En direct'&&!document.querySelector('.ao-bureau__stagecap'));
-    if(version===3)await p.waitForFunction(()=>{const panel=document.querySelector('.ao-team-office');return panel?.querySelector('.ao-team-empty')&&!panel.querySelector('.ao-team-state,.ao-team-cached');});
+    if(version===3)await p.waitForFunction(()=>!document.querySelector('.ao-team-office'));
     else assert.equal(await p.locator('.ao-team-office').count(),0,'legacy v2 does not render the v3 Members panel');
     await p.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.querySelector('.ao-bureau__stage').querySelectorAll('img[src]')].map(i=>i.decode()));});
     assert.equal(await p.locator('.ao-sleep-letters:visible').count(),2,'both unselected idle effects are visible independently of nameplates');

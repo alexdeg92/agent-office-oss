@@ -159,7 +159,8 @@ test('chat titles redact raw identifiers and OfficeVM omits transcript summaries
     for (const P of [project2x, project3x]) {
       const rows = embedded.build(P).occupants.filter(o => o.sessionKey === embedded.session.key);
       assert.ok(rows.length > 0);
-      const chatRow = rows.find(row => row.sessionKey === embedded.session.key && !['main', 'primary', 'agent'].includes(row.role));
+      const chatRow = kind === 'conversation-direct' ? rows.find(row => ['main','primary','agent'].includes(row.role))
+        : rows.find(row => row.sessionKey === embedded.session.key && !['main', 'primary', 'agent'].includes(row.role));
       assert.ok(chatRow, `${kind} has a chat occupant in v${P.version}`);
       assert.ok(!chatRow.name.includes('fixture_handle') && !chatRow.name.includes('123456789012345678'), `${kind} v${P.version} name was ${chatRow.name}`);
       assert.equal(chatRow.summary, undefined, `${kind} transcript summary is omitted in v${P.version}`);

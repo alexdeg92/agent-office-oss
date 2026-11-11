@@ -6,6 +6,7 @@ const { buildOfficeCharactersVM } = require('../../../src/api/v2/vm/office-chara
 const { createVmCheck } = require('../../../src/api/v2/vm/check');
 const { project2x } = require('../../../src/api/v2/project2x');
 const { project3x } = require('../../../src/api/v2/project3x');
+const { dedupeRows } = require('../../../src/api/v2/vm/dedupe');
 const { loadScenario } = require('../../helpers/scenario');
 const { startServer } = require('../../helpers/harness');
 
@@ -37,6 +38,16 @@ test('office character view preserves backend grouping, applies search and expos
   assert.equal(createVmCheck({ mode: 'throw', version: 2 }).check('officeCharacters', legacy).count, 2);
 });
 
+test('shared alias dedupe always keeps an active office row over a newer stored poll timestamp', () => {
+  const activeLook = { character: 'fen', variant: 'moss', accessories: [] };
+  const staleLook = { character: 'orbit', variant: 'slate', accessories: [] };
+  const rows = dedupeRows([
+    { id: 'channel:rt:legacy:session:c2Vzc2lvbg', name: 'Active conversation', inOffice: true, lastSeenAt: 100, automaticLook: activeLook },
+    { id: 'channel:rt:legacy:session:c2Vzc2lvbg', name: 'Stale group alias', inOffice: false, lastSeenAt: 10_000, automaticLook: staleLook },
+  ]);
+  assert.deepEqual(rows, [{ id: 'channel:rt:legacy:session:c2Vzc2lvbg', name: 'Active conversation', inOffice: true, lastSeenAt: 100, automaticLook: activeLook }]);
+});
+
 test('office character v2/v3 contracts accept a backend-omitted duplicate sub-agent role label', () => {
   const occupant = { id: 'agent:task', role: 'subagent', name: '', title: { key: 'occupantRole.subagent' },
     roleLabel: null, state: 'idle', stateLabel: { key: 'agentState.idle' }, look,
@@ -65,4 +76,24 @@ test('office character endpoint is authenticated, validates filters, and project
   }
   const anonymous = await fetch(`${h.base}/api/v2/views/office/characters`);
   assert.equal(anonymous.status, 401);
+});
+
+test('office character scope=all repairs historical group/conversation aliases after v2 mapping', async t => {
+  const h = await startServer(loadScenario('synthetic-basic'));
+  t.after(() => h.stop());
+  const ref = 'rt:legacy:session:c2Vzc2lvbg';
+  h.withStore(db => {
+    db.exec('PRAGMA ignore_check_constraints=ON');
+    const put = db.prepare(`INSERT INTO office_agents_seen (occupant_id, role, name, last_seen_at, automatic_look_json)
+      VALUES (?, ?, ?, ?, ?)`);
+    put.run(`group:${ref}`, 'group', 'Older alias', Date.now() - 243, JSON.stringify(look));
+    put.run(`conversation:${ref}`, 'conversation', 'Current conversation', Date.now(), JSON.stringify(look));
+  });
+  for (const version of [2, 3]) {
+    const response = await h.get(`/api/v${version}/views/office/characters?scope=all`);
+    assert.equal(response.status, 200, response.text);
+    const aliases = response.json.data.groups.flatMap(group => group.rows).filter(row => row.id.endsWith(`:${ref}`));
+    assert.equal(aliases.length, version === 2 ? 1 : 2, JSON.stringify(response.json.data));
+    assert.equal(new Set(aliases.map(row => row.id)).size, aliases.length);
+  }
 });
