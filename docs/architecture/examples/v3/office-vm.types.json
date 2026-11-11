@@ -48,6 +48,9 @@
     "$.occupantOverflowCount": "number"
   },
   "variants": {
+    "$.rosterFloors[].agentGroups[].memberFloors": [
+      [{ "occupantId": "agent:lead", "label": { "key": "office.floor.number", "params": { "n": 3 } } }]
+    ],
     "$.rosterFloors[].agentGroups[]": [
       {
         "id": "team:example",
@@ -64,7 +67,9 @@
         "previewStateKind": "working",
         "previewStateLabel": { "key": "agentState.working" },
         "previewStateActive": true,
-        "sharedLabel": { "key": "office.floor.sharedAcrossTeams", "params": { "n": 2 } }
+        "sharedLabel": { "key": "office.floor.sharedAcrossTeams", "params": { "n": 2 } },
+        "floorLabels": [{ "key": "office.floor.first", "params": { "n": 1 } }, { "key": "office.floor.number", "params": { "n": 3 } }],
+        "memberFloors": [{ "occupantId": "agent:lead", "label": { "key": "office.floor.number", "params": { "n": 3 } } }]
       }
     ],
     "$.occupants[].destination": [

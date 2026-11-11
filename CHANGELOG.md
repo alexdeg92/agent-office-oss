@@ -2,6 +2,13 @@
 
 All notable changes to Agent Office are documented in this file. The format is based on Keep a Changelog, and versions follow Semver. `packaging/release.sh` copies the matching section into `dist/RELEASE_NOTES.md`.
 
+## 1.4.1 - 2026-11-11
+
+### Office
+
+- **Teams and agents** lists every team and every agent without a team, whichever floor is selected. Each team appears once with all its members; a member on another floor shows that floor. The selected floor's teams come first; the map and floor counts stay per floor.
+- People with limited access no longer see agents of an empty floor they are not allowed to see.
+
 ## 1.4.0 - 2026-11-11
 
 This release makes a fresh install reach the setup wizard and finish it without errors (also behind a reverse proxy), adds a Cursor connector, and shows agent teams and channel conversations correctly in the office.

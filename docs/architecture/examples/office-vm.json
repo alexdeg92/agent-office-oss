@@ -836,7 +836,16 @@
               "params": {
                 "n": 4
               }
-            }
+            },
+            "floorLabels": [
+              {
+                "key": "office.floor.first",
+                "params": {
+                  "n": 1
+                }
+              }
+            ],
+            "memberFloors": []
           }
         ],
         "agentGroupsLabel": {

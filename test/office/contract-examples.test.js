@@ -45,6 +45,7 @@ describe('office mocks ↔ docs/architecture/examples (2.1)', () => {
         countLabel: { key: 'office.floor.count.one' },
         previewOccupantId: 'agent:lead', previewState: 'working', previewStateKind: 'working',
         previewStateLabel: { key: 'agentState.working' }, previewStateActive: true, sharedLabel: null,
+        floorLabels: [{ key: 'office.floor.first', params: { n: 1 } }], memberFloors: [],
       }];
       assert.deepEqual(compareExample('office-vm', vm, { version }), [], `strict v${version} team group`);
     }

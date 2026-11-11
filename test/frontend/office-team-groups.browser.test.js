@@ -166,7 +166,7 @@ for(const width of [1440,390])for(const theme of ['light','dark'])test(`Bureau r
  }finally{await b?.close();await h?.close();}
 });
 
-for(const width of [1440,390])for(const floorId of ['1','3'])test(`Bureau floor ${floorId} renders only its backend agent groups ${width} dark`,{skip:browserSkipReason(),timeout:120000},async()=>{
+for(const width of [1440,390])for(const floorId of ['1','3'])test(`Bureau floor ${floorId} renders the whole office roster, its own groups first ${width} dark`,{skip:browserSkipReason(),timeout:120000},async()=>{
  let h,b;
  try{
   b=await openLayoutBrowser({theme:'dark',touch:width===390,apiVersion:width===390?2:3,apiProxy:async publicUrl=>{
@@ -180,21 +180,21 @@ for(const width of [1440,390])for(const floorId of ['1','3'])test(`Bureau floor 
   if(floorId==='1'){
    const expectedTeams=office.teamGroups.filter(group=>group.floorId==='1').map(group=>group.id);
    assert.ok(expectedTeams.length>0,'synthetic project teams are seated on floor 1');
-   assert.deepEqual(floor.agentGroups.filter(group=>group.kind==='team').map(group=>group.id),expectedTeams,
-     'floor 1 has both project teams in server order');
+   assert.deepEqual(floor.agentGroups.filter(group=>group.kind==='team').slice(0,expectedTeams.length).map(group=>group.id),expectedTeams,
+     'floor 1 lists its own project teams first, in server order');
   }else{
    const primary=office.occupants.find(row=>row.role==='primary');assert.ok(primary,'fixture has a primary agent');
    const unassigned=floor.agentGroups.find(group=>group.kind==='unassigned');assert.ok(unassigned,'floor 3 has an explicit unassigned group');
-   assert.ok(unassigned.occupantIds.includes(primary.id),'the unassigned primary is shown under its own seated floor');
+   assert.ok(unassigned.occupantIds.includes(primary.id),'the unassigned primary is listed');
+   assert.ok(floor.agentGroups.some(group=>group.kind==='team'),'floor 3 also lists the teams seated elsewhere');
   }
-  assert.ok(floor.agentGroups.every(group=>group.occupantIds.every(id=>floor.occupantIds.includes(id))),
-    'every visible group is confined to occupants seated on the selected floor');
-  assert.equal(floor.agentGroups.reduce((sum,group)=>sum+group.count,0),floor.count,
-    'group counts add up to unique floor occupants, including shared leads exactly once');
-  assert.equal(new Set(floor.agentGroups.flatMap(group=>group.occupantIds)).size,floor.count,
-    'the floor roster does not duplicate a lead shared by two teams');
-  assert.equal(office.rosterFloors.flatMap(row=>row.agentGroups).filter(group=>group.kind==='team'&&group.id==='team:atelier-projets').length,1,
-    'Domaine Kildare is assigned to one floor only');
+  const officeAgents=office.rosterFloors.reduce((sum,row)=>sum+row.count,0);
+  assert.equal(floor.agentGroups.reduce((sum,group)=>sum+group.count,0),officeAgents,
+    'group counts add up to every agent in the office, including shared leads exactly once');
+  assert.equal(new Set(floor.agentGroups.flatMap(group=>group.occupantIds)).size,officeAgents,
+    'the office roster does not duplicate a lead shared by two teams');
+  assert.equal(floor.agentGroups.filter(group=>group.kind==='team'&&group.id==='team:atelier-projets').length,1,
+    'Domaine Kildare appears once in the roster');
   const url=new URL('/bureau',b.origin);url.searchParams.set('etage',floorId);
   await page.goto(url.href,{waitUntil:'domcontentloaded'});await page.locator('.ao-bureau__stage').waitFor({state:'visible'});
   const groupSelector=width===390?'.ao-mobile-team-preview[data-floor-agent-group]':`[data-roster-floor="${floorId}"] .ao-floor-roster__agent-group[data-floor-agent-group]`;
@@ -203,6 +203,8 @@ for(const width of [1440,390])for(const floorId of ['1','3'])test(`Bureau floor 
   assert.deepEqual(await page.locator(groupSelector).evaluateAll(nodes=>nodes.map(node=>node.dataset.floorAgentGroup)),expectedGroups.map(group=>group.id),
     'desktop and phone render the selected floor groups in the VM-provided order');
   assert.deepEqual(await page.locator(groupSelector).evaluateAll(nodes=>nodes.map(node=>node.dataset.floorAgentGroupKind)),expectedGroups.map(group=>group.kind));
+  if(width!==390)assert.equal(await page.locator('.ao-floor-roster__agent-group[data-floor-agent-group]').count(),expectedGroups.length,
+    'the desktop rail renders the office roster once, under the selected floor only');
   assert.equal(await page.locator('[data-testid="team-herdr-opt-in-hint"]').count(),0,
     'the global opt-in hint is suppressed when the OfficeVM already supplies team groups');
   const teamOffice=page.locator('[data-testid="team-office"]');
@@ -241,7 +243,7 @@ for(const width of [1440,390])for(const floorId of ['1','3'])test(`Bureau floor 
   if(width===390&&floorId==='1'){
    await page.locator(groupSelector).first().scrollIntoViewIfNeeded();
    const viewport=await page.evaluate(()=>({height:innerHeight,bottomNavTop:document.querySelector('.bu-bottombar')?.getBoundingClientRect().top||innerHeight}));
-   const boxes=await Promise.all((await page.locator(groupSelector).all()).map(node=>node.boundingBox()));
+   const boxes=await Promise.all((await page.locator(`${groupSelector}[data-floor-agent-group-kind="team"]`).all()).map(node=>node.boundingBox()));
    assert.ok(boxes.every(box=>box&&box.y>=0&&box.y+box.height<=viewport.bottomNavTop),
      `all project-team cards fit together in the scrolled phone viewport: ${JSON.stringify({boxes,viewport})}`);
    await mkdir(OUT,{recursive:true});

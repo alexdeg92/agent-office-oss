@@ -38,6 +38,8 @@ const MAIN_ALIASES = [/^\$\.(layout|default)\.data\.agents\[\d+\]\.(agentId|matc
 // These are occupant-ID references in the same documented 2.x primary alias namespace.
 MAIN_ALIASES.push(/^\$\.visitIntent\.hosts\[\d+\]\.id$/, /^\$\.visitIntent\.visitors\[\d+\]\.hostId$/,
   /^\$\.rosterFloors\[\d+\]\.agentGroups\[\d+\]\.occupantIds\[\d+\]$/,
+  // Cross-floor team members: memberFloors references the same projected occupant ids as agentGroups.occupantIds.
+  /^\$\.rosterFloors\[\d+\]\.agentGroups\[\d+\]\.memberFloors\[\d+\]\.occupantId$/,
   /^\$\.rosterFloors\[\d+\]\.agentGroups\[\d+\]\.previewOccupantId$/);
 function mainOutsideAliases(value, at = '$', out = []) {
   if (Array.isArray(value)) value.forEach((v, i) => mainOutsideAliases(v, `${at}[${i}]`, out));

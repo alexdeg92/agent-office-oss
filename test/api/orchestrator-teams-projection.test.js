@@ -129,16 +129,16 @@ describe('T-0045 · wired orchestrator/team projections', () => {
     assert.deepEqual(v3Group.members.map(member => member.occupantId), projectedMembers.map(member => member.id),
       'team members are delivered in the same backend-defined roster order');
     const v3Floor = office.json.data.rosterFloors.find(floor => floor.id === v3Group.floorId);
-    assert.ok(Array.isArray(v3Floor.agentGroups), 'each floor supplies backend-authored agent groups for its seated roster');
-    assert.ok(v3Floor.agentGroups.some(group => group.kind === 'team' && group.id === v3Group.id),
-      'the registered project team appears only in its seated floor collection');
-    assert.ok(v3Floor.agentGroups.every(group => group.occupantIds.every(id => v3Floor.occupantIds.includes(id))),
-      'floor groups reference only occupants seated on that floor');
-    assert.equal(office.json.data.rosterFloors.flatMap(floor => floor.agentGroups)
-      .filter(group => group.kind === 'team' && group.id === v3Group.id).length, 1,
-    'a project team is not repeated in other floor rosters');
-    assert.ok(office.json.data.rosterFloors.every(floor => floor.agentGroups.every(group =>
-      group.occupantIds.every(id => floor.occupantIds.includes(id)))), 'every floor group is scoped to its own seated occupants');
+    assert.ok(Array.isArray(v3Floor.agentGroups), 'each floor supplies backend-authored agent groups for the whole office');
+    assert.equal(v3Floor.agentGroups[0].id, v3Group.id, 'the team seated on this floor comes first');
+    const officeAgentIds = new Set(office.json.data.rosterFloors.flatMap(floor => floor.agentGroups.flatMap(group => group.occupantIds)));
+    for (const floor of office.json.data.rosterFloors) {
+      const team = floor.agentGroups.filter(group => group.kind === 'team' && group.id === v3Group.id);
+      assert.equal(team.length, 1, `floor ${floor.id} lists the project team exactly once`);
+      assert.deepEqual(team[0].occupantIds, v3Group.members.map(member => member.occupantId), `floor ${floor.id} lists all team members`);
+      assert.deepEqual(new Set(floor.agentGroups.flatMap(group => group.occupantIds)), officeAgentIds, `floor ${floor.id} lists the same office roster`);
+      assert.deepEqual(floor.teamGroups.map(group => group.id), floor.id === v3Group.floorId ? [v3Group.id] : [], 'the map team panel stays per floor');
+    }
     assert.ok(v3Group.members.every(member => v3Floor.items.some(item => item.kind === 'occupant' && item.occupantId === member.occupantId)),
       'the separate team pod projection leaves ordinary floor roster occupants intact');
     const executionByHerdrStatus = { working: 'running', idle: 'idle', done: 'succeeded', blocked: 'failed' };

@@ -58,8 +58,13 @@ export function OfficeTeamRoster({ teamGroups = [], occupants = [], selected, on
   </section>`;
 }
 
+const awayFloors = (group, floorLabel) => {
+  const floors = group.floorLabels || [];
+  return floors.length === 1 && JSON.stringify(floors[0]) === JSON.stringify(floorLabel) ? [] : floors;
+};
+
 /** Render the exact OfficeVM roster supplied by the server. */
-export function OfficeRoster({ all = false, occupants, rosterFloors = [], teamGroups = [], selected, onSelect, unconfirmed, manifest, Avatar, StateChip, nameOf, label, stateTitle, now, groupedFloors = false, onJumpFloor = () => {}, hostAnnotation }) {
+export function OfficeRoster({ all = false, occupants, rosterFloors = [], teamGroups = [], selected, onSelect, unconfirmed, manifest, Avatar, StateChip, nameOf, label, stateTitle, now, groupedFloors = false, groupsFloorId = null, memberFloors = [], onJumpFloor = () => {}, hostAnnotation }) {
   const byId = new Map(occupants.map(occupant => [occupant.id, occupant]));
   const [eggs, setEggs] = useState({});
   useEffect(() => {
@@ -67,33 +72,40 @@ export function OfficeRoster({ all = false, occupants, rosterFloors = [], teamGr
     document.addEventListener('office-surprise', update);
     return () => document.removeEventListener('office-surprise', update);
   }, []);
-  const card = occupant => html`<li key=${occupant.id} class=${occupant.rosterDepth > 0 ? 'ao-roster__child' : undefined}>
+  // The backend names a member's floor only when it differs from its group's main floor.
+  const floorOf = new Map(memberFloors.map(row => [row.occupantId, row.label]));
+  const card = (occupant, floors = floorOf) => html`<li key=${occupant.id} class=${occupant.rosterDepth > 0 ? 'ao-roster__child' : undefined}>
     <button type="button" class=${'bu-roster ao-roster ao-agentcard' + (occupant.presence ? ' is-seen' : '')} data-occupant=${occupant.id} data-presence=${occupant.presence || undefined} data-source-stale=${occupant.sourceStale || undefined}
       aria-current=${selected === occupant.id ? 'true' : undefined} onClick=${() => onSelect(occupant.id)}>
       <${Avatar} o=${occupant} manifest=${manifest} />
       <span class="bu-cell-main" data-by=${occupant.parentName || undefined}><span class="ao-roster__name ao-agentcard__name" title=${nameOf(occupant)}>${nameOf(occupant)}</span>
         <span class="bu-cell-sub ao-roster__summary" data-conversation=${occupant.visitLabel ? true : undefined} data-visit=${occupant.visitPhase || undefined} title=${occupant.summary || undefined}>${occupant.visitLabel ? label(occupant.visitLabel) : occupant.summary && occupant.summary !== occupant.name ? occupant.summary : occupant.project ? officeTr('office.inProject', { project: occupant.project }) : label(occupant.roleLabel)}${occupant.stationUid || occupant.visitPhase || occupant.summary || occupant.project ? '' : ` · ${officeTr('office.noStation')}`}</span>
         ${hostAnnotation?.(occupant) ? html`<span class="bu-cell-sub ao-host-annotation" data-host-agent=${occupant.hostAgentId}>${hostAnnotation(occupant)}</span>` : null}
+        ${floors.has(occupant.id) ? html`<span class="bu-cell-sub" data-member-floor=${occupant.id}>${label(floors.get(occupant.id))}</span>` : null}
         ${occupant.presence ? html`<span class="ao-agentcard__seen">${occupant.presenceLabel}</span>` : null}</span>
       ${eggs[occupant.id] && !unconfirmed ? html`<span class="bu-state" data-surprise-status=${eggs[occupant.id]}>${officeTr('egg.'+eggs[occupant.id])}</span>` : html`<${StateChip} state=${occupant.state} stateKind=${occupant.stateKind} stateLabel=${occupant.stateLabel} stateActive=${occupant.stateActive} live=${!unconfirmed && !occupant.presence && !occupant.sourceStale} title=${unconfirmed || occupant.sourceStale ? label(occupant.stateLastLabel) : stateTitle(occupant)} />`}
     </button></li>`;
   if (!occupants.length && !teamGroups.length) return html`<p class="bu-text-secondary">${officeTr('office.empty')}</p>`;
   const teamRoster = html`<${OfficeTeamRoster} teamGroups=${teamGroups} occupants=${occupants} selected=${selected} onSelect=${onSelect} unconfirmed=${unconfirmed} manifest=${manifest} Avatar=${Avatar} StateChip=${StateChip} nameOf=${nameOf} label=${label} stateTitle=${stateTitle} />`;
+  // Every floor carries the whole office roster ordered for that floor: render it once, for the selected floor.
+  const groups = floor => groupsFloorId == null || floor.id === groupsFloorId ? floor.agentGroups || [] : [];
+  // A group's floors are shown when it reaches beyond the selected floor; repeating that floor adds nothing.
+  const floorsText = (group, floor) => awayFloors(group, floor?.label).map(label).join(' · ');
   if (groupedFloors && rosterFloors.length) return html`<div class="ao-floor-roster">${rosterFloors.map(floor => {
     const floorItems = (floor.otherItems || []).map(item => item.kind === 'team-header'
       ? html`<li key=${item.id} class="ao-floor-roster__team" data-roster-team-header=${item.id}>${label(item.label)}</li>`
       : byId.has(item.occupantId) ? card(byId.get(item.occupantId)) : null);
     return html`<section key=${floor.id} class="ao-floor-roster__group" data-roster-floor=${floor.id}>
       <button type="button" class="ao-floor-roster__jump" onClick=${() => onJumpFloor(floor.id)}><span>${label(floor.label)}</span><span>${floor.count}</span><${Icon} name="arrow-right" /></button>
-      ${(floor.agentGroups || []).length ? html`<h3 class="ao-floor-roster__team" data-floor-groups-label=${floor.id}>${label(floor.agentGroupsLabel)}</h3>` : null}
-      ${(floor.agentGroups || []).map(group => html`<section key=${group.id} class="ao-floor-roster__agent-group" data-floor-agent-group=${group.id} data-floor-agent-group-kind=${group.kind} data-team-accent=${group.accentToken || undefined}>
-        <h4 class="ao-floor-roster__team" data-floor-agent-group-label>${label(group.label)} <span>${label(group.countLabel)}</span>${group.sharedLabel ? html`<small data-floor-agent-group-shared>${label(group.sharedLabel)}</small>` : null}</h4>
-        <ul class="ao-bureau__roster">${group.occupantIds.map(id => byId.has(id) ? card(byId.get(id)) : null)}</ul>
+      ${groups(floor).length ? html`<h3 class="ao-floor-roster__team" data-floor-groups-label=${floor.id}>${label(floor.agentGroupsLabel)}</h3>` : null}
+      ${groups(floor).map(group => html`<section key=${group.id} class="ao-floor-roster__agent-group" data-floor-agent-group=${group.id} data-floor-agent-group-kind=${group.kind} data-team-accent=${group.accentToken || undefined}>
+        <h4 class="ao-floor-roster__team" data-floor-agent-group-label>${label(group.label)} <span>${label(group.countLabel)}</span>${floorsText(group, floor) ? html`<small data-floor-agent-group-floors>${floorsText(group, floor)}</small>` : null}${group.sharedLabel ? html`<small data-floor-agent-group-shared>${label(group.sharedLabel)}</small>` : null}</h4>
+        <ul class="ao-bureau__roster">${group.occupantIds.map(id => byId.has(id) ? card(byId.get(id), new Map((group.memberFloors || []).map(row => [row.occupantId, row.label]))) : null)}</ul>
       </section>`)}
       ${floorItems.length ? html`<ul class="ao-bureau__roster">${floorItems}</ul>` : null}
     </section>`;
   })}</div>`;
-  return html`<div><ul class="ao-bureau__roster">${occupants.map(card)}</ul>${teamGroups.length ? teamRoster : null}</div>`;
+  return html`<div><ul class="ao-bureau__roster">${occupants.map(occupant => card(occupant))}</ul>${teamGroups.length ? teamRoster : null}</div>`;
 }
 
 /** The compact legend is rendered in VM order, outside the room artwork. */
@@ -107,16 +119,16 @@ export function OfficeTeamLegend({ teamLegend = [], label }) {
 }
 
 /** Compact phone cards use the same backend-owned membership and ordering as the desktop roster. */
-export function OfficeMobileTeamRoster({ agentGroups = [], otherItems = [], groupsLabel, occupants = [], onTeam, onSelect, manifest, Avatar, StateChip, unconfirmed, stateTitle, label, nameOf }) {
+export function OfficeMobileTeamRoster({ agentGroups = [], otherItems = [], groupsLabel, floorLabel = null, occupants = [], onTeam, onSelect, manifest, Avatar, StateChip, unconfirmed, stateTitle, label, nameOf }) {
   if (!agentGroups.length) return null;
   const byId = new Map(occupants.map(occupant => [occupant.id, occupant]));
   return html`<section class="ao-mobile-roster ao-mobile-roster--teams" aria-label=${label(groupsLabel)}>
     <h3 class="ao-mobile-team-header">${label(groupsLabel)}</h3>
     ${agentGroups.map(group => {
       const ids = group.occupantIds;
-      return html`<button type="button" key=${group.id} class="bu-card ao-mobile-team-preview" data-floor-agent-group=${group.id} data-floor-agent-group-kind=${group.kind} data-floor-agent-group-state=${group.previewState || undefined} data-team-accent=${group.accentToken || undefined} onClick=${() => onTeam({ groupId: group.id, ids, label: group.label })}>
+      return html`<button type="button" key=${group.id} class="bu-card ao-mobile-team-preview" data-floor-agent-group=${group.id} data-floor-agent-group-kind=${group.kind} data-floor-agent-group-state=${group.previewState || undefined} data-team-accent=${group.accentToken || undefined} onClick=${() => onTeam({ groupId: group.id, ids, label: group.label, memberFloors: group.memberFloors || [] })}>
         <span class="ao-mobile-team-preview__avatars">${ids.slice(0, 2).map(id => byId.has(id) ? html`<span data-floor-agent-occupant=${id}><${Avatar} o=${byId.get(id)} manifest=${manifest} /></span>` : null)}</span>
-        <span class="ao-mobile-team-preview__copy"><strong>${label(group.label)}</strong><span>${label(group.countLabel)}</span>${group.sharedLabel ? html`<small data-floor-agent-group-shared>${label(group.sharedLabel)}</small>` : null}</span>
+        <span class="ao-mobile-team-preview__copy"><strong>${label(group.label)}</strong><span>${label(group.countLabel)}</span>${awayFloors(group, floorLabel).length ? html`<small data-floor-agent-group-floors>${awayFloors(group, floorLabel).map(label).join(' · ')}</small>` : null}${group.sharedLabel ? html`<small data-floor-agent-group-shared>${label(group.sharedLabel)}</small>` : null}</span>
         ${group.previewStateLabel ? html`<${StateChip} state=${group.previewState} stateKind=${group.previewStateKind} stateLabel=${group.previewStateLabel} stateActive=${group.previewStateActive} live=${!unconfirmed} title=${label(group.previewStateLabel)} />` : null}
         <span class="ao-mobile-team-preview__arrow" aria-hidden="true">›</span>
       </button>`;

@@ -6,11 +6,13 @@ import {openLayoutBrowser,browserSkipReason} from './helpers/layout-browser.js';
 const require=createRequire(import.meta.url);
 const {rosterFloorFixture}=require('../helpers/roster-floor-fixture.cjs');
 const current=async(h,version)=>{const r=await h.get(`/api/v${version}/views/office`);assert.equal(r.status,200,r.text);return r.json.data;};
-const expected=vm=>vm.rosterFloors.map(f=>({id:f.id,count:f.count,
- agentGroups:(f.agentGroups||[]).map(group=>({id:group.id,kind:group.kind,occupantIds:group.occupantIds})),
+// Every floor carries the whole office roster ordered for it; the rail renders it once, under the selected floor.
+const expected=(vm,selected)=>vm.rosterFloors.map(f=>({id:f.id,count:f.count,
+ agentGroups:f.id===selected?(f.agentGroups||[]).map(group=>({id:group.id,kind:group.kind,occupantIds:group.occupantIds})):[],
  otherItems:(f.otherItems||[]).map(item=>item.kind==='team-header'?{kind:item.kind,id:item.id}:{kind:item.kind,id:item.occupantId})}));
 async function matches(page,vm){
- const want=expected(vm);
+ const selected=await page.evaluate(()=>document.querySelector('.ao-bureau__stage')?.aoScene?._floorId||'1');
+ const want=expected(vm,selected);
  await page.waitForFunction(want=>{
   const groups=[...document.querySelectorAll('.ao-bureau__side > .ao-floor-roster > [data-roster-floor]')].map(g=>({id:g.dataset.rosterFloor,count:Number(g.querySelector('.ao-floor-roster__jump span:nth-child(2)').textContent),
    agentGroups:[...g.querySelectorAll(':scope > [data-floor-agent-group]')].map(group=>({id:group.dataset.floorAgentGroup,kind:group.dataset.floorAgentGroupKind,occupantIds:[...group.querySelectorAll(':scope > ul [data-occupant]')].map(row=>row.dataset.occupant)})),
@@ -20,7 +22,7 @@ async function matches(page,vm){
  const actual=await page.evaluate(()=>[...document.querySelectorAll('.ao-bureau__side > .ao-floor-roster > [data-roster-floor]')].map(g=>({id:g.dataset.rosterFloor,count:Number(g.querySelector('.ao-floor-roster__jump span:nth-child(2)').textContent),
   agentGroups:[...g.querySelectorAll(':scope > [data-floor-agent-group]')].map(group=>({id:group.dataset.floorAgentGroup,kind:group.dataset.floorAgentGroupKind,occupantIds:[...group.querySelectorAll(':scope > ul [data-occupant]')].map(row=>row.dataset.occupant)})),
   otherItems:[...g.querySelectorAll(':scope > ul')].flatMap(list=>[...list.children].map(li=>li.hasAttribute('data-roster-team-header')?{kind:'team-header',id:li.dataset.rosterTeamHeader}:{kind:'occupant',id:li.querySelector('[data-occupant]')?.dataset.occupant}))})));
- assert.deepEqual(actual,want,'each floor renders exactly the backend group and non-agent collections');
+ assert.deepEqual(actual,want,'the selected floor renders the backend office roster; every floor keeps its non-agent collections');
  const descendants=actual.flatMap(f=>[...f.agentGroups.flatMap(group=>group.occupantIds),...f.otherItems.filter(i=>i.kind==='occupant').map(i=>i.id)]);
  assert.equal(new Set(descendants).size,vm.occupants.length);assert.equal(descendants.length,vm.occupants.length,'no duplicate or leftover rows');
 }

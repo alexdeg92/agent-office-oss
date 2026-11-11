@@ -5,7 +5,7 @@ const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:pa
 const {projectSnapshot}=require('../../src/adapters/agent-team-pm/store-reader');
 const assert=require('node:assert/strict');
 
-async function projectTeamFixture({publicUrl,sourcePortraits=false,theme='day',taskCopies=1,memberCount=6,exactLooks=true,memberNames=null,twoTeams=false,primaryFloorId=null}={}) {
+async function projectTeamFixture({publicUrl,sourcePortraits=false,theme='day',taskCopies=1,memberCount=6,exactLooks=true,memberNames=null,twoTeams=false,separateLeads=false,primaryFloorId=null,memberFloorIds={}}={}) {
   const at=Date.now(),teamId='team:atelier-projets',secondTeamId='team:platform-vce';
   const ids=Array.from({length:memberCount},(_,n)=>`member:12345678-1111-4111-8111-${String(n+1).padStart(12,'0')}`);
   const names=Array.isArray(memberNames)?[...memberNames]:['pm','designer','Nox','Mina','Camille','Sol','Iris'];
@@ -25,7 +25,10 @@ async function projectTeamFixture({publicUrl,sourcePortraits=false,theme='day',t
       status:n===4?'inactive':'active',runtimeKind:adapters[n%3],parentMemberId:n===0?null:n===2?ids[1]:ids[0],hostAgentId:n===0&&twoTeams?'fixture-shared-lead':null,
       brand:require('../../src/adapters/'+adapters[n%3]).setup.capabilities.brand,
       ...(sourcePortraits?{portrait:{look:looks[n],avatarUrl:null}}:{})}));
-  if(twoTeams){
+  if(twoTeams&&separateLeads){
+    // Two independent teams: the second is led by worker-4, so it can be homed on another floor.
+    members[3].teamId=secondTeamId;members[3].parentMemberId=null;members[4].teamId=secondTeamId;members[4].parentMemberId=ids[3];
+  }else if(twoTeams){
     const lead={...members[0],id:'member:12345678-1111-4111-8111-999999999999',teamId:secondTeamId};
     members.splice(1,0,lead);
     for(const member of members)if(member.teamId===secondTeamId&&member.id!==ids[0])member.teamId=secondTeamId;
@@ -61,7 +64,8 @@ async function projectTeamFixture({publicUrl,sourcePortraits=false,theme='day',t
   const saved=await h.put('/api/v3/office/layout',{expectedRevision:layout.json.data.layout.revision,data:{...layout.json.data.layout.data,
     agents:[...layout.json.data.layout.data.agents.filter(rule=>!['main','primary'].includes(rule.agentId)),
       primaryFloorId ? {...primaryRule,homeFloor:primaryFloorId} : primaryRule,
-      ...looks.slice(0,memberCount).map((look,n)=>({agentId:'agent:worker-'+(n+1),...look,appearance:'manual',name:names[n],role:null,station:'auto'}))]}});
+      ...looks.slice(0,memberCount).map((look,n)=>({agentId:'agent:worker-'+(n+1),...look,appearance:'manual',name:names[n],role:null,station:'auto',
+        ...(memberFloorIds[n+1]?{homeFloor:memberFloorIds[n+1]}:{})}))]}});
   assert.equal(saved.status,200,saved.text);
   const committedLayout=await h.get('/api/v3/office/layout');assert.equal(committedLayout.status,200,committedLayout.text);
   if(exactLooks)for(const [n,look] of looks.slice(0,memberCount).entries()){

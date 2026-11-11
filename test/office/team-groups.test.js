@@ -72,44 +72,62 @@ it('projects N runtime-neutral team pods with shared leads once and linked acros
   assert.equal(groups[0].memberCountLabel.params.n, 2);
 });
 
-it('supplies each floor with only its seated team members plus an explicit no-team group', () => {
+it('lists every team once with all its members and every unteamed agent on every floor; the map stays per floor', () => {
   const occupants = [
     { id: 'lead-a', role: 'agent', floorId: '1', teamId: 'alpha', teamIds: ['alpha', 'beta'], state: 'blocked', stateKind: 'blocked', stateLabel: { key: 'agentState.blocked' }, stateActive: false },
     { id: 'worker-a', role: 'subagent', floorId: '1' }, { id: 'worker-b', role: 'subagent', floorId: '1' },
-    { id: 'solo-3', role: 'agent', floorId: '3' }, { id: 'visitor-3', role: 'conversation', floorId: '3', visitPhase: 'person' },
+    // alpha's second worker sits on floor 3; gamma lives entirely on floor 3.
+    { id: 'worker-a3', role: 'subagent', floorId: '3' }, { id: 'lead-g', role: 'agent', floorId: '3', teamId: 'gamma' },
+    { id: 'solo-1', role: 'agent', floorId: '1' }, { id: 'solo-3', role: 'agent', floorId: '3' },
+    { id: 'visitor-3', role: 'conversation', floorId: '3', visitPhase: 'person' },
   ];
-  const floorOne = { id: '1', count: 3, occupantIds: ['lead-a', 'worker-a', 'worker-b'], items: [
+  const floorOne = { id: '1', count: 4, occupantIds: ['lead-a', 'worker-a', 'worker-b', 'solo-1'], items: [
     { kind: 'occupant', id: 'lead', occupantId: 'lead-a' }, { kind: 'occupant', id: 'worker-a', occupantId: 'worker-a' },
-    { kind: 'occupant', id: 'worker-b', occupantId: 'worker-b' },
+    { kind: 'occupant', id: 'worker-b', occupantId: 'worker-b' }, { kind: 'occupant', id: 'solo-1', occupantId: 'solo-1' },
   ] };
-  const floorThree = { id: '3', occupantIds: ['solo-3', 'visitor-3'], items: [
+  const floorThree = { id: '3', occupantIds: ['worker-a3', 'lead-g', 'solo-3', 'visitor-3'], items: [
+    { kind: 'occupant', id: 'worker-a3', occupantId: 'worker-a3' }, { kind: 'occupant', id: 'lead-g', occupantId: 'lead-g' },
     { kind: 'occupant', id: 'solo', occupantId: 'solo-3' }, { kind: 'occupant', id: 'visit', occupantId: 'visitor-3' },
   ] };
   const groups = projectFloorAgentGroups([floorOne, floorThree], occupants, [
     { id: 'alpha', floorId: '1', label: { key: 'team:alpha' }, leadOccupantId: 'lead-a', accentToken: 'teal',
-      members: [{ occupantId: 'lead-a' }, { occupantId: 'worker-a' }], sharedLeadLinks: [{ teamId: 'beta' }] },
+      members: [{ occupantId: 'lead-a' }, { occupantId: 'worker-a' }, { occupantId: 'worker-a3' }], sharedLeadLinks: [{ teamId: 'beta' }] },
     { id: 'beta', floorId: '1', label: { key: 'team:beta' }, leadOccupantId: 'lead-a', accentToken: 'rose',
       members: [{ occupantId: 'lead-a' }, { occupantId: 'worker-b' }] },
+    { id: 'gamma', floorId: '3', label: { key: 'team:gamma' }, leadOccupantId: 'lead-g', accentToken: 'amber', members: [{ occupantId: 'lead-g' }] },
   ]);
-  assert.deepEqual(groups[0].agentGroups.map(group => [group.kind, group.id, group.occupantIds]), [
-    ['team', 'alpha', ['lead-a', 'worker-a']], ['team', 'beta', ['worker-b']],
-  ]);
-  assert.deepEqual(groups[1].agentGroups.map(group => [group.kind, group.occupantIds]), [['unassigned', ['solo-3']]]);
-  assert.equal(groups[0].agentGroups.reduce((sum, group) => sum + group.count, 0), floorOne.count,
-    'floor groups count each occupant exactly once even when a lead belongs to several teams');
-  assert.equal(new Set(groups[0].agentGroups.flatMap(group => group.occupantIds)).size, floorOne.count,
-    'a shared lead is rendered in only its canonical floor group');
-  assert.ok(groups[0].agentGroups.find(group => group.teamId === 'alpha')?.sharedLabel,
-    'the canonical team explains that its lead is shared');
-  assert.equal(groups[0].showTeamPanel, true);
-  assert.equal(groups[1].showTeamPanel, false);
+  const view = floor => floor.agentGroups.map(group => [group.kind, group.teamId, group.occupantIds]);
+  assert.deepEqual(view(groups[0]), [['team', 'alpha', ['lead-a', 'worker-a', 'worker-a3']], ['team', 'beta', ['worker-b']], ['team', 'gamma', ['lead-g']],
+    ['unassigned', null, ['solo-1', 'solo-3']]], 'floor 1: its own teams first, every team whole, then all unteamed agents (this floor first)');
+  assert.deepEqual(view(groups[1]), [['team', 'gamma', ['lead-g']], ['team', 'alpha', ['lead-a', 'worker-a', 'worker-a3']], ['team', 'beta', ['worker-b']],
+    ['unassigned', null, ['solo-3', 'solo-1']]], 'floor 3 lists the same office, its own team first');
+  const alpha = groups[1].agentGroups.find(group => group.teamId === 'alpha');
+  assert.deepEqual(alpha.floorLabels, [{ key: 'office.floor.first', params: { n: 1 } }, { key: 'office.floor.number', params: { n: 3 } }], 'the team row names its floors, main floor first');
+  assert.deepEqual(alpha.memberFloors, [{ occupantId: 'worker-a3', label: { key: 'office.floor.number', params: { n: 3 } } }],
+    'only members away from the team main floor carry their floor');
+  assert.deepEqual(groups[0].agentGroups.at(-1).memberFloors.map(row => row.occupantId), ['solo-3'], 'unteamed agents off the selected floor carry their floor');
+  for (const floor of groups) {
+    const ids = floor.agentGroups.flatMap(group => group.occupantIds);
+    assert.equal(new Set(ids).size, ids.length, 'a shared lead is listed once, in its canonical team');
+    assert.deepEqual(new Set(ids), new Set(['lead-a', 'worker-a', 'worker-a3', 'worker-b', 'lead-g', 'solo-1', 'solo-3']), 'every floor lists the whole office');
+  }
+  assert.ok(groups[0].agentGroups.find(group => group.teamId === 'alpha')?.sharedLabel, 'the canonical team explains that its lead is shared');
+  assert.deepEqual(groups.map(floor => floor.teamGroups.map(team => team.id)), [['alpha', 'beta'], ['gamma']], 'map team panels and pods stay per floor');
+  assert.deepEqual(groups.map(floor => floor.showTeamPanel), [true, true]);
   assert.deepEqual([groups[0].agentGroups[0].previewOccupantId, groups[0].agentGroups[0].previewState, groups[0].agentGroups[0].previewStateLabel],
     ['lead-a', 'blocked', { key: 'agentState.blocked' }], 'mobile group previews reuse the backend state of their canonical lead');
-  assert.equal(groups[1].agentGroups[0].countLabel.key, 'office.floor.count.one');
+  assert.equal(groups[0].agentGroups.find(group => group.teamId === 'gamma').countLabel.key, 'office.floor.count.one');
   assert.equal(groups[0].agentGroups[0].countLabel.key, 'office.floor.count.other');
   assert.deepEqual(groups[1].otherItems.map(item => item.occupantId), ['visitor-3'], 'visiting conversations remain in their backend-authored floor items');
-  assert.ok(groups.every(floor => floor.agentGroups.every(group => group.occupantIds.every(id => floor.occupantIds.includes(id)))),
-    'no floor can display agents seated on another floor');
+  assert.deepEqual(groups[0].otherItems, [], 'agents listed in a group are not repeated below');
+});
+
+it('without team data every floor lists all visible agents in one no-team group', () => {
+  const occupants = [{ id: 'a', role: 'agent', floorId: '1' }, { id: 'b', role: 'agent', floorId: '2' }];
+  const floors = projectFloorAgentGroups([{ id: '1', occupantIds: ['a'], items: [] }, { id: '2', occupantIds: ['b'], items: [] }, { id: 'gym', occupantIds: [], items: [] }], occupants);
+  assert.deepEqual(floors.map(floor => floor.agentGroups.map(group => [group.kind, group.occupantIds])),
+    [[['unassigned', ['a', 'b']]], [['unassigned', ['b', 'a']]], [['unassigned', ['a', 'b']]]], 'even an empty floor shows the office roster');
+  assert.ok(floors.every(floor => floor.teamGroups.length === 0 && floor.showTeamPanel === false));
 });
 
 it('emits one canonical connector from a shared lead home pod to each of three teams', () => {

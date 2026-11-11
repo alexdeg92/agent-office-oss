@@ -280,6 +280,10 @@ function officeAgentCountLabel(count) {
   return { key: count === 1 ? 'office.floor.count.one' : 'office.floor.count.other', params: { n: count } };
 }
 
+// "Teams and agents" lists the whole office on every floor (owner decision, reverses T-0255 for the roster
+// only): each team once with all its members wherever they sit, then every agent without a team. The selected
+// floor's teams come first; members away from the group's main floor carry that floor's label. The map side
+// (teamGroups, pods, showTeamPanel) stays per floor.
 function projectFloorAgentGroups(rosterFloors, occupants, teamGroups = []) {
   const byId = new Map((occupants || []).map(row => [row.id, row]));
   const previewFor = occupantIds => {
@@ -288,42 +292,48 @@ function projectFloorAgentGroups(rosterFloors, occupants, teamGroups = []) {
       previewStateLabel: row.stateLabel || { key: `agentState.${row.state || 'unknown'}` },
       previewStateActive: row.stateActive === true } : {};
   };
-  return (rosterFloors || []).map(floor => {
-    const floorIds = new Set((floor.occupantIds || []).filter(id => byId.has(id)));
-    const agentIds = (floor.occupantIds || []).filter(id => {
-      const row = byId.get(id);
-      return row && !row.visitPhase && !CONVERSATION_ROLES.has(row.role);
-    });
-    const assigned = new Set();
-    const groups = [];
-    const floorTeamGroups = [];
-    const floorTeams = (teamGroups || []).filter(team => team.floorId === floor.id)
-      .sort((a, b) => {
-        const aCanonical = byId.get(a.leadOccupantId)?.teamId === a.id ? 0 : 1;
-        const bCanonical = byId.get(b.leadOccupantId)?.teamId === b.id ? 0 : 1;
-        return aCanonical - bCanonical || a.id.localeCompare(b.id);
-      });
-    for (const team of floorTeams) {
-      const occupantIds = (team.members || []).map(member => member.occupantId)
-        .filter(id => floorIds.has(id) && agentIds.includes(id) && !assigned.has(id));
-      if (!occupantIds.length) continue;
-      for (const id of occupantIds) assigned.add(id);
-      floorTeamGroups.push(team);
-      groups.push({ id: team.id, kind: 'team', teamId: team.id, label: team.label, accentToken: team.accentToken, leadOccupantId: team.leadOccupantId, occupantIds,
-        count: occupantIds.length, countLabel: officeAgentCountLabel(occupantIds.length),
-        ...previewFor([[team.leadOccupantId, ...occupantIds].find(id => occupantIds.includes(id))].filter(Boolean)),
-        sharedLabel: team.sharedLeadLinks?.length ? { key: 'office.floor.sharedAcrossTeams', params: { n: team.sharedLeadLinks.length + 1 } } : null });
-    }
-    const unassignedIds = agentIds.filter(id => !assigned.has(id));
-    if (unassignedIds.length) groups.push({ id: `unassigned:${floor.id}`, kind: 'unassigned', teamId: null,
-      label: { key: 'office.floor.unassignedAgents' }, occupantIds: unassignedIds,
-      count: unassignedIds.length, countLabel: officeAgentCountLabel(unassignedIds.length), ...previewFor(unassignedIds) });
-    const nonAgentIds = new Set((floor.occupantIds || []).filter(id => !agentIds.includes(id)));
+  const floors = rosterFloors || [], floorRank = new Map(floors.map((floor, index) => [floor.id, index])), floorOf = new Map();
+  for (const floor of floors) for (const id of floor.occupantIds || []) if (byId.has(id) && !floorOf.has(id)) floorOf.set(id, floor.id);
+  const isAgent = id => floorOf.has(id) && !CONVERSATION_ROLES.has(byId.get(id).role);
+  const seatedAgent = id => isAgent(id) && !byId.get(id).visitPhase;
+  // Office-wide membership, decided once: a shared lead belongs to its canonical team only.
+  const teams = [...new Map((teamGroups || []).map(team => [team.id, team])).values()].sort((a, b) => {
+    const aCanonical = byId.get(a.leadOccupantId)?.teamId === a.id ? 0 : 1;
+    const bCanonical = byId.get(b.leadOccupantId)?.teamId === b.id ? 0 : 1;
+    return aCanonical - bCanonical || a.id.localeCompare(b.id);
+  });
+  const assigned = new Set(), teamRows = [];
+  for (const team of teams) {
+    const occupantIds = (team.members || []).map(member => member.occupantId).filter(id => isAgent(id) && !assigned.has(id));
+    if (!occupantIds.length) continue;
+    for (const id of occupantIds) assigned.add(id);
+    teamRows.push({ team, occupantIds });
+  }
+  const unassignedIds = floors.flatMap(floor => (floor.occupantIds || []).filter(id => floorOf.get(id) === floor.id && seatedAgent(id) && !assigned.has(id)));
+  const placement = (occupantIds, mainFloorId) => ({
+    floorLabels: [...new Set(occupantIds.map(id => floorOf.get(id)))]
+      .sort((a, b) => (a === mainFloorId ? -1 : b === mainFloorId ? 1 : floorRank.get(a) - floorRank.get(b))).map(floorLabel),
+    memberFloors: occupantIds.filter(id => floorOf.get(id) !== mainFloorId).map(id => ({ occupantId: id, label: floorLabel(floorOf.get(id)) })),
+  });
+  return floors.map(floor => {
+    const ordered = [...teamRows.filter(row => row.team.floorId === floor.id), ...teamRows.filter(row => row.team.floorId !== floor.id)];
+    const groups = ordered.map(({ team, occupantIds }) => ({ id: team.id, kind: 'team', teamId: team.id, label: team.label, accentToken: team.accentToken,
+      leadOccupantId: team.leadOccupantId, occupantIds, count: occupantIds.length, countLabel: officeAgentCountLabel(occupantIds.length),
+      ...previewFor([[team.leadOccupantId, ...occupantIds].find(id => occupantIds.includes(id))].filter(Boolean)),
+      sharedLabel: team.sharedLeadLinks?.length ? { key: 'office.floor.sharedAcrossTeams', params: { n: team.sharedLeadLinks.length + 1 } } : null,
+      ...placement(occupantIds, team.floorId) }));
+    const loose = [...unassignedIds.filter(id => floorOf.get(id) === floor.id), ...unassignedIds.filter(id => floorOf.get(id) !== floor.id)];
+    if (loose.length) groups.push({ id: `unassigned:${floor.id}`, kind: 'unassigned', teamId: null,
+      label: { key: 'office.floor.unassignedAgents' }, occupantIds: loose,
+      count: loose.length, countLabel: officeAgentCountLabel(loose.length), ...previewFor(loose), ...placement(loose, floor.id) });
+    // The map's team panel and pods remain those seated on this floor.
+    const floorTeamGroups = teamRows.filter(row => row.team.floorId === floor.id && row.occupantIds.some(id => floorOf.get(id) === floor.id)).map(row => row.team);
+    const listed = new Set(groups.flatMap(group => group.occupantIds));
     const otherItems = [];
     let pendingHeaders = [];
     for (const item of floor.items || []) {
       if (item.kind === 'team-header') { pendingHeaders.push(item); continue; }
-      if (nonAgentIds.has(item.occupantId)) {
+      if (floorOf.get(item.occupantId) === floor.id && !listed.has(item.occupantId)) {
         const row = byId.get(item.occupantId), parent = row && byId.get(row.parentId);
         if (parent && !pendingHeaders.length) pendingHeaders.push({
           kind: 'team-header', id: `team-header:${parent.id}:${floor.id}`,

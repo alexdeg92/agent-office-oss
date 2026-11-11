@@ -161,6 +161,8 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false,chatSessionF
             countLabel:{key:'office.floor.count',params:{n:0}},statusLabel:{key:'office.floor.status',params:{active:0,idle:0}}};
         });
         vm.rosterFloors.push(...projectedFloors.values());
+        // The office-wide roster lists only what this viewer may see, on every floor (empty ones included).
+        vm.rosterFloors=require('../engine/office/roster').projectFloorAgentGroups(vm.rosterFloors,vm.occupants);
         const visibleIds=new Set(vm.occupants.map(row=>row.id));
         vm.unseatedTeams=(Array.isArray(vm.unseatedTeams)?vm.unseatedTeams:[]).flatMap(team=>{
           if(!visibleIds.has(team.parentId))return [];
@@ -213,6 +215,8 @@ function createViewProjection({store,cfg={},isTeamProject=()=>false,chatSessionF
             statusLabel:{key:'office.floor.status',params:{active:0,idle:0}}};
         });
         vm.rosterFloors.push(...projectedFloors.values());
+        // The office-wide roster lists only what this viewer may see, on every floor (empty ones included).
+        vm.rosterFloors=require('../engine/office/roster').projectFloorAgentGroups(vm.rosterFloors,vm.occupants);
         const visibleIds=new Set(vm.occupants.map(o=>o.id));
         vm.unseatedTeams=(Array.isArray(vm.unseatedTeams)?vm.unseatedTeams:[]).flatMap(team=>{
           if(!visibleIds.has(team.parentId))return [];
